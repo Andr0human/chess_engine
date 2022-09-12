@@ -1,0 +1,27 @@
+/***
+     LMR Vs. Non-LMR Search Test:
+     Games played  : 80
+     Time Per Move : 2-2.5 sec.
+     Game Time     : 7 hr, 14 min.
+     Result        : Success.
+***/
+
+Elsa Stats :
+Playing with White -- 
+| Wins : 23 | Loss : 5 | Draws : 12 |
+Playing with Black -- 
+| Wins : 28 | Loss : 6 | Draws : 6 |
+Total -- 
+| Wins : 51 | Loss : 11 | Draws : 18 |
+Score -> 120
+
+Chessbot Stats : 
+Playing with White -- 
+| Wins : 6 | Loss : 28 | Draws : 6 |
+Playing with Black -- 
+| Wins : 5 | Loss : 23 | Draws : 12 |
+Total -- 
+| Wins : 11 | Loss : 51 | Draws : 18 |
+Score -> 40
+
+Prediction Accuracy -> 62 / 63

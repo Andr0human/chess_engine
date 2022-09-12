@@ -1,0 +1,27 @@
+/***
+     Dual Vs. Single Thread Test:
+     Games played : 120
+     Time Per Move : 1 sec.
+     Game Time : 4 hr, 57 min.
+     Result : Fail. (no significant elo gain observed)
+***/
+
+
+Elsa Stats :
+Playing with White -- 
+| Wins : 16 | Loss : 25 | Draws : 19 |
+Playing with Black -- 
+| Wins : 19 | Loss : 17 | Draws : 24 |
+Total -- 
+| Wins : 35 | Loss : 42 | Draws : 43 |
+Score -> 113
+
+Masterbot Stats : 
+Playing with White -- 
+| Wins : 17 | Loss : 19 | Draws : 24 |
+Playing with Black -- 
+| Wins : 25 | Loss : 16 | Draws : 19 |
+Total -- 
+| Wins : 42 | Loss : 35 | Draws : 43 |
+Score -> 127
+

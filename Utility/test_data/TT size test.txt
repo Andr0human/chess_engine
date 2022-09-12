@@ -1,0 +1,32 @@
+/***
+     TT larger size_test:
+     // Using 10x table size for TT. (Single-thread search)
+     Games played : 100
+     Time Format  : 2m + (2s inc.)
+     Arena Time   : 5 hr, 17 min.
+     Result       : Fail. (significant elo loss observed)
+     Verdict      : In games, using 10x larger table does not improve performance.
+***/
+
+Elsa Stats :
+Playing with White -- 
+| Wins : 29 | Loss : 17 | Draws : 14 |
+Playing with Black -- 
+| Wins : 13 | Loss : 27 | Draws : 20 |
+Total -- 
+| Wins : 42 | Loss : 44 | Draws : 34 |
+Score -> 118
+
+Chessbot Stats : 
+Playing with White -- 
+| Wins : 27 | Loss : 13 | Draws : 20 |
+Playing with Black -- 
+| Wins : 17 | Loss : 29 | Draws : 14 |
+Total --
+| Wins : 44 | Loss : 42 | Draws : 34 |
+Score -> 122
+
+Prediction Acc. -> 88 / 88
+Elsa losses in time : 0
+CB losses in time : 0
+Avg. Game Time : 190.3194 sec.
