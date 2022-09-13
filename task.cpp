@@ -1,7 +1,9 @@
 
 #include "task.h"
 
-void init() {
+void
+init()
+{
     perf_clock start = perf::now();
     plt::init();
 
@@ -21,7 +23,9 @@ void init() {
     #endif
 }
 
-vector<test_position> get_test_positions(string filename) {
+vector<test_position>
+get_test_positions(string filename)
+{
     std::ifstream infile;
     infile.open("Utility/" + filename + "_test_positions.txt");
 
@@ -29,7 +33,8 @@ vector<test_position> get_test_positions(string filename) {
     vector<string> tmp;
     vector<test_position> res;
 
-    while (true) {
+    while (true)
+    {
         getline(infile, text);
         if (text == "") break;
         tmp = split(text, '|');
@@ -45,15 +50,17 @@ vector<test_position> get_test_positions(string filename) {
     return res;
 }
 
-void accuracy_test() {
-
-    const auto get_test_pos = [] () {
-        
+void
+accuracy_test()
+{
+    const auto get_test_pos = [] ()
+    {
         std::ifstream infile("Utility/accuracy_test_positions.txt");
         string line;
         vector<movegen_test_position> tests;
 
-        while (true) {
+        while (true)
+        {
             getline(infile, line);
             if (line.empty()) break;
 
@@ -66,15 +73,14 @@ void accuracy_test() {
         return tests;
     };
 
-    const auto run_tests = [] (const vector<movegen_test_position>& tests) {
-
+    const auto run_tests = [] (const vector<movegen_test_position>& tests)
+    {
         int pos_no = 1;
 
-        for (const auto& test : tests) {
-        
+        for (const auto& test : tests)
+        {
             const auto depth = test.depth();
             chessBoard _cb = test.fen();
-
             uint64_t found = bulkCount(_cb, static_cast<int>(depth));
 
             if (found != test.expected_nodes(depth))
@@ -86,32 +92,31 @@ void accuracy_test() {
         return true;
     };
 
-    const auto failed_tests = [] (const vector<movegen_test_position>& tests) {
-
+    const auto failed_tests = [] (const vector<movegen_test_position>& tests)
+    {
         auto best_case = tests.front();
         uint64_t best_depth = 100;
 
-        for (const auto& test : tests) {
-            
+        for (const auto& test : tests)
+        {
             const auto depth = test.depth();
             chessBoard _cb = test.fen();
 
-            for (uint64_t dep = 1; dep <= depth; dep++) {
-
+            for (uint64_t dep = 1; dep <= depth; dep++)
+            {
                 const auto found = bulkCount(_cb, static_cast<int>(dep));
 
                 if (found == test.expected_nodes(dep))
                     continue;
                 
-                if (dep < best_depth) {
+                if (dep < best_depth)
+                {
                     best_case = test;
                     best_depth = dep;
                     break;
                 }
             }
-
         }
-
         return best_case;
     };
 
@@ -134,10 +139,11 @@ void accuracy_test() {
     for (uint64_t depth = 1; depth <= maxDepth; depth++)
         cout << best_case.expected_nodes(depth)
              << " | " << bulkCount(_cb, static_cast<int>(depth)) << endl;
-
 }
 
-void helper() {
+void
+helper() 
+{
     puts("/****************   Command List   ****************/\n");
 
     puts("** For Elsa's movegenerator self-accuracy test, type:\n");
@@ -155,8 +161,9 @@ void helper() {
     puts("/**************************************************/\n\n");
 }
 
-void free_space(const vector<string> &_args) {
-
+void
+free_space(const vector<string> &_args)
+{
     #if defined(TRANSPOSITION_TABLE_H)
         std::puts("Freeing Ram!");
         TT.resize(1);
@@ -164,8 +171,9 @@ void free_space(const vector<string> &_args) {
     #endif
 }
 
-void speed_test() {
-
+void
+speed_test()
+{
     using namespace std::chrono;
 
     const auto positions = get_test_positions("Speed");
@@ -176,8 +184,8 @@ void speed_test() {
     int64_t total_time = 0;
     int64_t total_nodes = 0;
 
-    for (auto pos : positions) {
-        
+    for (auto pos : positions)
+    {
         chessBoard board = pos.fen;
         int64_t nodes_current = 3 * pos.nodeCount;
         int64_t time_current = 0;
@@ -201,8 +209,9 @@ void speed_test() {
     cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
 }
 
-void direct_search(const vector<string> &_args) {
-    
+void
+direct_search(const vector<string> &_args)
+{    
     perf::Timer _t("Direct_Search");
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : default_fen;
@@ -214,7 +223,6 @@ void direct_search(const vector<string> &_args) {
     if (__n >= 4) alloted_extra_time  = std::stod(_args[3]);
 
     chessBoard primary = fen;
-
     primary.show();
 
     MakeMove_Iterative(primary, maxDepth, true);
@@ -224,8 +232,9 @@ void direct_search(const vector<string> &_args) {
     // Show_Searched_Info(primary);
 }
 
-void node_count(const vector<string> &_args) {
-
+void
+node_count(const vector<string> &_args)
+{
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : default_fen;
     const int depth  = __n > 2 ? stoi(_args[2]) : 6;
@@ -249,12 +258,13 @@ void node_count(const vector<string> &_args) {
     // cout << "Threads Used = " << threadCount << endl;
 }
 
-void debug_movegen(const vector<string> &_args) {
-
+void
+debug_movegen(const vector<string> &_args)
+{
     // Argument : elsa debug <fen> <depth> <output_file_name>
 
-    const auto moveName = [] (int move) {
-
+    const auto moveName = [] (int move)
+    {
         const int ip = (move & 63);
         const int fp = (move >> 6) & 63;
 
@@ -275,11 +285,11 @@ void debug_movegen(const vector<string> &_args) {
     const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
     
     std::ofstream out(_fn);
-
     chessBoard _cb = fen;
     MoveList myMoves = generate_moves(_cb);
 
-    for (const auto move : myMoves) {
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         const auto current = bulkCount(_cb, dep - 1);
         out << moveName(move) << " : " << current << '\n';
@@ -293,54 +303,64 @@ void debug_movegen(const vector<string> &_args) {
 
 
 
-void Task(int argc, char *argv[]) {
-
+void Task(int argc, char *argv[])
+{
     const auto argument_list =
         extract_argument_list(argc, argv);
 
     string command = argument_list.empty() ? "" : argument_list[0];
 
-    if (argument_list.empty()) {
+    if (argument_list.empty())
+    {
         puts("No Task Found!");
         puts("Type : \'elsa help\' to view command list.\n");
-
-    } else if (command == "help") {
+    }
+    else if (command == "help")
+    {
         helper();
-
-    } else if (command == "accuracy") {
+    }
+    else if (command == "accuracy")
+    {
         // Argument : elsa accuracy
         accuracy_test();
-
-    } else if (command == "speed") {
+    }
+    else if (command == "speed")
+    {
         // Argument : elsa speed
         speed_test();
-
-    } else if (command == "go") {
+    }
+    else if (command == "go")
+    {
         // Argument : elsa go "fen" allowed_search_time allowed_extra_time
         direct_search(argument_list);
-
-    } else if (command == "play") {
+    }
+    else if (command == "play")
+    {
         // Argument : elsa play "fen"
         start_game(argument_list);
-
-    } else if (command == "free") {
+    }
+    else if (command == "free")
+    {
         // Argument : elsa free size
         free_space(argument_list);
-
-    } else if (command == "ponder") {
+    }
+    else if (command == "ponder")
+    {
         // Argument : elsa ponder "fen"
         ponderSearch(chessBoard(argument_list[1]), true);
-
-    } else if (command == "count") {
+    }
+    else if (command == "count")
+    {
         // Argument : elsa count {fen} {depth}
         node_count(argument_list);
-
-    } else if (command == "debug") {
+    }
+    else if (command == "debug")
+    {
         debug_movegen(argument_list);
-
-    } else {
+    }
+    else
+    {
         puts("No Valid Task!");
     }
-
 }
 

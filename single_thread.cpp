@@ -4,8 +4,9 @@
 
 #ifndef SINGLE_THREAD_NEGAMAX
 
-uint64_t bulkCount(chessBoard &_cb, int depth) {
-
+uint64_t
+bulkCount(chessBoard &_cb, int depth)
+{
     if (depth <= 0) return 1;
 
     // if (has_legal_moves(_cb) == false) return 0;
@@ -14,7 +15,8 @@ uint64_t bulkCount(chessBoard &_cb, int depth) {
     if (depth == 1) return myMoves.size();
     uint64_t answer = 0;
     
-    for (const auto move : myMoves) {
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         answer += bulkCount(_cb, depth - 1);
         _cb.UnmakeMove();
@@ -23,14 +25,11 @@ uint64_t bulkCount(chessBoard &_cb, int depth) {
     return answer;
 }
 
-int negaMax(chessBoard &_cb, int depth) {
-    if (depth <= 0) {
-        // tmp_clock = perf::now();
-        int res = ev.Evaluate(_cb);
-        // tmp_duration = perf::now() - tmp_clock;
-        // tmp_time_spend += tmp_duration.count();
-        return res;
-    }
+int
+negaMax(chessBoard &_cb, int depth)
+{
+    if (depth <= 0)
+        return ev.Evaluate(_cb);
 
     MoveList myMoves = generate_moves(_cb);
     if (myMoves.empty())
@@ -38,7 +37,8 @@ int negaMax(chessBoard &_cb, int depth) {
 
     int _eval = negInf;
 
-    for (const auto move : myMoves) {
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         _eval = std::max(_eval, -negaMax(_cb, depth - 1));
         _cb.UnmakeMove();
@@ -46,8 +46,9 @@ int negaMax(chessBoard &_cb, int depth) {
     return _eval;
 }
 
-std::pair<int, int> negaMax_root(chessBoard &_cb, int depth) {
-
+std::pair<int, int>
+negaMax_root(chessBoard &_cb, int depth)
+{
     if (has_legal_moves(_cb) == false)
         return std::make_pair(0, (_cb.king_in_check() ? checkmate_score(0) : 0));
     
@@ -55,11 +56,13 @@ std::pair<int, int> negaMax_root(chessBoard &_cb, int depth) {
 
     int best = negInf, _bm = 0, eval;
 
-    for (const auto move : myMoves) {
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         eval = -negaMax(_cb, depth - 1);
         _cb.UnmakeMove();
-        if (eval > best) {
+        if (eval > best)
+        {
             _bm = move;
             best = eval;
         }
@@ -71,13 +74,15 @@ std::pair<int, int> negaMax_root(chessBoard &_cb, int depth) {
 
 #ifndef SINGLE_THREAD_SEARCH
 
-void MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc) {
-
+void
+MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
+{
     // A Zero depth Move is produced in case we don't even have time to do a search of depth 1
     reset_pv_line();
     info.reset();
     int zero_move = createMoveOrderList(board), eval = 0;
-    if (zero_move < 0) {
+    if (zero_move < 0)
+    {
         cout << "No legal Moves on board! Discarding Search.\n";
         info.set_discard_result(zero_move);
         return;
@@ -86,28 +91,32 @@ void MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_
 
     search_time_left = extra_time_left = true;
     std::thread timer_thread;
-    if (use_timer) timer_thread = std::thread(timer);
+
+    if (use_timer)
+        timer_thread = std::thread(timer);
 
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
     // perf_clock start_point = perf::now();
 
-    for (int depth = 1; depth <= mDepth;) {
-
+    for (int depth = 1; depth <= mDepth;)
+    {
         // pre_status(depth, valWindowCnt);
         eval = pv_rootAlphaBeta(board, alpha, beta, depth);
         // post_status(board, pvArray[0], eval, start_point);
 
         if (__abs(eval) == valUNKNOWN) break;                                     // Time Over! Cut the Search.
 
-        if ((eval <= alpha) || (eval >= beta)) {
+        if ((eval <= alpha) || (eval >= beta))
+        {
             // We fell outside the window, so try again with a wider Window
             valWindowCnt++;
             alpha = eval - (valWindow << valWindowCnt);
             beta  = eval + (valWindow << valWindowCnt);
             within_valWindow = false;
         }
-        else {
+        else
+        {
             // Set up the window for the next iteration.
             alpha = eval - valWindow;
             beta  = eval + valWindow;
@@ -122,7 +131,8 @@ void MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_
         moc.sortList(pvArray[0]);                                               // Sort Moves according to time.
     }
 
-    if (prnt_moc) {
+    if (prnt_moc)
+    {
         moc.sortList(pvArray[0]);
         moc.mprint(board);
     }
@@ -130,26 +140,27 @@ void MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_
     search_time_left = extra_time_left = false;
 }
 
-int AlphaBeta(chessBoard &__pos, int depth, int alpha,
-              int beta, int ply, int pvIndex) 
+int
+AlphaBeta(chessBoard &__pos, int depth,
+    int alpha, int beta, int ply, int pvIndex) 
 {
     if (extra_time_left == false)
         return valUNKNOWN;
 
-    if (depth <= 0) {
+    if (depth <= 0)
+    {
         // Depth 0, starting Quiensense Search
         return QuieSearch(__pos, alpha, beta, ply, 0);
     }
 
-    {   //Check for check-mate/stale-mate
-
+    {
+        //Check for check-mate/stale-mate
         if (has_legal_moves(__pos) == false)
             return __pos.king_in_check() ? checkmate_score(ply) : 0;
-
     }
 
-    {   // TT_lookup
-
+    {
+        // TT_lookup
         #if defined(TRANSPOSITION_TABLE_H)
 
             // Check for 3-move repetition using Transposition_Table
@@ -186,14 +197,15 @@ int AlphaBeta(chessBoard &__pos, int depth, int alpha,
     int pvNextIndex = pvIndex + maxPly - ply;
     int hashf = HASHALPHA, eval;
 
-    for (const auto move : myMoves) {
-        
+    for (const auto move : myMoves)
+    {    
         __pos.MakeMove(move);
-        eval = -AlphaBeta(__pos, depth - 1, -beta, -alpha,
-                          ply + 1, pvNextIndex);
+        eval = -AlphaBeta(__pos, depth - 1,
+                -beta, -alpha, ply + 1, pvNextIndex);
         __pos.UnmakeMove();
         
-        if (eval == -valUNKNOWN) {
+        if (eval == -valUNKNOWN)
+        {
             // No time left, stop the search
 
             #if defined(TRANSPOSITION_TABLE_H)
@@ -203,7 +215,8 @@ int AlphaBeta(chessBoard &__pos, int depth, int alpha,
             return valUNKNOWN;
         }
 
-        if (eval >= beta) {
+        if (eval >= beta)
+        {
             // beta-cut found
 
             #if defined(TRANSPOSITION_TABLE_H)
@@ -214,7 +227,8 @@ int AlphaBeta(chessBoard &__pos, int depth, int alpha,
             return beta;
         }
 
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             // Better move found, update the result
 
             hashf = HASHEXACT;
@@ -222,9 +236,7 @@ int AlphaBeta(chessBoard &__pos, int depth, int alpha,
             pvArray[pvIndex] = move;
             movcpy (pvArray + pvIndex + 1,
                     pvArray + pvNextIndex, maxPly - ply - 1);
-
         }
-
     }
 
     // if (pvArray[pvIndex] == 0)
@@ -239,8 +251,9 @@ int AlphaBeta(chessBoard &__pos, int depth, int alpha,
 }
 
 
-int pv_rootAlphaBeta(chessBoard &_cb, int alpha, int beta, int depth) {
-    
+int
+pv_rootAlphaBeta(chessBoard &_cb, int alpha, int beta, int depth)
+{
     perf_clock startTime;
     perf_ns_time duration;
 
@@ -253,21 +266,24 @@ int pv_rootAlphaBeta(chessBoard &_cb, int alpha, int beta, int depth) {
     pvArray[pvIndex] = 0; // no pv yet
     pvNextIndex = pvIndex + maxPly - ply;
 
-    for (const auto move : myMoves) {
-        
+    for (const auto move : myMoves)
+    {    
         startTime = perf::now();
-        if (i < LMR_LIMIT || interesting_move(move, _cb)) {
+        if (i < LMR_LIMIT || interesting_move(move, _cb))
+        {
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
-        else {
+        else
+        {
             R = root_reduction(depth, i);
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
             if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-            if (eval > alpha && R) {
+            if (eval > alpha && R)
+            {
                 startTime = perf::now();
                 _cb.MakeMove(move);
                 eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
@@ -279,7 +295,8 @@ int pv_rootAlphaBeta(chessBoard &_cb, int alpha, int beta, int depth) {
         moc.insert(i, duration.count());
 
         if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             alpha = eval;
             pvArray[pvIndex] = myMoves.pMoves[i];
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
@@ -291,39 +308,45 @@ int pv_rootAlphaBeta(chessBoard &_cb, int alpha, int beta, int depth) {
     return alpha;
 }
 
-int LMR_search(chessBoard &_cb, MoveList& myMoves, int depth, int alpha, int beta, int ply, int pvIndex) {
-
+int
+LMR_search(chessBoard &_cb, MoveList& myMoves,
+    int depth, int alpha, int beta, int ply, int pvIndex)
+{
     int eval, hashf = HASHALPHA, R, i = 0;
     int pvNextIndex = pvIndex + maxPly - ply;
 
-    for (const auto move : myMoves) {
-
-        if (i < LMR_LIMIT || interesting_move(move, _cb)) {
+    for (const auto move : myMoves)
+    {
+        if (i < LMR_LIMIT || interesting_move(move, _cb))
+        {
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
-        else {
+        else
+        {
             R = reduction(depth, i);
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
             if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-            if (eval > alpha) {
+            if (eval > alpha)
+            {
                 _cb.MakeMove(move);
                 eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
         }
         if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             hashf = HASHEXACT;
             alpha = eval;
             pvArray[pvIndex] = move;
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
         }
-        if (eval >= beta) {
-
+        if (eval >= beta)
+        {
             #if defined(TRANSPOSITION_TABLE_H)
                 TT.record_position(_cb.Hash_Value, depth, move, beta, HASHBETA);
                 // TT.RemSearchHistory(_cb.Hash_Value);
