@@ -393,12 +393,13 @@ chessBoard::generate_hashKey() const
         key ^= TT.hash_key((csep & 127) + 1);
         key ^= TT.hash_key((csep >> 7) + castle_offset);
 
-        for (int i = 1; i < 16; i++) {
-            
+        for (int i = 1; i < 16; i++)
+        {    
             const int mul = i > 8 ? 1 : -1;
             uint64_t tmp = Pieces[i];
             
-            while (tmp) {
+            while (tmp)
+            {
                 const int idx = lSb_idx(tmp);
                 tmp &= tmp - 1;
                 key ^= TT.hash_key(pieceOfs + i * (idx + 1) * mul);

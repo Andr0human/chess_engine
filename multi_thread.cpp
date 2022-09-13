@@ -6,21 +6,25 @@ std::thread td[maxThreadCount];
 
 #ifndef NODECOUNT
 
-uint64_t bulk_MultiCount(chessBoard &_cb, int depth) {
+uint64_t
+bulk_MultiCount(chessBoard &_cb, int depth)
+{
     if (depth <= 0) return 1;
 
     MoveList myMoves = generate_moves(_cb);
 
     if (depth == 1) return myMoves.size();
     
-    if (thread_data.threads_available) {
+    if (thread_data.threads_available)
+    {
         thread_data.set(_cb, myMoves, depth, 0, 0, 0, 0, 0);
         run_threads('c', pvArray);
         return thread_data.NodeCount;
     }
     
     uint64_t answer = 0;
-    for (const auto move : myMoves) {
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         answer += bulk_MultiCount(_cb, depth - 1);
         _cb.UnmakeMove();
@@ -33,7 +37,9 @@ uint64_t bulk_MultiCount(chessBoard &_cb, int depth) {
 
 #ifndef MULTI_THREAD_SEARCH
 
-void MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer) {
+void
+MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer)
+{
     search_time_left = extra_time_left = true;
     std::thread timer_thread;
     if (use_timer) timer_thread = std::thread(timer);
@@ -47,21 +53,23 @@ void MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer) {
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
     
-    for (int depth = 1; depth <= mDepth;) {
-
+    for (int depth = 1; depth <= mDepth;)
+    {
         // pre_status(depth, valWindowCnt);
         eval = pv_multiAlphaBetaRoot(primary, alpha, beta, depth);
         // post_status(primary, pvArray[0], eval, global_time);
 
         if (__abs(eval) == valUNKNOWN) break;
-        if ((eval <= alpha) || (eval >= beta)) {
+        if ((eval <= alpha) || (eval >= beta))
+        {
             // We fell outside the window, so try again with a wider Window
             valWindowCnt++;
             alpha = eval - (valWindow << valWindowCnt);
             beta = eval + (valWindow << valWindowCnt);
             within_valWindow = false;
         }
-        else {
+        else
+        {
             // Set up the window for the next iteration.
             alpha = eval - valWindow;
             beta  = eval + valWindow;
@@ -78,16 +86,15 @@ void MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer) {
 
     if (use_timer) timer_thread.join();
     search_time_left = extra_time_left = false;
-    
 }
 
-int thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex) {
-
+int
+thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
+{
     if (!extra_time_left) return valUNKNOWN;
 
-    if (depth <= 0) {
+    if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
-    }
 
     info.max_ply = std::max(info.max_ply, ply);
     nodes_hits++;
@@ -105,32 +112,31 @@ int thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int de
 
     #endif
 
-
     auto myMoves = generate_moves(_cb);
     order_generated_moves(myMoves, true);
 
     loc_arr[pvIndex] = 0; // no pv yet
     int pvNextIndex = pvIndex + maxPly - ply;
 
-    if (ok_to_do_LMR(depth, myMoves)) {
+    if (ok_to_do_LMR(depth, myMoves))
         return LMR_threadSearch(_cb, loc_arr, myMoves, depth, alpha, beta, ply, pvIndex);
-    }
 
-    for (const auto move : myMoves) {
-
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
         _cb.UnmakeMove();
         
         if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             hashf = HASHEXACT;
             alpha = eval;
             loc_arr[pvIndex] = move;
             movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, maxPly - ply - 1);
         }
-        if (alpha >= beta) {
-
+        if (alpha >= beta)
+        {
             #if defined(TRANSPOSITION_TABLE_H)
                 TT.record_position(_cb.Hash_Value, depth, move, beta, HASHBETA);
                 // TT.RemSearchHistory(_cb.Hash_Value);
@@ -148,12 +154,12 @@ int thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int de
     return alpha;
 }
 
-int pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex) {
-    
+int
+pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
+{    
     if (!extra_time_left) return valUNKNOWN;
-    if (depth <= 0) {
+    if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
-    }
 
     info.max_ply = std::max(info.max_ply, ply);
     nodes_hits++;
@@ -178,20 +184,23 @@ int pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int d
 
     bool cut = fm_Search(_cb, loc_arr, depth, myMoves.pMoves[0], alpha, beta, ply, pvIndex);
     if (__abs(alpha) == valUNKNOWN) return valUNKNOWN;
-    if (cut) {
+    if (cut)
+    {
         // TT.RecordHash (myMoves.pMoves[0], _cb.Hash_Value, depth, beta, HASHBETA);
         // TT.RemSearchHistory(_cb.Hash_Value);
         return beta;
     }
 
-    if (thread_data.threads_available) {
+    if (thread_data.threads_available)
+    {
         thread_data.set(_cb, myMoves, depth, alpha, beta, ply, pvIndex, 1);
         run_threads('a', loc_arr);
         
         if (__abs(thread_data.alpha) == valUNKNOWN) return valUNKNOWN;
 
         // TT.RemSearchHistory(_cb.Hash_Value);
-        if (thread_data.beta_cut) {
+        if (thread_data.beta_cut)
+        {
             // TT.RecordHash (thread_data.best_move, _cb.Hash_Value, depth, beta, HASHBETA);
             return thread_data.beta;
         }
@@ -200,35 +209,36 @@ int pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int d
         return thread_data.alpha;
     }
 
-    for (const auto move : myMoves) {
-
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         int eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
         _cb.UnmakeMove();
 
         if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             hashf = HASHEXACT;
             alpha = eval;
             loc_arr[pvIndex] = move;
             movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, maxPly - ply - 1);
         }
-        if (alpha >= beta) {
+        if (alpha >= beta)
+        {
             // TT.RecordHash (move, _cb.Hash_Value, depth, beta, HASHBETA);
             // TT.RemSearchHistory(_cb.Hash_Value);
             return beta;
         }
-
     }
     
     // TT.RemSearchHistory(_cb.Hash_Value);
     // TT.RecordHash(loc_arr[pvIndex], _cb.Hash_Value, depth, alpha, hashf);
     return alpha;
-
 }
 
-int pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth) {
-
+int
+pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth)
+{
     MoveList myMoves = generate_moves(_cb);
     moc.setMoveOrder(myMoves);
     // moc.print(_cb);
@@ -252,20 +262,24 @@ int pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth) {
     TIME_VARIABLE duration;
     int pvNextIndex = pvIndex + maxPly - ply;
 
-    for (int i = 0; i < myMoves.__count; i++) {
+    for (int i = 0; i < myMoves.__count; i++)
+    {
         int move = myMoves.pMoves[i];
         startTime = TIME_NOW;
-        if (i < LMR_LIMIT || interesting_move(move, _cb)) {
+        if (i < LMR_LIMIT || interesting_move(move, _cb))
+        {
             _cb.MakeMove(move);
             eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
-        else {
+        else
+        {
             int R = root_reduction(depth, i);
             _cb.MakeMove(move);
             eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
-            if (eval > alpha && R) {
+            if (eval > alpha && R)
+            {
                 startTime = TIME_NOW;
                 _cb.MakeMove(move);
                 eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
@@ -278,7 +292,8 @@ int pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth) {
         moc.insert(i, duration.count());
 
         if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             alpha = eval;
             pvArray[pvIndex] = move;
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
@@ -286,40 +301,46 @@ int pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth) {
         if (alpha >= beta) return beta;
     }
     return alpha; */
-
 }
 
-int LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex) {
-
+int
+LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex)
+{
     int eval, hashf = HASHALPHA;
     int pvNextIndex = pvIndex + maxPly - ply;
 
-    for (uint64_t i = 0; i < myMoves.size(); i++) {
-        if (i < LMR_LIMIT || interesting_move(myMoves.pMoves[i], _cb)) {
+    for (uint64_t i = 0; i < myMoves.size(); i++)
+    {
+        if (i < LMR_LIMIT || interesting_move(myMoves.pMoves[i], _cb))
+        {
             _cb.MakeMove(myMoves.pMoves[i]);
             eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
-        else {
+        else
+        {
             int R = reduction(depth, i);
             _cb.MakeMove(myMoves.pMoves[i]);
             eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
             if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-            if (eval > alpha) {
+            if (eval > alpha)
+            {
                 _cb.MakeMove(myMoves.pMoves[i]);
                 eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
         }
         if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
-        if (eval > alpha) {
+        if (eval > alpha)
+        {
             hashf = HASHEXACT;
             alpha = eval;
             loc_arr[pvIndex] = myMoves.pMoves[i];
             movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, maxPly - ply - 1);
         }
-        if (eval >= beta) {
+        if (eval >= beta)
+        {
             // TT.RecordHash (myMoves.pMoves[i], _cb.Hash_Value, depth, beta, HASHBETA);
             // TT.RemSearchHistory(_cb.Hash_Value);
             return beta;
@@ -331,7 +352,9 @@ int LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int dept
     return alpha;
 }
 
-bool fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex) {
+bool
+fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex)
+{
     // No need to pick reduction as this is first move
     int pvNextIndex = pvIndex + maxPly - ply;
 
@@ -339,7 +362,8 @@ bool fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, 
     int eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
     _cb.UnmakeMove();
 
-    if (eval > alpha) {
+    if (eval > alpha)
+    {
         alpha = eval;
         loc_arr[pvIndex] = move;
         movcpy (loc_arr + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
@@ -348,7 +372,9 @@ bool fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, 
     return false;
 }
 
-bool first_rm_search(chessBoard &_cb, int move, int depth, int &alpha, int &beta) {
+bool
+first_rm_search(chessBoard &_cb, int move, int depth, int &alpha, int &beta)
+{
     // rm_search => root_move_search
 
     perf_clock startTime;
@@ -370,32 +396,33 @@ bool first_rm_search(chessBoard &_cb, int move, int depth, int &alpha, int &beta
 
     if (alpha >= beta) return true;
     return false;
-
 }
 
 #endif
 
 #ifndef WORKER
 
-void run_threads(char runtype, int sourceArr[]) {
-
-    if (runtype == 'c') {
+void
+run_threads(char runtype, int sourceArr[])
+{
+    if (runtype == 'c')
+    {
         for (int i = 0; i < threadCount; i++)
             td[i] = std::thread(worker_Count, i);
 
         for (int i = 0; i < threadCount; i++)
             td[i].join();
     }
-
-    else if (runtype == 'a') {
+    else if (runtype == 'a')
+    {
         for (int i = 0; i < threadCount; i++)
             td[i] = std::thread(worker_alphabeta, i, sourceArr);
 
         for (int i = 0; i < threadCount; i++)
             td[i].join();
     }
-
-    else if (runtype == 'r') {
+    else if (runtype == 'r')
+    {
         for (int i = 0; i < threadCount; i++)
             td[i] = std::thread(worker_root_alphabeta, i, sourceArr);
 
@@ -407,8 +434,9 @@ void run_threads(char runtype, int sourceArr[]) {
     return;
 }
 
-void worker_Count(int thread_num) {
-    
+void
+worker_Count(int thread_num)
+{
     chessBoard _cb;
     mute.lock();
     _cb = thread_data.Board;
@@ -418,7 +446,8 @@ void worker_Count(int thread_num) {
     int move = thread_num;
     uint64_t answer = 0;
 
-    while (true) {
+    while (true)
+    {
         mute.lock();
         uint64_t index = thread_data.get_index();
         mute.unlock();
@@ -431,12 +460,11 @@ void worker_Count(int thread_num) {
     mute.lock();
     thread_data.NodeCount += answer;
     mute.unlock();
-
-    return;
 }
 
-void worker_alphabeta(int thread_num, int sourceArr[]) {
-    
+void
+worker_alphabeta(int thread_num, int sourceArr[])
+{
     chessBoard _cb;
     mute.lock();
     _cb = thread_data.Board;
@@ -448,7 +476,8 @@ void worker_alphabeta(int thread_num, int sourceArr[]) {
     int pvNextIndex  = pvIndex + maxPly - ply;
     int eval, move;
 
-    while (true) {
+    while (true)
+    {
         mute.lock();
         uint64_t index = thread_data.get_index();
         int alpha = thread_data.alpha, beta = thread_data.beta;
@@ -462,14 +491,16 @@ void worker_alphabeta(int thread_num, int sourceArr[]) {
         eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
         _cb.UnmakeMove();
 
-        if (__abs(eval) == valUNKNOWN) {
+        if (__abs(eval) == valUNKNOWN)
+        {
             thread_data.alpha = valUNKNOWN;
             break;
         }
 
         mute.lock();
 
-        if (eval > thread_data.alpha) {
+        if (eval > thread_data.alpha)
+        {
             thread_data.alpha = eval;
             thread_data.best_move = move;
             sourceArr[pvIndex] = move;
@@ -479,11 +510,11 @@ void worker_alphabeta(int thread_num, int sourceArr[]) {
 
         mute.unlock();
     }
-
-    return;
 }
 
-void worker_root_alphabeta(int thread_num, int sourceArr[]) {
+void
+worker_root_alphabeta(int thread_num, int sourceArr[])
+{
     chessBoard _cb;
     mute.lock();
     _cb = thread_data.Board;
@@ -497,7 +528,8 @@ void worker_root_alphabeta(int thread_num, int sourceArr[]) {
     perf_clock startTime;
     perf_time duration;
 
-    while (true) {
+    while (true)
+    {
         mute.lock();
         uint64_t index = thread_data.get_index();
         int alpha = thread_data.alpha, beta = thread_data.beta;
@@ -509,17 +541,20 @@ void worker_root_alphabeta(int thread_num, int sourceArr[]) {
         move = thread_data.legal_moves[index];
 
         startTime = perf::now();
-        if (index < LMR_LIMIT || interesting_move(move, _cb)) {
+        if (index < LMR_LIMIT || interesting_move(move, _cb))
+        {
             _cb.MakeMove(move);
             eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
-        else {
+        else
+        {
             int R = root_reduction(depth, index);
             _cb.MakeMove(move);
             eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
-            if (eval > alpha && R) {
+            if (eval > alpha && R)
+            {
                 startTime = perf::now();
                 _cb.MakeMove(move);
                 eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
@@ -527,7 +562,8 @@ void worker_root_alphabeta(int thread_num, int sourceArr[]) {
             }
         }
 
-        if (__abs(eval) == valUNKNOWN) {
+        if (__abs(eval) == valUNKNOWN)
+        {
             thread_data.alpha = valUNKNOWN;
             break;
         }
@@ -537,7 +573,8 @@ void worker_root_alphabeta(int thread_num, int sourceArr[]) {
         duration = perf::now() - startTime;
         moc.insert(index, duration.count() * 10000);
 
-        if (eval > thread_data.alpha) {
+        if (eval > thread_data.alpha)
+        {
             thread_data.alpha = eval;
             thread_data.best_move = move;
             sourceArr[pvIndex] = move;
@@ -547,8 +584,6 @@ void worker_root_alphabeta(int thread_num, int sourceArr[]) {
 
         mute.unlock();
     }
-
-    return;
 }
 
 #endif
