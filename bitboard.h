@@ -19,46 +19,43 @@ extern uint64_t tmp_this_counter;
 
 #ifndef BIT_MANIPULATION
 
-inline int __ppcnt(const uint64_t N) {
-    return __builtin_popcountll(N);
-}
+inline int
+__ppcnt(const uint64_t N) 
+{ return __builtin_popcountll(N); }
 
-inline int idx_no(const uint64_t N) {
-    return __builtin_popcountll(N - 1);
-}
+inline int
+idx_no(const uint64_t N)
+{ return __builtin_popcountll(N - 1); }
 
-inline int lSb_idx(const uint64_t N) {
-    const uint64_t pow63 = 1ULL << 63;
-    return __builtin_ctzll(N | pow63);
-}
+inline int
+lSb_idx(const uint64_t N)
+{ return __builtin_ctzll(N | (1ULL << 63)); }
 
-inline int mSb_idx(const uint64_t N) {
-    return __builtin_clzll(N | 1) ^ 63;
-}
+inline int
+mSb_idx(const uint64_t N)
+{ return __builtin_clzll(N | 1) ^ 63; }
 
-inline uint64_t lSb(const uint64_t N) {
-    return N ^ (N & (N - 1));
-}
+inline uint64_t
+lSb(const uint64_t N)
+{ return N ^ (N & (N - 1)); }
 
-inline uint64_t mSb(const uint64_t N) {
-    if (N) return 1ULL << (__builtin_clzll(N) ^ 63);
-    return 0;
-}
+inline uint64_t
+mSb(const uint64_t N)
+{ return (N!=0) ? (1ULL << (__builtin_clzll(N)^63)) : (0); }
 
-inline uint64_t l_shift(const uint64_t val, const int shift) {
-    return val << shift;
-}
+inline uint64_t
+l_shift(const uint64_t val, const int shift)
+{ return val << shift; }
 
-inline uint64_t r_shift(const uint64_t val, const int shift) {
-    return val >> shift;
-}
+inline uint64_t
+r_shift(const uint64_t val, const int shift)
+{ return val >> shift; }
 
 #endif
 
-class chessBoard {
-
-private:
-
+class chessBoard
+{
+    private:
     static const int pieceOfs = 470, ofs = 7;
     static const int max_moveNum = 60;
 
@@ -69,8 +66,7 @@ private:
 
     void fill_with_piece(std::string arr[], uint64_t val, char ch) const;
 
-public:
-
+    public:
     int board[64] = {0};
 
     // White -> 1, Black -> 0
@@ -140,8 +136,6 @@ public:
 
     inline bool king_in_check() const noexcept
     { return KA > 0; }
-
-
 };
 
 

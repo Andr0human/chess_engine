@@ -5,7 +5,8 @@
 uint64_t tmp_total_counter = 0;
 uint64_t tmp_this_counter = 0;
 
-chessBoard::chessBoard() {
+chessBoard::chessBoard()
+{
     color = 1;
     csep = moveNum = 0;
     Hash_Value = 0;
@@ -15,25 +16,30 @@ chessBoard::chessBoard() {
     for (int i = 0; i < 16; i++) Pieces[i] = 0; 
 }
 
-chessBoard::chessBoard(const std::string &fen) {
-    
+chessBoard::chessBoard(const std::string& fen)
+{    
     // Split the elements from fen.
-    const auto text_split = [](const std::string &__s, char sep) {
+    const auto text_split = [] (const std::string &__s, char sep)
+    {
         std::vector<std::string> res;
         size_t prev = 0, __n = __s.length();
         
-        for (size_t i = 0; i < __n; i++) {
+        for (size_t i = 0; i < __n; i++)
+        {
             if (__s[i] != sep) continue;
             
-            if (i > prev) res.push_back(__s.substr(prev, i - prev));
+            if (i > prev)
+                res.push_back(__s.substr(prev, i - prev));
             prev = i + 1;
         }
 
-        if (__n > prev) res.push_back(__s.substr(prev, __n - prev));
+        if (__n > prev)
+            res.push_back(__s.substr(prev, __n - prev));
         return res;
     };
 
-    const auto char_to_piece_no = [] (const char ch) {
+    const auto char_to_piece_no = [] (const char ch)
+    {
         int res = 1;
         const char piece = ch < 'a' ? ch : ch - 32; 
 
@@ -71,7 +77,6 @@ chessBoard::chessBoard(const std::string &fen) {
             Pieces[ 7] |= Pieces[i];
             Pieces[15] |= Pieces[8 + i];
         }
-    
     }
 
 
@@ -80,7 +85,8 @@ chessBoard::chessBoard(const std::string &fen) {
     
     // Extracting castle-info
     csep = 0;
-    for (char ch : elements[2]) {
+    for (char ch : elements[2])
+    {
         if (ch == 'K') csep |= 1024;
         else if (ch == 'Q') csep |= 512;
         else if (ch == 'k') csep |= 256;
@@ -92,10 +98,13 @@ chessBoard::chessBoard(const std::string &fen) {
     else csep |= 28 + ((2 * color - 1) * 12) + (elements[3][0] - 'a');
 
     // Extracting half-move and full-move
-    if (elements.size() == 6) {
+    if (elements.size() == 6)
+    {
         halfmove = std::stoi(elements[4]);
         fullmove = std::stoi(elements[5]);
-    } else {
+    }
+    else
+    {
         halfmove = 0;
         fullmove = 1;
     }
@@ -105,8 +114,9 @@ chessBoard::chessBoard(const std::string &fen) {
     Hash_Value = generate_hashKey();
 }
 
-void chessBoard::MakeMove(int move) {
-
+void
+chessBoard::MakeMove(int move)
+{
     const int ip = move & 63, fp = (move >> 6) & 63;
     const int ep = csep & 127;
     int pt = board[ip], cpt = board[fp];
@@ -128,8 +138,10 @@ void chessBoard::MakeMove(int move) {
     board[fp] = pt;
     csep = (csep & 1920) ^ 64;
  
-    if ((pt & 7) == 1) {
-        if (fp == ep) {
+    if ((pt & 7) == 1)
+    {
+        if (fp == ep)
+        {
             // Check if captured square is an en-passant square
             
             const int pawn_fp = ep - 8 * piece_cl;
@@ -141,13 +153,15 @@ void chessBoard::MakeMove(int move) {
                 Hash_Value ^= TT.hash_key(pieceOfs - pt_m * (pawn_fp + 1));    // Fix needed
             #endif
         }
-        else if (std::abs(fp - ip) == 16) {
+        else if (std::abs(fp - ip) == 16)
+        {
             // Check if pawns move 2 two steps up or down
             // Generates en-passant square
             
             csep = (csep & 1920) | ((fp + ip) >> 1);           // Fix needed
         }
-        else if (fPos & 0xFF000000000000FF) {
+        else if (fPos & 0xFF000000000000FF)
+        {
             // Check for Pawn Promotion
 
             Pieces[pt] ^= iPos;
@@ -166,13 +180,14 @@ void chessBoard::MakeMove(int move) {
             #endif
         }
     }
-    else if ((pt & 7 )== 6) {  /// Check for a king Move
-
+    else if ((pt & 7 )== 6)
+    {
+        /// Check for a king Move
         const int filter_value = 2047 ^ (384 << (color * 2));
         csep &= filter_value;
 
-        if (std::abs(fp - ip) == 2) {
-
+        if (std::abs(fp - ip) == 2)
+        {
             const uint64_t swap_value = ((fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1)));
 
             Pieces[own + 4] ^= swap_value;
@@ -186,11 +201,11 @@ void chessBoard::MakeMove(int move) {
                 board[ip - 1] = own + 4;
             }
         }
-
     }
 
     ////// Check if a rook got captured
-    if ((fPos & 0x8100000000000081) && (move & 229376) == 131072) {
+    if ((fPos & 0x8100000000000081) && (move & 229376) == 131072)
+    {
         if (fp == 0) csep &= 1535;
         else if (fp == 7) csep &= 1023;
         else if (fp == 56) csep &= 1919;
@@ -198,7 +213,8 @@ void chessBoard::MakeMove(int move) {
     }
 
     ///// CHECK if a Rook Moved
-    if ((iPos & 0x8100000000000081) && (move & 28672) == 16384) {
+    if ((iPos & 0x8100000000000081) && (move & 28672) == 16384)
+    {
         if (ip == 0) csep &= 1535;
         else if (ip == 7) csep &= 1023;
         else if (ip == 56) csep &= 1919;
@@ -206,7 +222,8 @@ void chessBoard::MakeMove(int move) {
     }
 
 
-    if (cpt != 0) {
+    if (cpt != 0)
+    {
         Pieces[cpt] ^= fPos;
         Pieces[emy + 7] ^= fPos;
 
@@ -225,8 +242,9 @@ void chessBoard::MakeMove(int move) {
     color ^= 1;
 }
 
-void chessBoard::UnmakeMove() {
-    
+void
+chessBoard::UnmakeMove()
+{
     if (moveNum <= 0) return;
     moveNum--;
     int move   = aux_table_move[moveNum];
@@ -247,7 +265,8 @@ void chessBoard::UnmakeMove() {
     board[ip] = pt;
     board[fp] = cpt;
 
-    if (cpt) {
+    if (cpt)
+    {
         Pieces[cpt] ^= fPos;
         Pieces[emy + 7] ^= fPos;  
     }
@@ -255,21 +274,25 @@ void chessBoard::UnmakeMove() {
     Pieces[pt] ^= iPos ^ fPos;
     Pieces[own + 7] ^= iPos ^ fPos;
 
-    if ((pt & 7) == 1) {
-        if (fp == ep) {
+    if ((pt & 7) == 1)
+    {
+        if (fp == ep)
+        {
             const int pawn_fp = ep - 8 * piece_cl;
             Pieces[emy + 1] ^= 1ULL << (pawn_fp);
             Pieces[emy + 7] ^= 1ULL << (pawn_fp);
             board[pawn_fp] = emy + 1;
         }
-        else if ((fPos & 0xFF000000000000FF)) {
+        else if ((fPos & 0xFF000000000000FF))
+        {
             pt = (((move >> 18) & 3) + 2) + own;
             Pieces[own + 1] ^= fPos;
             Pieces[pt] ^= fPos;
         }
     }
-    else if ((pt & 7) == 6 && std::abs(fp - ip) == 2) {  /// Check for a king Move
-
+    else if ((pt & 7) == 6 && std::abs(fp - ip) == 2)
+    {
+        /// Check for a king Move
         const uint64_t swap_value = (fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1));
         Pieces[own + 4] ^= swap_value;
         Pieces[own + 7] ^= swap_value;
@@ -281,19 +304,20 @@ void chessBoard::UnmakeMove() {
             board[ip - 4] = own + 4;
             board[ip - 1] = 0;
         }
-
     }
     
     csep = t_csep;
     Hash_Value = aux_table_hash[moveNum];
 }
 
-const std::string chessBoard::fen() const {
-    
+const std::string
+chessBoard::fen() const
+{
     std::string generated_fen;
     int zero = 0;
 
-    const auto piece_no_to_char = [] (const int piece_no) {
+    const auto piece_no_to_char = [] (const int piece_no)
+    {
         char res = 'P';
         int piece = piece_no & 7;
 
@@ -307,22 +331,29 @@ const std::string chessBoard::fen() const {
         return res;
     };
     
-    for(int j = 7; j >= 0; j--) {
-        for (int i = 0; i < 8; i++) {
-            if (board[8 * j + i] == 0) zero++;
-            else {
-                if (zero) {
+    for(int j = 7; j >= 0; j--)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (board[8 * j + i] == 0)
+                zero++;
+            else
+            {
+                if (zero)
+                {
                     generated_fen.push_back(static_cast<char>(zero + 48));      // '0' + zero
                     zero = 0;
                 }
                 generated_fen.push_back(piece_no_to_char(board[8 * j + i]));
             }
         }
-        if (zero != 0) {
+        if (zero != 0)
+        {
             generated_fen.push_back(static_cast<char>(zero + 48));              // '0' + zero
             zero = 0;
         }
-        if (j != 0) generated_fen.push_back('/');
+        if (j != 0)
+            generated_fen.push_back('/');
     }
 
     generated_fen += " ";
@@ -335,8 +366,10 @@ const std::string chessBoard::fen() const {
     if ((csep & 1920) == 0) generated_fen.push_back('-');
     generated_fen.push_back(' ');
 
-    if ((csep & 64) != 0) generated_fen += "- ";
-    else {
+    if ((csep & 64) != 0)
+        generated_fen += "- ";
+    else
+    {
         generated_fen.push_back((csep & 7) + 'a');
         generated_fen += (color == 1 ? "6 " : "3 ");
     }
@@ -347,8 +380,9 @@ const std::string chessBoard::fen() const {
     return generated_fen;
 }
 
-uint64_t chessBoard::generate_hashKey() const {
-    
+uint64_t
+chessBoard::generate_hashKey() const
+{    
     uint64_t key = 0;
 
     #if defined(TRANSPOSITION_TABLE_H)
@@ -376,13 +410,16 @@ uint64_t chessBoard::generate_hashKey() const {
     return key;
 }
 
-void chessBoard::MakeNullMove() {
+void
+chessBoard::MakeNullMove()
+{
     csep = (csep & 1920) ^ 64;
     // Hash_Value ^= TT.HashIndex[0];
     color ^= 1;
 }
 
-void chessBoard::UnmakeNullMove() {
+void chessBoard::UnmakeNullMove()
+{
     // Update to not use t_csep form external source
     // csep = t_csep;
     // Hash_Value ^= TT.HashIndex[0];
@@ -390,7 +427,9 @@ void chessBoard::UnmakeNullMove() {
     // moveInvert(0, t_csep, t_HashVal);
 }
 
-void chessBoard::Reset() { 
+void
+chessBoard::Reset()
+{ 
     for (int i = 0; i < 64; i++) board[i] = 0;
     for (int i = 0; i < 16; i++) Pieces[i] = 0;
     csep = 0;
@@ -398,8 +437,9 @@ void chessBoard::Reset() {
     moveNum = 0;
 }
 
-void chessBoard::fill_with_piece(std::string arr[], uint64_t value, char ch) const {
-    
+void
+chessBoard::fill_with_piece(std::string arr[], uint64_t value, char ch) const
+{
     while (value != 0) {
         const int idx = lSb_idx(value);
         value &= value - 1;
@@ -409,8 +449,9 @@ void chessBoard::fill_with_piece(std::string arr[], uint64_t value, char ch) con
     }
 }
 
-void chessBoard::show() const {
-    
+void
+chessBoard::show() const
+{
     string arr[8];
     for (int i = 0; i < 8; i++) arr[i] = "........";
 
@@ -419,14 +460,16 @@ void chessBoard::show() const {
         '.', 'P', 'B', 'N', 'R', 'Q', 'K', '.'
     };
 
-    for (int i = 1; i < 15; i++) {
+    for (int i = 1; i < 15; i++)
+    {
         if (i == 7) continue;
         fill_with_piece(arr, Pieces[i], _piece[i]);
     }
 
     const string s = "+---+---+---+---+---+---+---+---+\n";
     cout << s;
-    for (int j = 7; j >= 0; j--) {
+    for (int j = 7; j >= 0; j--)
+    {
         cout << "| ";
         for (int i = 0; i < 8; i++)
             cout << arr[i][j] << " | ";
@@ -436,8 +479,9 @@ void chessBoard::show() const {
     cout << endl;
 }
 
-bool chessBoard::operator== (const chessBoard& other) {
-
+bool
+chessBoard::operator==(const chessBoard& other)
+{
     for (int i = 0; i < 64; i++)
         if (board[i] != other.board[i]) return false;
 
@@ -452,6 +496,5 @@ bool chessBoard::operator== (const chessBoard& other) {
     return true;
 }
 
-bool chessBoard::operator!= (const chessBoard& other) {
-    return !(*this == other);
-}
+bool chessBoard::operator!= (const chessBoard& other)
+{ return !(*this == other); }

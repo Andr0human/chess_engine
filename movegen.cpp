@@ -11,10 +11,9 @@
 
 #ifndef MOVEGEN_UTILS
 
-inline int gen_move_priority
-       (const chessBoard &__b, const int ip, const int fp)
+inline int
+gen_move_priority(const chessBoard &__b, const int ip, const int fp)
 {
-    
     int res = 0;
     const int pt  =  __b.board[ip] & 7;
     const int cpt = -__b.board[fp] & 7;
@@ -24,10 +23,9 @@ inline int gen_move_priority
     return res;
 }
 
-inline int gen_pawn_move_priority
-       (const chessBoard &__b, const int ip, const int fp)
+inline int
+gen_pawn_move_priority(const chessBoard &__b, const int ip, const int fp)
 {
-    
     int res = 5;
     const int pt  = __b.board[ip] & 7;
     const int cpt = __b.board[fp] & 7;
@@ -36,10 +34,9 @@ inline int gen_pawn_move_priority
     return res;
 }
 
-inline int encode_move
-    (const chessBoard &__b, const int ip, const int fp, const int pr)
+inline int
+encode_move(const chessBoard &__b, const int ip, const int fp, const int pr)
 {
-
     const int pt  = __b.board[ip] & 7;
     const int cpt = __b.board[fp] & 7;
     const int white_move = 1048576;
@@ -48,11 +45,11 @@ inline int encode_move
     
     gen_move ^= (pr << 21) ^ (cpt << 15) ^ (pt << 12) ^ (fp << 6) ^ ip;
     return gen_move;
-
 }
 
-bool en_passant_recheck(int ip, const chessBoard& _cb) {
-
+bool
+en_passant_recheck(int ip, const chessBoard& _cb)
+{
     const int own = _cb.color << 3;
     const int emy = (_cb.color ^ 1) << 3;
 
@@ -73,12 +70,14 @@ bool en_passant_recheck(int ip, const chessBoard& _cb) {
     return true;
 }
 
-inline void Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoard &_cb, MoveList &myMoves) {
-
+inline void
+Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoard &_cb, MoveList &myMoves)
+{
     if (!endSquares) return;
     myMoves.canMove = true;
 
-    if (myMoves.cpt_only) {
+    if (myMoves.cpt_only)
+    {
         uint64_t promotion_sq = endSquares & Rank18;
         endSquares = (endSquares & ALL(EMY)) | (promotion_sq);
         endSquares &= ALL(EMY);
@@ -91,21 +90,20 @@ inline void Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoa
         const int mv_priority = gen_pawn_move_priority(_cb, ip, fp);
         const int move = encode_move(_cb, ip, fp, mv_priority);
         // myMoves.pMoves[myMoves.__count++] = move;
-        myMoves.Add(move);
-        
+        myMoves.Add(move);   
     }
-
 }
 
-inline void Add_m_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves) {
-
+inline void
+Add_m_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves)
+{
     if (!endSquares) return;
     myMoves.canMove = true;
 
     if (myMoves.cpt_only) endSquares &= ALL(EMY);
     
-    while (endSquares) {
-        
+    while (endSquares)
+    {    
         const int fp = next_idx(endSquares);
         const int mv_priority = gen_move_priority(_cb, ip, fp);
         const int move = encode_move(_cb, ip, fp, mv_priority);
@@ -114,8 +112,9 @@ inline void Add_m_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, Move
     }
 }
 
-inline void Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves) {
-
+inline void
+Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves)
+{
     if (!endSquares) return;
     
     myMoves.canMove = true;
@@ -123,8 +122,8 @@ inline void Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, Mov
     
     myMoves.canPromote = true;
     
-    while (endSquares) {
-        
+    while (endSquares)
+    {    
         const int fp = next_idx(endSquares);
         const int mv_priority = gen_move_priority(_cb, ip, fp);
         const int move = encode_move(_cb, ip, fp, mv_priority);
@@ -139,10 +138,7 @@ inline void Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, Mov
         myMoves.Add(((pr +  9) << 21) ^ move ^ 0x80000);
         myMoves.Add(((pr +  6) << 21) ^ move ^ 0x40000);
         myMoves.Add(((pr +  3) << 21) ^ move);
-
     }
-
-
 }
 
 #endif
@@ -151,10 +147,10 @@ inline void Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, Mov
 
 #ifndef PAWNS
 
-inline void enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
-            const uint64_t l_pawns, const uint64_t r_pawns, const int KA)
+inline void
+enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
+    const uint64_t l_pawns, const uint64_t r_pawns, const int KA)
 {
-
     const int own = _cb.color << 3;
     const int emy = own ^ 8;
     const int kpos = idx_no(KING(own));
@@ -171,27 +167,25 @@ inline void enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
 
     if ((shift(r_pawns, 7 + (emy >> 2)) & _ep) && en_passant_recheck(eps + (2 * emy - 7), _cb))
         Add_m_Pawns(eps + (2 * emy - 7), _ep, _cb, myMoves);
-
 }
 
-inline void promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
-            const uint64_t move_sq, const uint64_t capt_sq, uint64_t pawns)
+inline void
+promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
+    const uint64_t move_sq, const uint64_t capt_sq, uint64_t pawns)
 {
-
     while (pawns) {
         const int idx = next_idx(pawns);
         const uint64_t res = ( plt::pBoard[_cb.color][idx] & move_sq)
                            | (plt::pcBoard[_cb.color][idx] & capt_sq);
         Add_pm_Pawns(idx, res, _cb, myMoves);
     }
-
 }
 
 
-inline void pawn_movement(const chessBoard &_cb, MoveList &myMoves,
-            const uint64_t pin_pieces, const int KA, const uint64_t atk_area)
+inline void
+pawn_movement(const chessBoard &_cb, MoveList &myMoves,
+    const uint64_t pin_pieces, const int KA, const uint64_t atk_area)
 {
-
     const uint64_t Rank27[2] = {Rank2, Rank7};
     const uint64_t Rank63[2] = {Rank6, Rank3};
 
@@ -212,7 +206,6 @@ inline void pawn_movement(const chessBoard &_cb, MoveList &myMoves,
     const auto shift   = _cb.color == 1 ? l_shift : r_shift;
     const auto s_pawns = (shift(n_pawns, 8) & free_sq) & Rank63[_cb.color];
 
-
     enpassant_pawns(_cb, myMoves, l_pawns, r_pawns, KA);
     promotion_pawns(_cb, myMoves, move_sq, capt_sq, e_pawns);
 
@@ -221,34 +214,42 @@ inline void pawn_movement(const chessBoard &_cb, MoveList &myMoves,
 
     add_quiet_pawn_moves(shift(s_pawns, 8) & move_sq, (4 * emy - 16), _cb, myMoves);
     add_quiet_pawn_moves(shift(n_pawns, 8) & move_sq, (2 * emy -  8), _cb, myMoves);
-
 }
 
 #endif
 
 
-inline uint64_t KnightMovement(int idx, const chessBoard& _cb) {
+inline uint64_t
+KnightMovement(int idx, const chessBoard& _cb)
+{
     const uint64_t dest_sqaures = knight_atk_sq(idx, 0);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-inline uint64_t BishopMovement(int idx, const chessBoard& _cb) {
+inline uint64_t
+BishopMovement(int idx, const chessBoard& _cb)
+{
     const uint64_t dest_sqaures = bishop_atk_sq(idx, ALL_BOTH);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-inline uint64_t RookMovement(int idx, const chessBoard& _cb) {
+inline uint64_t
+RookMovement(int idx, const chessBoard& _cb)
+{
     const uint64_t dest_sqaures = rook_atk_sq(idx, ALL_BOTH);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-inline uint64_t QueenMovement(int idx, const chessBoard &_cb) {
+inline uint64_t
+QueenMovement(int idx, const chessBoard &_cb)
+{
     const uint64_t dest_sqaures = queen_atk_sq(idx, ALL_BOTH);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-uint64_t pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA) {
-
+uint64_t
+pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
+{
     const int own = _cb.color << 3;
     const int emy = (_cb.color ^ 1) << 3;
 
@@ -267,7 +268,7 @@ uint64_t pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int 
     
 
     const auto pins_check = [&] (const auto &__f, const uint64_t *table,
-                                 uint64_t ownP, uint64_t emyP, char pawn)
+            uint64_t ownP, uint64_t emyP, char pawn)
     {
         const uint64_t pieces = table[kpos] & _Ap;
         const uint64_t first_piece = __f(pieces);
@@ -283,7 +284,8 @@ uint64_t pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int 
 
         if (KA == 1) return;
 
-        if ((first_piece & ownP) != 0) {
+        if ((first_piece & ownP) != 0)
+        {
             const uint64_t dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
             add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
@@ -292,7 +294,8 @@ uint64_t pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int 
         const int side  = 2 * color - 1;
         const int eps   = _cb.csep & 127;
 
-        if (pawn == 's' && (first_piece & PAWN(own))) {
+        if (pawn == 's' && (first_piece & PAWN(own)))
+        {
             uint64_t dest_sq = plt::pBoard[color][index_f] & (~_Ap);
             uint64_t second_rank = color == 1 ? Rank2 : Rank7;
 
@@ -302,8 +305,8 @@ uint64_t pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int 
             add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
 
-        if (pawn == 'c' && (first_piece & PAWN(own))) {
-
+        if (pawn == 'c' && (first_piece & PAWN(own)))
+        {
             uint64_t capt_sq = plt::pcBoard[color][index_f];
             uint64_t dest_sq = capt_sq & second_piece;
 
@@ -335,48 +338,48 @@ uint64_t pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int 
     return pinned_pieces;
 } 
 
-void piece_movement(const chessBoard &_cb, MoveList &myMoves, const int KA) {
-
+void
+piece_movement(const chessBoard &_cb, MoveList &myMoves, const int KA)
+{
     const uint64_t pinned_pieces = pinned_pieces_list(_cb, myMoves, KA);
     const uint64_t valid_sq = KA * _cb.Pieces[0] + (1 - KA) * AllSquares;
 
-    const auto Add_Vaild_Dest_Sq = [&] (const auto &__f, uint64_t piece) {
-
+    const auto Add_Vaild_Dest_Sq = [&] (const auto &__f, uint64_t piece)
+    {
         piece ^= (piece & pinned_pieces);
-        while (piece != 0) {
+        while (piece != 0)
+        {
             const int __pos = next_idx(piece);
             add_move_to_list(__pos, __f(__pos, _cb) & valid_sq, _cb, myMoves);
         }
     };
 
     const int own = OWN;
-
     pawn_movement(_cb, myMoves, pinned_pieces, KA, _cb.Pieces[0]);
 
     Add_Vaild_Dest_Sq(BishopMovement, BISHOP(own));
     Add_Vaild_Dest_Sq(KnightMovement, KNIGHT(own));
     Add_Vaild_Dest_Sq(RookMovement  , ROOK(own)  );
     Add_Vaild_Dest_Sq(QueenMovement , QUEEN(own) );
-
 }
 
 #endif
 
 #ifndef KING_MOVE_GENERATION
 
-uint64_t generate_AttackedSquares(const chessBoard& _cb) {
-    // generate_checks_indexs(_cb);
+uint64_t
+generate_AttackedSquares(const chessBoard& _cb)
+{
     uint64_t ans = 0;
     const uint64_t Apieces = ALL_BOTH ^ KING(OWN);
 
-    const auto attacked_squares = [&] (const auto &__f, uint64_t piece) {
-
+    const auto attacked_squares = [&] (const auto &__f, uint64_t piece)
+    {
         uint64_t res = 0;
         while (piece)
             ans |= __f(next_idx(piece), Apieces);
         return res;
     };
-
 
     const int emy = EMY;
 
@@ -390,11 +393,13 @@ uint64_t generate_AttackedSquares(const chessBoard& _cb) {
     return ans;
 }
 
-void king_attackers(chessBoard &_cb) {
-    
+void
+king_attackers(chessBoard &_cb)
+{    
     const uint64_t attacked_sq = _cb.Pieces[8];
 
-    if (attacked_sq && ((KING(OWN) & attacked_sq)) == 0) {
+    if (attacked_sq && ((KING(OWN) & attacked_sq)) == 0)
+    {
         _cb.KA = 0;
         return;
     }
@@ -405,9 +410,8 @@ void king_attackers(chessBoard &_cb) {
     int attk_count = 0;
     uint64_t attk_area = 0;
 
-    const auto add_piece = [kpos, _Ap, &attk_count, &attk_area]
-               (const auto &__f, const uint64_t enemy) {
-
+    const auto add_piece = [&] (const auto &__f, const uint64_t enemy)
+    {
         const uint64_t area  = __f(kpos, _Ap);
         const uint64_t piece = area & enemy;
 
@@ -425,7 +429,8 @@ void king_attackers(chessBoard &_cb) {
     add_piece(knight_atk_sq, KNIGHT(emy));
 
     const uint64_t pawn_sq = plt::pcBoard[_cb.color][kpos] & PAWN(emy);
-    if (pawn_sq) {
+    if (pawn_sq)
+    {
         ++attk_count;
         attk_area |= pawn_sq;
     }
@@ -433,23 +438,19 @@ void king_attackers(chessBoard &_cb) {
 
     _cb.KA = attk_count;
     _cb.Pieces[0] = attk_area;
-    return;
 }
 
-void KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq) {
-    
-
-    const auto add_castle_move =
-        [&_cb, &myMoves] (const int ip, const int fp) {
-
+void
+KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
+{
+    const auto add_castle_move = [&_cb, &myMoves] (const int ip, const int fp)
+    {
         const int pt = 6;
         const int priority = 20 << 21;
         const int side = _cb.color << 20;
         const int enc_move = priority + side + (pt << 12) + (fp << 6) + ip;
         myMoves.Add(enc_move);
-
     };
-
 
     const int kpos = idx_no(KING(OWN));
     const uint64_t K_sq = plt::KBoard[kpos];
@@ -467,19 +468,20 @@ void KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked
     const uint64_t sq_58_59 = 864691128455135232ULL;
     const uint64_t sq_61_62 = 6917529027641081856ULL;
 
-    if (_cb.color == 1) {
+    if (_cb.color == 1)
+    {
         if ((_cb.csep & 1024) && !(sq_5_6 & opd))
             add_castle_move(kpos, 6);
         if ((_cb.csep & 512) && (!(Apieces & 2) && !(12 & opd)))
             add_castle_move(kpos, 2);
     }
-    else {
+    else
+    {
         if ((_cb.csep & 256) && !(opd & sq_61_62))
             add_castle_move(kpos, 62);
         if ((_cb.csep & 128) && (!(Apieces & sq_57) && !(opd & sq_58_59)))
             add_castle_move(kpos, 58);
     }
-
 }
 
 
@@ -487,15 +489,16 @@ void KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked
 
 #ifndef LEGAL_MOVES_CHECK
 
-uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
-
+uint64_t
+can_pinned_pieces_move(const chessBoard& _cb, const int KA)
+{
     using std::make_pair;
 
     const int own = OWN;
     const int emy = EMY;
 
     const int kpos  = idx_no(KING(own));
-    const uint64_t _Ap   = ALL(WHITE) | ALL(BLACK);
+    const uint64_t _Ap = ALL(WHITE) | ALL(BLACK);
     
     const uint64_t erq = QUEEN(emy) | ROOK(emy);
     const uint64_t ebq = QUEEN(emy) | BISHOP(emy);
@@ -509,10 +512,9 @@ uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
     if (!((ray_line & erq) | (ray_diag & ebq)))
         return 0;
 
-
     const auto can_pinned = [&] (const auto &__f, const auto *table,
-                                 const uint64_t ownP, const uint64_t emyP, const char pawn) -> bool {
-
+            const uint64_t ownP, const uint64_t emyP, const char pawn) -> bool
+    {
         const uint64_t pieces = table[kpos] & _Ap;
         const uint64_t first_piece = __f(pieces);
         const uint64_t second_piece = __f(pieces ^ first_piece);
@@ -527,7 +529,8 @@ uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
 
         if (KA == 1) return false;
 
-        if ((first_piece & ownP) != 0) {
+        if ((first_piece & ownP) != 0)
+        {
             const uint64_t dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
             return dest_sq != 0;
         }
@@ -536,7 +539,8 @@ uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
         const int side  = 2 * color - 1;
         const int eps   = _cb.csep & 127;
 
-        if (pawn == 's' && (first_piece & PAWN(own))) {
+        if (pawn == 's' && (first_piece & PAWN(own)))
+        {
             uint64_t dest_sq = plt::pBoard[color][index_f] & (~_Ap);
             uint64_t second_rank = color == 1 ? Rank2 : Rank7;
 
@@ -546,7 +550,8 @@ uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
             return dest_sq != 0;
         }
 
-        if (pawn == 'c' && (first_piece & PAWN(own))) {
+        if (pawn == 'c' && (first_piece & PAWN(own)))
+        {
             uint64_t capt_sq = plt::pcBoard[color][index_f];
             uint64_t dest_sq = capt_sq & second_piece;
 
@@ -558,7 +563,6 @@ uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
 
         return false;
     };
-
 
     if (can_pinned(lSb, plt::rBoard,  rq, erq, '-')) return 1;
     if (can_pinned(mSb, plt::lBoard,  rq, erq, '-')) return 1;
@@ -573,9 +577,10 @@ uint64_t can_pinned_pieces_move(const chessBoard& _cb, const int KA) {
     return pinned_pieces;
 }
 
-bool can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
-                    const int KA, const uint64_t atk_area) {
-
+bool
+can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
+    const int KA, const uint64_t atk_area)
+{
     const int own = OWN;
     const int emy = own ^ 8;
 
@@ -592,16 +597,16 @@ bool can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
     const uint64_t r_pawns = PAWN(own) &  LeftAttkingPawns;
 
     
-    if (_cb.color == 1) {
-
-        if (KA == 0 || (KA == 1 && (plt::pcBoard[1][kpos] & capt_sq))) {
+    if (_cb.color == 1)
+    {
+        if (KA == 0 || (KA == 1 && (plt::pcBoard[1][kpos] & capt_sq)))
+        {
             if (((l_pawns << 9) & _ep) && en_passant_recheck(eps - 9, _cb))
                 return true;
 
             if (((r_pawns << 7) & _ep) && en_passant_recheck(eps - 7, _cb))
                 return true;
         }
-        
 
         if ((l_pawns << 9) & capt_sq) return true;
         if ((r_pawns << 7) & capt_sq) return true;
@@ -610,7 +615,8 @@ bool can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
         const uint64_t s_pawns = (flask >> 8) & Rank2;
 
         if (KA == 0 && flask) return true;
-        if (KA == 1 && flask) {
+        if (KA == 1 && flask)
+        {
             if (flask & move_sq) return true;
             if ((s_pawns << 16) & move_sq) return true;
         }
@@ -618,7 +624,8 @@ bool can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
         return false;
     }
 
-    if (KA == 0 || (KA == 1 && (plt::pcBoard[0][kpos] & capt_sq))) {
+    if (KA == 0 || (KA == 1 && (plt::pcBoard[0][kpos] & capt_sq)))
+    {
         if (((l_pawns >> 7) & _ep) && en_passant_recheck(eps + 7, _cb))
             return true;
 
@@ -633,7 +640,8 @@ bool can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
     const uint64_t s_pawns = (flask << 8) & Rank7;
 
     if (KA == 0 && flask) return true;
-    if (KA == 1 && flask) {
+    if (KA == 1 && flask)
+    {
         if (flask & move_sq) return true;
         if ((s_pawns >> 16) & move_sq) return true;
     }
@@ -641,9 +649,9 @@ bool can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
     return false;
 }
 
-bool can_piece_move(const chessBoard &_cb, const int KA) {
-
-
+bool
+can_piece_move(const chessBoard &_cb, const int KA)
+{
     const auto pinned_pieces = can_pinned_pieces_move(_cb, KA);
     const auto filter = KA * _cb.Pieces[0] + (1 - KA) * AllSquares;
 
@@ -651,8 +659,8 @@ bool can_piece_move(const chessBoard &_cb, const int KA) {
 
     if (legal) return true;
 
-    const auto canMove = [&] (const auto &__f, uint64_t piece) {
-
+    const auto canMove = [&] (const auto &__f, uint64_t piece)
+    {
         piece = piece ^ (piece & pinned_pieces);
 
         while (piece != 0) {
@@ -674,8 +682,9 @@ bool can_piece_move(const chessBoard &_cb, const int KA) {
     return legal;
 }
 
-uint64_t canKingMove(const chessBoard& _cb, uint64_t Attacked_Squares) {
-
+uint64_t
+canKingMove(const chessBoard& _cb, uint64_t Attacked_Squares)
+{
     const uint64_t _Ap = ALL_BOTH;
     const int kpos = idx_no(KING(OWN));
     uint64_t ans, Ksquares = plt::KBoard[kpos], opd = _Ap | Attacked_Squares;
@@ -684,13 +693,15 @@ uint64_t canKingMove(const chessBoard& _cb, uint64_t Attacked_Squares) {
     if (ans) return 1;
     if (!(_cb.csep & 1920)) return 0;
 
-    if (_cb.color == 1 && !((1ULL << kpos) & Attacked_Squares)) {
+    if (_cb.color == 1 && !((1ULL << kpos) & Attacked_Squares))
+    {
         if (_cb.csep & 1024)
             if (!(96 & opd)) return 1;
         if (_cb.csep & 512)
             if (!(_Ap & 2) && !(12 & opd)) return 1;
     }
-    if (_cb.color == 0 && !((1ULL << kpos) & Attacked_Squares)) {
+    if (_cb.color == 0 && !((1ULL << kpos) & Attacked_Squares))
+    {
         if (_cb.csep & 256)
             if (!(opd & 6917529027641081856ULL)) return 1;
         if (_cb.csep & 128)
@@ -704,9 +715,11 @@ uint64_t canKingMove(const chessBoard& _cb, uint64_t Attacked_Squares) {
 
 #ifndef SEARCH_HELPER
 
-bool is_passad_pawn(int idx, chessBoard& _cb) {
-
-    if (_cb.color == 1) {
+bool
+is_passad_pawn(int idx, chessBoard& _cb)
+{
+    if (_cb.color == 1)
+    {
         uint64_t res = plt::uBoard[idx];
         if ((idx & 7) >= 1) res |= plt::uBoard[idx - 1];
         if ((idx & 7) <= 6) res |= plt::uBoard[idx + 1];
@@ -719,11 +732,11 @@ bool is_passad_pawn(int idx, chessBoard& _cb) {
     if ((idx & 7) <= 6) res |= plt::dBoard[idx + 1];
     if (res & PAWN(WHITE)) return false;
     return true;
-
 }
 
-bool interesting_move(int move, chessBoard& _cb) {
-    
+bool
+interesting_move(int move, chessBoard& _cb)
+{
     int ip = move & 63, fp = (move >> 6) & 63, ep = _cb.csep & 127;
     int pt = _cb.board[ip], cpt = _cb.board[fp];
     if (cpt) return true;
@@ -740,11 +753,14 @@ bool interesting_move(int move, chessBoard& _cb) {
     return res;
 }
 
-bool f_prune_move(int move, chessBoard& _cb) {
+bool
+f_prune_move(int move, chessBoard& _cb)
+{
     int fp = (move >> 6) & 63;
     int cpt = _cb.board[fp];
     if (cpt) return true;
-    if ((_cb.board[move & 63] & 7) == 1) {
+    if ((_cb.board[move & 63] & 7) == 1)
+    {
         if (fp == (_cb.csep & 127)) return true;
         if (((1ULL << fp) & Rank18)) return true;
     }
@@ -784,28 +800,27 @@ MoveList generateMoves(const chessBoard &board, bool qs_only) {
 
 
 // Returns true if board position has at least one legal move.
-bool has_legal_moves(chessBoard &_cb) {
-
+bool
+has_legal_moves(chessBoard &_cb)
+{
     _cb.remove_movegen_extra_data();
 
+    // _cb.Pieces[8] = generate_AttackedSquares(_cb);
+    // if (canKingMove(_cb, _cb.Pieces[8])) return true;
+    // king_attackers(_cb);
+    // if (_cb.KA < 2 && can_piece_move(_cb, _cb.KA)) return true;
+    // return false;
+
     king_attackers(_cb);
-    
     if (_cb.KA < 2 && can_piece_move(_cb, _cb.KA)) return true;
 
     _cb.Pieces[8] = generate_AttackedSquares(_cb);
     return canKingMove(_cb, _cb.Pieces[8]);
-
-    // _cb.Pieces[8] = generate_AttackedSquares(_cb);
-    // if (canKingMove(_cb, _cb.Pieces[8])) return true;
-
-    // king_attackers(_cb);
-    // if (_cb.KA < 2 && can_piece_move(_cb, _cb.KA)) return true;
-
-    // return false;
 }
 
-MoveList generate_moves(chessBoard &_cb, bool qs_only) {
-
+MoveList
+generate_moves(chessBoard &_cb, bool qs_only)
+{
     /**
      * @brief 
      * enemy_attacked_sq => represents all the squares on board that are attacked by
@@ -828,7 +843,6 @@ MoveList generate_moves(chessBoard &_cb, bool qs_only) {
      *
     **/
 
-    
     MoveList myMoves;
 
     // const auto enemy_attacked_sq = (_cb.Pieces[8] == 0) ?
@@ -865,7 +879,6 @@ MoveList generate_moves(chessBoard &_cb, bool qs_only) {
 }
 
 #endif
-
 
 
 /**
