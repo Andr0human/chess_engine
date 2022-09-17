@@ -19,7 +19,9 @@ int64_t this_can_pos = 0;
 
 #ifndef TOOLS
 
-void timer() {
+void
+timer()
+{
     /* int _x = alloted_search_time * 1000, _y = alloted_extra_time * 1000;
     std::this_thread::sleep_for(std::chrono::milliseconds(_x)); */
     const auto _x = static_cast<uint64_t>(alloted_search_time * 1e6);
@@ -37,19 +39,22 @@ void timer() {
     extra_time_left = false; */
 }
 
-void timer2() {
+void
+timer2()
+{
     const auto _x = static_cast<uint64_t>(alloted_search_time * 1000);
     std::this_thread::sleep_for(std::chrono::microseconds(_x * 1000));
     search_time_left = false;
     return;
 }
 
-void movcpy (int* pTarget, const int* pSource, int n) {
-    while (n-- && (*pTarget++ = *pSource++));
-}
+void
+movcpy(int* pTarget, const int* pSource, int n)
+{ while (n-- && (*pTarget++ = *pSource++)); }
 
-void PRINT_LINE(chessBoard board, int line[], int __N) {
-
+void
+PRINT_LINE(chessBoard board, int line[], int __N)
+{
     for (int i = 0; i < __N; i++) {
         if (!line[i]) break;
         cout << print(line[i], board) << " ";
@@ -58,8 +63,9 @@ void PRINT_LINE(chessBoard board, int line[], int __N) {
     cout << endl;
 }
 
-void PRINT_LINE(chessBoard _cb, std::vector<int> line) {
-
+void
+PRINT_LINE(chessBoard _cb, std::vector<int> line)
+{
     for (const auto move : line) {
         if (move == 0) break;
         cout << print(move, _cb) << " ";
@@ -68,7 +74,9 @@ void PRINT_LINE(chessBoard _cb, std::vector<int> line) {
     cout << endl;
 }
 
-void pre_status(int __dep, int __cnt) {
+void
+pre_status(int __dep, int __cnt)
+{
     nodes_hits = qnodes_hits = 0;
     if (!perf_test) {
         cout << "Looking at Depth : " << __dep << endl;
@@ -76,12 +84,14 @@ void pre_status(int __dep, int __cnt) {
     }
 }
 
-void post_status(chessBoard &_cb, int _m, int _e, perf_clock start_time) {
-
+void
+post_status(chessBoard &_cb, int _m, int _e, perf_clock start_time)
+{
     perf_time x = perf::now() - start_time;
     const auto eval = _e * (2 * _cb.color - 1);
     
-    if (!perf_test) {
+    if (!perf_test)
+    {
         cout << "Node Hits :  " << nodes_hits << " Nodes. | qNode Hits : " << qnodes_hits << " Nodes.\n";
         cout << "Eval : " << static_cast<float>(eval) / 100.0 << '\n';
         cout << "Best Move : " << print(_m, _cb) << '\n';
@@ -89,8 +99,9 @@ void post_status(chessBoard &_cb, int _m, int _e, perf_clock start_time) {
     }
 }
 
-void curr_depth_status(chessBoard &_cb) {
-
+void
+curr_depth_status(chessBoard &_cb)
+{
     cout << std::setprecision(2);
     cout << "Depth ";
     if (info.last_depth() < 10) cout << " ";
@@ -100,7 +111,9 @@ void curr_depth_status(chessBoard &_cb) {
     PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
 }
 
-void Show_Searched_Info(chessBoard &_cb) {
+void
+Show_Searched_Info(chessBoard &_cb)
+{
     cout << "Depth Searched : " << info.last_depth() << endl;
     // cout << "Max Depth Reached : " << info.max_ply << endl;
     // cout << "Max Qs Depth Reached : " << info.max_qs_ply << endl;
@@ -110,28 +123,32 @@ void Show_Searched_Info(chessBoard &_cb) {
     PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
 }
 
-void reset_pv_line() {
+void
+reset_pv_line()
+{
     for (int i = 0; i < 800; i++)
         pvArray[i] = 0;
 }
 
-int checkmate_score(int ply) {
-    return (negInf >> 1) + (20 * ply);
-}
+int
+checkmate_score(int ply)
+{ return (negInf >> 1) + (20 * ply); }
 
 #endif
 
 #ifndef MOVE_GENERATION
 
-void order_generated_moves(MoveList& myMoves, bool pv_moves) {
-
+void
+order_generated_moves(MoveList& myMoves, bool pv_moves)
+{
     /* We order all legal moves in current position based on their type.
     e.g - Cap. Moves, PV Moves */
 
     uint64_t start = 0, __n = myMoves.size(), l2;
 
     // Put all PV moves before rest of the legal moves
-    if (pv_moves) {
+    if (pv_moves)
+    {
         for (uint64_t i = 0; i < __n; i++)
             if (info.is_part_of_pv(myMoves.pMoves[i])) 
                 std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
@@ -145,14 +162,18 @@ void order_generated_moves(MoveList& myMoves, bool pv_moves) {
     // Order all pv and capture moves based on their move priority
     l2 = start;
     for (uint64_t i = 0; i < l2; i++)
+    {
         for (uint64_t j = i + 1; j < l2; j++)
+        {
             if (myMoves.pMoves[j] > myMoves.pMoves[i])
                 std::swap(myMoves.pMoves[i], myMoves.pMoves[j]);
-
+        }
+    }
 }
 
-int createMoveOrderList(chessBoard &_cb) {
-
+int
+createMoveOrderList(chessBoard &_cb)
+{
     /* Stores time used to evaluate each root move.
     Useful in ordering root moves in iterative search. */
 
@@ -174,8 +195,9 @@ int createMoveOrderList(chessBoard &_cb) {
     return res;
 }
 
-bool is_valid_move(int move, chessBoard _cb) {
-
+bool
+is_valid_move(int move, chessBoard _cb)
+{
     int ip = move & 63, vMove/* , fp = (move >> 6) & 63 */;                      // Get Init. and Dest. Square from encoded move.
 
     if (!_cb.board[ip]) return false;                               // No piece on initial square
@@ -188,8 +210,8 @@ bool is_valid_move(int move, chessBoard _cb) {
     // Match with all generated legal moves, it found return valid, else not-valid.
 
     move &= (1 << 12) - 1;
-
-    for (const auto vmove : myMoves) {
+    for (const auto vmove : myMoves)
+    {
         vMove = vmove & ((1 << 12) - 1);
         if (move == vMove) return true;                             // Valid Move Found.
     }
@@ -201,13 +223,17 @@ bool is_valid_move(int move, chessBoard _cb) {
 
 #ifndef SEARCH_UTIL
 
-bool ok_to_do_nullmove(chessBoard& _cb) {
+bool
+ok_to_do_nullmove(chessBoard& _cb)
+{
     // if (ka_pieces.attackers) return false;
     if (info.side2move != _cb.color) return false;
     return true;
 }
 
-bool ok_to_fprune(int depth, chessBoard& _cb, MoveList& myMoves, int beta) {
+bool
+ok_to_fprune(int depth, chessBoard& _cb, MoveList& myMoves, int beta)
+{
     if (_cb.king_in_check()) return false;
     int margin = 250;
     if (depth == 2) margin = 420;
@@ -216,20 +242,25 @@ bool ok_to_fprune(int depth, chessBoard& _cb, MoveList& myMoves, int beta) {
     return false;
 }
 
-int apply_search_extensions(MoveList& myMoves) {
+int
+apply_search_extensions(MoveList& myMoves)
+{
     int R = 0;
-    // if (myMoves.KingAttackers) R++;
-    
+    // if (myMoves.KingAttackers) R++;    
     return R;
 }
 
-bool ok_to_do_LMR(int depth, MoveList& myMoves) {
+bool
+ok_to_do_LMR(int depth, MoveList& myMoves)
+{
     if (depth < 3) return false;
     // if (myMoves.KingAttackers || myMoves.__count < 6) return false;
     return true;
 }
 
-int root_reduction(int depth, int num) {
+int
+root_reduction(int depth, int num)
+{
     if (depth < 3) return 0;
     if (depth < 6) {
         if (num < 9) return 1;
@@ -241,8 +272,9 @@ int root_reduction(int depth, int num) {
     return 3;
 }
 
-int reduction (int depth, int move_no) {
-
+int
+reduction (int depth, int move_no)
+{
     if (depth < 2) return 0;
     if (depth < 4 && move_no > 9) return 1; 
 
@@ -256,7 +288,9 @@ int reduction (int depth, int move_no) {
     return 3;
 }
 
-int MaterialCount(chessBoard& _cb) {
+int
+MaterialCount(chessBoard& _cb)
+{
     int answer = 0;
     answer += 100 * (__ppcnt(PAWN(WHITE))   + __ppcnt(PAWN(BLACK)));
     answer += 300 * (__ppcnt(BISHOP(WHITE)) + __ppcnt(BISHOP(BLACK)));
@@ -270,8 +304,9 @@ int MaterialCount(chessBoard& _cb) {
 
 #ifndef SEARCH_COMMON
 
-int QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol) {
-    
+int
+QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol)
+{    
     if (!extra_time_left) return valUNKNOWN;                                // Check if Time Left for Search
     if (__dol > info.max_qs_ply) info.max_qs_ply = __dol;
     qnodes_hits++;
@@ -294,9 +329,11 @@ int QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol) {
     order_generated_moves(myMoves, false);
 
 
-    for (const auto move : myMoves) {
+    for (const auto move : myMoves)
+    {
         int move_priority = (move >> 21) & 31;
-        if (move_priority > 10) {                                           // Check based on priority for captures & checks
+        if (move_priority > 10)
+        {                                           // Check based on priority for captures & checks
             _cb.MakeMove(move);                                             // Make current move
             int score = -QuieSearch(_cb, -beta, -alpha, ply + 1, __dol + 1);
             _cb.UnmakeMove();                                               // Takeback made move
@@ -308,7 +345,9 @@ int QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol) {
     return alpha;
 }
 
-int AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply) {
+int
+AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply)
+{
     // if (!extra_time_left) return valUNKNOWN;
     nodes_hits++;
     if (has_legal_moves(_cb) == false)
@@ -319,8 +358,8 @@ int AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply) {
     auto myMoves = generate_moves(_cb);
     order_generated_moves(myMoves, false);
 
-    for (const auto move : myMoves) {
-
+    for (const auto move : myMoves)
+    {
         _cb.MakeMove(move);
         int eval = -AlphaBeta_noPV(_cb, depth - 1, -beta, -alpha, ply + 1);
         _cb.UnmakeMove();
