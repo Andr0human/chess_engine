@@ -114,20 +114,26 @@ chessBoard::chessBoard(const std::string& fen)
     Hash_Value = generate_hashKey();
 }
 
+
 void
-chessBoard::MakeMove(int move)
+chessBoard::MakeMove(const int move)
 {
-    const int ip = move & 63, fp = (move >> 6) & 63;
+    // Init and Dest. sq
+    const int ip = move & 63;
+    const int fp = (move >> 6) & 63;
+
+    const uint64_t iPos = 1ULL << ip;
+    const uint64_t fPos = 1ULL << fp;
+
     const int ep = csep & 127;
-    int pt = board[ip], cpt = board[fp];
-    const uint64_t iPos = 1ULL << ip, fPos = 1ULL << fp;
-    
-    const int own = color << 3, emy = (color ^ 1) << 3;
+    const int own = color << 3;
+    const int emy = (color ^ 1) << 3;
 
-    const int piece_cl = (color << 1) - 1;
-    const int pt_m = (pt & 7) * piece_cl;
-    const int cpt_m = (cpt & 7) * piece_cl;
+    // Piece at init sq.
+    int pt = board[ip];
 
+    // Piece at dest sq.
+    int cpt = board[fp];
 
     aux_table_move[moveNum] = move;
     aux_table_csep[moveNum] = csep;
@@ -136,51 +142,36 @@ chessBoard::MakeMove(int move)
 
     board[ip] = 0;
     board[fp] = pt;
+
+    #if defined(TRANSPOSITION_TABLE_H)
+    
+        if (ep != 64)
+            Hash_Value ^= TT.hash_key(ep + 1);
+
+    #endif
+
+    // Reset the en-passant state
     csep = (csep & 1920) ^ 64;
- 
+
+    // Check if a rook is on dest. sq.
+    make_move_castle_check((move >> 15) & 7, fp);
+
+    // Check if a rook is on init. sq.
+    make_move_castle_check((move >> 12) & 7, ip);
+
     if ((pt & 7) == 1)
     {
-        if (fp == ep)
-        {
-            // Check if captured square is an en-passant square
-            
-            const int pawn_fp = ep - 8 * piece_cl;
-            Pieces[emy + 1] ^= 1ULL << (pawn_fp);
-            Pieces[emy + 7] ^= 1ULL << (pawn_fp);
-            board[pawn_fp] = 0;
+        if (is_double_pawn_push(ip, fp))
+            return make_move_double_pawn_push(ip, fp);
 
-            #if defined(TRANSPOSITION_TABLE_H)
-                Hash_Value ^= TT.hash_key(pieceOfs - pt_m * (pawn_fp + 1));    // Fix needed
-            #endif
-        }
-        else if (std::abs(fp - ip) == 16)
-        {
-            // Check if pawns move 2 two steps up or down
-            // Generates en-passant square
-            
-            csep = (csep & 1920) | ((fp + ip) >> 1);           // Fix needed
-        }
-        else if (fPos & 0xFF000000000000FF)
-        {
-            // Check for Pawn Promotion
+        if (is_en_passant(fp, ep))
+            return make_move_enpassant(ip, fp);
 
-            Pieces[pt] ^= iPos;
-            #if defined(TRANSPOSITION_TABLE_H)
-                Hash_Value ^= TT.hash_key(pieceOfs + pt_m * (ip + 1));
-            #endif
-
-            pt = (((move >> 18) & 3) + 2) + own;
-            board[fp] = pt;
-            Pieces[pt] ^= iPos;
-            
-            const int new_pt_m = (pt & 7) * piece_cl;
-
-            #if defined(TRANSPOSITION_TABLE_H)
-                Hash_Value ^= TT.hash_key(pieceOfs + new_pt_m * (ip + 1));
-            #endif
-        }
+        if (is_pawn_promotion(fp))
+            return make_move_pawn_promotion(move);
     }
-    else if ((pt & 7 )== 6)
+
+    if ((pt & 7) == 6)
     {
         /// Check for a king Move
         const int filter_value = 2047 ^ (384 << (color * 2));
@@ -188,7 +179,7 @@ chessBoard::MakeMove(int move)
 
         if (std::abs(fp - ip) == 2)
         {
-            const uint64_t swap_value = ((fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1)));
+            const uint64_t swap_value = (fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1));
 
             Pieces[own + 4] ^= swap_value;
             Pieces[own + 7] ^= swap_value;
@@ -203,32 +194,14 @@ chessBoard::MakeMove(int move)
         }
     }
 
-    ////// Check if a rook got captured
-    if ((fPos & 0x8100000000000081) && (move & 229376) == 131072)
-    {
-        if (fp == 0) csep &= 1535;
-        else if (fp == 7) csep &= 1023;
-        else if (fp == 56) csep &= 1919;
-        else if (fp == 63) csep &= 1791;
-    }
-
-    ///// CHECK if a Rook Moved
-    if ((iPos & 0x8100000000000081) && (move & 28672) == 16384)
-    {
-        if (ip == 0) csep &= 1535;
-        else if (ip == 7) csep &= 1023;
-        else if (ip == 56) csep &= 1919;
-        else if (ip == 63) csep &= 1791;
-    }
-
-
     if (cpt != 0)
     {
         Pieces[cpt] ^= fPos;
         Pieces[emy + 7] ^= fPos;
 
         #if defined(TRANSPOSITION_TABLE_H)
-            Hash_Value ^= TT.hash_key(pieceOfs + cpt_m * (fp + 1));
+            // Hash_Value ^= TT.hash_key(pieceOfs + cpt_m * (fp + 1));
+            Hash_Value ^= TT.hashkey_update(cpt, fp);
         #endif
     }
 
@@ -236,10 +209,107 @@ chessBoard::MakeMove(int move)
     Pieces[own + 7] ^= iPos ^ fPos;
 
     #if defined(TRANSPOSITION_TABLE_H)
-        Hash_Value ^= TT.hash_key(pieceOfs + pt_m * (ip + 1)) ^ TT.hash_key(0)
-                    ^ TT.hash_key(pieceOfs + pt_m * (fp + 1));
+        Hash_Value ^= TT.hashkey_update(pt, ip)
+                    ^ TT.hashkey_update(pt, fp)
+                    ^ TT.hash_key(0);
     #endif
     color ^= 1;
+}
+
+void
+chessBoard::make_move_double_pawn_push(int ip, int fp)
+{
+    int own = color << 3;
+    csep = (csep & 1920) | ((ip + fp) >> 1);
+
+    Pieces[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
+    Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+
+    color ^= 1;
+
+    #if defined(TRANSPOSITION_TABLE_H)
+        // Add current enpassant-state to hash_value
+        Hash_Value ^= TT.hash_key(1 + ((ip + fp) >> 1));
+        Hash_Value ^= TT.hashkey_update(own + 1, ip)
+                    ^ TT.hashkey_update(own + 1, fp)
+                    ^ TT.hash_key(0);
+    #endif
+}
+
+void
+chessBoard::make_move_enpassant(int ip, int ep)
+{
+    int own = color << 3;
+    int emy = own ^ 8;
+    int cap_pawn_fp = ep - 8 * (2 * color - 1);
+
+    // Remove opp. pawn from the Pieces-table
+    Pieces[emy + 1] ^= 1ULL << cap_pawn_fp;
+    Pieces[emy + 7] ^= 1ULL << cap_pawn_fp;
+    board[cap_pawn_fp] = 0;
+
+    // Shift own pawn in Pieces-table
+    Pieces[own + 1] ^= (1ULL << ip) ^ (1ULL << ep);
+    Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << ep);
+
+    color ^= 1;
+
+    #if defined(TRANSPOSITION_TABLE_H)
+        Hash_Value ^= TT.hashkey_update(own + 1, ip)
+                    ^ TT.hashkey_update(own + 1, ep)
+                    ^ TT.hash_key(0);
+    #endif
+}
+
+void
+chessBoard::make_move_castle_check(const int piece, const int sq)
+{
+    // piece - at (init) or (dest) square.
+
+    const uint64_t CORNER_SQUARES = 0x8100000000000081;
+    const uint64_t bit_pos = 1ULL << sq;
+
+    if ((bit_pos & CORNER_SQUARES) and (piece == 4))
+    {
+        int y = (sq + 1) >> 3;
+        int z  = y + (y < 7 ? 9 : 0);
+        csep &= 2047 ^ (1 << z);
+    }
+}
+
+
+void
+chessBoard::make_move_pawn_promotion(const int move)
+{
+    int ip  = move & 63;
+    int fp  = (move >> 6) & 63;
+    int cpt = (move >> 15) & 7;
+
+    int own = color << 3;
+    int emy = own ^ 8;
+    int new_pt = ((move >> 18) & 3) + 2;
+
+    Pieces[own + 1] ^= 1ULL << ip;
+    Pieces[own + new_pt] ^= 1ULL << fp;
+    Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+    board[fp] = own + new_pt;
+
+    if (cpt > 0)
+    {
+        Pieces[emy + cpt] ^= 1ULL << fp;
+        Pieces[emy + 7] ^= 1ULL << fp;
+
+        #if defined(TRANSPOSITION_TABLE_H)
+            Hash_Value ^= TT.hashkey_update(cpt, fp);
+        #endif
+    }
+
+    color ^= 1;
+
+    #if defined(TRANSPOSITION_TABLE_H)
+        Hash_Value ^= TT.hashkey_update(own + 1, ip);
+        Hash_Value ^= TT.hashkey_update(own + new_pt, fp);
+    #endif
 }
 
 void
@@ -388,21 +458,21 @@ chessBoard::generate_hashKey() const
     #if defined(TRANSPOSITION_TABLE_H)
 
         const int castle_offset = 66;
-        if (color == 0) key ^= TT.hash_key(0);
+        if (color == 0)
+            key ^= TT.hash_key(0);
 
         key ^= TT.hash_key((csep & 127) + 1);
         key ^= TT.hash_key((csep >> 7) + castle_offset);
 
-        for (int i = 1; i < 16; i++)
-        {    
-            const int mul = i > 8 ? 1 : -1;
-            uint64_t tmp = Pieces[i];
-            
-            while (tmp)
+        for (int piece = 1; (piece < 16) and (piece & 7) < 7; piece++)
+        {
+            uint64_t __tmp = Pieces[piece];
+
+            while (__tmp > 0)
             {
-                const int idx = lSb_idx(tmp);
-                tmp &= tmp - 1;
-                key ^= TT.hash_key(pieceOfs + i * (idx + 1) * mul);
+                const int __pos = lSb_idx(__tmp);
+                __tmp &= __tmp - 1;
+                key ^= TT.hashkey_update(piece, __pos);
             }
         }
 
@@ -441,7 +511,8 @@ chessBoard::Reset()
 void
 chessBoard::fill_with_piece(std::string arr[], uint64_t value, char ch) const
 {
-    while (value != 0) {
+    while (value != 0)
+    {
         const int idx = lSb_idx(value);
         value &= value - 1;
 
@@ -497,5 +568,6 @@ chessBoard::operator==(const chessBoard& other)
     return true;
 }
 
-bool chessBoard::operator!= (const chessBoard& other)
+bool
+chessBoard::operator!= (const chessBoard& other)
 { return !(*this == other); }

@@ -66,6 +66,32 @@ class chessBoard
 
     void fill_with_piece(std::string arr[], uint64_t val, char ch) const;
 
+    // MakeMove-Subparts
+
+    bool
+    is_en_passant(int fp, int ep) const noexcept
+    { return fp == ep; }
+
+    bool
+    is_double_pawn_push(int ip, int fp) const noexcept
+    { return std::abs(ip - fp) == 16; }
+
+    bool
+    is_pawn_promotion(int fp) const noexcept
+    { return (1ULL << fp) & 0xFF000000000000FF; }
+
+    void
+    make_move_castle_check(const int piece, const int sq);
+
+    void
+    make_move_enpassant(int ip, int fp);
+
+    void
+    make_move_double_pawn_push(int ip, int fp);
+
+    void
+    make_move_pawn_promotion(const int move);
+
     public:
     int board[64] = {0};
 
@@ -99,27 +125,35 @@ class chessBoard
      * Pieces[0] and Pieces[8] are unused.
      * 
      **/
-    uint64_t Pieces[16] = {0};
+    uint64_t Pieces[16]{0};
 
     chessBoard();
     
     chessBoard(const std::string &fen);
 
-    void show() const;
+    void
+    show() const;
 
-    void MakeMove(int move);
+    void
+    MakeMove(const int move);
 
-    void UnmakeMove();
+    void
+    UnmakeMove();
 
-    const string fen() const;
+    const string
+    fen() const;
 
-    uint64_t generate_hashKey() const;
+    uint64_t
+    generate_hashKey() const;
 
-    void MakeNullMove();
+    void
+    MakeNullMove();
 
-    void UnmakeNullMove();
+    void
+    UnmakeNullMove();
 
-    void Reset();
+    void
+    Reset();
 
     bool operator== (const chessBoard& other);
 
