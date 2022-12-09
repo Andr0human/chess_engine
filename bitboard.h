@@ -80,6 +80,10 @@ class chessBoard
     is_pawn_promotion(int fp) const noexcept
     { return (1ULL << fp) & 0xFF000000000000FF; }
 
+    bool
+    is_castling(int ip, int fp) const noexcept
+    { return (ip - fp == 2) | (fp - ip == 2);}
+
     void
     make_move_castle_check(const int piece, const int sq);
 
@@ -92,8 +96,11 @@ class chessBoard
     void
     make_move_pawn_promotion(const int move);
 
+    void
+    make_move_castling(int ip, int fp, bool call_from_makemove);
+
     public:
-    int board[64] = {0};
+    int board[64]{0};
 
     // White -> 1, Black -> 0
     int color;
@@ -139,6 +146,12 @@ class chessBoard
 
     void
     UnmakeMove();
+
+    void
+    auxilary_table_update(const int move);
+
+    int
+    auxilary_table_revert();
 
     const string
     fen() const;

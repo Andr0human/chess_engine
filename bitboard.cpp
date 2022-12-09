@@ -129,16 +129,11 @@ chessBoard::MakeMove(const int move)
     const int own = color << 3;
     const int emy = (color ^ 1) << 3;
 
-    // Piece at init sq.
-    int pt = board[ip];
+    // Piece at init and dest. sq.
+    const int pt = board[ip];
+    const int cpt = board[fp];
 
-    // Piece at dest sq.
-    int cpt = board[fp];
-
-    aux_table_move[moveNum] = move;
-    aux_table_csep[moveNum] = csep;
-    aux_table_hash[moveNum] = Hash_Value;
-    moveNum++;
+    auxilary_table_update(move);
 
     board[ip] = 0;
     board[fp] = pt;
@@ -159,6 +154,7 @@ chessBoard::MakeMove(const int move)
     // Check if a rook is on init. sq.
     make_move_castle_check((move >> 12) & 7, ip);
 
+    // Check for pawn special moves.
     if ((pt & 7) == 1)
     {
         if (is_double_pawn_push(ip, fp))
@@ -171,27 +167,14 @@ chessBoard::MakeMove(const int move)
             return make_move_pawn_promotion(move);
     }
 
+    // Check for king moves.
     if ((pt & 7) == 6)
     {
-        /// Check for a king Move
-        const int filter_value = 2047 ^ (384 << (color * 2));
-        csep &= filter_value;
+        const int filter = 2047 ^ (384 << (color * 2));
+        csep &= filter;
 
-        if (std::abs(fp - ip) == 2)
-        {
-            const uint64_t swap_value = (fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1));
-
-            Pieces[own + 4] ^= swap_value;
-            Pieces[own + 7] ^= swap_value;
-
-            if (fp > ip) {
-                board[ip + 3] = 0;
-                board[ip + 1] = own + 4;
-            } else {
-                board[ip - 4] = 0;
-                board[ip - 1] = own + 4;
-            }
-        }
+        if (is_castling(ip, fp))
+            return make_move_castling(ip, fp, true);
     }
 
     if (cpt != 0)
@@ -208,12 +191,30 @@ chessBoard::MakeMove(const int move)
     Pieces[pt] ^= iPos ^ fPos;
     Pieces[own + 7] ^= iPos ^ fPos;
 
+    // Flip the sides.
+    color ^= 1;
+
     #if defined(TRANSPOSITION_TABLE_H)
         Hash_Value ^= TT.hashkey_update(pt, ip)
                     ^ TT.hashkey_update(pt, fp)
                     ^ TT.hash_key(0);
     #endif
-    color ^= 1;
+}
+
+void
+chessBoard::make_move_castle_check(const int piece, const int sq)
+{
+    // piece - at (init) or (dest) square.
+
+    const uint64_t CORNER_SQUARES = 0x8100000000000081;
+    const uint64_t bit_pos = 1ULL << sq;
+
+    if ((bit_pos & CORNER_SQUARES) and (piece == 4))
+    {
+        int y = (sq + 1) >> 3;
+        int z  = y + (y < 7 ? 9 : 0);
+        csep &= 2047 ^ (1 << z);
+    }
 }
 
 void
@@ -262,23 +263,6 @@ chessBoard::make_move_enpassant(int ip, int ep)
 }
 
 void
-chessBoard::make_move_castle_check(const int piece, const int sq)
-{
-    // piece - at (init) or (dest) square.
-
-    const uint64_t CORNER_SQUARES = 0x8100000000000081;
-    const uint64_t bit_pos = 1ULL << sq;
-
-    if ((bit_pos & CORNER_SQUARES) and (piece == 4))
-    {
-        int y = (sq + 1) >> 3;
-        int z  = y + (y < 7 ? 9 : 0);
-        csep &= 2047 ^ (1 << z);
-    }
-}
-
-
-void
 chessBoard::make_move_pawn_promotion(const int move)
 {
     int ip  = move & 63;
@@ -313,22 +297,52 @@ chessBoard::make_move_pawn_promotion(const int move)
 }
 
 void
+chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove)
+{
+    int own = color << 3;
+    
+    uint64_t rooks_indexes =
+            (fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1));
+
+    Pieces[own + 4] ^= rooks_indexes;
+    Pieces[own + 7] ^= rooks_indexes;
+
+    int flask = static_cast<int>(!call_from_makemove) * (own + 4);
+
+    if (fp > ip) {
+        board[ip + 3] = flask;
+        board[ip + 1] = (own + 4) ^ flask;
+    } else {
+        board[ip - 4] = flask;
+        board[ip - 1] = (own + 4) ^ flask;
+    }
+
+    if (call_from_makemove)
+    {
+        Pieces[own + 6] ^= (1ULL << ip) ^ (1ULL << fp);
+        Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+        color ^= 1;
+    }
+}
+
+void
 chessBoard::UnmakeMove()
 {
     if (moveNum <= 0) return;
-    moveNum--;
-    int move   = aux_table_move[moveNum];
-    int t_csep = aux_table_csep[moveNum];
 
     color ^= 1;
-    const int ip = move & 63, fp = (move >> 6) & 63;
-    const int ep = t_csep & 127;
-    
-    const uint64_t iPos = 1ULL << ip, fPos = 1ULL << fp;
-    const int own = color << 3, emy = (color ^ 1) << 3;
-    int pt = ((move >> 12) & 7) ^ own, cpt = ((move >> 15) & 7) ^ emy;
+    const int move = auxilary_table_revert();
 
-    const int piece_cl = (color << 1) - 1;
+    const int ip = move & 63;
+    const int fp = (move >> 6) & 63;
+    const int ep = csep & 127;
+    
+    const uint64_t iPos = 1ULL << ip;
+    const uint64_t fPos = 1ULL << fp;
+    const int own = color << 3;
+    const int emy = (color ^ 1) << 3;
+    int pt = ((move >> 12) & 7) ^ own;
+    int cpt = ((move >> 15) & 7) ^ emy;
 
     if (cpt == 8) cpt = 0;
 
@@ -348,7 +362,7 @@ chessBoard::UnmakeMove()
     {
         if (fp == ep)
         {
-            const int pawn_fp = ep - 8 * piece_cl;
+            const int pawn_fp = ep - 8 * (2 * color - 1);
             Pieces[emy + 1] ^= 1ULL << (pawn_fp);
             Pieces[emy + 7] ^= 1ULL << (pawn_fp);
             board[pawn_fp] = emy + 1;
@@ -360,24 +374,28 @@ chessBoard::UnmakeMove()
             Pieces[pt] ^= fPos;
         }
     }
-    else if ((pt & 7) == 6 && std::abs(fp - ip) == 2)
-    {
-        /// Check for a king Move
-        const uint64_t swap_value = (fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1));
-        Pieces[own + 4] ^= swap_value;
-        Pieces[own + 7] ^= swap_value;
 
-        if (fp > ip) {
-            board[ip + 3] = own + 4;
-            board[ip + 1] = 0 ;
-        } else {
-            board[ip - 4] = own + 4;
-            board[ip - 1] = 0;
-        }
-    }
-    
-    csep = t_csep;
+    if ((pt & 7) == 6 and is_castling(ip, fp))
+        return make_move_castling(ip, fp, false);
+}
+
+void
+chessBoard::auxilary_table_update(const int move)
+{
+    aux_table_move[moveNum] = move;
+    aux_table_csep[moveNum] = csep;
+    aux_table_hash[moveNum] = Hash_Value;
+    ++moveNum;
+}
+
+int
+chessBoard::auxilary_table_revert()
+{
+    moveNum--;
+    csep = aux_table_csep[moveNum];
     Hash_Value = aux_table_hash[moveNum];
+
+    return aux_table_move[moveNum];
 }
 
 const std::string
