@@ -4,10 +4,10 @@
 #define TASK_H
 
 #include "perf.h"
-#include "play.h"
 #include "single_thread.h"
-#include "multi_thread.h"
-#include "ponder.h"
+// #include "multi_thread.h"
+// #include "play.h"
+// #include "ponder.h"
 #include <fstream>
 #include <iomanip>  // for setprecision
 

@@ -49,6 +49,7 @@ class moveOrderClass
     void reset();
 };
 
+
 class search_data
 {
     private:
@@ -110,101 +111,6 @@ class search_data
     set_discard_result(int zMove);
 };
 
-struct thread_search_info
-{
-    chessBoard Board;
-    bool beta_cut, threads_available, time_left;
-
-    uint64_t moveCount, index;
-    int depth;
-    int ply, pvIndex, best_move, hashf;
-    int legal_moves[156], alpha, beta;
-    uint64_t NodeCount;
-
-    thread_search_info ();
-
-    void
-    set(chessBoard &tmp_board, MoveList &tmp, int t_dep, int ta, int tb, int tply, int pv_idx, int start);
-
-    uint64_t
-    get_index();
-
-    std::pair<int, int>
-    result();
-};
-
-struct play_board
-{
-    chessBoard board;
-    string commandline;
-    static const int occ_pos_size = 300;
-    uint64_t occured_positions[occ_pos_size];
-    int pos_cnt, opponent_move;
-
-    play_board()
-    {
-        board = chessBoard(
-                string("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"));
-        pos_cnt = 0;
-        opponent_move = 0;
-    }
-
-    void
-    init(const string fen)
-    {
-        board = fen;
-        pos_cnt = 0;
-        opponent_move = 0;
-    }
-
-    void
-    play_move(int move)
-    {
-        board.MakeMove(move);
-        int pt = (move >> 12) & 7, cpt = (move >> 15) & 7;
-        if (pt == 1 || cpt >= 1) pos_cnt = 0;                       // If pawn or a capture move, clear game history table
-        occured_positions[pos_cnt++] = board.Hash_Value;            // Add Board pos. to occured table list.
-
-        #if defined(TRANSPOSITION_TABLE_H)
-            // TT.ClearTT();
-            // TT.Clear_History();
-        #endif
-    }
-
-    void
-    generate_history_table()
-    {
-        #if defined(TRANSPOSITION_TABLE_H)
-        // for (int i = 0; i < pos_cnt; i++)
-            // TT.RecordSearch(occured_positions[i]);
-        #endif
-    }
-};
-
-class ponder_list
-{
-    void index_swap(uint64_t i, uint64_t j);
-
-    public:
-    int moves[maxMoves];
-    int evals[maxMoves];
-    int lines[maxMoves][maxDepth];
-    uint64_t mCount;
-
-    ponder_list() {mCount = 0;};
-
-    void
-    setList(MoveList &myMoves);
-
-    void
-    insert(int idx, int move, int eval, int line[]);
-
-    void
-    show(chessBoard &board);
-
-    void
-    sortlist();
-};
 
 class test_position
 {
@@ -225,7 +131,6 @@ class test_position
     void
     print();
 };
-
 
 class
 movegen_test_position
@@ -273,9 +178,6 @@ movegen_test_position
 
 extern search_data info;
 extern moveOrderClass moc;
-extern thread_search_info thread_data;
-extern play_board pb;
-extern ponder_list pdl;
 
 vector<string>
 split(const string &__s, char sep);

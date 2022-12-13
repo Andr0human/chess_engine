@@ -68,12 +68,56 @@ void test() {
     cout << "Var2 = " << __pos2.Hash_Value << endl;
 }
 
-int main(int argc, char **argv) {
-
+int main(int argc, char **argv)
+{
     FAST_IO();
     init();
     Task(argc, argv);
 
+    // std::cout << "Start !" << endl;
+
+    // test();
+
+    // chessBoard _cb = default_fen;
+    chessBoard _cb = string("r1bqkb1r/pppppBpp/2n2n2/8/4P3/8/PPPP1PPP/RNBQK1NR b KQkq - 0 3");
+    // _cb.show();
+
+    // cout << "Board Initialised!!\n\n" << endl;
+
+    cout << "Start = " << _cb.Hash_Value << endl;
+
+
+    // int moves[] = {1055784, 27898, 1076344, 27379, 27008560};
+
+    // for (int i = 0; i < 5; i++)
+    // {
+    //     cout << "Move = " << print(moves[i], _cb) << endl;
+    //     _cb.MakeMove(moves[i]);
+    //     auto __x = _cb.generate_hashKey();
+    //     std::cout << "End = " << _cb.Hash_Value << " | " << __x << endl;
+    // }
+
+    // MakeMove_Iterative(_cb, 8);
+
+    // for (int i = 0; i < 6; i++)
+    //     _cb.UnmakeMove();
+
+    int move = 16870780;
+    _cb.MakeMove(move);
+    // int move2 = 62005238;
+    // _cb.MakeMove(move2);
+
+    // cout << "HashIndex - " << TT.hash_key(21) << endl;
+
+    // _cb.show();
+    // std::cout << "Done!" << endl;
+
+    auto __x = _cb.generate_hashKey();
+    std::cout << "End = " << _cb.Hash_Value << " | " << __x << endl;
+
+    // MoveList myMoves = generate_moves(_cb);
+    // cout << myMoves.size() << endl;
+    // print(myMoves, _cb);
 }
 
 

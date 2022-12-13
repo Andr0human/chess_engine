@@ -110,6 +110,7 @@ chessBoard::chessBoard(const std::string& fen)
     }
 
     KA = -1;
+
     // Generate hash-value for current position
     Hash_Value = generate_hashKey();
 }
@@ -170,8 +171,13 @@ chessBoard::MakeMove(const int move)
     // Check for king moves.
     if ((pt & 7) == 6)
     {
+        int old_csep = csep;
         const int filter = 2047 ^ (384 << (color * 2));
         csep &= filter;
+
+        #if defined(TRANSPOSITION_TABLE_H)
+            update_csep(old_csep, csep);
+        #endif
 
         if (is_castling(ip, fp))
             return make_move_castling(ip, fp, true);
@@ -202,6 +208,13 @@ chessBoard::MakeMove(const int move)
 }
 
 void
+chessBoard::update_csep(int old_csep, int new_csep)
+{
+    Hash_Value ^= TT.hash_key((old_csep >> 7) + 66);
+    Hash_Value ^= TT.hash_key((new_csep >> 7) + 66);
+}
+
+void
 chessBoard::make_move_castle_check(const int piece, const int sq)
 {
     // piece - at (init) or (dest) square.
@@ -211,9 +224,14 @@ chessBoard::make_move_castle_check(const int piece, const int sq)
 
     if ((bit_pos & CORNER_SQUARES) and (piece == 4))
     {
+        int old_csep = csep;
         int y = (sq + 1) >> 3;
         int z  = y + (y < 7 ? 9 : 0);
         csep &= 2047 ^ (1 << z);
+
+        #if defined(TRANSPOSITION_TABLE_H)
+            update_csep(old_csep, csep);
+        #endif
     }
 }
 
@@ -226,15 +244,15 @@ chessBoard::make_move_double_pawn_push(int ip, int fp)
     Pieces[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
     Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
-    color ^= 1;
-
     #if defined(TRANSPOSITION_TABLE_H)
         // Add current enpassant-state to hash_value
-        Hash_Value ^= TT.hash_key(1 + ((ip + fp) >> 1));
+        Hash_Value ^= TT.hash_key(1 + (csep & 127));
         Hash_Value ^= TT.hashkey_update(own + 1, ip)
                     ^ TT.hashkey_update(own + 1, fp)
                     ^ TT.hash_key(0);
     #endif
+
+    color ^= 1;
 }
 
 void
@@ -309,10 +327,13 @@ chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove)
 
     int flask = static_cast<int>(!call_from_makemove) * (own + 4);
 
-    if (fp > ip) {
+    if (fp > ip)
+    {
         board[ip + 3] = flask;
         board[ip + 1] = (own + 4) ^ flask;
-    } else {
+    }
+    else
+    {
         board[ip - 4] = flask;
         board[ip - 1] = (own + 4) ^ flask;
     }
@@ -479,13 +500,17 @@ chessBoard::generate_hashKey() const
         if (color == 0)
             key ^= TT.hash_key(0);
 
-        key ^= TT.hash_key((csep & 127) + 1);
+        if ((csep & 127) != 64)
+            key ^= TT.hash_key((csep & 127) + 1);
+
         key ^= TT.hash_key((csep >> 7) + castle_offset);
 
-        for (int piece = 1; (piece < 16) and (piece & 7) < 7; piece++)
+        for (int piece = 1; piece < 16; piece++)
         {
-            uint64_t __tmp = Pieces[piece];
+            if ((piece & 7) >= 7)
+                continue;
 
+            uint64_t __tmp = Pieces[piece];
             while (__tmp > 0)
             {
                 const int __pos = lSb_idx(__tmp);

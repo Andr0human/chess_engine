@@ -14,7 +14,7 @@ bulkCount(chessBoard &_cb, int depth)
 
     if (depth == 1) return myMoves.size();
     uint64_t answer = 0;
-    
+
     for (const auto move : myMoves)
     {
         _cb.MakeMove(move);
@@ -159,6 +159,19 @@ AlphaBeta(chessBoard &__pos, int depth,
             return __pos.king_in_check() ? checkmate_score(ply) : 0;
     }
 
+    if (__pos.Hash_Value != __pos.generate_hashKey())
+    {
+        __pos.show();
+
+        cout << __pos.Hash_Value << endl;
+        cout << __pos.generate_hashKey() << endl;
+        cout << __pos.fen() << endl;
+
+        __pos.current_line();
+        system("pause");
+    }
+
+
     {
         // TT_lookup
         #if defined(TRANSPOSITION_TABLE_H)
@@ -170,9 +183,9 @@ AlphaBeta(chessBoard &__pos, int depth,
             // Check if given board is already in transpostion table
             // Note : Need to check for check-mate/stale-mate possibility before TT_lookup,
             //        else can lead to search faulires.
-            int tt_val = TT.lookup_position(__pos.Hash_Value, depth, alpha, beta);
-            if (tt_val != valUNKNOWN)
-                return tt_val;
+            // int tt_val = TT.lookup_position(__pos.Hash_Value, depth, alpha, beta);
+            // if (tt_val != valUNKNOWN)
+            //     return tt_val;
 
             // Store current board in history-table to check for 3-move repetition
             // TT.RecordSearch(__pos.Hash_Value);

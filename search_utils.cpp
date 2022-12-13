@@ -4,8 +4,7 @@
 
 search_data info;
 moveOrderClass moc;
-thread_search_info thread_data;
-ponder_list pdl;
+
 
 #ifndef MOVE_ORDER_CLASS
 
@@ -197,121 +196,6 @@ search_data::set_discard_result(int zMove)
         move[depth++] = std::make_pair(zMove, negInf / 2);
     if (zMove == -2)
         move[depth++] = std::make_pair(zMove, 0);
-}
-
-#endif
-
-#ifndef THREAD_SEARCH_INFO
-
-thread_search_info::thread_search_info()
-{
-    threads_available = true;
-    time_left = true;
-    beta_cut = false;
-}
-
-void
-thread_search_info::set(chessBoard &tmp_board, MoveList &tmp,
-    int t_dep, int ta, int tb, int tply, int pv_idx, int start)
-{
-    threads_available = beta_cut = false;
-    NodeCount = 0;
-    Board = tmp_board;
-    for (size_t i = 0; i < tmp.size(); i++)
-        legal_moves[i] = tmp.pMoves[i];
-    
-    moveCount = tmp.size(); index = start; depth = t_dep;
-    ply = tply; pvIndex = pv_idx, best_move = tmp.pMoves[0];
-
-    hashf = HASHALPHA;
-    alpha = ta; beta = tb;
-}
-
-uint64_t
-thread_search_info::get_index()
-{
-    if (index >= moveCount) return -1;
-    uint64_t value = index;
-    index++;
-    return value;
-}
-
-std::pair<int, int>
-thread_search_info::result()
-{ return std::make_pair(best_move, alpha); }
-
-#endif
-
-#ifndef PONDER_LIST
-
-void
-ponder_list::setList(MoveList &myMoves)
-{
-    mCount = myMoves.size();
-    for (size_t i = 0; i < myMoves.size(); i++)
-        moves[i] = myMoves.pMoves[i];
-}
-
-void
-ponder_list::insert(int idx, int cmove, int ceval, int cline[])
-{
-    moves[idx] = cmove;
-    evals[idx] = ceval;
-    lines[idx][0] = cmove;
-    int cnt = 0;
-    while (cline[cnt])
-    {
-        lines[idx][cnt + 1] = cline[cnt];
-        cnt++; 
-    }
-}
-
-void
-ponder_list::show(chessBoard &board)
-{
-    cout << "MoveCount : " << mCount << endl;
-    chessBoard tmp;
-    uint64_t cnt;
-
-    for (uint64_t i = 0; i < mCount; i++)
-    {
-        cout << print(moves[i], board) << "\t| " << evals[i] << "\t| ";
-        cnt = 0;
-        tmp = board;
-
-        while (lines[i][cnt])
-        {
-            cout << print(lines[i][cnt], tmp) << " ";
-            tmp.MakeMove(lines[i][cnt]);
-            cnt++;
-        }
-        cout << endl;
-    }
-}
-
-void
-ponder_list::index_swap(uint64_t i, uint64_t j)
-{
-    std::swap(moves[i], moves[j]);
-    std::swap(evals[i], evals[j]);
-    uint64_t cnt = 0;
-    while (lines[i][cnt] || lines[j][cnt])
-    {
-        std::swap(lines[i][cnt], lines[j][cnt]);
-        cnt++;
-    }
-}
-
-void
-ponder_list::sortlist()
-{
-    for (uint64_t i = 0; i < mCount; i++)
-    {
-        uint64_t best = i;
-        for (uint64_t j = i; j < mCount; j++)
-            if (evals[j] > evals[best]) best = j;
-        index_swap(i, best);
-    }
 }
 
 #endif

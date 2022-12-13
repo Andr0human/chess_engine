@@ -7,7 +7,34 @@
 #include <thread>
 #include <vector>
 #include "single_thread.h"
-#include "multi_thread.h"
+// #include "multi_thread.h"
+
+
+class ponder_list
+{
+    void index_swap(uint64_t i, uint64_t j);
+
+    public:
+    int moves[maxMoves];
+    int evals[maxMoves];
+    int lines[maxMoves][maxDepth];
+    uint64_t mCount;
+
+    ponder_list() {mCount = 0;};
+
+    void
+    setList(MoveList &myMoves);
+
+    void
+    insert(int idx, int move, int eval, int line[]);
+
+    void
+    show(chessBoard &board);
+
+    void
+    sortlist();
+};
+
 
 bool read_input();
 bool read_stop_input();
@@ -22,6 +49,9 @@ bool extract_commandline(chessBoard &_cb);
 void execute_commandline(chessBoard &_cb);
 
 void ponderSearch(chessBoard board, bool file_print = false);
+
+
+extern ponder_list pdl;
 
 #endif
 

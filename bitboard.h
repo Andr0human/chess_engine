@@ -64,7 +64,9 @@ class chessBoard
     uint64_t aux_table_hash[max_moveNum];
     int moveNum = 0;
 
-    void fill_with_piece(std::string arr[], uint64_t val, char ch) const;
+    void
+    fill_with_piece(std::string arr[], uint64_t val, char ch)
+    const;
 
     // MakeMove-Subparts
 
@@ -98,6 +100,9 @@ class chessBoard
 
     void
     make_move_castling(int ip, int fp, bool call_from_makemove);
+
+    void
+    update_csep(int old_csep, int new_csep);
 
     public:
     int board[64]{0};
@@ -155,6 +160,14 @@ class chessBoard
 
     const string
     fen() const;
+
+    void
+    current_line() const noexcept
+    {
+        for (int i = 0; i < moveNum; i++)
+        cout << aux_table_move[i] << ' ';
+        cout << endl;
+    }
 
     uint64_t
     generate_hashKey() const;

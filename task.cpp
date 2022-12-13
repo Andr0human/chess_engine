@@ -15,11 +15,11 @@ init()
 
     bool sec = (it >= 1);
     cout << "Table Gen. took " << (sec ? it : it * 1000)
-         << (sec ? " s.\n" : " ms.") << std::endl;
+         << (sec ? " s.\n" : " ms.") << endl;
 
     #if defined(TRANSPOSITION_TABLE_H)
         cout << "Transposition Table Size = " << TT.size()
-            << "\n\n" << std::flush;
+            << "\n" << endl;
     #endif
 }
 
@@ -158,6 +158,9 @@ helper()
     puts("** For Evaluating a position, type:\n");
     puts("** elsa go <fen> <search_time>\n");
 
+    puts("** For debugging movegenerator, type:\n");
+    puts("** elsa debug <fen> <depth> <output_file_name>\n");
+
     puts("/**************************************************/\n\n");
 }
 
@@ -293,6 +296,7 @@ debug_movegen(const vector<string> &_args)
         _cb.MakeMove(move);
         const auto current = bulkCount(_cb, dep - 1);
         out << moveName(move) << " : " << current << '\n';
+        // out << print(move, _cb) << " : " << current << '\n';
         _cb.UnmakeMove();
     }
 
@@ -336,8 +340,10 @@ void Task(int argc, char *argv[])
     }
     else if (command == "play")
     {
-        // Argument : elsa play "fen"
-        start_game(argument_list);
+        #if defined(PLAY_H)
+            // Argument : elsa play "fen"
+            start_game(argument_list);
+        #endif
     }
     else if (command == "free")
     {
@@ -346,8 +352,10 @@ void Task(int argc, char *argv[])
     }
     else if (command == "ponder")
     {
-        // Argument : elsa ponder "fen"
-        ponderSearch(chessBoard(argument_list[1]), true);
+        #if defined(PONDER_H)
+            // Argument : elsa ponder "fen"
+            ponderSearch(chessBoard(argument_list[1]), true);
+        #endif
     }
     else if (command == "count")
     {

@@ -3,6 +3,49 @@
 #include "multi_thread.h"
 
 std::thread td[maxThreadCount];
+thread_search_info thread_data;
+
+
+#ifndef THREAD_SEARCH_INFO
+
+thread_search_info::thread_search_info()
+{
+    threads_available = true;
+    time_left = true;
+    beta_cut = false;
+}
+
+void
+thread_search_info::set(chessBoard &tmp_board, MoveList &tmp,
+    int t_dep, int ta, int tb, int tply, int pv_idx, int start)
+{
+    threads_available = beta_cut = false;
+    NodeCount = 0;
+    Board = tmp_board;
+    for (size_t i = 0; i < tmp.size(); i++)
+        legal_moves[i] = tmp.pMoves[i];
+    
+    moveCount = tmp.size(); index = start; depth = t_dep;
+    ply = tply; pvIndex = pv_idx, best_move = tmp.pMoves[0];
+
+    hashf = HASHALPHA;
+    alpha = ta; beta = tb;
+}
+
+uint64_t
+thread_search_info::get_index()
+{
+    if (index >= moveCount) return -1;
+    uint64_t value = index;
+    index++;
+    return value;
+}
+
+std::pair<int, int>
+thread_search_info::result()
+{ return std::make_pair(best_move, alpha); }
+
+#endif
 
 #ifndef NODECOUNT
 

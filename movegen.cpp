@@ -173,7 +173,8 @@ inline void
 promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
     const uint64_t move_sq, const uint64_t capt_sq, uint64_t pawns)
 {
-    while (pawns) {
+    while (pawns)
+    {
         const int idx = next_idx(pawns);
         const uint64_t res = ( plt::pBoard[_cb.color][idx] & move_sq)
                            | (plt::pcBoard[_cb.color][idx] & capt_sq);

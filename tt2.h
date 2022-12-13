@@ -43,6 +43,7 @@ class Transposition_Table {
     const static int HASHEXACT = 1;
     const static int HASHALPHA = 2;
     const static int HASHBETA  = 3;
+    const static int HASH_INDEXES_SIZE = 855;
 
     /**
      * 0 -> 100 MB table_size
@@ -57,7 +58,7 @@ class Transposition_Table {
     Zobrist_HashKey *primary_tt_table;
     Zobrist_HashKey *secondary_tt_table;
 
-    uint64_t HashIndex[860];    
+    uint64_t HashIndex[HASH_INDEXES_SIZE];    
 
     void get_random_keys() noexcept;
 
@@ -72,16 +73,24 @@ public:
     Transposition_Table(int preset)
     { resize(preset); }
 
-    void resize(int preset = 0);
+    void
+    resize(int preset = 0);
 
-    std::string size() const;
+    std::string
+    size() const;
 
-    uint64_t hash_key(int __pos) const noexcept
+    uint64_t
+    hash_key(int __pos) const noexcept
     { return HashIndex[__pos]; }
 
-    void record_position(uint64_t zkey, int depth, int move, int eval, int flag) noexcept;
+    uint64_t
+    hashkey_update(int piece, int __pos) const noexcept;
+
+    void
+    record_position(uint64_t zkey, int depth, int move, int eval, int flag) noexcept;
     
-    int lookup_position(uint64_t zkey, int depth, int alpha, int beta) const noexcept;
+    int
+    lookup_position(uint64_t zkey, int depth, int alpha, int beta) const noexcept;
 
 
 };

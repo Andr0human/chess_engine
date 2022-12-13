@@ -3,13 +3,13 @@
 comp = g++
 
 
-CPPFLAGS = -std=c++20 -g3 -march=native -O3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion \
+CPPFLAGS = -std=c++20 -g3 -march=native -O3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
 	# -static -static-libgcc -static-libstdc++
 
 
-srcs = bitboard.cpp lookup_table.cpp tt2.cpp search_utils.cpp elsa.cpp movegen.cpp \
-	search.cpp PieceSquareTable.cpp single_thread.cpp multi_thread.cpp play.cpp \
-	task.cpp ponder.cpp evaluation.cpp move_utils.cpp
+srcs = bitboard.cpp lookup_table.cpp tt2.cpp search_utils.cpp elsa.cpp movegen.cpp\
+	search.cpp PieceSquareTable.cpp single_thread.cpp task.cpp evaluation.cpp move_utils.cpp\
+	# play.cpp ponder.cpp multi_thread.cpp
 
 
 objs = $(notdir $(srcs:.cpp=.o))

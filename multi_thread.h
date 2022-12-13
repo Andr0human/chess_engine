@@ -10,6 +10,31 @@
 // #include "new_eval.h"
 
 
+struct thread_search_info
+{
+    chessBoard Board;
+    bool beta_cut, threads_available, time_left;
+
+    uint64_t moveCount, index;
+    int depth;
+    int ply, pvIndex, best_move, hashf;
+    int legal_moves[156], alpha, beta;
+    uint64_t NodeCount;
+
+    thread_search_info ();
+
+    void
+    set(chessBoard &tmp_board, MoveList &tmp, int t_dep, int ta, int tb, int tply, int pv_idx, int start);
+
+    uint64_t
+    get_index();
+
+    std::pair<int, int>
+    result();
+};
+
+
+
 void run_threads(char runtype, int sourceArr[]);
 void worker_Count(int thread_num);
 void worker_alphabeta(int thread_num, int sourceArr[]);
@@ -25,6 +50,7 @@ bool fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, 
 bool first_rm_search(chessBoard &_cb, int __move, int depth, int &alpha, int &beta);
 
 extern std::thread td[maxThreadCount];
+extern thread_search_info thread_data;
 
 
 #endif

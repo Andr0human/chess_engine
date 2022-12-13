@@ -262,7 +262,7 @@ print(int move, chessBoard &_cb)
         add_to_string(idx_to_row(fp_x), idx_to_col(fp_y));
 
         int ppt = -1;
-        if ((color == 1 && fp_y == 7) || (color == -1 && fp_y == 0))
+        if ((color == 1 && fp_y == 7) || (color == 0 && fp_y == 0))
             ppt = (move >> 18) & 3;
         if (!ppt) res += "=B";
         else if (ppt == 1) res += "=N";

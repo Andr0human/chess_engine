@@ -8,7 +8,7 @@
 
 #define WHITE 8
 #define BLACK 0
-#define OWN (_cb.color << 3)
+#define OWN ((_cb.color) << 3)
 #define EMY ((_cb.color ^ 1) << 3)
 
 #define PAWN(x)   _cb.Pieces[x + 1]
