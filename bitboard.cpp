@@ -511,7 +511,7 @@ chessBoard::generate_hashKey() const
 
         for (int piece = 1; piece < 16; piece++)
         {
-            if ((piece & 7) >= 7)
+            if ((piece == 8) or (piece & 7) >= 7)
                 continue;
 
             uint64_t __tmp = Pieces[piece];
@@ -585,17 +585,19 @@ chessBoard::show() const
         fill_with_piece(arr, Pieces[i + 8], _piece[i + 8]);
     }
 
-    const string s = "+---+---+---+---+---+---+---+---+\n";
-    cout << s;
+    const string s = " +---+---+---+---+---+---+---+---+\n";
+
+    string gap = " | ";
+    string res = s;
+
     for (int j = 7; j >= 0; j--)
     {
-        cout << "| ";
         for (int i = 0; i < 8; i++)
-            cout << arr[i][j] << " | ";
-        cout << '\n';
-        cout << s;
+            res += gap + arr[i][j];
+        res += " |\n" + s;
     }
-    cout << endl;
+
+    cout << res;
 }
 
 bool
