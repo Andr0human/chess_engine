@@ -311,6 +311,7 @@ chessBoard::make_move_pawn_promotion(const int move)
     #if defined(TRANSPOSITION_TABLE_H)
         Hash_Value ^= TT.hashkey_update(own + 1, ip);
         Hash_Value ^= TT.hashkey_update(own + new_pt, fp);
+        Hash_Value ^= TT.hash_key(0);
     #endif
 }
 
@@ -343,6 +344,9 @@ chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove)
         Pieces[own + 6] ^= (1ULL << ip) ^ (1ULL << fp);
         Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
         color ^= 1;
+
+        Hash_Value ^= TT.hash_key(0);
+        // Should update color value in HashKey
     }
 }
 
@@ -575,10 +579,10 @@ chessBoard::show() const
         '.', 'P', 'B', 'N', 'R', 'Q', 'K', '.'
     };
 
-    for (int i = 1; i < 15; i++)
+    for (int i = 1; i <= 6; i++)
     {
-        if (i == 7) continue;
         fill_with_piece(arr, Pieces[i], _piece[i]);
+        fill_with_piece(arr, Pieces[i + 8], _piece[i + 8]);
     }
 
     const string s = "+---+---+---+---+---+---+---+---+\n";

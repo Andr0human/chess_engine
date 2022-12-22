@@ -162,11 +162,11 @@ class chessBoard
     fen() const;
 
     void
-    current_line() const noexcept
+    current_line(int moves[], int& __n) const noexcept
     {
         for (int i = 0; i < moveNum; i++)
-        cout << aux_table_move[i] << ' ';
-        cout << endl;
+            moves[i] = aux_table_move[i];
+        __n = moveNum;
     }
 
     uint64_t

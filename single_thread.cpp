@@ -167,8 +167,25 @@ AlphaBeta(chessBoard &__pos, int depth,
         cout << __pos.generate_hashKey() << endl;
         cout << __pos.fen() << endl;
 
-        __pos.current_line();
-        system("pause");
+
+        int moves[100], __n = 0;
+        __pos.current_line(moves, __n);
+
+
+        chessBoard tmp = default_fen;
+
+        for (int i = 0; i < __n; i++)
+        {
+            cout << print(moves[i], tmp) << " | " << moves[i] << endl;
+            tmp.MakeMove(moves[i]);
+        }
+
+        cout << "Pieces :-\n";
+        for (int i = 0; i < 16; i++)
+            cout << i << " -> " << tmp.Pieces[i] << endl;
+
+        // system("pause");
+        std::cin.get();
     }
 
 
