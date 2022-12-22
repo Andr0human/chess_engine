@@ -261,7 +261,7 @@ int Evaluation::White_attk_Strength(chessBoard& _cb) {
     attackers += add_attackers(rook_atk_sq  , ROOK(WHITE)  );
     attackers += add_attackers(queen_atk_sq , QUEEN(WHITE) );
 
-    attackers = __min(attackers, 4);
+    attackers = std::min(attackers, 4);
     return (1 << (attackers * 3));
 }
 
@@ -289,7 +289,7 @@ int Evaluation::Black_attk_Strength(chessBoard& _cb) {
     attackers += add_attackers(rook_atk_sq  , ROOK(BLACK)  );
     attackers += add_attackers(queen_atk_sq , QUEEN(BLACK) );
 
-    attackers = __min(attackers, 4);
+    attackers = std::min(attackers, 4);
     return (1 << (attackers * 3));
 }
 
