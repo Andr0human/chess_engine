@@ -55,7 +55,10 @@ accuracy_test()
 {
     const auto get_test_pos = [] ()
     {
-        std::ifstream infile("Utility/accuracy_test_positions.txt");
+        char *cwd = getenv("PWD");
+        string file_path = string(cwd) + "/Utility/accuracy_test_positions.txt";
+        std::ifstream infile(file_path);
+
         string line;
         vector<movegen_test_position> tests;
 

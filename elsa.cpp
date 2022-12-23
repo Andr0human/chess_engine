@@ -1,11 +1,28 @@
 
 #include "task.h"
 
+void tt_test()
+{
+    chessBoard _cb = string("K4QR1/8/6p1/Bk6/8/8/6r1/r7 b - - 0 3");
+
+    auto myMoves = generate_moves(_cb);
+    // print(myMoves, _cb);
+
+    for (const auto move : myMoves)
+    {
+        int move_priority = (move >> 21) & 31;
+        cout << print(move, _cb) << " -> " << move_priority << endl;
+    }
+
+}
+
 int main(int argc, char **argv)
 {
     FAST_IO();
     init();
     Task(argc, argv);
+
+    // tt_test();
 }
 
 

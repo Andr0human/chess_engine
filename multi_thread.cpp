@@ -143,7 +143,10 @@ thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
     nodes_hits++;
 
     if (has_legal_moves(_cb) == false)
+    {
+        _cb.remove_movegen_extra_data();
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
+    }
 
     int hashf = HASHALPHA, tt_val, eval;
 
@@ -207,7 +210,10 @@ pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
     info.max_ply = std::max(info.max_ply, ply);
     nodes_hits++;
     if (has_legal_moves(_cb) == false)
+    {
+        _cb.remove_movegen_extra_data();
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
+    }
 
     int hashf = HASHALPHA, tt_val;
 

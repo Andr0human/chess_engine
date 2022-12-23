@@ -192,7 +192,7 @@ class chessBoard
     { return KA != -1; }
 
     inline void remove_movegen_extra_data() noexcept
-    { KA = -1; Pieces[8] = 0; }
+    { KA = -1, Pieces[8] = 0, Pieces[0] = 0; }
 
     inline bool king_in_check() const noexcept
     { return KA > 0; }

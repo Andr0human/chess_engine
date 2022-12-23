@@ -172,26 +172,21 @@ order_generated_moves(MoveList& myMoves, bool pv_moves)
 }
 
 int
-createMoveOrderList(chessBoard &_cb)
+createMoveOrderList(chessBoard& _cb)
 {
     /* Stores time used to evaluate each root move.
     Useful in ordering root moves in iterative search. */
 
     // res -> -1(Lost), -2(Draw), -3(Invalid), >1(Zero-depth Move)
 
-    MoveList tmp = generate_moves(_cb);
-    order_generated_moves(tmp, false);
-    moc.initialise(tmp);
-    moc.reset();
+    MoveList movelist = generate_moves(_cb);
 
-    int res = 0;
+    // To ensure, the zero move is best_move.
+    order_generated_moves(movelist, false);
+    moc.initialise(movelist);
+    // moc.reset();
 
-    if (tmp.size()) {
-        res = tmp.pMoves[0];
-    } else {
-        res = _cb.KA > 0 ? -1 : -2;
-    }
-
+    int res = (movelist.size() > 0) ? (*movelist.begin()) : (_cb.KA > 0 ? -1 : -2);
     return res;
 }
 
@@ -292,7 +287,7 @@ int
 MaterialCount(chessBoard& _cb)
 {
     int answer = 0;
-    answer += 100 * (__ppcnt(PAWN(WHITE))   + __ppcnt(PAWN(BLACK)));
+    answer += 100 * (__ppcnt (PAWN(WHITE))   + __ppcnt(PAWN(BLACK)));
     answer += 300 * (__ppcnt(BISHOP(WHITE)) + __ppcnt(BISHOP(BLACK)));
     answer += 300 * (__ppcnt(KNIGHT(WHITE)) + __ppcnt(KNIGHT(BLACK)));
     answer += 500 * (__ppcnt(ROOK(WHITE))   + __ppcnt(ROOK(BLACK)));
@@ -305,33 +300,47 @@ MaterialCount(chessBoard& _cb)
 #ifndef SEARCH_COMMON
 
 int
-QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol)
+QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 {    
-    if (!extra_time_left) return valUNKNOWN;                                // Check if Time Left for Search
-    if (__dol > info.max_qs_ply) info.max_qs_ply = __dol;
+    // Check if Time Left for Search
+    if (!extra_time_left)
+        return valUNKNOWN;
+
+    if (__dol > info.max_qs_ply)
+        info.max_qs_ply = __dol;
     qnodes_hits++;
     
 
     if (has_legal_moves(_cb) == false)
+    {
+        _cb.remove_movegen_extra_data();
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
+    }
 
     // if (ka_pieces.attackers) return AlphaBeta_noPV(_cb, 1, alpha, beta, ply);
 
     int stand_pat = ev.Evaluate(_cb);                                       // Get a 'Stand Pat' Score
-    if (stand_pat >= beta) return beta;                                     // Checking for beta-cutoff
+    if (stand_pat >= beta)
+    {
+        _cb.remove_movegen_extra_data();                 // Usually called at the end of move-generation.
+        return beta;                                     // Checking for beta-cutoff
+    }
 
     // int BIG_DELTA = 925;
     // if (stand_pat < alpha - BIG_DELTA) return alpha;
 
     if (stand_pat > alpha) alpha = stand_pat;
 
+    // cout << "generate_moves! ply = " << ply << endl;
     auto myMoves = generate_moves(_cb, true);
+
+    // cout << "order_moves! ply = " << ply << endl;
     order_generated_moves(myMoves, false);
 
-
-    for (const auto move : myMoves)
+    for (const int move : myMoves)
     {
         int move_priority = (move >> 21) & 31;
+        // int cpt = ((move >> 15) & 7);
         if (move_priority > 10)
         {                                           // Check based on priority for captures & checks
             _cb.MakeMove(move);                                             // Make current move
@@ -342,6 +351,7 @@ QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol)
             if (score > alpha) alpha = score;                               // Check if a better move is found
         }
     }
+
     return alpha;
 }
 
