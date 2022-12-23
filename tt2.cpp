@@ -61,15 +61,12 @@ uint64_t
 Transposition_Table::hashkey_update
     (int piece, int __pos) const noexcept
 {
-
-    // std::cout << "Update Called for " << piece << " at " << __pos << std::endl;
-    
     const int offset = 85;
     const int color = piece >> 3;
     piece = (piece & 7) - 1;
 
-    return offset + __pos
-         + 64 * (piece + (6 * color));
+    return HashIndex[ offset + __pos
+         + 64 * (piece + (6 * color)) ];
 }
 
 void

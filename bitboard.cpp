@@ -175,9 +175,7 @@ chessBoard::MakeMove(const int move)
         const int filter = 2047 ^ (384 << (color * 2));
         csep &= filter;
 
-        #if defined(TRANSPOSITION_TABLE_H)
-            update_csep(old_csep, csep);
-        #endif
+        update_csep(old_csep, csep);
 
         if (is_castling(ip, fp))
             return make_move_castling(ip, fp, true);
@@ -210,8 +208,10 @@ chessBoard::MakeMove(const int move)
 void
 chessBoard::update_csep(int old_csep, int new_csep)
 {
+    #if defined(TRANSPOSITION_TABLE_H)
     Hash_Value ^= TT.hash_key((old_csep >> 7) + 66);
     Hash_Value ^= TT.hash_key((new_csep >> 7) + 66);
+    #endif
 }
 
 void
@@ -229,9 +229,7 @@ chessBoard::make_move_castle_check(const int piece, const int sq)
         int z  = y + (y < 7 ? 9 : 0);
         csep &= 2047 ^ (1 << z);
 
-        #if defined(TRANSPOSITION_TABLE_H)
-            update_csep(old_csep, csep);
-        #endif
+        update_csep(old_csep, csep);
     }
 }
 
@@ -274,6 +272,7 @@ chessBoard::make_move_enpassant(int ip, int ep)
     color ^= 1;
 
     #if defined(TRANSPOSITION_TABLE_H)
+        Hash_Value ^= TT.hashkey_update(emy + 1, cap_pawn_fp);
         Hash_Value ^= TT.hashkey_update(own + 1, ip)
                     ^ TT.hashkey_update(own + 1, ep)
                     ^ TT.hash_key(0);
@@ -299,10 +298,10 @@ chessBoard::make_move_pawn_promotion(const int move)
     if (cpt > 0)
     {
         Pieces[emy + cpt] ^= 1ULL << fp;
-        Pieces[emy + 7] ^= 1ULL << fp;
+        Pieces[emy +   7] ^= 1ULL << fp;
 
         #if defined(TRANSPOSITION_TABLE_H)
-            Hash_Value ^= TT.hashkey_update(cpt, fp);
+            Hash_Value ^= TT.hashkey_update(emy + cpt, fp);
         #endif
     }
 
@@ -345,7 +344,14 @@ chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove)
         Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
         color ^= 1;
 
-        Hash_Value ^= TT.hash_key(0);
+
+        #if defined(TRANSPOSITION_TABLE_H)
+            int __p1 = lSb_idx(rooks_indexes);
+            int __p2 = mSb_idx(rooks_indexes);
+            Hash_Value ^= TT.hashkey_update(own + 6, ip) ^ TT.hashkey_update(own + 6, fp);
+            Hash_Value ^= TT.hashkey_update(own + 4, __p1) ^ TT.hashkey_update(own + 4, __p2);
+            Hash_Value ^= TT.hash_key(0);
+        #endif
         // Should update color value in HashKey
     }
 }
@@ -509,9 +515,9 @@ chessBoard::generate_hashKey() const
 
         key ^= TT.hash_key((csep >> 7) + castle_offset);
 
-        for (int piece = 1; piece < 16; piece++)
+        for (int piece = 1; piece < 15; piece++)
         {
-            if ((piece == 8) or (piece & 7) >= 7)
+            if ((piece == 8) or (piece == 7))
                 continue;
 
             uint64_t __tmp = Pieces[piece];
