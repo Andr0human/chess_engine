@@ -12,25 +12,25 @@
 #ifndef MOVEGEN_UTILS
 
 inline int
-gen_move_priority(const chessBoard &__b, const int ip, const int fp)
+gen_move_priority(const chessBoard& __b, const int ip, const int fp)
 {
     int res = 0;
     const int pt  =  __b.board[ip] & 7;
     const int cpt = -__b.board[fp] & 7;
     const int is_cpt = (bool)cpt;
 
-    res += (cpt - pt + 12) * is_cpt;
+    res += (cpt - pt + 16) * is_cpt;
     return res;
 }
 
 inline int
-gen_pawn_move_priority(const chessBoard &__b, const int ip, const int fp)
+gen_pawn_move_priority(const chessBoard& __b, const int ip, const int fp)
 {
     int res = 5;
     const int pt  = __b.board[ip] & 7;
     const int cpt = __b.board[fp] & 7;
 
-    res += cpt ? (cpt - pt + 12) : 0;
+    res += cpt ? (cpt - pt + 16) : 0;
     return res;
 }
 
@@ -83,13 +83,13 @@ Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoard &_cb, Mov
         endSquares &= ALL(EMY);
     }
 
-    while (endSquares) {
+    while (endSquares)
+    {
         const int fp = next_idx(endSquares);
         const int ip = fp + shift;
 
         const int mv_priority = gen_pawn_move_priority(_cb, ip, fp);
         const int move = encode_move(_cb, ip, fp, mv_priority);
-        // myMoves.pMoves[myMoves.__count++] = move;
         myMoves.Add(move);   
     }
 }
@@ -128,11 +128,6 @@ Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMov
         const int mv_priority = gen_move_priority(_cb, ip, fp);
         const int move = encode_move(_cb, ip, fp, mv_priority);
         const int pr = (move >> 21);
-        
-        // myMoves.pMoves[myMoves.__count++] = ((pr +  3) << 21) ^ move;
-        // myMoves.pMoves[myMoves.__count++] = ((pr + 12) << 21) ^ move ^ 0xC0000;
-        // myMoves.pMoves[myMoves.__count++] = ((pr +  9) << 21) ^ move ^ 0x80000;
-        // myMoves.pMoves[myMoves.__count++] = ((pr +  6) << 21) ^ move ^ 0x40000;
 
         myMoves.Add(((pr + 12) << 21) ^ move ^ 0xC0000);
         myMoves.Add(((pr +  9) << 21) ^ move ^ 0x80000);

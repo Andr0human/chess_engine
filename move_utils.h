@@ -21,8 +21,8 @@
 #define ALL_BOTH  (_cb.Pieces[15] | _cb.Pieces[7])
 
 
-enum board:unsigned long long {
-
+enum board: uint64_t
+{
     Rank1 = 255ULL, Rank2 = Rank1 << 8, Rank3 = Rank1 << 16, Rank4 = Rank1 << 24,
     Rank5 = Rank1 << 32, Rank6 = Rank1 << 40, Rank7 = Rank1 << 48, Rank8 = Rank1 << 56,
     Rank18 = Rank1 | Rank8,
@@ -47,30 +47,26 @@ enum board:unsigned long long {
     CentralSquare = (Rank4 | Rank5) & (FileD | FileE),
     SemiCentralSquare = (Rank3 | Rank4 | Rank5 | Rank6) & (FileC | FileD | FileE | FileF),
     OuterSquare = AllSquares ^ SemiCentralSquare,
-
 };
 
 
-class MoveList {
-
-private:
-
+class MoveList
+{
+    private:
     int *__begin, *__end;
 
-public:
-
+    public:
     int pMoves[120];
     int pColor;
     
     bool canMove, cpt_only, canPromote;
 
-    MoveList() {
-        pColor = 1;
-        __begin = __end = pMoves;
-        cpt_only = false;
-    }
+    MoveList()
+    : __begin(pMoves), __end(pMoves), pColor(1), cpt_only(false) {}
 
-    inline void set(int t_cl, bool qs_only) {
+    inline void
+    set(int t_cl, bool qs_only)
+    {
         pColor = t_cl;
         cpt_only = qs_only;
         canMove = canPromote = false;
@@ -91,9 +87,7 @@ public:
 
     inline uint64_t size() const noexcept
     { return __end - __begin; }
-
 };
-
 
 
 
@@ -113,23 +107,23 @@ void decode_move(const int encoded_move);
 
 
 
-inline int gen_base_move(const chessBoard &_cb, int ip);
+inline int gen_base_move(const chessBoard& _cb, int ip);
 
 inline void add_cap_moves(const int ip, uint64_t endSquares, const int base,
-            const chessBoard &_cb, MoveList &myMoves);
+            const chessBoard& _cb, MoveList& myMoves);
 
 inline void add_quiet_moves(uint64_t endSquares, const int base,
-            const chessBoard &_cb, MoveList &myMoves);
+            const chessBoard& _cb, MoveList& myMoves);
 
 void add_move_to_list(const int ip, uint64_t endSquares,
-     const chessBoard &_cb, MoveList &myMoves);
+     const chessBoard& _cb, MoveList& myMoves);
 
 
 
 
 
 void add_quiet_pawn_moves(uint64_t endSquares, const int shift,
-                          const chessBoard &_cb, MoveList & myMoves);
+                          const chessBoard& _cb, MoveList& myMoves);
 
 
 
@@ -166,7 +160,7 @@ uint64_t queen_atk_sq(const int __pos, const uint64_t _Ap);
  * @return true 
  * @return false 
  */
-bool Incheck(const chessBoard &_cb);
+bool Incheck(const chessBoard& _cb);
 
 /**
  * @brief Returns string readable move from encoded-move.
@@ -176,7 +170,7 @@ bool Incheck(const chessBoard &_cb);
  * @param _cb board position
  * @return string 
  */
-string print(int move, chessBoard &_cb);
+string print(int move, chessBoard& _cb);
 
 /**
  * @brief Prints all encoded-moves in list to human-readable strings
@@ -184,7 +178,7 @@ string print(int move, chessBoard &_cb);
  * @param _cb board position
  * @param myMoves Movelist for board positions.
  */
-void print(const MoveList &myMoves, chessBoard &_cb);
+void print(const MoveList& myMoves, chessBoard& _cb);
 
 
 

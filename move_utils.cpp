@@ -36,7 +36,7 @@ decode_move(const int move)
 
 
 inline int
-gen_base_move(const chessBoard &_cb, int ip)
+gen_base_move(const chessBoard& _cb, int ip)
 {
     const int pt =  _cb.board[ip] & 7;
     const int side = _cb.color << 20;
@@ -47,10 +47,10 @@ gen_base_move(const chessBoard &_cb, int ip)
 
 inline void
 add_cap_moves(const int ip, uint64_t endSquares,
-    const int base_move, const chessBoard &_cb, MoveList &myMoves)
+    const int base_move, const chessBoard& _cb, MoveList& myMoves)
 {
     const auto cap_priority = [] (const int pt, const int cpt)
-    { return (cpt - pt + 12); };
+    { return (cpt - pt + 16); };
 
     const auto encode_full_move = [] (const int base,
             const int fp, const int cpt, const int move_pr)
@@ -75,7 +75,7 @@ add_cap_moves(const int ip, uint64_t endSquares,
 
 inline void
 add_quiet_moves(uint64_t endSquares,
-    const int base_move, const chessBoard &_cb, MoveList &myMoves)
+    const int base_move, const chessBoard& _cb, MoveList& myMoves)
 {
     const auto encode_full_move = [] (const int base, const int fp, const int pr)
     {
@@ -83,7 +83,7 @@ add_quiet_moves(uint64_t endSquares,
         return e_move;
     };
 
-    while (endSquares  != 0)
+    while (endSquares != 0)
     {
         const int fp = next_idx(endSquares);
         const int move_priority = 0;
@@ -94,7 +94,7 @@ add_quiet_moves(uint64_t endSquares,
 
 void
 add_move_to_list(const int ip, uint64_t endSquares,
-    const chessBoard &_cb, MoveList &myMoves)
+    const chessBoard& _cb, MoveList& myMoves)
 {
     const uint64_t cap_Squares = endSquares & ALL(EMY);
     const uint64_t quiet_Squares = endSquares ^ cap_Squares;
@@ -108,7 +108,7 @@ add_move_to_list(const int ip, uint64_t endSquares,
 
 void
 add_quiet_pawn_moves(uint64_t endSquares,
-    const int shift, const chessBoard &_cb, MoveList & myMoves)
+    const int shift, const chessBoard& _cb, MoveList& myMoves)
 {
     const int pt = 1;
     const int side = _cb.color << 20;
@@ -170,7 +170,7 @@ queen_atk_sq(const int __pos, const uint64_t _Ap)
 
 
 bool
-Incheck(const chessBoard &_cb)
+Incheck(const chessBoard& _cb)
 {
     const int kpos = idx_no(KING(OWN));
     uint64_t res, Apieces = ALL_BOTH;
@@ -196,7 +196,7 @@ Incheck(const chessBoard &_cb)
 }
 
 string
-print(int move, chessBoard &_cb)
+print(int move, chessBoard& _cb)
 {    
     string res;
     if (!move) return "null";
@@ -307,7 +307,7 @@ print(int move, chessBoard &_cb)
 }
 
 void
-print(const MoveList &myMoves, chessBoard &_cb)
+print(const MoveList& myMoves, chessBoard& _cb)
 {
     cout << "MoveCount : " << myMoves.size() << '\n';
     
