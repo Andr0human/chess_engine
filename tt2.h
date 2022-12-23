@@ -9,9 +9,11 @@
 #include <random>
 
 
-class Zobrist_HashKey {
-
-    void clear() {
+class Zobrist_HashKey
+{
+    void
+    clear()
+    {
         key = 0;
         depth = move = 0;
         eval = flag = 0;
@@ -26,7 +28,9 @@ class Zobrist_HashKey {
     Zobrist_HashKey() noexcept
     { clear(); }
 
-    void show() const noexcept {
+    void
+    show() const noexcept
+    {
         std::cout 
             << "Key = " << key << '\n'
             << "Depth = " << depth << '\n'
@@ -34,11 +38,10 @@ class Zobrist_HashKey {
             << "Eval = " << eval << '\n'
             << "Flag = " << flag << std::endl;
     }
-
 };
 
-class Transposition_Table {
-
+class Transposition_Table
+{
     const static int HASHEMPTY = 0;
     const static int HASHEXACT = 1;
     const static int HASHALPHA = 2;
@@ -66,8 +69,8 @@ class Transposition_Table {
 
     void free_tables();
 
-public:
-
+    public:
+    // Initialize Transposition Table
     Transposition_Table() { }
 
     Transposition_Table(int preset)
@@ -91,8 +94,6 @@ public:
     
     int
     lookup_position(uint64_t zkey, int depth, int alpha, int beta) const noexcept;
-
-
 };
 
 

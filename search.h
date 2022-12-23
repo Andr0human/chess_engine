@@ -54,5 +54,11 @@ int QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol);
 int AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply);
 
 
+
+
+inline bool
+time_left_for_search()
+{ return extra_time_left; }
+
 #endif
 

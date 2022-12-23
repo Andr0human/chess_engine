@@ -193,7 +193,7 @@ pawn_movement(const chessBoard &_cb, MoveList &myMoves,
     const auto n_pawns = pawns ^ e_pawns;
     const auto l_pawns = n_pawns & RightAttkingPawns;
     const auto r_pawns = n_pawns &  LeftAttkingPawns;
-    
+
     const auto free_sq = ~ALL_BOTH;
     const auto enemyP  = ALL(emy);
     const auto capt_sq = (atk_area &  enemyP) * (KA) + ( enemyP) * (1 - KA);
@@ -592,7 +592,7 @@ can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
     const uint64_t l_pawns = PAWN(own) & RightAttkingPawns;
     const uint64_t r_pawns = PAWN(own) &  LeftAttkingPawns;
 
-    
+
     if (_cb.color == 1)
     {
         if (KA == 0 || (KA == 1 && (plt::pcBoard[1][kpos] & capt_sq)))
@@ -801,12 +801,6 @@ has_legal_moves(chessBoard &_cb)
 {
     _cb.remove_movegen_extra_data();
 
-    // _cb.Pieces[8] = generate_AttackedSquares(_cb);
-    // if (canKingMove(_cb, _cb.Pieces[8])) return true;
-    // king_attackers(_cb);
-    // if (_cb.KA < 2 && can_piece_move(_cb, _cb.KA)) return true;
-    // return false;
-
     king_attackers(_cb);
     if (_cb.KA < 2 && can_piece_move(_cb, _cb.KA)) return true;
 
@@ -840,24 +834,6 @@ generate_moves(chessBoard &_cb, bool qs_only)
     **/
 
     MoveList myMoves;
-
-    // const auto enemy_attacked_sq = (_cb.Pieces[8] == 0) ?
-    //            generate_AttackedSquares(_cb) : _cb.Pieces[8];
-    // _cb.Pieces[8] = enemy_attacked_sq;
-
-    // if (_cb.Pieces[8] == 0)
-    //     _cb.Pieces[8] = generate_AttackedSquares(_cb);
-
-    // const auto &[KA, valid_moveable_sq] = king_attackers(_cb);
-    // _cb.Pieces[0] = valid_moveable_sq;
-    
-    // _cb.KA = KA;
-    // if (KA < 2) piece_movement(_cb, myMoves, KA);
-    // KingMoves(_cb, myMoves, enemy_attacked_sq);
-    
-    // _cb.Pieces[0] = _cb.Pieces[8] = 0;
-    // return myMoves;
-
 
     if (_cb.enemy_attacked_sq_generated() == false)
         _cb.Pieces[8] = generate_AttackedSquares(_cb);

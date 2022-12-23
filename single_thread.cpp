@@ -147,8 +147,8 @@ int
 AlphaBeta(chessBoard& __pos, int depth,
     int alpha, int beta, int ply, int pvIndex) 
 {
-    if (extra_time_left == false)
-        return valUNKNOWN;
+    if (time_left_for_search() == false)
+        return TIMEOUT;
 
     if (depth <= 0)
     {
@@ -161,26 +161,6 @@ AlphaBeta(chessBoard& __pos, int depth,
         //Check for check-mate/stale-mate
         if (has_legal_moves(__pos) == false)
             return __pos.king_in_check() ? checkmate_score(ply) : 0;
-    }
-
-    if (__pos.Hash_Value != __pos.generate_hashKey())
-    {
-        __pos.show();
-        cout << __pos.Hash_Value << endl;
-        cout << __pos.generate_hashKey() << endl;
-        cout << __pos.fen() << endl;
-
-        int moves[100], __n = 0;
-        __pos.current_line(moves, __n);
-
-        chessBoard tmp = default_fen;
-
-        for (int i = 0; i < __n; i++)
-        {
-            cout << print(moves[i], tmp) << " | " << moves[i] << endl;
-            tmp.MakeMove(moves[i]);
-        }
-        std::cin.get();
     }
 
 
@@ -233,7 +213,7 @@ AlphaBeta(chessBoard& __pos, int depth,
 
         __pos.UnmakeMove();
         
-        if (eval == -valUNKNOWN)
+        if (time_left_for_search() == false)
         {
             // No time left, stop the search
 
@@ -241,7 +221,7 @@ AlphaBeta(chessBoard& __pos, int depth,
                 // TT.RemSearchHistory(__pos.Hash_Value);
             #endif
 
-            return valUNKNOWN;
+            return TIMEOUT;
         }
 
         if (eval >= beta)

@@ -19,6 +19,8 @@ enum search_flag:int
     quit = 1, opp_move = 2, self_move = 4,
     negInf = -16000, posInf = 16000, valWindow = 4, LMR_LIMIT = 4,
 
+    TIMEOUT = 1112223334,
+
     valUNKNOWN = 5567899,
     HASHEMPTY = 0, HASHEXACT = 1,
     HASHALPHA = 2, HASHBETA  = 3,
