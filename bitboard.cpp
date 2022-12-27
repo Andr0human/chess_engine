@@ -429,6 +429,19 @@ chessBoard::auxilary_table_revert()
     return aux_table_move[moveNum];
 }
 
+
+bool
+chessBoard::three_move_repetition() const noexcept
+{
+    int pos_count = 0;
+
+    for (int i = moveNum - 1; i >= 0; i--)
+        if (Hash_Value == aux_table_hash[i])
+            ++pos_count;
+    
+    return pos_count >= 1;
+}
+
 const std::string
 chessBoard::fen() const
 {

@@ -20,6 +20,7 @@ enum search_flag:int
     negInf = -16000, posInf = 16000, valWindow = 4, LMR_LIMIT = 4,
 
     TIMEOUT = 1112223334,
+    DRAW_VALUE = -25,
 
     valUNKNOWN = 5567899,
     HASHEMPTY = 0, HASHEXACT = 1,
@@ -34,21 +35,29 @@ class moveOrderClass
     uint64_t mCount = 0;
 
     public:
-    void initialise(MoveList& myMoves);
+    void
+    initialise(MoveList& myMoves);
 
-    void sortList(int best_move);
+    void
+    sortList(int best_move);
 
-    void setMoveOrder(MoveList& myMoves);
+    void
+    setMoveOrder(MoveList& myMoves);
 
-    void insert(uint64_t idx, double time_taken);
+    void
+    insert(uint64_t idx, double time_taken);
 
-    void mprint(chessBoard &cb);
+    void
+    mprint(chessBoard &cb);
 
-    int get_move(uint64_t index);
+    int
+    get_move(uint64_t index);
 
-    uint64_t moveCount();
+    uint64_t
+    moveCount();
 
-    void reset();
+    void
+    reset();
 };
 
 

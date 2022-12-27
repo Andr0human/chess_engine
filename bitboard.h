@@ -169,6 +169,9 @@ class chessBoard
         __n = moveNum;
     }
 
+    bool
+    three_move_repetition() const noexcept;
+
     uint64_t
     generate_hashKey() const;
 

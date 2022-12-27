@@ -108,7 +108,8 @@ MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
         eval = pv_rootAlphaBeta(board, alpha, beta, depth);
         // post_status(board, pvArray[0], eval, start_point);
 
-        if (__abs(eval) == valUNKNOWN) break;                                     // Time Over! Cut the Search.
+        if (time_left_for_search() == false)
+            break;
 
         if ((eval <= alpha) || (eval >= beta))
         {
@@ -158,9 +159,19 @@ AlphaBeta(chessBoard& __pos, int depth,
     }
 
     {
-        //Check for check-mate/stale-mate
+        // check/stalemate check
         if (has_legal_moves(__pos) == false)
+        {
+            __pos.remove_movegen_extra_data();
             return __pos.king_in_check() ? checkmate_score(ply) : 0;
+        }
+
+        // 3-move repetition check
+        if (__pos.three_move_repetition())
+        {
+            __pos.remove_movegen_extra_data();
+            return DRAW_VALUE;
+        }
     }
 
 
@@ -168,9 +179,7 @@ AlphaBeta(chessBoard& __pos, int depth,
         // TT_lookup
         #if defined(TRANSPOSITION_TABLE_H)
 
-            // Check for 3-move repetition using Transposition_Table
-            // if (TT.ProbeSearchHistory(__pos.Hash_Value) != valUNKNOWN)
-            //     return 0;
+            // Check for 3-move repetition
 
             // Check if given board is already in transpostion table
             // Note : Need to check for check-mate/stale-mate possibility before TT_lookup,
@@ -181,10 +190,6 @@ AlphaBeta(chessBoard& __pos, int depth,
                 __pos.remove_movegen_extra_data();
                 return tt_val;
             }
-
-            // Store current board in history-table to check for 3-move repetition
-            // TT.RecordSearch(__pos.Hash_Value);
-
         #endif
     }
 
@@ -198,7 +203,7 @@ AlphaBeta(chessBoard& __pos, int depth,
     // Try LMR_search,
     if (ok_to_do_LMR(depth, myMoves))
         return LMR_search(__pos, myMoves, depth, alpha, beta, ply, pvIndex);
-    
+
     
     // Set pvArray, for storing the search_tree
     pvArray[pvIndex] = 0; // no pv yet
@@ -212,11 +217,11 @@ AlphaBeta(chessBoard& __pos, int depth,
                 -beta, -alpha, ply + 1, pvNextIndex);
 
         __pos.UnmakeMove();
-        
+
+
+        // No time left!
         if (time_left_for_search() == false)
         {
-            // No time left, stop the search
-
             #if defined(TRANSPOSITION_TABLE_H)
                 // TT.RemSearchHistory(__pos.Hash_Value);
             #endif
@@ -239,7 +244,6 @@ AlphaBeta(chessBoard& __pos, int depth,
         if (eval > alpha)
         {
             // Better move found, update the result
-
             hashf = HASHEXACT;
             alpha = eval;
             pvArray[pvIndex] = move;
@@ -247,8 +251,6 @@ AlphaBeta(chessBoard& __pos, int depth,
                     pvArray + pvNextIndex, maxPly - ply - 1);
         }
     }
-    // if (pvArray[pvIndex] == 0)
-    //     puts("Closer to culprit!");
 
     #if defined(TRANSPOSITION_TABLE_H)
         // TT.RemSearchHistory(__pos.Hash_Value);
@@ -289,7 +291,10 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
-            if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+
+            if (time_left_for_search() == false)
+                return TIMEOUT;
+
             if ((eval > alpha) and R)
             {
                 startTime = perf::now();
@@ -302,7 +307,9 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
         duration = perf::now() - startTime;
         moc.insert(i, duration.count());
 
-        if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+        if (time_left_for_search() == false)
+            return TIMEOUT;
+
         if (eval > alpha)
         {
             alpha = eval;
@@ -338,8 +345,11 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
-            
-            if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+
+
+            if (time_left_for_search() == false)
+                return TIMEOUT;
+
             if (eval > alpha)
             {
                 _cb.MakeMove(move);
@@ -347,7 +357,10 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
                 _cb.UnmakeMove();
             }
         }
-        if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+
+        if (time_left_for_search() == false)
+            return TIMEOUT;
+
         if (eval > alpha)
         {
             hashf = HASHEXACT;
@@ -374,5 +387,7 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
 
     return alpha;
 }
+
+
 
 #endif
