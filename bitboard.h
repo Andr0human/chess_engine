@@ -2,7 +2,7 @@
 #ifndef BITBOARD_H
 #define BITBOARD_H
 
-#include "tt2.h"
+#include "tt.h"
 #include <iostream>
 #include <cstring>          // For memset
 #include <vector>

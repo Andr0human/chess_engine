@@ -4,6 +4,7 @@
 
 Evaluation ev;
 
+// TODO: special pawn_evaluation (after no major piece is left)
 
 #ifndef MATERIAL
 

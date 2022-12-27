@@ -1,120 +1,104 @@
 
+
 #ifndef TRANSPOSITION_TABLE_H
 #define TRANSPOSITION_TABLE_H
 
 
-#include <windows.h>
-#include <iomanip>
-#include <iostream>
-#include <cstring>
-#include <fstream>
-#include <random>
-#include <chrono>
 #include <cstdint>
+#include <iostream>
+#include <random>
 
-using std::cout;
 
-
-struct ZobristHashKey {
-    uint64_t key;
-    int32_t depth, flags;
-    int32_t eval, move;
-
-    void Clear() {
+class Zobrist_HashKey
+{
+    private:
+    void
+    clear()
+    {
         key = 0;
-        depth = flags = 0;
-        eval = move = 0;
+        depth = move = 0;
+        eval = flag = 0;
     }
 
-    ZobristHashKey() {
-        Clear();
-    }
+    public:
+    uint64_t key;
+    int32_t depth, move;
+    int32_t eval, flag;
 
+    Zobrist_HashKey() noexcept
+    { clear(); }
+
+    void
+    show() const noexcept
+    {
+        std::cout 
+            << "Key = " << key << '\n'
+            << "Depth = " << depth << '\n'
+            << "Move = " << move << '\n'
+            << "Eval = " << eval << '\n'
+            << "Flag = " << flag << std::endl;
+    }
 };
 
-struct HistoryNode {
-    uint64_t key;
-    int repeats;
-
-    void Clear() {
-        key = 0;
-        repeats = 0;
-    }
-
-    HistoryNode() {
-        Clear();
-    }
-
-};
-
-class TranspositionTable {
-    
-    uint64_t HASH_TABLE_SIZE = 2189477;
-    uint64_t HISTORY_TABLE_SIZE = 10061;
-
-    ZobristHashKey *prim_hash_table, *sec_hash_table;
-    HistoryNode *hist_table;
-
-    //  2189477 -> ~100 MB Hash
-    // 22508861 -> ~  1 GB Hash
-
-    const static int valUNKNOWN = 5567899;
+class Transposition_Table
+{
     const static int HASHEMPTY = 0;
     const static int HASHEXACT = 1;
     const static int HASHALPHA = 2;
     const static int HASHBETA  = 3;
+    const static int HASH_INDEXES_SIZE = 855;
 
+    /**
+     * 0 -> 100 MB table_size
+     * 1 ->   1 GB table_size 
+     */
+    const uint64_t tt_sizes[2] = {
+        2189477ULL, 22508861ULL
+    };
+
+    uint64_t TT_SIZE = 0;
+
+    Zobrist_HashKey *primary_tt_table;
+    Zobrist_HashKey *secondary_tt_table;
+
+    uint64_t HashIndex[HASH_INDEXES_SIZE];    
+
+    void get_random_keys() noexcept;
+
+    void allocate_tables();
+
+    void free_tables();
 
     public:
+    // Initialize Transposition Table
+    Transposition_Table() { }
 
+    Transposition_Table(int preset)
+    { resize(preset); }
 
-    TranspositionTable() {}
+    void
+    resize(int preset = 0);
 
-    TranspositionTable(uint64_t tt_size)
-    : HASH_TABLE_SIZE(tt_size) { allocate_table(tt_size, 10061); Get_Random_Keys(); }
+    std::string
+    size() const;
 
-    void init();
+    uint64_t
+    hash_key(int __pos) const noexcept
+    { return HashIndex[__pos]; }
 
-    void Clear();
+    uint64_t
+    hashkey_update(int piece, int __pos) const noexcept;
 
-    std::string hashtable_size();
-
-    void allocate_table(uint64_t tt_size, uint64_t ht_size);
-
-    void free_table();
-
-    void Get_Random_Keys();
-
-    void reIntialize(uint64_t tt_size, uint64_t ht_size);
-
-    void ClearTT();
-
-    void ClearTT_primary();
-
-    void Clear_History();
-
-    double filled_space();
-
-    int ProbeHash(int depth, int alpha, int beta, uint64_t zKey);
-
-    void RecordHash(int curr_move, uint64_t zKey, int depth, int val, int t_flag);
-
-    void RecordSearch (uint64_t zKey);
-
-    void RemSearchHistory (uint64_t zKey);
-
-    int ProbeSearchHistory (uint64_t zKey);
-
-    int Search_History_Size ();
-
-    ZobristHashKey hashkey_at(uint64_t zKey);
-
-    uint64_t HashIndex[860];
-
-
+    void
+    record_position(uint64_t zkey, int depth, int move, int eval, int flag) noexcept;
+    
+    int
+    lookup_position(uint64_t zkey, int depth, int alpha, int beta) const noexcept;
 };
 
-extern TranspositionTable TT;
+
+extern Transposition_Table TT;
 
 #endif
+
 

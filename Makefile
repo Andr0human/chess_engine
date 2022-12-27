@@ -4,10 +4,10 @@ comp = g++
 
 
 CPPFLAGS = -std=c++20 -g3 -march=native -O3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
-	# -static -static-libgcc -static-libstdc++
+	# -static -static-libgcc -static-libstdc++ -fsanitize=address
 
 
-srcs = bitboard.cpp lookup_table.cpp tt2.cpp search_utils.cpp elsa.cpp movegen.cpp\
+srcs = bitboard.cpp lookup_table.cpp tt.cpp search_utils.cpp elsa.cpp movegen.cpp\
 	search.cpp PieceSquareTable.cpp single_thread.cpp task.cpp evaluation.cpp move_utils.cpp\
 	# play.cpp ponder.cpp multi_thread.cpp
 
@@ -44,8 +44,8 @@ search.o: search.h search.cpp
 lookup_table.o: lookup_table.h lookup_table.cpp 
 	$(comp) $(CPPFLAGS) -c lookup_table.cpp
 
-tt2.o: tt2.h tt2.cpp
-	$(comp) $(CPPFLAGS) -c tt2.cpp
+tt.o: tt.h tt.cpp
+	$(comp) $(CPPFLAGS) -c tt.cpp
 
 search_utils.o: search_utils.h search_utils.cpp
 	$(comp) $(CPPFLAGS) -c search_utils.cpp

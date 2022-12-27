@@ -1,21 +1,6 @@
 
 #include "task.h"
 
-void tt_test()
-{
-    chessBoard _cb = string("K4QR1/8/6p1/Bk6/8/8/6r1/r7 b - - 0 3");
-
-    auto myMoves = generate_moves(_cb);
-    // print(myMoves, _cb);
-
-    for (const auto move : myMoves)
-    {
-        int move_priority = (move >> 21) & 31;
-        cout << print(move, _cb) << " -> " << move_priority << endl;
-    }
-
-}
-
 int main(int argc, char **argv)
 {
     FAST_IO();
@@ -26,7 +11,8 @@ int main(int argc, char **argv)
 }
 
 
-/*
+/*  
+
     r1bq1rk1/p4ppp/2Bb1n2/3p2B1/8/2N5/PPP2PPP/R2Q1RK1 b - - 0 12             // Bxh2+
     r2q3r/1b1k1pbp/p4np1/2BP1pN1/p1B5/P1Q5/1PP3PP/R3K2R w KQ - 0 19          // O-O O-O-O Qb4
     2k1r3/p1p2p1p/2p3p1/2bb1qB1/2P5/PP3P2/4N1PP/R2QK2R w KQ - 1 18           // Qd2 cxd5 Bh4
@@ -58,6 +44,9 @@ int main(int argc, char **argv)
     8/8/4K1n1/4p1P1/4k3/8/8/8 b - - 1 63                                     // D.M (Ke3)           (Endgame)
     8/7p/6p1/pP3p2/P2p1k2/1r5P/3KBP2/8 b - - 3 44                            // D.M (Rxh3)          (Endgame)
     8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1                                  // Kb1
+    7k/5P2/4KN1P/6p1/8/8/8/4r3 w - - 5 64                                    // B.M Kf5
+    r4rk1/2R3bp/4p3/1p3p2/3p1P2/1P1P2P1/4N2P/5R1K w - - 0 29                 // D.M Rxg7+
+    8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
 
     Search Explosion :
     qqqqkqqq/qqqqqqqq/8/8/8/8/QQQQQQQQ/QQQQKQQQ w - - 0 1
@@ -70,7 +59,3 @@ int main(int argc, char **argv)
     8/5ppp/4k3/p2pP3/Pr3PP1/R3K3/7P/8 b - - 0 33
 
 */
-
-
-// To check : K5R1/5P1p/1B4P1/1k6/8/8/6r1/r7 w - - 1 2
-
