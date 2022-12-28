@@ -4,7 +4,7 @@ settings.json
 
 bitboard.o
 lookup_table.o
-tt2.o
+tt.o
 search_utils.o
 elsa.o
 movegen.o

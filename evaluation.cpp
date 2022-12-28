@@ -4,7 +4,44 @@
 
 Evaluation ev;
 
-// TODO: special pawn_evaluation (after no major piece is left)
+
+// Search
+
+// Late Move Pruning
+// https://www.youtube.com/watch?v=R0L3AuJUkk0&ab_channel=TNGTechnologyConsultingGmbH
+
+
+// -------------------------
+
+
+// https://www.chessprogramming.org/Evaluation_of_Pieces
+
+// Game-phase
+// Material Weight
+// Piece Mobility
+// Piece-Square Table
+
+
+// King-Safety (king and queen-side)
+// Tempo-Bonus
+// adjustements of piece value based on the number of own pawns
+// Bonus of bishop-pair, penalty for [knight and rook] pairs
+// Low material correction
+
+  /********************************************************************
+  *  Low material correction - guarding against an illusory material  *
+  *  advantage. Full blown program should have more such rules,  but  *
+  *  the current set ought to be useful enough. Please note that our  *
+  *  code  assumes different material values for bishop and  knight.  *
+  *                                                                   *
+  *  - a single minor piece cannot win                                *
+  *  - two knights cannot checkmate bare king                         *
+  *  - bare rook vs minor piece is drawish                            *
+  *  - rook and minor vs rook is drawish                              *
+  ********************************************************************/
+
+
+// special pawn_evaluation (after no major piece is left)
 
 #ifndef MATERIAL
 
@@ -239,7 +276,8 @@ int Evaluation::BlackPawns_Structure(const chessBoard& _cb) {
 
 #ifndef ATTACK_STRENGTH
 
-int Evaluation::White_attk_Strength(const chessBoard& _cb) {
+int Evaluation::White_attk_Strength(const chessBoard& _cb)
+{
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(BLACK));
     const uint64_t attk_sq = plt::KBoard[kpos]
@@ -294,7 +332,8 @@ int Evaluation::Black_attk_Strength(const chessBoard& _cb) {
     return (1 << (attackers * 3));
 }
 
-int Evaluation::White_King_Safety(const chessBoard& _cb) {
+int Evaluation::White_King_Safety(const chessBoard& _cb)
+{
     uint64_t res;
     int kpos = idx_no(KING(WHITE)), kx = kpos & 7, ky = (kpos - kx) >> 3;
     int score = 0, open_files = 0, defenders[2];
@@ -361,8 +400,8 @@ int Evaluation::attack_strength(const chessBoard& _cb) {
 
 #endif
 
-bool Evaluation::is_hypothetical_draw() {
-
+bool Evaluation::is_hypothetical_draw()
+{
     if (wPieces >= 3 || bPieces >= 3) return false;
     if (wPawns + bPawns) return false;
 

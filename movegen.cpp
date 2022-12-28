@@ -457,27 +457,23 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
     if (!(_cb.csep & 1920) || ((1ULL << kpos) & Attacked_Sq)) return;
 
     const uint64_t Apieces = ALL_BOTH;
-    const uint64_t opd = Apieces | Attacked_Sq;
+    const uint64_t enemy_attacked_sqs = Apieces | Attacked_Sq;
 
-    const uint64_t sq_5_6 = 96ULL;
-    const uint64_t sq_57 = 144115188075855872ULL;
-    const uint64_t sq_58_59 = 864691128455135232ULL;
-    const uint64_t sq_61_62 = 6917529027641081856ULL;
+    const int shift         = 56 * (_cb.color ^ 1);
+    const uint64_t l_mid_sq = 2ULL << shift;
+    const uint64_t r_sq     = 96ULL << shift;
+    const uint64_t l_sq     = 12ULL << shift;
 
-    if (_cb.color == 1)
-    {
-        if ((_cb.csep & 1024) && !(sq_5_6 & opd))
-            add_castle_move(kpos, 6);
-        if ((_cb.csep & 512) && (!(Apieces & 2) && !(12 & opd)))
-            add_castle_move(kpos, 2);
-    }
-    else
-    {
-        if ((_cb.csep & 256) && !(opd & sq_61_62))
-            add_castle_move(kpos, 62);
-        if ((_cb.csep & 128) && (!(Apieces & sq_57) && !(opd & sq_58_59)))
-            add_castle_move(kpos, 58);
-    }
+    const uint64_t king_side  = 256 << (2 * _cb.color);
+    const uint64_t queen_side = 128 << (2 * _cb.color);
+
+    // Can castle king_side  and no pieces are in-between
+    if ((_cb.csep & king_side) and !(r_sq & enemy_attacked_sqs))
+        add_castle_move(kpos, 6 + shift);
+    
+    // Can castle queen_side and no pieces are in-between
+    if ((_cb.csep & queen_side) and !(Apieces & l_mid_sq) and !(l_sq & enemy_attacked_sqs))
+        add_castle_move(kpos, 2 + shift);
 }
 
 
