@@ -6,7 +6,7 @@
 #include "perf.h"
 #include "single_thread.h"
 // #include "multi_thread.h"
-// #include "play.h"
+#include "play.h"
 // #include "ponder.h"
 #include <fstream>
 #include <iomanip>  // for setprecision
@@ -19,8 +19,7 @@ void direct_search(const vector<string> &arg_list);
 void node_count(const vector<string> &arg_list);
 void debug_movegen(const vector<string> &_args);
 
-void Task(int argc, char *argv[]);
-void free_space(const vector<string> &arg_list);
+void task(int argc, char *argv[]);
 
 
 #endif

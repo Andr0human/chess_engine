@@ -6,9 +6,32 @@ play_board pb;
 std::ifstream inFile;
 int moveNum = 0;
 
+
+
+/*** CommandList to implement
+ * go - To start searching for the best move
+
+ * position - set the current position using fen
+ * position [fen <FEN string> | startpos]
+
+ * moves - play the current in move(s) in set position. (Do a legality-check first)
+ * moves <move1> <move2> ... <movei>
+
+ * movetime - time allocated for the search [default : 2 sec.]
+
+ * threads - threads used for the search
+
+ * depth - maxDepth to be searched [default : inf] 
+
+ * quit - exits the program
+
+***/
+
+
 #ifndef READ_WRITE
 
-bool readFile() {
+bool readFile()
+{
     string str;
     inFile.open(file_name + "_in.txt");
     getline(inFile, str);
@@ -21,7 +44,8 @@ bool readFile() {
     return true;
 }
 
-void writeFile(string message, char file) {
+void writeFile(string message, char file)
+{
     std::ofstream outFile;
     if (file == 'i')
         outFile.open(file_name + "_in.txt");
@@ -31,7 +55,8 @@ void writeFile(string message, char file) {
     outFile.close();
 }
 
-void write_Execute_Result() {
+void write_Execute_Result()
+{
     std::ofstream outFile;
     outFile.open(file_name + "_out.txt");
     outFile << (info.best_move() & 2097151) << " " << info.last_eval() << " -out";
@@ -42,12 +67,11 @@ void write_Execute_Result() {
 
 #ifndef PLAY
 
-void start_game(const vector<string> &arg_list) {
-
+void start_game(const vector<string>& arg_list)
+{
     const string fen = arg_list.size() >= 2 ? arg_list[1] : default_fen;
     
     // TT.reIntialize(2'000'073, 10'073);
-    cout << "Play Mode Started!";
     puts("Play Mode Started!");
     cout << "FEN : " << fen << '\n';
     pb.init(fen);
@@ -55,9 +79,10 @@ void start_game(const vector<string> &arg_list) {
     play();
 }
 
-int read_commands() {
+int read_commands()
+{
     std::vector<string> commands = split(pb.commandline, ' ');
-    cout << "CommandLine : " << pb.commandline << std::endl;
+    cout << "CommandLine : " << pb.commandline << endl;
     alloted_search_time = 2;
     alloted_extra_time = 0;
     threadCount = 4;
@@ -89,32 +114,33 @@ int read_commands() {
     return result;
 }
 
-void execute_Commands(int command) {
-
-    cout << "Starting Fen : " << pb.board.fen() << std::endl;
-
-    cout << "MoveNum : " << ++moveNum << std::endl;
+void execute_Commands(int command)
+{
+    cout << "Starting Fen : " << pb.board.fen() << endl;
+    cout << "MoveNum : " << ++moveNum << endl;
 
     if (command & opp_move) {
         if (is_valid_move(pb.opponent_move, pb.board)) {
-            cout << "Oppenent Move - " << print(pb.opponent_move, pb.board) << " [Valid]." << std::endl;
+            cout << "Oppenent Move - " << print(pb.opponent_move, pb.board) << " [Valid]." << endl;
             pb.play_move(pb.opponent_move);
         } else {
-            cout << "Opponent Move Invalid, Discarding!" << std::endl;
+            cout << "Opponent Move Invalid, Discarding!" << endl;
         }
     }
 
-    if (command & self_move) {
+    if (command & self_move)
+    {
         find_move_for_position();
         write_Execute_Result();
         pb.play_move(info.best_move() & 2097151);
         info.reset();
     }
-    cout << std::endl;
+    cout << endl;
     return;
 }
 
-void find_move_for_position() {
+void find_move_for_position()
+{
     // perf::Timer pos("Find Move");
     chessBoard primary = pb.board;
     pb.generate_history_table();
@@ -125,49 +151,35 @@ void find_move_for_position() {
     Show_Searched_Info(primary);
 }
 
-void inputRun() {
-
-    bool commandFound = false;
-    while (true) {
-        commandFound = readFile();
-        if (commandFound) {
-            writeFile("", 'i');
-            int command = read_commands();
-            if (command & quit) {
-                writeFile("-quit", 'o');
-                return;
-            }
-            execute_Commands(command);
-            commandFound = false;
-        }
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-    }
-
-}
 
 #endif
 
 #ifndef PLAY2
 
 
-void getInput() {
-    while (true) {
-        if (readFile()) break;
+void getInput()
+{
+    while (true)
+    {
+        if (readFile())
+            break;
         std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 }
 
-void play() {
-
+void play()
+{
     std::thread input_thread;
     
-    while (true) {
+    while (true)
+    {
         input_thread = std::thread(getInput);
         input_thread.join();
 
         writeFile("", 'i');
         int command = read_commands();
-        if (command & quit) {
+        if (command & quit)
+        {
             writeFile("-quit", 'o');
             break;
         }

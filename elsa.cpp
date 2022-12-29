@@ -5,7 +5,7 @@ int main(int argc, char **argv)
 {
     FAST_IO();
     init();
-    Task(argc, argv);
+    task(argc, argv);
 
     // tt_test();
 }

@@ -167,15 +167,6 @@ helper()
     puts("/**************************************************/\n\n");
 }
 
-void
-free_space(const vector<string> &_args)
-{
-    #if defined(TRANSPOSITION_TABLE_H)
-        std::puts("Freeing Ram!");
-        TT.resize(1);
-        cout << TT.size() << endl;
-    #endif
-}
 
 void
 speed_test()
@@ -310,7 +301,7 @@ debug_movegen(const vector<string> &_args)
 
 
 
-void Task(int argc, char *argv[])
+void task(int argc, char *argv[])
 {
     const auto argument_list =
         extract_argument_list(argc, argv);
@@ -347,11 +338,6 @@ void Task(int argc, char *argv[])
             // Argument : elsa play "fen"
             start_game(argument_list);
         #endif
-    }
-    else if (command == "free")
-    {
-        // Argument : elsa free size
-        free_space(argument_list);
     }
     else if (command == "ponder")
     {
