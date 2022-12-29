@@ -91,12 +91,13 @@ MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
         return;
     }
     info.init(board.color, zero_move);
+    start_time = perf::now();
 
     search_time_left = extra_time_left = true;
     std::thread timer_thread;
 
-    if (use_timer)
-        timer_thread = std::thread(timer);
+    // if (use_timer)
+    //     timer_thread = std::thread(timer);
 
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
@@ -140,7 +141,8 @@ MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
         moc.sortList(pvArray[0]);
         moc.mprint(board);
     }
-    if (use_timer) timer_thread.join();
+
+    // if (use_timer) timer_thread.join();
     search_time_left = extra_time_left = false;
 }
 

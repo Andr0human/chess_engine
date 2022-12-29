@@ -3,8 +3,8 @@
 comp = g++
 
 
-CPPFLAGS = -std=c++20 -g3 -march=native -O3 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
-	-static -static-libgcc -static-libstdc++\
+CPPFLAGS = -std=c++20 -g3 -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
+	# -static -static-libgcc -static-libstdc++\
 	# -fsanitize=address
 
 

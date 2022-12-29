@@ -13,6 +13,7 @@ const double default_allocate_time = 2.0;
 int pvArray[(maxPly * maxPly + maxPly) / 2];
 int thread_array[maxThreadCount][(maxPly * maxPly) / 2];
 const string default_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+perf_clock start_time;
 
 int64_t total_can_pos = 0;
 int64_t this_can_pos = 0;
@@ -86,9 +87,9 @@ pre_status(int __dep, int __cnt)
 }
 
 void
-post_status(chessBoard &_cb, int _m, int _e, perf_clock start_time)
+post_status(chessBoard &_cb, int _m, int _e, perf_clock s_time)
 {
-    perf_time x = perf::now() - start_time;
+    perf_time x = perf::now() - s_time;
     const auto eval = _e * (2 * _cb.color - 1);
     
     if (!perf_test)
