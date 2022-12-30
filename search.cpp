@@ -12,7 +12,7 @@ int threadCount = 4;
 const double default_allocate_time = 2.0;
 int pvArray[(maxPly * maxPly + maxPly) / 2];
 int thread_array[maxThreadCount][(maxPly * maxPly) / 2];
-const string default_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 perf_clock start_time;
 
 int64_t total_can_pos = 0;

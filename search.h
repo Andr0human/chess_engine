@@ -21,7 +21,7 @@ extern int threadCount;
 extern const double default_allocate_time;
 extern int pvArray[(maxPly * maxPly + maxPly) / 2];
 extern int thread_array[maxThreadCount][(maxPly * maxPly) / 2];
-extern const string default_fen;
+extern const string startFen;
 extern perf_clock start_time;
 
 // Utility
@@ -64,9 +64,8 @@ int AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply);
 inline bool
 time_left_for_search()
 {
-    const auto current = perf::now();
-    const perf_time dur = current - start_time;
-    return dur.count() < alloted_search_time;
+    const perf_time dur_from_start = perf::now() - start_time;
+    return dur_from_start.count() < alloted_search_time;
 }
 
 #endif

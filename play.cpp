@@ -21,7 +21,7 @@ int moveNum = 0;
 
  * threads - threads used for the search
 
- * depth - maxDepth to be searched [default : inf] 
+ * depth - maxDepth to be searched [default : 36] 
 
  * quit - exits the program
 
@@ -69,7 +69,7 @@ void write_Execute_Result()
 
 void start_game(const vector<string>& arg_list)
 {
-    const string fen = arg_list.size() >= 2 ? arg_list[1] : default_fen;
+    const string fen = arg_list.size() >= 2 ? arg_list[1] : startFen;
     
     // TT.reIntialize(2'000'073, 10'073);
     puts("Play Mode Started!");
@@ -151,12 +151,6 @@ void find_move_for_position()
     Show_Searched_Info(primary);
 }
 
-
-#endif
-
-#ifndef PLAY2
-
-
 void getInput()
 {
     while (true)
@@ -166,6 +160,7 @@ void getInput()
         std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 }
+
 
 void play()
 {
@@ -188,6 +183,87 @@ void play()
     }
     
 }
+
+
+#endif
+
+#ifndef PLAY2
+
+
+bool
+command_found(std::ifstream& in, string& __s)
+{
+    getline(in, __s);
+    const size_t len = __s.size();
+
+    // Commandline is valid if its followed by '-in';
+    return len > 3 and
+        (__s[len - 1] == 'n') and
+        (__s[len - 1] == 'i') and
+        (__s[len - 2] == '-');
+}
+
+void
+get_input(string& __s)
+{
+    const string filename = "elsa_in";
+
+    // Break between each read
+    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(5);
+
+    // To read from the file
+    std::ifstream infile(filename);
+
+    // Searching for a valid commandline
+    while (command_found(infile, __s) == false)
+        std::this_thread::sleep_for(WAIT_TIME_PER_CYCLE);
+    
+    infile.close();
+}
+
+
+void
+read_commands(const string& __s)
+{
+    std::vector<string> args = split(__s, ' ');
+    args.pop_back();
+
+
+
+
+}
+
+
+
+
+
+void
+play(vector<string>& args)
+{
+    const string fen = args.size() > 1 ? args[1] : startFen;
+    
+    std::thread input_thread;
+    playboard board(fen);
+
+    // Used to store the commands by user
+    string __s;
+
+    while (true)
+    {
+        input_thread = std::thread(get_input, std::ref(__s));
+        input_thread.join();
+
+
+
+
+
+
+
+
+    }
+
+}
+
 
 
 #endif

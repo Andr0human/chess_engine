@@ -185,7 +185,7 @@ AlphaBeta(chessBoard& __pos, int depth,
 
             // Check if given board is already in transpostion table
             // Note : Need to check for check-mate/stale-mate possibility before TT_lookup,
-            //        else can lead to search faulires.
+            //        else can lead to search failures.
             int tt_val = TT.lookup_position(__pos.Hash_Value, depth, alpha, beta);
             if (tt_val != valUNKNOWN)
             {
@@ -194,7 +194,6 @@ AlphaBeta(chessBoard& __pos, int depth,
             }
         #endif
     }
-
 
     // Generate moves for current board
     auto myMoves = generate_moves(__pos);

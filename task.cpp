@@ -211,7 +211,7 @@ direct_search(const vector<string> &_args)
 {    
     perf::Timer _t("Direct_Search");
     const size_t __n = _args.size();
-    const string fen = __n > 1 ? _args[1] : default_fen;
+    const string fen = __n > 1 ? _args[1] : startFen;
     
     alloted_search_time = default_search_time;
     alloted_extra_time  = 0;
@@ -233,7 +233,7 @@ void
 node_count(const vector<string> &_args)
 {
     const size_t __n = _args.size();
-    const string fen = __n > 1 ? _args[1] : default_fen;
+    const string fen = __n > 1 ? _args[1] : startFen;
     const int depth  = __n > 2 ? stoi(_args[2]) : 6;
     chessBoard _cb   = fen;
 
@@ -277,7 +277,7 @@ debug_movegen(const vector<string> &_args)
     };
 
     const auto __n = _args.size();
-    const auto fen = __n > 1 ? _args[1] : default_fen;
+    const auto fen = __n > 1 ? _args[1] : startFen;
     const auto dep = __n > 2 ? stoi(_args[2]) : 2;
     const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
     

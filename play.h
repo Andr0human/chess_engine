@@ -9,6 +9,26 @@
 #include <fstream>
 
 
+class playboard : chessBoard
+{
+    private:
+
+    static const int OCC_POS_SIZE = 300;
+    uint64_t occured_pos[OCC_POS_SIZE];
+
+    public:
+
+    playboard() {}
+
+    playboard(const string fen)
+    : chessBoard(fen) {}
+
+
+    
+
+};
+
+
 class play_board
 {
     public:
@@ -74,7 +94,7 @@ void play();
 
 extern play_board pb;
 extern std::ifstream inFile;
-const std::string file_name = "elsa";
+const static std::string file_name = "elsa";
 
 // Commandline : -p -th 2 -tm 1.23 0.67 -m 5069 -e
 
