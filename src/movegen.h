@@ -9,11 +9,11 @@
 #include "move_utils.h"
 
 
-inline int gen_move_priority
+inline MoveType gen_move_priority
        (const chessBoard &__b, const int ip, const int fp);
-inline int gen_pawn_move_priority
+inline MoveType gen_pawn_move_priority
        (const chessBoard &__b, const int ip, const int fp);
-inline int encode_move
+inline MoveType encode_move
     (const chessBoard &__b, const int ip, const int fp, const int pr);
 
 
@@ -50,8 +50,8 @@ uint64_t canKingMove(const chessBoard& _cb, uint64_t Attacked_Squares);
 
 
 bool is_passad_pawn(int idx, chessBoard& _cb);
-bool interesting_move(int move, chessBoard& _cb);
-bool f_prune_move(int move, chessBoard& _cb);
+bool interesting_move(MoveType move, chessBoard& _cb);
+bool f_prune_move(MoveType move, chessBoard& _cb);
 
 
 bool has_legal_moves(chessBoard &_cb);

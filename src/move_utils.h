@@ -21,6 +21,7 @@
 #define ALL_BOTH  (_cb.Pieces[15] | _cb.Pieces[7])
 
 
+
 enum board: uint64_t
 {
     Rank1 = 255ULL, Rank2 = Rank1 << 8, Rank3 = Rank1 << 16, Rank4 = Rank1 << 24,
@@ -53,10 +54,11 @@ enum board: uint64_t
 class MoveList
 {
     private:
-    int *__begin, *__end;
+    MoveType* __begin;
+    MoveType* __end;
 
     public:
-    int pMoves[120];
+    MoveType pMoves[120];
     int pColor;
     
     bool canMove, cpt_only, canPromote;
@@ -73,16 +75,16 @@ class MoveList
         __begin = __end = pMoves;
     }
 
-    inline void Add(int move) noexcept
+    inline void Add(MoveType move) noexcept
     { *__end++ = move; }
 
     inline bool empty() const noexcept
     { return __begin == __end; }
 
-    inline int* begin() const noexcept
+    inline MoveType* begin() const noexcept
     { return __begin; }
 
-    inline int* end() const noexcept
+    inline MoveType* end() const noexcept
     { return __end; }
 
     inline uint64_t size() const noexcept
@@ -100,30 +102,30 @@ inline int next_idx(uint64_t &__n) {
 }
 
 // Prints all the info on the encoded-move
-void decode_move(const int encoded_move);
+void decode_move(const MoveType encoded_move);
 
 
 
 
 
 
-inline int gen_base_move(const chessBoard& _cb, int ip);
+inline MoveType gen_base_move(const chessBoard& _cb, int ip);
 
-inline void add_cap_moves(const int ip, uint64_t endSquares, const int base,
-            const chessBoard& _cb, MoveList& myMoves);
+inline void add_cap_moves(const int ip, uint64_t endSquares, const MoveType base,
+    const chessBoard& _cb, MoveList& myMoves);
 
-inline void add_quiet_moves(uint64_t endSquares, const int base,
-            const chessBoard& _cb, MoveList& myMoves);
+inline void add_quiet_moves(uint64_t endSquares, const MoveType base,
+    const chessBoard& _cb, MoveList& myMoves);
 
 void add_move_to_list(const int ip, uint64_t endSquares,
-     const chessBoard& _cb, MoveList& myMoves);
+    const chessBoard& _cb, MoveList& myMoves);
 
 
 
 
 
 void add_quiet_pawn_moves(uint64_t endSquares, const int shift,
-                          const chessBoard& _cb, MoveList& myMoves);
+    const chessBoard& _cb, MoveList& myMoves);
 
 
 
@@ -170,7 +172,7 @@ bool Incheck(const chessBoard& _cb);
  * @param _cb board position
  * @return string 
  */
-string print(int move, chessBoard& _cb);
+string print(MoveType move, chessBoard& _cb);
 
 /**
  * @brief Prints all encoded-moves in list to human-readable strings

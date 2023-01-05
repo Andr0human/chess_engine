@@ -27,7 +27,7 @@ vector<test_position>
 get_test_positions(string filename)
 {
     std::ifstream infile;
-    infile.open("Utility/" + filename + "_test_positions.txt");
+    infile.open("../Utility/" + filename + "_test_positions.txt");
 
     string pos, text, name;
     vector<string> tmp;
@@ -55,8 +55,7 @@ accuracy_test()
 {
     const auto get_test_pos = [] ()
     {
-        char *cwd = getenv("PWD");
-        string file_path = string(cwd) + "/Utility/accuracy_test_positions.txt";
+        string file_path = "../Utility/accuracy_test_positions.txt";
         std::ifstream infile(file_path);
 
         string line;
@@ -303,7 +302,7 @@ debug_movegen(const vector<string> &_args)
 
 void task(int argc, char *argv[])
 {
-    const auto argument_list =
+    const vector<string> argument_list =
         extract_argument_list(argc, argv);
 
     string command = argument_list.empty() ? "" : argument_list[0];
@@ -337,7 +336,9 @@ void task(int argc, char *argv[])
         #if defined(PLAY_H)
             // Argument : elsa play "fen"
             start_game(argument_list);
+            play(argument_list);
         #endif
+        play(argument_list);
     }
     else if (command == "ponder")
     {

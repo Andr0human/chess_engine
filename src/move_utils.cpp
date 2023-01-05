@@ -4,7 +4,7 @@
 
 
 void
-decode_move(const int move)
+decode_move(const MoveType move)
 {
     const int ip  = move & 63;
     const int fp  = (move >> 6) & 63;
@@ -35,27 +35,27 @@ decode_move(const int move)
 
 
 
-inline int
+inline MoveType
 gen_base_move(const chessBoard& _cb, int ip)
 {
     const int pt =  _cb.board[ip] & 7;
     const int side = _cb.color << 20;
 
-    const int base_move = side + (pt << 12) + ip;
+    const MoveType base_move = side + (pt << 12) + ip;
     return base_move;
 }
 
 inline void
 add_cap_moves(const int ip, uint64_t endSquares,
-    const int base_move, const chessBoard& _cb, MoveList& myMoves)
+    const MoveType base_move, const chessBoard& _cb, MoveList& myMoves)
 {
     const auto cap_priority = [] (const int pt, const int cpt)
     { return (cpt - pt + 16); };
 
     const auto encode_full_move = [] (const int base,
-            const int fp, const int cpt, const int move_pr)
+        const int fp, const int cpt, const int move_pr)
     {
-        const int e_move = base + (move_pr << 21) + (cpt << 15) + (fp << 6);
+        const MoveType e_move = base + (move_pr << 21) + (cpt << 15) + (fp << 6);
         return e_move;
     };
 
@@ -68,18 +68,18 @@ add_cap_moves(const int ip, uint64_t endSquares,
         const int cpt = _cb.board[fp] & 7;
         const int move_priority = cap_priority(pt, cpt);
         
-        const int enc_move = encode_full_move(base_move, fp, cpt, move_priority);
+        const MoveType enc_move = encode_full_move(base_move, fp, cpt, move_priority);
         myMoves.Add(enc_move);
     }
 }
 
 inline void
-add_quiet_moves(uint64_t endSquares,
-    const int base_move, const chessBoard& _cb, MoveList& myMoves)
+add_quiet_moves(uint64_t endSquares, const MoveType base_move,
+    const chessBoard& _cb, MoveList& myMoves)
 {
     const auto encode_full_move = [] (const int base, const int fp, const int pr)
     {
-        const int e_move = base + (pr << 21) + (fp << 6);
+        const MoveType e_move = base + (pr << 21) + (fp << 6);
         return e_move;
     };
 
@@ -87,7 +87,7 @@ add_quiet_moves(uint64_t endSquares,
     {
         const int fp = next_idx(endSquares);
         const int move_priority = 0;
-        const int enc_move = encode_full_move(base_move, fp, move_priority);
+        const MoveType enc_move = encode_full_move(base_move, fp, move_priority);
         myMoves.Add(enc_move);
     }
 }
@@ -98,7 +98,7 @@ add_move_to_list(const int ip, uint64_t endSquares,
 {
     const uint64_t cap_Squares = endSquares & ALL(EMY);
     const uint64_t quiet_Squares = endSquares ^ cap_Squares;
-    const int base_move = gen_base_move(_cb, ip);
+    const MoveType base_move = gen_base_move(_cb, ip);
 
     add_cap_moves(ip, cap_Squares, base_move, _cb, myMoves);
     add_quiet_moves(quiet_Squares, base_move, _cb, myMoves);
@@ -113,13 +113,13 @@ add_quiet_pawn_moves(uint64_t endSquares,
     const int pt = 1;
     const int side = _cb.color << 20;
 
-    const int base_move = side + (pt << 12);
+    const MoveType base_move = side + (pt << 12);
 
     while (endSquares != 0)
     {
         const int fp = next_idx(endSquares);
         const int ip = fp + shift;
-        const int enc_move = base_move + (fp << 6) + ip;
+        const MoveType enc_move = base_move + (fp << 6) + ip;
         myMoves.Add(enc_move);
     }
 }
@@ -128,10 +128,10 @@ add_quiet_pawn_moves(uint64_t endSquares,
 uint64_t
 pawn_atk_sq(const chessBoard& _cb, const int enemy)
 {
-    const auto side = _cb.color ^ enemy;
-    const auto inc  = 2 * side - 1;
-    const auto pawns = _cb.Pieces[8 * side + 1];
-    const auto shifter = side == 1 ? l_shift : r_shift;
+    const int side = _cb.color ^ enemy;
+    const int inc  = 2 * side - 1;
+    const uint64_t pawns = _cb.Pieces[8 * side + 1];
+    const auto shifter = (side == 1) ? l_shift : r_shift;
 
     return shifter(pawns & RightAttkingPawns, 8 + inc) |
            shifter(pawns & LeftAttkingPawns , 8 - inc);
@@ -196,7 +196,7 @@ Incheck(const chessBoard& _cb)
 }
 
 string
-print(int move, chessBoard& _cb)
+print(MoveType move, chessBoard& _cb)
 {    
     string res;
     if (!move) return "null";
@@ -312,7 +312,7 @@ print(const MoveList& myMoves, chessBoard& _cb)
     cout << "MoveCount : " << myMoves.size() << '\n';
     
     int move_no = 0;
-    for (const auto move : myMoves)
+    for (const MoveType move : myMoves)
         cout << (++move_no) << "\t| " << print(move, _cb) << "\t| "
              << move << '\n';
 

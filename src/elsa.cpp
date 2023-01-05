@@ -12,7 +12,6 @@ int main(int argc, char **argv)
 
 
 /*  
-
     r1bq1rk1/p4ppp/2Bb1n2/3p2B1/8/2N5/PPP2PPP/R2Q1RK1 b - - 0 12             // Bxh2+
     r2q3r/1b1k1pbp/p4np1/2BP1pN1/p1B5/P1Q5/1PP3PP/R3K2R w KQ - 0 19          // O-O O-O-O Qb4
     2k1r3/p1p2p1p/2p3p1/2bb1qB1/2P5/PP3P2/4N1PP/R2QK2R w KQ - 1 18           // Qd2 cxd5 Bh4

@@ -16,8 +16,9 @@ chessBoard::chessBoard()
     for (int i = 0; i < 16; i++) Pieces[i] = 0; 
 }
 
-chessBoard::chessBoard(const std::string& fen)
-{    
+void
+chessBoard::set_position_with_fen(const string& fen) noexcept
+{
     // Split the elements from fen.
     const auto text_split = [] (const std::string &__s, char sep)
     {
@@ -98,26 +99,25 @@ chessBoard::chessBoard(const std::string& fen)
     else csep |= 28 + ((2 * color - 1) * 12) + (elements[3][0] - 'a');
 
     // Extracting half-move and full-move
+    using std::stoi;
     if (elements.size() == 6)
-    {
-        halfmove = std::stoi(elements[4]);
-        fullmove = std::stoi(elements[5]);
-    }
+        halfmove = stoi(elements[4]), fullmove = stoi(elements[5]);
     else
-    {
-        halfmove = 0;
-        fullmove = 1;
-    }
+        halfmove = 0, fullmove = 1;
 
     KA = -1;
+    moveNum = 0;
 
     // Generate hash-value for current position
     Hash_Value = generate_hashKey();
 }
 
+chessBoard::chessBoard(const string& fen)
+{ set_position_with_fen(fen); }
+
 
 void
-chessBoard::MakeMove(const int move)
+chessBoard::MakeMove(const MoveType move)
 {
     // Init and Dest. sq
     const int ip = move & 63;
@@ -280,7 +280,7 @@ chessBoard::make_move_enpassant(int ip, int ep)
 }
 
 void
-chessBoard::make_move_pawn_promotion(const int move)
+chessBoard::make_move_pawn_promotion(const MoveType move)
 {
     int ip  = move & 63;
     int fp  = (move >> 6) & 63;
@@ -411,7 +411,7 @@ chessBoard::UnmakeMove()
 }
 
 void
-chessBoard::auxilary_table_update(const int move)
+chessBoard::auxilary_table_update(const MoveType move)
 {
     aux_table_move[moveNum] = move;
     aux_table_csep[moveNum] = csep;
@@ -588,7 +588,7 @@ chessBoard::fill_with_piece(std::string arr[], uint64_t value, char ch) const
 }
 
 void
-chessBoard::show() const
+chessBoard::show() const noexcept
 {
     string arr[8];
     for (int i = 0; i < 8; i++) arr[i] = "........";

@@ -18,19 +18,18 @@ extern bool search_time_left, extra_time_left, perf_test;
 extern double alloted_search_time, alloted_extra_time;
 extern uint64_t nodes_hits, qnodes_hits;
 extern int threadCount;
-extern const double default_allocate_time;
-extern int pvArray[(maxPly * maxPly + maxPly) / 2];
-extern int thread_array[maxThreadCount][(maxPly * maxPly) / 2];
+extern MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
+extern MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
 extern const string startFen;
 extern perf_clock start_time;
 
 // Utility
 void timer();
-void movcpy (int* pTarget, const int* pSource, int n);
-void PRINT_LINE(chessBoard _cb, int line[], int __N);
-void PRINT_LINE(chessBoard _cb, std::vector<int> line);
+void movcpy (MoveType* pTarget, const MoveType* pSource, int n);
+void PRINT_LINE(chessBoard _cb, MoveType line[], int __N);
+void PRINT_LINE(chessBoard _cb, std::vector<MoveType> line);
 void pre_status(int __dep, int __cnt);
-void post_status(chessBoard &_cb, int _m, int _e, perf_clock start_time);
+void post_status(chessBoard &_cb, MoveType _m, int _e, perf_clock start_time);
 void curr_depth_status(chessBoard &_cb);
 void Show_Searched_Info(chessBoard &_cb);
 void reset_pv_line();
@@ -39,7 +38,7 @@ int checkmate_score(int ply);
 // Move_Generator
 void order_generated_moves(MoveList& myMoves, bool pv_moves);
 int createMoveOrderList(chessBoard &_cb);
-bool is_valid_move(int move, chessBoard _cb);
+bool is_valid_move(MoveType move, chessBoard _cb);
 
 // Search_Checks
 bool ok_to_do_nullmove(chessBoard& _cb);

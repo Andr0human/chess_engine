@@ -11,7 +11,7 @@
 
 #ifndef MOVEGEN_UTILS
 
-inline int
+inline MoveType
 gen_move_priority(const chessBoard& __b, const int ip, const int fp)
 {
     int res = 0;
@@ -23,7 +23,7 @@ gen_move_priority(const chessBoard& __b, const int ip, const int fp)
     return res;
 }
 
-inline int
+inline MoveType
 gen_pawn_move_priority(const chessBoard& __b, const int ip, const int fp)
 {
     int res = 5;
@@ -34,7 +34,7 @@ gen_pawn_move_priority(const chessBoard& __b, const int ip, const int fp)
     return res;
 }
 
-inline int
+inline MoveType
 encode_move(const chessBoard &__b, const int ip, const int fp, const int pr)
 {
     const int pt  = __b.board[ip] & 7;
@@ -727,7 +727,7 @@ is_passad_pawn(int idx, chessBoard& _cb)
 }
 
 bool
-interesting_move(int move, chessBoard& _cb)
+interesting_move(MoveType move, chessBoard& _cb)
 {
     int ip = move & 63, fp = (move >> 6) & 63, ep = _cb.csep & 127;
     int pt = _cb.board[ip], cpt = _cb.board[fp];
@@ -746,7 +746,7 @@ interesting_move(int move, chessBoard& _cb)
 }
 
 bool
-f_prune_move(int move, chessBoard& _cb)
+f_prune_move(MoveType move, chessBoard& _cb)
 {
     int fp = (move >> 6) & 63;
     int cpt = _cb.board[fp];

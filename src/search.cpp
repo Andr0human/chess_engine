@@ -9,14 +9,11 @@ bool search_time_left, extra_time_left, perf_test = false;
 double alloted_search_time = 2, alloted_extra_time = 0;
 uint64_t nodes_hits = 0, qnodes_hits = 0;
 int threadCount = 4;
-const double default_allocate_time = 2.0;
-int pvArray[(maxPly * maxPly + maxPly) / 2];
-int thread_array[maxThreadCount][(maxPly * maxPly) / 2];
+MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
+MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
 const string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 perf_clock start_time;
 
-int64_t total_can_pos = 0;
-int64_t this_can_pos = 0;
 
 #ifndef TOOLS
 
@@ -51,11 +48,11 @@ timer2()
 }
 
 void
-movcpy(int* pTarget, const int* pSource, int n)
+movcpy(MoveType* pTarget, const MoveType* pSource, int n)
 { while (n-- && (*pTarget++ = *pSource++)); }
 
 void
-PRINT_LINE(chessBoard board, int line[], int __N)
+PRINT_LINE(chessBoard board, MoveType line[], int __N)
 {
     for (int i = 0; i < __N; i++) {
         if (!line[i]) break;
@@ -66,9 +63,9 @@ PRINT_LINE(chessBoard board, int line[], int __N)
 }
 
 void
-PRINT_LINE(chessBoard _cb, std::vector<int> line)
+PRINT_LINE(chessBoard _cb, std::vector<MoveType> line)
 {
-    for (const auto move : line) {
+    for (const MoveType move : line) {
         if (move == 0) break;
         cout << print(move, _cb) << " ";
         _cb.MakeMove(move);
@@ -87,7 +84,7 @@ pre_status(int __dep, int __cnt)
 }
 
 void
-post_status(chessBoard &_cb, int _m, int _e, perf_clock s_time)
+post_status(chessBoard &_cb, MoveType _m, int _e, perf_clock s_time)
 {
     perf_time x = perf::now() - s_time;
     const auto eval = _e * (2 * _cb.color - 1);
@@ -193,7 +190,7 @@ createMoveOrderList(chessBoard& _cb)
 }
 
 bool
-is_valid_move(int move, chessBoard _cb)
+is_valid_move(MoveType move, chessBoard _cb)
 {
     int ip = move & 63, vMove/* , fp = (move >> 6) & 63 */;                      // Get Init. and Dest. Square from encoded move.
 
@@ -339,7 +336,7 @@ QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
     // cout << "order_moves! ply = " << ply << endl;
     order_generated_moves(myMoves, false);
 
-    for (const int move : myMoves)
+    for (const MoveType move : myMoves)
     {
         int move_priority = (move >> 21) & 31;
         // int cpt = ((move >> 15) & 7);
@@ -370,7 +367,7 @@ AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply)
     auto myMoves = generate_moves(_cb);
     order_generated_moves(myMoves, false);
 
-    for (const auto move : myMoves)
+    for (const MoveType move : myMoves)
     {
         _cb.MakeMove(move);
         int eval = -AlphaBeta_noPV(_cb, depth - 1, -beta, -alpha, ply + 1);

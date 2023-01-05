@@ -7,27 +7,6 @@ std::ifstream inFile;
 int moveNum = 0;
 
 
-
-/*** CommandList to implement
- * go - To start searching for the best move
-
- * position - set the current position using fen
- * position [fen <FEN string> | startpos]
-
- * moves - play the current in move(s) in set position. (Do a legality-check first)
- * moves <move1> <move2> ... <movei>
-
- * movetime - time allocated for the search [default : 2 sec.]
-
- * threads - threads used for the search
-
- * depth - maxDepth to be searched [default : 36] 
-
- * quit - exits the program
-
-***/
-
-
 #ifndef READ_WRITE
 
 bool readFile()
@@ -191,75 +170,111 @@ void play()
 
 
 bool
-command_found(std::ifstream& in, string& __s)
+valid_args_found(string& __s)
 {
-    getline(in, __s);
-    const size_t len = __s.size();
+    const string filename = "elsa_in";
 
-    // Commandline is valid if its followed by '-in';
-    return len > 3 and
-        (__s[len - 1] == 'n') and
-        (__s[len - 1] == 'i') and
-        (__s[len - 2] == '-');
+    // To read from the file
+    std::ifstream infile(filename);
+    
+    getline(infile, __s);
+    infile.close();
+    
+    return !__s.empty();
 }
 
 void
 get_input(string& __s)
 {
-    const string filename = "elsa_in";
-
     // Break between each read
-    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(5);
-
-    // To read from the file
-    std::ifstream infile(filename);
+    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(3);
 
     // Searching for a valid commandline
-    while (command_found(infile, __s) == false)
+    while (valid_args_found(__s) == false)
         std::this_thread::sleep_for(WAIT_TIME_PER_CYCLE);
-    
-    infile.close();
 }
 
 
+
 void
-read_commands(const string& __s)
+read_commands(const string& __s, playboard& board)
 {
+    using std::stoi;
+    using std::stod;
+
     std::vector<string> args = split(__s, ' ');
-    args.pop_back();
+    size_t index = 0;
+
+    for (const string& arg : args)
+    {   
+        if (arg == "go") {
+            board.ready_search();
+        }
+        else if (arg == "position") {
+            board.set_new_position(args[index + 1]);
+        }
+        else if (arg == "moves") {
+            board.play_moves_before_search(args, index + 1);
+        }
+        else if (arg == "movetime") {
+            board.set_movetime(stod(args[index + 1]));
+        }
+        else if (arg == "threads") {
+            board.set_thread(stoi(args[index + 1]));
+        }
+        else if (arg == "depth") {
+            board.set_depth(stoi(args[index + 1]));
+        }
+        else if (arg == "quit") {
+            board.ready_quit();
+        }
+
+        index++;
+    }
+}
+
+void
+execute_commands(playboard& board)
+{
+
+    // Prev moves
+    if (board.to_play_moves())
+        board.play_moves();
 
 
+    // best move for current position (go)
+    if (board.init_search())
+    {
+        MakeMove_Iterative(board.fen());
 
-
+    }
+    
 }
 
 
-
-
-
 void
-play(vector<string>& args)
+play(const vector<string>& args)
 {
-    const string fen = args.size() > 1 ? args[1] : startFen;
+    puts("PLAY mode started!");
     
     std::thread input_thread;
-    playboard board(fen);
+    playboard board;
 
     // Used to store the commands by user
-    string __s;
+    string input_string;
 
     while (true)
     {
-        input_thread = std::thread(get_input, std::ref(__s));
+        input_thread = std::thread(get_input, std::ref(input_string));
         input_thread.join();
 
+        read_commands(input_string, board);
+        // Empty the input_string
 
+        execute_commands(board);
 
-
-
-
-
-
+        if (board.do_quit())
+            break;
     }
 
 }

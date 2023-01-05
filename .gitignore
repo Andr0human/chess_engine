@@ -1,5 +1,5 @@
 .vscode
-/Utility/test_data
+/Utility/test_data/
 
 bitboard.o
 lookup_table.o

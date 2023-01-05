@@ -15,7 +15,8 @@ struct thread_search_info
     chessBoard Board;
     bool beta_cut, threads_available, time_left;
 
-    uint64_t moveCount, index;
+    uint64_t moveCount;
+    int index;
     int depth;
     int ply, pvIndex, best_move, hashf;
     int legal_moves[156], alpha, beta;
@@ -26,8 +27,8 @@ struct thread_search_info
     void
     set(chessBoard &tmp_board, MoveList &tmp, int t_dep, int ta, int tb, int tply, int pv_idx, int start);
 
-    uint64_t
-    get_index();
+    int
+    get_index() noexcept;
 
     std::pair<int, int>
     result();

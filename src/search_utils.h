@@ -21,6 +21,8 @@ enum search_flag:int
 
     TIMEOUT = 1112223334,
     DRAW_VALUE = -25,
+    default_allocate_time = 2,
+
 
     valUNKNOWN = 5567899,
     HASHEMPTY = 0, HASHEXACT = 1,

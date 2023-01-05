@@ -1,87 +1,84 @@
+#
+# 'make'        build executable file 'elsa'
+# 'make clean'  removes all .o and executable files
+#
+
+# define the Cpp compiler to use
+CXX = g++
+
+# define any compile-time flags
+CXXFLAGS	:= -std=c++20 -g -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
+				# -static -static-libgcc -static-libstdc++\
+				# -fsanitize=address
+
+# define output directory
+OUTPUT	:= output
+
+# define source directory
+SRC		:= src
+
+ifeq ($(OS),Windows_NT)
+MAIN	:= elsa.exe
+SOURCEDIRS	:= $(SRC)
+# INCLUDEDIRS	:= $(INCLUDE)
+# LIBDIRS		:= $(LIB)
+FIXPATH = $(subst /,\,$1)
+RM			:= rm -f
+MD	:= mkdir
+else
+MAIN	:= elsa
+SOURCEDIRS	:= $(shell find $(SRC) -type d)
+# INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d)
+# LIBDIRS		:= $(shell find $(LIB) -type d)
+FIXPATH = $1
+RM = rm -f
+MD	:= mkdir -p
+endif
 
 
-comp = g++
+# define the C source files
+SOURCES		:= $(wildcard $(patsubst %,%/*.cpp, $(SOURCEDIRS)))
 
+# define the C object files 
+OBJECTS		:= $(SOURCES:.cpp=.o)
 
-CPPFLAGS = -std=c++20 -g3 -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
-	# -static -static-libgcc -static-libstdc++\
-	# -fsanitize=address
+#
+# The following part of the makefile is generic; it can be used to 
+# build any executable just by changing the definitions above and by
+# deleting dependencies appended to the file from 'make depend'
+#
 
-
-srcs = bitboard.cpp lookup_table.cpp tt.cpp search_utils.cpp elsa.cpp movegen.cpp play.cpp\
-	search.cpp PieceSquareTable.cpp single_thread.cpp task.cpp evaluation.cpp move_utils.cpp\
-	# play.cpp ponder.cpp multi_thread.cpp
-
-
-objs = $(notdir $(srcs:.cpp=.o))
-
+OUTPUTMAIN	:= $(call FIXPATH,$(OUTPUT)/$(MAIN))
 
 default: help
 
-elsa: $(objs)
-	$(comp) $(CPPFLAGS) $(objs) -o elsa
+elsa: $(OUTPUT) $(MAIN)
+	@echo Executing 'elsa' complete!
 
-elsa.o: elsa.cpp
-	$(comp) $(CPPFLAGS) -c elsa.cpp
+$(OUTPUT):
+	$(MD) $(OUTPUT)
 
-bitboard.o: bitboard.h bitboard.cpp perf.h
-	$(comp) $(CPPFLAGS) -c bitboard.cpp
+$(MAIN): $(OBJECTS) 
+	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(OUTPUTMAIN)
 
-move_utils.o : move_utils.h move_utils.cpp
-	$(comp) $(CPPFLAGS) -c move_utils.cpp
 
-movegen.o: movegen.h movegen.cpp move_utils.h move_utils.cpp
-	$(comp) $(CPPFLAGS) -c movegen.cpp
+# this is a suffix replacement rule for building .o's from .c's
+# it uses automatic variables $<: the name of the prerequisite of
+# the rule(a .c file) and $@: the name of the target of the rule (a .o file) 
+# (see the gnu make manual section about automatic variables)
+.cpp.o:
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $<  -o $@
 
-evaluation.o: evaluation.h evaluation.cpp
-	$(comp) $(CPPFLAGS) -c evaluation.cpp
 
-PieceSquareTable.o: PieceSquareTable.h PieceSquareTable.cpp
-	$(comp) $(CPPFLAGS) -c PieceSquareTable.cpp
-
-search.o: search.h search.cpp
-	$(comp) $(CPPFLAGS) -c search.cpp
-
-lookup_table.o: lookup_table.h lookup_table.cpp 
-	$(comp) $(CPPFLAGS) -c lookup_table.cpp
-
-tt.o: tt.h tt.cpp
-	$(comp) $(CPPFLAGS) -c tt.cpp
-
-search_utils.o: search_utils.h search_utils.cpp
-	$(comp) $(CPPFLAGS) -c search_utils.cpp
-
-single_thread.o: single_thread.h single_thread.cpp search.o
-	$(comp) $(CPPFLAGS) -c single_thread.cpp
-
-multi_thread.o: multi_thread.h multi_thread.cpp search.o
-	$(comp) $(CPPFLAGS) -c multi_thread.cpp
-
-play.o: play.h play.cpp
-	$(comp) $(CPPFLAGS) -c play.cpp
-
-task.o: task.h task.cpp
-	$(comp) $(CPPFLAGS) -c task.cpp
-
-ponder.o: ponder.h ponder.cpp
-	$(comp) $(CPPFLAGS) -c ponder.cpp
-
-new_eval.o: new_eval.h new_eval.cpp
-	$(comp) $(CPPFLAGS) -c new_eval.cpp
-
+.PHONY: clean
 clean:
-	rm *.o elsa
+	$(RM) $(OUTPUTMAIN)
+	$(RM) $(call FIXPATH,$(OBJECTS))
+	@echo Cleanup complete!
 
-objclean:
-	rm *.o
-
-elsabot:
-	g++ --version
-	$(comp) $(CPPFLAGS) $(srcs) -o elsabot
-
-chessbot:
-	$(comp) $(CPPFLAGS) $(srcs) -o chessbot
-
+run: all
+	./$(OUTPUTMAIN)
+	@echo Executing 'run: all' complete!
 
 help:
 	@echo ""
@@ -95,9 +92,6 @@ help:
 	@echo ""
 	@echo "To clear all .o files, type:"
 	@echo ""
-	@echo "make objclean"
-	@echo ""
-	@echo "For help utility, type:"
+	@echo "For help, type:"
 	@echo ""
 	@echo "make help"
-

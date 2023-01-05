@@ -13,6 +13,8 @@ using std::endl;
 using std::string;
 using std::vector;
 
+using MoveType = int;
+
 extern uint64_t tmp_total_counter;
 extern uint64_t tmp_this_counter;
 
@@ -59,7 +61,7 @@ class chessBoard
     static const int pieceOfs = 470, ofs = 7;
     static const int max_moveNum = 60;
 
-    int aux_table_move[max_moveNum];
+    MoveType aux_table_move[max_moveNum];
     int aux_table_csep[max_moveNum];
     uint64_t aux_table_hash[max_moveNum];
     int moveNum = 0;
@@ -96,7 +98,7 @@ class chessBoard
     make_move_double_pawn_push(int ip, int fp);
 
     void
-    make_move_pawn_promotion(const int move);
+    make_move_pawn_promotion(const MoveType move);
 
     void
     make_move_castling(int ip, int fp, bool call_from_makemove);
@@ -141,19 +143,22 @@ class chessBoard
 
     chessBoard();
     
-    chessBoard(const std::string &fen);
+    chessBoard(const std::string& fen);
 
     void
-    show() const;
+    set_position_with_fen(const string& fen) noexcept;
 
     void
-    MakeMove(const int move);
+    show() const noexcept;
+
+    void
+    MakeMove(const MoveType move);
 
     void
     UnmakeMove();
 
     void
-    auxilary_table_update(const int move);
+    auxilary_table_update(const MoveType move);
 
     int
     auxilary_table_revert();
@@ -162,7 +167,7 @@ class chessBoard
     fen() const;
 
     void
-    current_line(int moves[], int& __n) const noexcept
+    current_line(MoveType moves[], int& __n) const noexcept
     {
         for (int i = 0; i < moveNum; i++)
             moves[i] = aux_table_move[i];

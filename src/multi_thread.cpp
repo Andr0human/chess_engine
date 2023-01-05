@@ -32,11 +32,11 @@ thread_search_info::set(chessBoard &tmp_board, MoveList &tmp,
     alpha = ta; beta = tb;
 }
 
-uint64_t
-thread_search_info::get_index()
+int
+thread_search_info::get_index() noexcept
 {
-    if (index >= moveCount) return -1;
-    uint64_t value = index;
+    if (index >= static_cast<int>(moveCount)) return -1;
+    int value = index;
     index++;
     return value;
 }
@@ -281,7 +281,10 @@ pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
     }
     
     // TT.RemSearchHistory(_cb.Hash_Value);
-    // TT.RecordHash(loc_arr[pvIndex], _cb.Hash_Value, depth, alpha, hashf);
+
+    #if defined(TRANSPOSITION_TABLE_H)
+        TT.record_position(_cb.Hash_Value, depth, loc_arr[pvIndex], alpha, hashf);
+    #endif
     return alpha;
 }
 
@@ -357,8 +360,9 @@ LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, i
 {
     int eval, hashf = HASHALPHA;
     int pvNextIndex = pvIndex + maxPly - ply;
+    const int __n = static_cast<int>(myMoves.size());
 
-    for (uint64_t i = 0; i < myMoves.size(); i++)
+    for (int i = 0; i < __n; i++)
     {
         if (i < LMR_LIMIT || interesting_move(myMoves.pMoves[i], _cb))
         {
@@ -397,7 +401,10 @@ LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, i
     }
 
     // TT.RemSearchHistory(_cb.Hash_Value);
-    // TT.RecordHash(pvArray[pvIndex], _cb.Hash_Value, depth, alpha, hashf);
+
+    #if defined(TRANSPOSITION_TABLE_H)
+        TT.record_position(_cb.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
+    #endif
     return alpha;
 }
 
@@ -498,7 +505,7 @@ worker_Count(int thread_num)
     while (true)
     {
         mute.lock();
-        uint64_t index = thread_data.get_index();
+        int index = thread_data.get_index();
         mute.unlock();
         if (index == -1) break;
         move = thread_data.legal_moves[index];
@@ -528,7 +535,7 @@ worker_alphabeta(int thread_num, int sourceArr[])
     while (true)
     {
         mute.lock();
-        uint64_t index = thread_data.get_index();
+        int index = thread_data.get_index();
         int alpha = thread_data.alpha, beta = thread_data.beta;
         bool cut  = thread_data.beta_cut;
         mute.unlock();
@@ -580,7 +587,7 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
     while (true)
     {
         mute.lock();
-        uint64_t index = thread_data.get_index();
+        int index = thread_data.get_index();
         int alpha = thread_data.alpha, beta = thread_data.beta;
         bool cut  = thread_data.beta_cut;
 
