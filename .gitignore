@@ -1,6 +1,5 @@
-c_cpp_properties.json
-tasks.json
-settings.json
+.vscode
+/Utility/test_data
 
 bitboard.o
 lookup_table.o
@@ -17,6 +16,7 @@ move_utils.o
 play.o
 ponder.o
 multi_thread.o
-elsa_in.txt
-elsa_out.txt
+elsa_in
+elsa_out
 elsa
+elsa.exe
