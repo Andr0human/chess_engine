@@ -2,7 +2,7 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
-#include "perf.h"
+
 #include "bitboard.h"
 #include "movegen.h"
 #include "search_utils.h"
@@ -14,14 +14,10 @@
 
 // Variables
 extern std::mutex mute;
-extern bool search_time_left, extra_time_left, perf_test;
-extern double alloted_search_time, alloted_extra_time;
-extern uint64_t nodes_hits, qnodes_hits;
 extern int threadCount;
 extern MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
 extern MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
 extern const string startFen;
-extern perf_clock start_time;
 
 // Utility
 void timer();
@@ -60,12 +56,12 @@ int AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply);
 // time_left_for_search()
 // { return extra_time_left; }
 
-inline bool
-time_left_for_search()
-{
-    const perf_time dur_from_start = perf::now() - start_time;
-    return dur_from_start.count() < alloted_search_time;
-}
+// inline bool
+// time_left_for_search()
+// {
+//     const perf_time dur_from_start = perf::now() - start_time;
+//     return dur_from_start.count() < alloted_search_time;
+// }
 
 #endif
 

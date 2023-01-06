@@ -2,7 +2,8 @@
 
 #include "search_utils.h"
 
-search_data info;
+// search_data info;
+SearchData info;
 moveOrderClass moc;
 
 
@@ -77,23 +78,7 @@ moveOrderClass::reset()
 
 #endif
 
-#ifndef SEARCH_DATA
-
-int
-search_data::min3(int _X, int _Y, int _Z)
-{
-    if (_Y < _X) _X = _Y;
-    if (_Z < _X) _X = _Z;
-    return _X;
-}
-
-int
-search_data::max3(int _X, int _Y, int _Z)
-{
-    if (_Y > _X) _X = _Y;
-    if (_Z > _X) _X = _Z;
-    return _X;
-}
+/* #ifndef SEARCH_DATA
 
 int
 search_data::best_move()
@@ -157,13 +142,19 @@ search_data::use_verification_Search()
     if (depth < 4) return false;
     if (last_eval() > 70) return false;
 
-    std::pair<int, int> alpha = move[depth - 1], beta = move[depth - 2], delta = move[depth - 3];
-    
-    if ((alpha.first != beta.first) || (alpha.first != delta.first)) return true;
-    int lower = min3(alpha.second, beta.second, delta.second);
-    int upper = max3(alpha.second, beta.second, delta.second);
-    if (upper - lower > 300) return true;
+    using std::max;
+    using std::min;
 
+    auto alpha = move[depth - 1];
+    auto beta  = move[depth - 2];
+    auto delta = move[depth - 3];
+    
+    if ((alpha.first != beta.first) or (alpha.first != delta.first)) return true;
+
+    int lower = min(min(alpha.second, beta.second), delta.second);
+    int upper = max(max(alpha.second, beta.second), delta.second);
+
+    if (upper - lower > 300) return true;
     return false;
 }
 
@@ -198,7 +189,7 @@ search_data::set_discard_result(int zMove)
         move[depth++] = std::make_pair(zMove, 0);
 }
 
-#endif
+#endif */
 
 #ifndef TEST_POSITION
 
@@ -243,11 +234,19 @@ test_position::print()
 std::vector<std::string>
 split(const string &__s, char sep)
 {
+
     std::vector<std::string> res;
     size_t prev = 0, __n = __s.length();
     
-    for (size_t i = 0; i < __n; i++) {
-        if (__s[i] != sep) continue;
+    int in_case = 0;
+
+    for (size_t i = 0; i < __n; i++)
+    {
+        int val = static_cast<int>(__s[i]);
+        if (val == 34 or val == 39)
+            in_case ^= 1;
+
+        if (__s[i] != sep or (in_case == 1)) continue;
         
         if (i > prev)
             res.push_back(__s.substr(prev, i - prev));

@@ -6,6 +6,7 @@
 
 #include "bitboard.h"
 #include "movegen.h"
+#include "perf.h"
 #include <iostream>
 
 enum search_flag:int
@@ -63,26 +64,95 @@ class moveOrderClass
 };
 
 
-class search_data
+class SearchData
+{
+    private:
+    // Set the starting point for clock
+    perf_clock StartTime;
+
+    // Store which side to play for search_position
+    int side;
+
+    // Time provided to find move for current position (in secs.)
+    double time_alloted;
+
+    // Stores the pv of the lastest searched depth
+    vector<MoveType> last_pv;
+
+    // Stores the <best_move, eval> for each depth during search.
+    vector<std::pair<MoveType, int>> move_eval;
+
+    public:
+    // Init
+    SearchData()
+    : StartTime(perf::now()) {}
+
+    SearchData(int __side, double __time_alloted, MoveType zero_move)
+    : StartTime(perf::now()), side(__side), time_alloted(__time_alloted), move_eval({std::make_pair(zero_move, 0)}) {}
+    
+
+    double
+    alloted_time_for_search() const noexcept
+    { return time_alloted; }
+
+    std::pair<MoveType, int> last_iter_result() const noexcept
+    { return move_eval.back(); }
+
+    MoveType
+    last_move() const noexcept
+    { return move_eval.back().first; }
+
+    size_t
+    last_depth() const noexcept
+    { return move_eval.size() - 1; }
+
+    bool
+    is_part_of_pv(MoveType move) const noexcept
+    {
+        for (MoveType pv_move : last_pv)
+            if (move == pv_move) return true;
+        return false;
+    }
+
+    bool
+    time_over() const noexcept
+    {
+        perf_time duration = perf::now() - StartTime;
+        return duration.count() >= time_alloted;
+    }
+
+    void
+    add_current_depth_result(size_t depth, int eval, int __pv[]) noexcept
+    {
+        for (size_t i = 0; i < depth; i++)
+            last_pv.emplace_back(__pv[i]);
+        
+        move_eval.emplace_back(std::make_pair(__pv[0], eval * (2 * side - 1)));
+    }
+
+    void
+    set_discard_result(MoveType zero_move) noexcept
+    {
+        int eval = (zero_move == -1) ? (negInf / 2) :(0);
+        move_eval.emplace_back(std::make_pair(zero_move, eval));
+    }
+};
+
+
+
+
+/* class search_data
 {
     private:
     int depth;
     std::pair<int, int> move[maxPly];
-
     public:
     int side2move;
     int max_ply, max_qs_ply;
     int pvAlpha[maxPly];
-    
 
     search_data()
     { depth = max_ply = max_qs_ply = 0; }
-
-    int
-    min3(int _X, int _Y, int _Z);
-
-    int
-    max3(int _X, int _Y, int _Z);
 
     int
     best_move();
@@ -122,7 +192,7 @@ class search_data
 
     void
     set_discard_result(int zMove);
-};
+}; */
 
 
 class test_position
@@ -189,7 +259,8 @@ movegen_test_position
 
 
 
-extern search_data info;
+// extern search_data info;
+extern SearchData info;
 extern moveOrderClass moc;
 
 vector<string>

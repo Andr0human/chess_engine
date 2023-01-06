@@ -75,12 +75,16 @@ class playboard : public chessBoard
     ready_search() noexcept
     { search_curr_pos = true; }
 
+    void
+    search_done() noexcept
+    { search_curr_pos = false; }
+
     bool init_search() const noexcept
     { return search_curr_pos; }
 
     void
     ready_quit() noexcept
-    { to_quit = false; }
+    { to_quit = true; }
 
     bool do_quit() const noexcept
     { return to_quit; }
@@ -103,18 +107,33 @@ class playboard : public chessBoard
     to_play_moves() const noexcept
     { return !moves.empty(); }
 
+ 
+    // Play the current in move(s) in set position.
     void
     play_moves() noexcept
     {
+        const auto pawn_move = [] (MoveType move)
+        { return ((move >> 12) & 7) == 1; };
+
+        const auto captures = [] (MoveType move)
+        { return ((move >> 15) & 7) > 0; };
+
+        const auto en_passant = [] (MoveType move, int _csep)
+        { return ((move >> 6) & 63) == (_csep & 127); };
+
         for (const MoveType move : moves)
         {
-            // if (pawn or capture_move)
-            //     prev_keys.clear();
+            if (pawn_move(move) or captures(move) or en_passant(move, csep))
+                prev_keys.clear();
+
             MakeMove(move);
             prev_keys.push_back(Hash_Value);
         }
     }
 
+    vector<uint64_t>
+    get_prev_hashkeys() const noexcept
+    { return prev_keys; }
 };
 
 
@@ -187,8 +206,6 @@ play(const vector<string>& args);
 extern play_board pb;
 extern std::ifstream inFile;
 const static std::string file_name = "elsa";
-
-// Commandline : -p -th 2 -tm 1.23 0.67 -m 5069 -e
 
 #endif
 

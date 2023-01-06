@@ -5,14 +5,10 @@
 
 
 std::mutex mute;
-bool search_time_left, extra_time_left, perf_test = false;
-double alloted_search_time = 2, alloted_extra_time = 0;
-uint64_t nodes_hits = 0, qnodes_hits = 0;
 int threadCount = 4;
 MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
 MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
 const string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-perf_clock start_time;
 
 
 #ifndef TOOLS
@@ -23,10 +19,10 @@ timer()
 {
     /* int _x = alloted_search_time * 1000, _y = alloted_extra_time * 1000;
     std::this_thread::sleep_for(std::chrono::milliseconds(_x)); */
-    const auto _x = static_cast<uint64_t>(alloted_search_time * 1e6);
-    std::this_thread::sleep_for(std::chrono::microseconds(_x));
+    // const auto _x = static_cast<uint64_t>(alloted_search_time * 1e6);
+    // std::this_thread::sleep_for(std::chrono::microseconds(_x));
 
-    search_time_left = extra_time_left = false;
+    // search_time_left = extra_time_left = false;
     /* if (info.use_verification_Search()) {
         search_time_left = true;
     } else {
@@ -41,10 +37,10 @@ timer()
 void
 timer2()
 {
-    const auto _x = static_cast<uint64_t>(alloted_search_time * 1000);
-    std::this_thread::sleep_for(std::chrono::microseconds(_x * 1000));
-    search_time_left = false;
-    return;
+    // const auto _x = static_cast<uint64_t>(alloted_search_time * 1000);
+    // std::this_thread::sleep_for(std::chrono::microseconds(_x * 1000));
+    // search_time_left = false;
+    // return;
 }
 
 void
@@ -76,50 +72,60 @@ PRINT_LINE(chessBoard _cb, std::vector<MoveType> line)
 void
 pre_status(int __dep, int __cnt)
 {
-    nodes_hits = qnodes_hits = 0;
-    if (!perf_test) {
-        cout << "Looking at Depth : " << __dep << endl;
-        cout << "ValWindow => " << (valWindow << __cnt) << endl;
-    }
+    // nodes_hits = qnodes_hits = 0;
+    // if (!perf_test) {
+    //     cout << "Looking at Depth : " << __dep << endl;
+    //     cout << "ValWindow => " << (valWindow << __cnt) << endl;
+    // }
 }
 
 void
 post_status(chessBoard &_cb, MoveType _m, int _e, perf_clock s_time)
 {
-    perf_time x = perf::now() - s_time;
-    const auto eval = _e * (2 * _cb.color - 1);
+    // perf_time x = perf::now() - s_time;
+    // const auto eval = _e * (2 * _cb.color - 1);
     
-    if (!perf_test)
-    {
-        cout << "Node Hits :  " << nodes_hits << " Nodes. | qNode Hits : " << qnodes_hits << " Nodes.\n";
-        cout << "Eval : " << static_cast<float>(eval) / 100.0 << '\n';
-        cout << "Best Move : " << print(_m, _cb) << '\n';
-        cout << "Time Used : " << x.count() << "\n\n" << std::flush;
-    }
+    // if (!perf_test)
+    // {
+    //     // cout << "Node Hits :  " << nodes_hits << " Nodes. | qNode Hits : " << qnodes_hits << " Nodes.\n";
+    //     cout << "Eval : " << static_cast<float>(eval) / 100.0 << '\n';
+    //     cout << "Best Move : " << print(_m, _cb) << '\n';
+    //     cout << "Time Used : " << x.count() << "\n\n" << std::flush;
+    // }
 }
 
 void
 curr_depth_status(chessBoard &_cb)
 {
-    cout << std::setprecision(2);
-    cout << "Depth ";
-    if (info.last_depth() < 10) cout << " ";
+    // cout << std::setprecision(2);
+    // cout << "Depth ";
+    // if (info.last_depth() < 10) cout << " ";
 
-    cout << info.last_depth() << " | Eval : " << info.last_eval() << "\t| PV : ";
-    cout << std::setprecision(3);
-    PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
+    // cout << info.last_depth() << " | Eval : " << info.last_eval() << "\t| PV : ";
+    // cout << std::setprecision(3);
+    // PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
+
+    const auto& [move, eval] = info.last_iter_result();
+
+    cout << print(move, _cb) << " " << eval << endl;
+
+    puts("TO BE DONE - CURR_DEPTH_STATUS");
+
 }
 
 void
 Show_Searched_Info(chessBoard &_cb)
 {
-    cout << "Depth Searched : " << info.last_depth() << endl;
-    // cout << "Max Depth Reached : " << info.max_ply << endl;
-    // cout << "Max Qs Depth Reached : " << info.max_qs_ply << endl;
-    cout << "Best Move : " << print(info.best_move(), _cb) << endl;
-    cout << "Eval : " << info.last_eval() << endl;
-    cout << "LINE : ";
-    PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
+    // cout << "Depth Searched : " << info.last_depth() << endl;
+    // // cout << "Max Depth Reached : " << info.max_ply << endl;
+    // // cout << "Max Qs Depth Reached : " << info.max_qs_ply << endl;
+    // cout << "Best Move : " << print(info.best_move(), _cb) << endl;
+    // cout << "Eval : " << info.last_eval() << endl;
+    // cout << "LINE : ";
+    // PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
+
+    puts("TO BE DONE - SHOW_SEARCHED_INFO");
+
 }
 
 void
@@ -185,8 +191,8 @@ createMoveOrderList(chessBoard& _cb)
     moc.initialise(movelist);
     // moc.reset();
 
-    int res = (movelist.size() > 0) ? (*movelist.begin()) : (_cb.KA > 0 ? -1 : -2);
-    return res;
+    return (movelist.size() > 0) ?
+           (*movelist.begin()) : (_cb.KA > 0 ? -1 : -2);
 }
 
 bool
@@ -221,7 +227,7 @@ bool
 ok_to_do_nullmove(chessBoard& _cb)
 {
     // if (ka_pieces.attackers) return false;
-    if (info.side2move != _cb.color) return false;
+    // if (info.side2move != _cb.color) return false;
     return true;
 }
 
@@ -302,12 +308,14 @@ int
 QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 {    
     // Check if Time Left for Search
-    if (!extra_time_left)
-        return valUNKNOWN;
+    // if (!extra_time_left)
+    //     return valUNKNOWN;
+    if (info.time_over())
+        return TIMEOUT;
 
-    if (__dol > info.max_qs_ply)
-        info.max_qs_ply = __dol;
-    qnodes_hits++;
+    // if (__dol > info.max_qs_ply)
+    //     info.max_qs_ply = __dol;
+    // qnodes_hits++;
     
 
     if (has_legal_moves(_cb) == false)
@@ -358,7 +366,7 @@ int
 AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply)
 {
     // if (!extra_time_left) return valUNKNOWN;
-    nodes_hits++;
+    // nodes_hits++;
     if (has_legal_moves(_cb) == false)
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
 

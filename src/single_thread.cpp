@@ -46,7 +46,7 @@ negaMax(chessBoard &_cb, int depth)
     return _eval;
 }
 
-std::pair<int, int>
+std::pair<MoveType, int>
 negaMax_root(chessBoard &_cb, int depth)
 {
     if (has_legal_moves(_cb) == false)
@@ -78,23 +78,23 @@ negaMax_root(chessBoard &_cb, int depth)
 #ifndef SINGLE_THREAD_SEARCH
 
 void
-MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
+MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
 {
     // A Zero depth Move is produced in case we don't even have time to do a search of depth 1
     reset_pv_line();
-    info.reset();
-    int zero_move = createMoveOrderList(board), eval = 0;
+    // info.reset();
+    MoveType zero_move = createMoveOrderList(board);
+
     if (zero_move < 0)
     {
         cout << "No legal Moves on board! Discarding Search.\n";
         info.set_discard_result(zero_move);
         return;
     }
-    info.init(board.color, zero_move);
-    start_time = perf::now();
-
-    search_time_left = extra_time_left = true;
-    std::thread timer_thread;
+    // info.init(board.color, zero_move);
+    info = SearchData(board.color, search_time, zero_move);
+    // start_time = perf::now();
+    // std::thread timer_thread;
 
     // if (use_timer)
     //     timer_thread = std::thread(timer);
@@ -106,10 +106,10 @@ MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
     for (int depth = 1; depth <= mDepth;)
     {
         // pre_status(depth, valWindowCnt);
-        eval = pv_rootAlphaBeta(board, alpha, beta, depth);
+        int eval = pv_rootAlphaBeta(board, alpha, beta, depth);
         // post_status(board, pvArray[0], eval, start_point);
 
-        if (time_left_for_search() == false)
+        if (info.time_over())
             break;
 
         if ((eval <= alpha) || (eval >= beta))
@@ -127,30 +127,25 @@ MakeMove_Iterative(chessBoard board, int mDepth, bool use_timer, bool prnt_moc)
             beta  = eval + valWindow;
             within_valWindow = true;
             valWindowCnt = 0;
-            info.update(depth, eval, pvArray);                                  // Update curr depth results
+
+            info.add_current_depth_result(depth, eval, pvArray);
+            // info.update(depth, eval, pvArray);                                  // Update curr depth results
             curr_depth_status(board);
-            if (within_valWindow && !search_time_left) break;
+            // if (within_valWindow && !search_time_left) break;
             depth++;
         }
         if (within_valWindow && __abs(eval) >= (posInf >> 1) - 500) break;   // If found a checkmate
         moc.sortList(pvArray[0]);                                               // Sort Moves according to time.
     }
 
-    if (prnt_moc)
-    {
-        moc.sortList(pvArray[0]);
-        moc.mprint(board);
-    }
-
     // if (use_timer) timer_thread.join();
-    search_time_left = extra_time_left = false;
 }
 
 int
 AlphaBeta(chessBoard& __pos, int depth,
     int alpha, int beta, int ply, int pvIndex) 
 {
-    if (time_left_for_search() == false)
+    if (info.time_over())
         return TIMEOUT;
 
     if (depth <= 0)
@@ -221,7 +216,7 @@ AlphaBeta(chessBoard& __pos, int depth,
 
 
         // No time left!
-        if (time_left_for_search() == false)
+        if (info.time_over())
         {
             #if defined(TRANSPOSITION_TABLE_H)
                 // TT.RemSearchHistory(__pos.Hash_Value);
@@ -293,7 +288,7 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
             eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
 
-            if (time_left_for_search() == false)
+            if (info.time_over())
                 return TIMEOUT;
 
             if ((eval > alpha) and R)
@@ -308,7 +303,7 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
         duration = perf::now() - startTime;
         moc.insert(i, duration.count());
 
-        if (time_left_for_search() == false)
+        if (info.time_over())
             return TIMEOUT;
 
         if (eval > alpha)
@@ -348,7 +343,7 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
             _cb.UnmakeMove();
 
 
-            if (time_left_for_search() == false)
+            if (info.time_over())
                 return TIMEOUT;
 
             if (eval > alpha)
@@ -359,7 +354,7 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
             }
         }
 
-        if (time_left_for_search() == false)
+        if (info.time_over())
             return TIMEOUT;
 
         if (eval > alpha)

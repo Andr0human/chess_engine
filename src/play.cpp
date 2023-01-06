@@ -38,7 +38,11 @@ void write_Execute_Result()
 {
     std::ofstream outFile;
     outFile.open(file_name + "_out.txt");
-    outFile << (info.best_move() & 2097151) << " " << info.last_eval() << " -out";
+
+    const auto&[move, eval] = info.last_iter_result();
+    double in_decimal = static_cast<double>(eval) / 100.0f;
+
+    outFile << (move & 2097151) << " " << in_decimal << " -out";
     outFile.close();
 }
 
@@ -62,8 +66,8 @@ int read_commands()
 {
     std::vector<string> commands = split(pb.commandline, ' ');
     cout << "CommandLine : " << pb.commandline << endl;
-    alloted_search_time = 2;
-    alloted_extra_time = 0;
+    // alloted_search_time = 2;
+    // alloted_extra_time = 0;
     threadCount = 4;
     int result = 0;
 
@@ -80,10 +84,10 @@ int read_commands()
             pb.opponent_move = std::stoi(commands[i + 1]);
         }
         else if (commands[i] == "-tm") {
-            if (i + 1 < commands.size())
-                alloted_search_time = std::stod(commands[i + 1]);
-            if (i + 2 < commands.size())
-                alloted_extra_time  = std::stod(commands[i + 2]);
+            // if (i + 1 < commands.size())
+                // alloted_search_time = std::stod(commands[i + 1]);
+            // if (i + 2 < commands.size())
+                // alloted_extra_time  = std::stod(commands[i + 2]);
         }
         else if (commands[i] == "-th") {
             threadCount = std::stoi(commands[i + 1]);
@@ -111,8 +115,8 @@ void execute_Commands(int command)
     {
         find_move_for_position();
         write_Execute_Result();
-        pb.play_move(info.best_move() & 2097151);
-        info.reset();
+        // pb.play_move(info.best_move() & 2097151);
+        // info.reset();
     }
     cout << endl;
     return;
@@ -168,6 +172,15 @@ void play()
 
 #ifndef PLAY2
 
+void
+write_to_file(const string filename, const string message)
+{
+    std::ofstream out(filename);
+
+    out << message;
+
+    out.close();
+}
 
 bool
 valid_args_found(string& __s)
@@ -195,7 +208,6 @@ get_input(string& __s)
 }
 
 
-
 void
 read_commands(const string& __s, playboard& board)
 {
@@ -205,27 +217,38 @@ read_commands(const string& __s, playboard& board)
     std::vector<string> args = split(__s, ' ');
     size_t index = 0;
 
+    // for (const auto& arg : args)
+    //     cout << arg << endl;
+
+
     for (const string& arg : args)
     {   
         if (arg == "go") {
+            puts("go command found!");
             board.ready_search();
         }
         else if (arg == "position") {
+            puts("position command found!");
             board.set_new_position(args[index + 1]);
         }
         else if (arg == "moves") {
+            puts("moves command found!");
             board.play_moves_before_search(args, index + 1);
         }
         else if (arg == "movetime") {
+            puts("movetime command found!");
             board.set_movetime(stod(args[index + 1]));
         }
         else if (arg == "threads") {
+            puts("threads command found!");
             board.set_thread(stoi(args[index + 1]));
         }
         else if (arg == "depth") {
+            puts("depth command found!");
             board.set_depth(stoi(args[index + 1]));
         }
         else if (arg == "quit") {
+            puts("quit command found!");
             board.ready_quit();
         }
 
@@ -237,18 +260,32 @@ void
 execute_commands(playboard& board)
 {
 
-    // Prev moves
+    // If prev moves to be made on board
     if (board.to_play_moves())
         board.play_moves();
 
 
-    // best move for current position (go)
+    // Start searching for best move in current position (go)
     if (board.init_search())
     {
-        MakeMove_Iterative(board.fen());
+        chessBoard __pos = board.fen();
+        __pos.add_prev_board_positions(board.get_prev_hashkeys());
 
+        MakeMove_Iterative(__pos, maxDepth, true);
+        Show_Searched_Info(__pos);
+        board.search_done();
+
+        //! Need to play the move on the board
+
+        const MoveType MOVE_FILTER = 2097151;
+        const auto& [move, eval] = info.last_iter_result();
+        const double in_decimal = static_cast<double>(eval) / 100;
+
+        string result = std::to_string(move & MOVE_FILTER) + string(" ")
+                      + std::to_string(in_decimal);
+
+        write_to_file("elsa_out", result);
     }
-    
 }
 
 
@@ -269,7 +306,10 @@ play(const vector<string>& args)
         input_thread.join();
 
         read_commands(input_string, board);
+
         // Empty the input_string
+        write_to_file("elsa_in", "");
+        input_string.clear();
 
         execute_commands(board);
 
@@ -277,6 +317,7 @@ play(const vector<string>& args)
             break;
     }
 
+    puts("PLAY move ended!");
 }
 
 

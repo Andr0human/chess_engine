@@ -211,17 +211,20 @@ direct_search(const vector<string> &_args)
     perf::Timer _t("Direct_Search");
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : startFen;
-    
-    alloted_search_time = default_search_time;
-    alloted_extra_time  = 0;
 
-    if (__n >= 3) alloted_search_time = std::stod(_args[2]);
-    if (__n >= 4) alloted_extra_time  = std::stod(_args[3]);
+    const double search_time = (__n >= 3) ?
+        std::stod(_args[2]) : static_cast<double>(default_allocate_time);
+    
+    // alloted_search_time = default_search_time;
+    // alloted_extra_time  = 0;
+
+    // if (__n >= 3) alloted_search_time = std::stod(_args[2]);
+    // if (__n >= 4) alloted_extra_time  = std::stod(_args[3]);
 
     chessBoard primary = fen;
     primary.show();
 
-    MakeMove_Iterative(primary, maxDepth, true);
+    MakeMove_Iterative(primary, maxDepth, search_time);
 
     // MakeMove_Iterative(primary, 11, false);
     // MakeMove_MultiIterative(primary, maxDepth, true);

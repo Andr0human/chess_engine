@@ -83,15 +83,12 @@ bulk_MultiCount(chessBoard &_cb, int depth)
 void
 MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer)
 {
-    search_time_left = extra_time_left = true;
-    std::thread timer_thread;
-    if (use_timer) timer_thread = std::thread(timer);
 
     // A Zero depth Move is produced in case we don't have time to do a search of depth 1
     int zero_move = createMoveOrderList(primary), eval = 0;
-    info.reset();
-    info.set_to_move(primary.color);
-    info.set_depth_zero_move(zero_move);
+    // info.reset();
+    // info.set_to_move(primary.color);
+    // info.set_depth_zero_move(zero_move);
 
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
@@ -118,29 +115,25 @@ MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer)
             beta  = eval + valWindow;
             within_valWindow = true;
             valWindowCnt = 0;
-            info.update(depth, eval, pvArray);
+            // info.update(depth, eval, pvArray);
             curr_depth_status(primary);
-            if (within_valWindow && !search_time_left) break;
+            // if (within_valWindow && !search_time_left) break;
             depth++;
         }
         // if (within_valWindow && __abs(eval) >= (posInf >> 1) - 500) break;
         moc.sortList(pvArray[0]);
     }
 
-    if (use_timer) timer_thread.join();
-    search_time_left = extra_time_left = false;
 }
 
 int
 thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
 {
-    if (!extra_time_left) return valUNKNOWN;
 
     if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
 
-    info.max_ply = std::max(info.max_ply, ply);
-    nodes_hits++;
+    // info.max_ply = std::max(info.max_ply, ply);
 
     if (has_legal_moves(_cb) == false)
     {
@@ -203,12 +196,11 @@ thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
 int
 pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
 {    
-    if (!extra_time_left) return valUNKNOWN;
+
     if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
 
-    info.max_ply = std::max(info.max_ply, ply);
-    nodes_hits++;
+    // info.max_ply = std::max(info.max_ply, ply);
     if (has_legal_moves(_cb) == false)
     {
         _cb.remove_movegen_extra_data();

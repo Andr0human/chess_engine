@@ -46,6 +46,7 @@ int main(int argc, char **argv)
     7k/5P2/4KN1P/6p1/8/8/8/4r3 w - - 5 64                                    // B.M Kf5
     r4rk1/2R3bp/4p3/1p3p2/3p1P2/1P1P2P1/4N2P/5R1K w - - 0 29                 // D.M Rxg7+
     8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
+    2kr3r/pppq4/3b4/3bn3/2N1p1p1/PP2P1N1/1B3PPP/2RQ1RK1 b - - 1 18           // B.M Nf3+
 
     Search Explosion :
     qqqqkqqq/qqqqqqqq/8/8/8/8/QQQQQQQQ/QQQQKQQQ w - - 0 1
