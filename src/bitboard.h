@@ -89,22 +89,22 @@ class chessBoard
     { return (ip - fp == 2) | (fp - ip == 2);}
 
     void
-    make_move_castle_check(const int piece, const int sq);
+    make_move_castle_check(const int piece, const int sq) noexcept;
 
     void
-    make_move_enpassant(int ip, int fp);
+    make_move_enpassant(int ip, int fp) noexcept;
 
     void
-    make_move_double_pawn_push(int ip, int fp);
+    make_move_double_pawn_push(int ip, int fp) noexcept;
 
     void
-    make_move_pawn_promotion(const MoveType move);
+    make_move_pawn_promotion(const MoveType move) noexcept;
 
     void
-    make_move_castling(int ip, int fp, bool call_from_makemove);
+    make_move_castling(int ip, int fp, bool call_from_makemove) noexcept;
 
     void
-    update_csep(int old_csep, int new_csep);
+    update_csep(int old_csep, int new_csep) noexcept;
 
     public:
     int board[64]{0};
@@ -152,10 +152,10 @@ class chessBoard
     show() const noexcept;
 
     void
-    MakeMove(const MoveType move);
+    MakeMove(const MoveType move) noexcept;
 
     void
-    UnmakeMove();
+    UnmakeMove() noexcept;
 
     void
     auxilary_table_update(const MoveType move);
@@ -176,6 +176,9 @@ class chessBoard
 
     bool
     three_move_repetition() const noexcept;
+
+    void
+    add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept;
 
     uint64_t
     generate_hashKey() const;

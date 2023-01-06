@@ -117,7 +117,7 @@ chessBoard::chessBoard(const string& fen)
 
 
 void
-chessBoard::MakeMove(const MoveType move)
+chessBoard::MakeMove(const MoveType move) noexcept
 {
     // Init and Dest. sq
     const int ip = move & 63;
@@ -206,7 +206,7 @@ chessBoard::MakeMove(const MoveType move)
 }
 
 void
-chessBoard::update_csep(int old_csep, int new_csep)
+chessBoard::update_csep(int old_csep, int new_csep) noexcept
 {
     #if defined(TRANSPOSITION_TABLE_H)
     Hash_Value ^= TT.hash_key((old_csep >> 7) + 66);
@@ -215,7 +215,7 @@ chessBoard::update_csep(int old_csep, int new_csep)
 }
 
 void
-chessBoard::make_move_castle_check(const int piece, const int sq)
+chessBoard::make_move_castle_check(const int piece, const int sq) noexcept
 {
     // piece - at (init) or (dest) square.
 
@@ -234,7 +234,7 @@ chessBoard::make_move_castle_check(const int piece, const int sq)
 }
 
 void
-chessBoard::make_move_double_pawn_push(int ip, int fp)
+chessBoard::make_move_double_pawn_push(int ip, int fp) noexcept
 {
     int own = color << 3;
     csep = (csep & 1920) | ((ip + fp) >> 1);
@@ -254,7 +254,7 @@ chessBoard::make_move_double_pawn_push(int ip, int fp)
 }
 
 void
-chessBoard::make_move_enpassant(int ip, int ep)
+chessBoard::make_move_enpassant(int ip, int ep) noexcept
 {
     int own = color << 3;
     int emy = own ^ 8;
@@ -280,7 +280,7 @@ chessBoard::make_move_enpassant(int ip, int ep)
 }
 
 void
-chessBoard::make_move_pawn_promotion(const MoveType move)
+chessBoard::make_move_pawn_promotion(const MoveType move) noexcept
 {
     int ip  = move & 63;
     int fp  = (move >> 6) & 63;
@@ -315,7 +315,7 @@ chessBoard::make_move_pawn_promotion(const MoveType move)
 }
 
 void
-chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove)
+chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove) noexcept
 {
     int own = color << 3;
     
@@ -357,7 +357,7 @@ chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove)
 }
 
 void
-chessBoard::UnmakeMove()
+chessBoard::UnmakeMove() noexcept
 {
     if (moveNum <= 0) return;
 
@@ -429,6 +429,17 @@ chessBoard::auxilary_table_revert()
     return aux_table_move[moveNum];
 }
 
+void
+chessBoard::add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept
+{
+    for (const uint64_t key : prev_keys)
+    {
+        aux_table_move[moveNum] = 0;
+        aux_table_csep[moveNum] = 0;
+        aux_table_hash[moveNum] = key;
+        ++moveNum;
+    }
+}
 
 bool
 chessBoard::three_move_repetition() const noexcept
