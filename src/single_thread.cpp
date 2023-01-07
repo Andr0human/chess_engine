@@ -51,8 +51,9 @@ negaMax_root(chessBoard &_cb, int depth)
 {
     if (has_legal_moves(_cb) == false)
     {
+        int result = _cb.king_in_check() ? checkmate_score(0) : 0;
         _cb.remove_movegen_extra_data();
-        return std::make_pair(0, (_cb.king_in_check() ? checkmate_score(0) : 0));
+        return std::make_pair(0, result);
     }
     
     const auto myMoves = generate_moves(_cb);
@@ -82,7 +83,6 @@ MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
 {
     // A Zero depth Move is produced in case we don't even have time to do a search of depth 1
     reset_pv_line();
-    // info.reset();
     MoveType zero_move = createMoveOrderList(board);
 
     if (zero_move < 0)
@@ -91,17 +91,11 @@ MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
         info.set_discard_result(zero_move);
         return;
     }
-    // info.init(board.color, zero_move);
-    info = SearchData(board.color, search_time, zero_move);
-    // start_time = perf::now();
-    // std::thread timer_thread;
 
-    // if (use_timer)
-    //     timer_thread = std::thread(timer);
+    info = SearchData(board.color, search_time, zero_move);
 
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
-    // perf_clock start_point = perf::now();
 
     for (int depth = 1; depth <= mDepth;)
     {
@@ -129,16 +123,12 @@ MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
             valWindowCnt = 0;
 
             info.add_current_depth_result(depth, eval, pvArray);
-            // info.update(depth, eval, pvArray);                                  // Update curr depth results
             curr_depth_status(board);
-            // if (within_valWindow && !search_time_left) break;
             depth++;
         }
-        if (within_valWindow && __abs(eval) >= (posInf >> 1) - 500) break;   // If found a checkmate
+        if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;   // If found a checkmate
         moc.sortList(pvArray[0]);                                               // Sort Moves according to time.
     }
-
-    // if (use_timer) timer_thread.join();
 }
 
 int
@@ -151,7 +141,6 @@ AlphaBeta(chessBoard& __pos, int depth,
     if (depth <= 0)
     {
         // Depth 0, starting Quiensense Search
-        // return ev.Evaluate(__pos);
         return QuieSearch(__pos, alpha, beta, ply, 0);
     }
 
@@ -159,8 +148,9 @@ AlphaBeta(chessBoard& __pos, int depth,
         // check/stalemate check
         if (has_legal_moves(__pos) == false)
         {
+            int result = __pos.king_in_check() ? checkmate_score(ply) : 0;
             __pos.remove_movegen_extra_data();
-            return __pos.king_in_check() ? checkmate_score(ply) : 0;
+            return result;
         }
 
         // 3-move repetition check
@@ -217,20 +207,13 @@ AlphaBeta(chessBoard& __pos, int depth,
 
         // No time left!
         if (info.time_over())
-        {
-            #if defined(TRANSPOSITION_TABLE_H)
-                // TT.RemSearchHistory(__pos.Hash_Value);
-            #endif
-
             return TIMEOUT;
-        }
 
         if (eval >= beta)
         {
             // beta-cut found
 
             #if defined(TRANSPOSITION_TABLE_H)
-                // TT.RemSearchHistory(__pos.Hash_Value);
                 TT.record_position(__pos.Hash_Value, depth, move, beta, HASHBETA);
             #endif
             
@@ -249,7 +232,6 @@ AlphaBeta(chessBoard& __pos, int depth,
     }
 
     #if defined(TRANSPOSITION_TABLE_H)
-        // TT.RemSearchHistory(__pos.Hash_Value);
         TT.record_position(__pos.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
     #endif
 
@@ -267,7 +249,7 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
     
     MoveList myMoves = generate_moves(_cb);
     moc.setMoveOrder(myMoves);
-    // moc.print(_cb);
+
 
     pvArray[pvIndex] = 0; // no pv yet
     pvNextIndex = pvIndex + maxPly - ply;
@@ -368,7 +350,6 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
         {
             #if defined(TRANSPOSITION_TABLE_H)
                 TT.record_position(_cb.Hash_Value, depth, move, beta, HASHBETA);
-                // TT.RemSearchHistory(_cb.Hash_Value);
             #endif
 
             return beta;
@@ -377,7 +358,6 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
     }
 
     #if defined(TRANSPOSITION_TABLE_H)
-        // TT.RemSearchHistory(_cb.Hash_Value);
         TT.record_position(_cb.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
     #endif
 

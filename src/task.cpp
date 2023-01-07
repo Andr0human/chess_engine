@@ -213,7 +213,7 @@ direct_search(const vector<string> &_args)
     const string fen = __n > 1 ? _args[1] : startFen;
 
     const double search_time = (__n >= 3) ?
-        std::stod(_args[2]) : static_cast<double>(default_allocate_time);
+        std::stod(_args[2]) : static_cast<double>(default_search_time);
     
     // alloted_search_time = default_search_time;
     // alloted_extra_time  = 0;
@@ -228,7 +228,7 @@ direct_search(const vector<string> &_args)
 
     // MakeMove_Iterative(primary, 11, false);
     // MakeMove_MultiIterative(primary, maxDepth, true);
-    // Show_Searched_Info(primary);
+    Show_Searched_Info(primary);
 }
 
 void

@@ -4,6 +4,7 @@
 
 std::thread td[maxThreadCount];
 thread_search_info thread_data;
+std::mutex mute;
 
 
 #ifndef THREAD_SEARCH_INFO
@@ -81,7 +82,7 @@ bulk_MultiCount(chessBoard &_cb, int depth)
 #ifndef MULTI_THREAD_SEARCH
 
 void
-MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer)
+MakeMove_MultiIterative(chessBoard &primary, int mDepth, double search_time)
 {
 
     // A Zero depth Move is produced in case we don't have time to do a search of depth 1
@@ -89,6 +90,8 @@ MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer)
     // info.reset();
     // info.set_to_move(primary.color);
     // info.set_depth_zero_move(zero_move);
+
+    info = SearchData(primary.color, search_time, zero_move);
 
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
@@ -117,10 +120,9 @@ MakeMove_MultiIterative(chessBoard &primary, int mDepth, bool use_timer)
             valWindowCnt = 0;
             // info.update(depth, eval, pvArray);
             curr_depth_status(primary);
-            // if (within_valWindow && !search_time_left) break;
             depth++;
         }
-        // if (within_valWindow && __abs(eval) >= (posInf >> 1) - 500) break;
+        if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;   // If found a checkmate
         moc.sortList(pvArray[0]);
     }
 
@@ -453,6 +455,7 @@ first_rm_search(chessBoard &_cb, int move, int depth, int &alpha, int &beta)
 void
 run_threads(char runtype, int sourceArr[])
 {
+    int threadCount = 4;
     if (runtype == 'c')
     {
         for (int i = 0; i < threadCount; i++)

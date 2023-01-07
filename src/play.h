@@ -7,6 +7,7 @@
 #include "single_thread.h"
 // #include "multi_thread.h"
 #include <fstream>
+#include <thread>
 
 
 /*** CommandList to implement
@@ -56,7 +57,7 @@ class playboard : public chessBoard
     public:
 
     playboard()
-    : threads(1), mDepth(maxDepth), movetime(default_allocate_time),
+    : threads(1), mDepth(maxDepth), movetime(default_search_time),
     search_curr_pos(false), to_quit(false) {}
 
     void

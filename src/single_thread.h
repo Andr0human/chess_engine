@@ -20,7 +20,7 @@ std::pair<MoveType, int> negaMax_root(chessBoard &_cb, int depth);
  * @param mDepth maxDepth to which Iterartive search should to run
  * @param use_timer Run a time-based search.
  */
-void MakeMove_Iterative(chessBoard primary, int mDepth = maxDepth, double search_time = default_allocate_time);
+void MakeMove_Iterative(chessBoard primary, int mDepth = maxDepth, double search_time = default_search_time);
 
 /**
  * @brief Returns the evaluation of a board at a given depth

@@ -1,131 +1,66 @@
 
 
-#include "search.h"
 #include <iomanip>
+#include "search.h"
 
-
-std::mutex mute;
-int threadCount = 4;
 MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
 MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
 const string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
 
 #ifndef TOOLS
 
 
 void
-timer()
-{
-    /* int _x = alloted_search_time * 1000, _y = alloted_extra_time * 1000;
-    std::this_thread::sleep_for(std::chrono::milliseconds(_x)); */
-    // const auto _x = static_cast<uint64_t>(alloted_search_time * 1e6);
-    // std::this_thread::sleep_for(std::chrono::microseconds(_x));
-
-    // search_time_left = extra_time_left = false;
-    /* if (info.use_verification_Search()) {
-        search_time_left = true;
-    } else {
-        _y = 0;
-        search_time_left = extra_time_left = false;
-        return;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(_y));
-    extra_time_left = false; */
-}
-
-void
-timer2()
-{
-    // const auto _x = static_cast<uint64_t>(alloted_search_time * 1000);
-    // std::this_thread::sleep_for(std::chrono::microseconds(_x * 1000));
-    // search_time_left = false;
-    // return;
-}
-
-void
 movcpy(MoveType* pTarget, const MoveType* pSource, int n)
 { while (n-- && (*pTarget++ = *pSource++)); }
 
-void
-PRINT_LINE(chessBoard board, MoveType line[], int __N)
-{
-    for (int i = 0; i < __N; i++) {
-        if (!line[i]) break;
-        cout << print(line[i], board) << " ";
-        board.MakeMove(line[i]);
-    }
-    cout << endl;
-}
 
-void
-PRINT_LINE(chessBoard _cb, std::vector<MoveType> line)
+string
+readable_pv_line(chessBoard board, const vector<MoveType>& pv)
 {
-    for (const MoveType move : line) {
+    string res;
+    for (const MoveType move : pv) {
         if (move == 0) break;
-        cout << print(move, _cb) << " ";
-        _cb.MakeMove(move);
+        res += print(move, board) + string(" ");
+        board.MakeMove(move);
     }
-    cout << endl;
+    return res;
 }
 
-void
-pre_status(int __dep, int __cnt)
-{
-    // nodes_hits = qnodes_hits = 0;
-    // if (!perf_test) {
-    //     cout << "Looking at Depth : " << __dep << endl;
-    //     cout << "ValWindow => " << (valWindow << __cnt) << endl;
-    // }
-}
 
 void
-post_status(chessBoard &_cb, MoveType _m, int _e, perf_clock s_time)
+curr_depth_status(const chessBoard& _cb)
 {
-    // perf_time x = perf::now() - s_time;
-    // const auto eval = _e * (2 * _cb.color - 1);
+    cout << std::setprecision(2);
     
-    // if (!perf_test)
-    // {
-    //     // cout << "Node Hits :  " << nodes_hits << " Nodes. | qNode Hits : " << qnodes_hits << " Nodes.\n";
-    //     cout << "Eval : " << static_cast<float>(eval) / 100.0 << '\n';
-    //     cout << "Best Move : " << print(_m, _cb) << '\n';
-    //     cout << "Time Used : " << x.count() << "\n\n" << std::flush;
-    // }
-}
-
-void
-curr_depth_status(chessBoard &_cb)
-{
-    // cout << std::setprecision(2);
-    // cout << "Depth ";
-    // if (info.last_depth() < 10) cout << " ";
-
-    // cout << info.last_depth() << " | Eval : " << info.last_eval() << "\t| PV : ";
-    // cout << std::setprecision(3);
-    // PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
-
+    const size_t depth = info.last_depth();
     const auto& [move, eval] = info.last_iter_result();
+    const double eval_conv = static_cast<double>(eval) / 100.0;
 
-    cout << print(move, _cb) << " " << eval << endl;
 
-    puts("TO BE DONE - CURR_DEPTH_STATUS");
+    cout << "Depth " << ((depth < 10) ? (" ") : (""))
+         << depth << " | Eval : " << eval_conv << "\t| PV = "
+         << readable_pv_line(_cb, info.last_pv_line()) << endl;
 
+
+    cout << std::setprecision(3);
 }
 
 void
-Show_Searched_Info(chessBoard &_cb)
+Show_Searched_Info(chessBoard& _cb)
 {
-    // cout << "Depth Searched : " << info.last_depth() << endl;
-    // // cout << "Max Depth Reached : " << info.max_ply << endl;
-    // // cout << "Max Qs Depth Reached : " << info.max_qs_ply << endl;
-    // cout << "Best Move : " << print(info.best_move(), _cb) << endl;
-    // cout << "Eval : " << info.last_eval() << endl;
-    // cout << "LINE : ";
-    // PRINT_LINE(_cb, info.pvAlpha, info.last_depth());
+    const auto&[move, eval] = info.last_iter_result();
+    const double eval_conv = static_cast<double>(eval) / 100.0;
 
-    puts("TO BE DONE - SHOW_SEARCHED_INFO");
+    puts("------ SEARCH-INFO ------");
 
+    cout << "Depth Searched = " << info.last_depth() << '\n'
+         << "Best Move = " << print(move, _cb) << '\n'
+         << "Eval = " << eval_conv << '\n'
+         << "Line = " << readable_pv_line(_cb, info.last_pv_line())
+         << endl;
+
+    puts("-------------------------");
 }
 
 void
@@ -189,7 +124,6 @@ createMoveOrderList(chessBoard& _cb)
     // To ensure, the zero move is best_move.
     order_generated_moves(movelist, false);
     moc.initialise(movelist);
-    // moc.reset();
 
     return (movelist.size() > 0) ?
            (*movelist.begin()) : (_cb.KA > 0 ? -1 : -2);
@@ -223,32 +157,6 @@ is_valid_move(MoveType move, chessBoard _cb)
 
 #ifndef SEARCH_UTIL
 
-bool
-ok_to_do_nullmove(chessBoard& _cb)
-{
-    // if (ka_pieces.attackers) return false;
-    // if (info.side2move != _cb.color) return false;
-    return true;
-}
-
-bool
-ok_to_fprune(int depth, chessBoard& _cb, MoveList& myMoves, int beta)
-{
-    if (_cb.king_in_check()) return false;
-    int margin = 250;
-    if (depth == 2) margin = 420;
-    int s_eval = ev.Evaluate(_cb);
-    if (s_eval + margin < beta) return true;
-    return false;
-}
-
-int
-apply_search_extensions(MoveList& myMoves)
-{
-    int R = 0;
-    // if (myMoves.KingAttackers) R++;    
-    return R;
-}
 
 bool
 ok_to_do_LMR(int depth, MoveList& myMoves)
@@ -292,7 +200,7 @@ int
 MaterialCount(chessBoard& _cb)
 {
     int answer = 0;
-    answer += 100 * (__ppcnt (PAWN(WHITE))   + __ppcnt(PAWN(BLACK)));
+    answer += 100 * (__ppcnt (PAWN(WHITE))  + __ppcnt(PAWN(BLACK)));
     answer += 300 * (__ppcnt(BISHOP(WHITE)) + __ppcnt(BISHOP(BLACK)));
     answer += 300 * (__ppcnt(KNIGHT(WHITE)) + __ppcnt(KNIGHT(BLACK)));
     answer += 500 * (__ppcnt(ROOK(WHITE))   + __ppcnt(ROOK(BLACK)));
@@ -308,20 +216,15 @@ int
 QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 {    
     // Check if Time Left for Search
-    // if (!extra_time_left)
-    //     return valUNKNOWN;
     if (info.time_over())
         return TIMEOUT;
 
-    // if (__dol > info.max_qs_ply)
-    //     info.max_qs_ply = __dol;
-    // qnodes_hits++;
-    
 
     if (has_legal_moves(_cb) == false)
     {
+        int result = _cb.king_in_check() ? checkmate_score(ply) : 0;
         _cb.remove_movegen_extra_data();
-        return _cb.king_in_check() ? checkmate_score(ply) : 0;
+        return result;
     }
 
     // if (ka_pieces.attackers) return AlphaBeta_noPV(_cb, 1, alpha, beta, ply);
@@ -338,10 +241,7 @@ QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 
     if (stand_pat > alpha) alpha = stand_pat;
 
-    // cout << "generate_moves! ply = " << ply << endl;
     auto myMoves = generate_moves(_cb, true);
-
-    // cout << "order_moves! ply = " << ply << endl;
     order_generated_moves(myMoves, false);
 
     for (const MoveType move : myMoves)
@@ -365,8 +265,7 @@ QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 int
 AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply)
 {
-    // if (!extra_time_left) return valUNKNOWN;
-    // nodes_hits++;
+
     if (has_legal_moves(_cb) == false)
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
 

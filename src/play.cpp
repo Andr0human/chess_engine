@@ -68,7 +68,7 @@ int read_commands()
     cout << "CommandLine : " << pb.commandline << endl;
     // alloted_search_time = 2;
     // alloted_extra_time = 0;
-    threadCount = 4;
+    // threadCount = 4;
     int result = 0;
 
 
@@ -89,9 +89,9 @@ int read_commands()
             // if (i + 2 < commands.size())
                 // alloted_extra_time  = std::stod(commands[i + 2]);
         }
-        else if (commands[i] == "-th") {
-            threadCount = std::stoi(commands[i + 1]);
-        }
+        // else if (commands[i] == "-th") {
+        //     threadCount = std::stoi(commands[i + 1]);
+        // }
     }
 
     return result;

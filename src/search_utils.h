@@ -22,7 +22,6 @@ enum search_flag:int
 
     TIMEOUT = 1112223334,
     DRAW_VALUE = -25,
-    default_allocate_time = 2,
 
 
     valUNKNOWN = 5567899,
@@ -106,6 +105,10 @@ class SearchData
     last_depth() const noexcept
     { return move_eval.size() - 1; }
 
+    vector<MoveType>
+    last_pv_line() const noexcept
+    { return last_pv; }
+
     bool
     is_part_of_pv(MoveType move) const noexcept
     {
@@ -124,9 +127,10 @@ class SearchData
     void
     add_current_depth_result(size_t depth, int eval, int __pv[]) noexcept
     {
+        last_pv.clear();
         for (size_t i = 0; i < depth; i++)
             last_pv.emplace_back(__pv[i]);
-        
+
         move_eval.emplace_back(std::make_pair(__pv[0], eval * (2 * side - 1)));
     }
 
@@ -136,6 +140,9 @@ class SearchData
         int eval = (zero_move == -1) ? (negInf / 2) :(0);
         move_eval.emplace_back(std::make_pair(zero_move, eval));
     }
+
+
+
 };
 
 
