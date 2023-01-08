@@ -41,17 +41,14 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
 
     const auto char_to_piece_no = [] (const char ch)
     {
-        int res = 1;
-        const char piece = ch < 'a' ? ch : ch - 32; 
+        const int piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
 
-        if (piece == 'K') res = 6;
-        else if (piece == 'Q') res = 5;
-        else if (piece == 'R') res = 4;
-        else if (piece == 'N') res = 3;
-        else if (piece == 'B') res = 2;
+        const char piece = ch < 'a' ? ch : ch - 32;
+        int v = static_cast<int>(piece);
 
-        res += ch < 'a' ? 8 : 0;
-        return res;
+        int index = ((v - 3) % 10) - 2;
+        return piece_no[index]
+             + (ch < 'a' ? 8 : 0);
     };
 
     const auto elements = text_split(fen, ' ');
