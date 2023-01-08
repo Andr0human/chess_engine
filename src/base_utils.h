@@ -74,6 +74,11 @@ vector<string>
 extract_argument_list(int argc, char *argv[]);
 
 
+
+void
+bits_on_board(uint64_t value);
+
+
 }
 
 

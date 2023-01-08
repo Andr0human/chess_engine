@@ -70,5 +70,29 @@ extract_argument_list(int argc, char *argv[])
 }
 
 
+void
+bits_on_board(uint64_t value)
+{
+    string res;
+    for (int row = 7; row >= 0; row--)
+    {
+        for (int col = 0; col < 8; col++)
+        {
+            if (value & (1ULL << (8 * row + col)))
+                res.push_back('*');
+            else
+                res.push_back('.');
+        }
+        res.push_back('\n');
+    }
+
+    cout << res << endl;
+}
+
+
+
+
+
+
 }
 
