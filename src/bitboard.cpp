@@ -22,7 +22,6 @@ chessBoard::chessBoard(const string& fen)
 void
 chessBoard::set_position_with_fen(const string& fen) noexcept
 {
-
     const auto char_to_piece_type = [] (const char ch)
     {
         const PieceType piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};

@@ -19,7 +19,7 @@ init()
 
     #if defined(TRANSPOSITION_TABLE_H)
         cout << "Transposition Table Size = " << TT.size()
-            << "\n" << endl;
+            << "\n\n" << std::flush;
     #endif
 }
 
