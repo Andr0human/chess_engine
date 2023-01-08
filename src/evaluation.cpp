@@ -45,7 +45,9 @@ Evaluation ev;
 
 #ifndef MATERIAL
 
-void Evaluation::config_weights() {
+void
+Evaluation::config_weights()
+{
     float offset = (float)position_weight / 8000;
     // material_weight = abs_mat_weight + (offset / 4);
     positional_weight = abs_pos_weight + 1.5f * offset;
@@ -53,7 +55,9 @@ void Evaluation::config_weights() {
     pawn_struct_weight = abs_pawnstr_weight + (1 - (offset) / 4);
 }
 
-void Evaluation::set_material_strength() {
+void
+Evaluation::set_material_strength()
+{
     pawnVal = 100; bishop_val = 330; knight_val = 300;
     rook_val = 500; queen_val = 900;
 
@@ -83,21 +87,26 @@ void Evaluation::set_material_strength() {
         * Three pawns can be stronger than a pieces (should consider if pieces on board gets too low)
     ***/
     game_phase = 2 * pieceCount + (wPawns + bPawns);
-    if (game_phase > 2 * phase_counter) {
+    if (game_phase > 2 * phase_counter)
+    {
         pawnVal -= 25;
         bishop_val -= 20;
         rook_val -= 25;
     }
-    else if (game_phase > phase_counter) {
+    else if (game_phase > phase_counter)
+    {
         pawnVal -= 15;
     }
-    else if (game_phase < phase_counter) {
+    else if (game_phase < phase_counter)
+    {
         pawnVal += 10;
         rook_val += 25;
     }
 }
 
-void Evaluation::MaterialCount(const chessBoard& _cb) {
+void
+Evaluation::MaterialCount(const chessBoard& _cb)
+{
     wPawns   = __ppcnt(PAWN(WHITE));     bPawns = __ppcnt(PAWN(BLACK));
     wBishops = __ppcnt(BISHOP(WHITE)); bBishops = __ppcnt(BISHOP(BLACK));
     wKnights = __ppcnt(KNIGHT(WHITE)); bKnights = __ppcnt(KNIGHT(BLACK));
@@ -111,22 +120,25 @@ void Evaluation::MaterialCount(const chessBoard& _cb) {
                     + 925 * (wQueens + bQueens);
 }
 
-int Evaluation::material_strength() {
+int
+Evaluation::material_strength()
+{
     const int wqn_val = queen_val + 8 * wPawns;
     const int bqn_val = queen_val + 8 * bPawns;
     return   pawnVal * (  wPawns -   bPawns) + bishop_val * (wBishops - bBishops)
         + knight_val * (wKnights - bKnights) +   rook_val * (  wRooks -   bRooks)
         + ((wqn_val * wQueens) - (bqn_val * bQueens));
-
 }
 
 #endif
 
 #ifndef SQUARE_TABLE
 
-int Evaluation::piece_strength(const chessBoard &_cb) const {
-
-    const auto str_score = [](uint64_t piece, const int *str_table) {
+int
+Evaluation::piece_strength(const chessBoard &_cb) const
+{
+    const auto str_score = [](uint64_t piece, const int *str_table)
+    {
         int score = 0;
         while (piece != 0)
             score += str_table[next_idx(piece)];
@@ -154,7 +166,9 @@ int Evaluation::piece_strength(const chessBoard &_cb) const {
     return score;
 }
 
-int Evaluation::king_strength(const chessBoard& _cb) const {
+int
+Evaluation::king_strength(const chessBoard& _cb) const
+{
     if (game_phase >= phase_counter)
         return WkMBoard[idx_no(KING(WHITE))] - BkMBoard[idx_no(KING(BLACK))];
     return WkEBoard[idx_no(KING(WHITE))] - BkEBoard[idx_no(KING(BLACK))];
@@ -164,8 +178,9 @@ int Evaluation::king_strength(const chessBoard& _cb) const {
 
 #ifndef MOBILITY
 
-int Evaluation::piece_mobility(const chessBoard &_cb) const {
-
+int
+Evaluation::piece_mobility(const chessBoard &_cb) const
+{
     const auto mobility_calc = [] (const auto &__f, uint64_t piece, uint64_t _Ap) {
         uint64_t area = 0;
         while (piece != 0)
@@ -195,37 +210,46 @@ int Evaluation::piece_mobility(const chessBoard &_cb) const {
 
 #ifndef PAWN_STRUCTURE
 
-int Evaluation::WhitePawns_Structure(const chessBoard& _cb) {
+int
+Evaluation::WhitePawns_Structure(const chessBoard& _cb)
+{
     uint64_t pawns = PAWN(WHITE), val, res;
     int score = 0, corner_points = 25, central_points = 15, pass_points = 10;
-    if (game_phase < 20) {
+    if (game_phase < 20)
+    {
         score = 60;
         pass_points = 30;
         corner_points = 50;
         central_points = 30;
     }
 
-    while (pawns) {
+    while (pawns)
+    {
         val = pawns ^ (pawns & (pawns - 1));
         int idx = idx_no(val), x = idx & 7, y = (idx - x) >> 3;
         res = plt::uBoard[idx] & PAWN(BLACK);
         if (!res) score += pass_points + (4 * y);
-        if (x == 0) {
+        if (x == 0)
+        {
             res = plt::uBoard[idx + 1] & PAWN(BLACK);
             if (!res) score += corner_points + (4 * y);
         }
-        else if (x == 7) {
+        else if (x == 7)
+        {
             res = plt::uBoard[idx - 1] & PAWN(BLACK);
             if (!res) score += corner_points + (4 * y);
         }
-        else if (x > 0 && x < 7) {
+        else if (x > 0 && x < 7)
+        {
             res = (plt::uBoard[idx + 1] ^ plt::uBoard[idx - 1]) & PAWN(BLACK);
             if (!res) score += central_points + (4 * y);
         }
         pawns &= pawns - 1;
     }
+
     uint64_t column = 72340172838076673ULL;
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 7; i++)
+    {
         int cnt = __ppcnt((column & PAWN(WHITE)));
         if (cnt == 2) score -= 40;
         if (cnt >= 3) score -= 120;
@@ -234,36 +258,44 @@ int Evaluation::WhitePawns_Structure(const chessBoard& _cb) {
     return score;
 }
 
-int Evaluation::BlackPawns_Structure(const chessBoard& _cb) {
+int
+Evaluation::BlackPawns_Structure(const chessBoard& _cb)
+{
     uint64_t pawns = PAWN(BLACK), val, res;
     int score = 0, corner_points = 25, central_points = 15, pass_points = 10;
-    if (game_phase < 20) {
+    if (game_phase < 20)
+    {
         score = 60;
         pass_points = 30;
         corner_points = 50;
         central_points = 30;
     }
-    while (pawns) {
+    while (pawns)
+    {
         val = pawns ^ (pawns & (pawns - 1));
         int idx = idx_no(val), x = idx & 7, y = (idx - x) >> 3;
         res = plt::dBoard[idx] & PAWN(WHITE);
         if (!res) score += pass_points + (4 * (7 - y));
-        if (x == 0) {
+        if (x == 0)
+        {
             res = plt::dBoard[idx + 1] & PAWN(WHITE);
             if (!res) score += corner_points + (4 * (7 - y));
         }
-        else if (x == 7) {
+        else if (x == 7)
+        {
             res = plt::dBoard[idx - 1] & PAWN(WHITE);
             if (!res) score += corner_points + (4 * (7 - y));
         }
-        else if (x > 0 && x < 7) {
+        else if (x > 0 && x < 7)
+        {
             res = (plt::dBoard[idx + 1] ^ plt::uBoard[idx - 1]) & PAWN(WHITE);
             if (!res) score += central_points + (4 * (7 - y));
         }
         pawns &= pawns - 1;
     }
     uint64_t column = 72340172838076673ULL;
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 7; i++)
+    {
         int cnt = __ppcnt((column & PAWN(BLACK)));
         if (cnt == 2) score -= 40;
         if (cnt >= 3) score -= 120;
@@ -276,7 +308,8 @@ int Evaluation::BlackPawns_Structure(const chessBoard& _cb) {
 
 #ifndef ATTACK_STRENGTH
 
-int Evaluation::White_attk_Strength(const chessBoard& _cb)
+int
+Evaluation::White_attk_Strength(const chessBoard& _cb)
 {
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(BLACK));
@@ -304,16 +337,19 @@ int Evaluation::White_attk_Strength(const chessBoard& _cb)
     return (1 << (attackers * 3));
 }
 
-int Evaluation::Black_attk_Strength(const chessBoard& _cb) {
-
+int
+Evaluation::Black_attk_Strength(const chessBoard& _cb)
+{
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(WHITE));
     const uint64_t attk_sq = plt::KBoard[kpos]
                       | (kpos < 56 ? plt::KBoard[kpos + 8] : 0);
 
-    const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece) {
+    const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece)
+    {
         int res = 0;
-        while (piece) {
+        while (piece)
+        {
             const int idx = next_idx(piece);
             const uint64_t area = __f(idx, Apiece);
             if (area & attk_sq) res++;
@@ -332,7 +368,8 @@ int Evaluation::Black_attk_Strength(const chessBoard& _cb) {
     return (1 << (attackers * 3));
 }
 
-int Evaluation::White_King_Safety(const chessBoard& _cb)
+int
+Evaluation::White_King_Safety(const chessBoard& _cb)
 {
     uint64_t res;
     int kpos = idx_no(KING(WHITE)), kx = kpos & 7, ky = (kpos - kx) >> 3;
@@ -359,18 +396,22 @@ int Evaluation::White_King_Safety(const chessBoard& _cb)
     return score;
 }
 
-int Evaluation::Black_King_Safety(const chessBoard& _cb) {
+int
+Evaluation::Black_King_Safety(const chessBoard& _cb)
+{
     uint64_t res;
     int kpos = idx_no(KING(BLACK)), kx = kpos & 7, ky = (kpos - kx) >> 3;
     int score = 0, open_files = 0, defenders[2];
 
     res = plt::dBoard[kpos];
     if (!(res & PAWN(BLACK))) open_files++;
-    if (kx) {
+    if (kx)
+    {
         res = plt::dBoard[kpos - 1];
         if (!(res & PAWN(BLACK))) open_files++;
     }
-    if (kx != 7) {
+    if (kx != 7)
+    {
         res = plt::dBoard[kpos + 1];
         if (!(res & PAWN(BLACK))) open_files++;
     }
@@ -385,8 +426,9 @@ int Evaluation::Black_King_Safety(const chessBoard& _cb) {
     return score;
 }
 
-int Evaluation::attack_strength(const chessBoard& _cb) {
-
+int
+Evaluation::attack_strength(const chessBoard& _cb)
+{
     if (game_phase < phase_counter + 2) return 0;
 
     int white_safety = White_King_Safety(_cb), black_safety = Black_King_Safety(_cb);
@@ -405,7 +447,8 @@ bool Evaluation::is_hypothetical_draw()
     if (wPieces >= 3 || bPieces >= 3) return false;
     if (wPawns + bPawns) return false;
 
-    if (wPieces == 1 && bPieces == 1) {
+    if (wPieces == 1 && bPieces == 1)
+    {
         if ((wBishops + wKnights) == 1 && bRooks == 1) return true;
         if (wRooks == 1 && (bBishops + bKnights) == 1) return true;
     }
@@ -416,7 +459,8 @@ bool Evaluation::is_hypothetical_draw()
     if (bPieces == 1 && !wPieces) {
         if (bBishops == 1 || bKnights == 1) return true;
     }
-    if (wPieces + bPieces == 2 && wPieces == bPieces) {
+    if (wPieces + bPieces == 2 && wPieces == bPieces)
+    {
         if (wQueens + bQueens == 2) return true;
         if (wRooks  + bRooks  == 2) return true;
         if (wBishops + bBishops == 2) return true;
@@ -429,7 +473,8 @@ bool Evaluation::is_hypothetical_draw()
     return false;
 }
 
-void Evaluation::set_parameter (int tmp1, int tmp2, int tmp3, int tmp4, int tmp5) {
+void Evaluation::set_parameter (int tmp1, int tmp2, int tmp3, int tmp4, int tmp5)
+{
     material_weight = (float)tmp1 / 10;
     positional_weight = (float)tmp2 / 10;
     attk_str_weight = (float)tmp3 / 10;
@@ -437,8 +482,8 @@ void Evaluation::set_parameter (int tmp1, int tmp2, int tmp3, int tmp4, int tmp5
     pawn_struct_weight = (float)tmp5 / 10;
 }
 
-int Evaluation::Evaluate (const chessBoard& _cb) {
-
+int Evaluation::Evaluate (const chessBoard& _cb)
+{
     MaterialCount(_cb);
 
     if (!position_weight) return 0;

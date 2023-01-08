@@ -268,7 +268,6 @@ print(MoveType move, chessBoard& _cb)
         else if (ppt == 1) res += "=N";
         else if (ppt == 2) res += "=R";
         else if (ppt == 3) res += "=Q";
-        
     }
     else if (_pt == 2)
     {

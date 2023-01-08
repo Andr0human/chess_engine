@@ -215,7 +215,6 @@ QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 int
 AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply)
 {
-
     if (has_legal_moves(_cb) == false)
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
 

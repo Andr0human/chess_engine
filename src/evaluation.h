@@ -46,10 +46,11 @@ class Evaluation
     int attack_strength(const chessBoard& _cb);
 
     public:
-
+    // Set the weights for evaluation
     void set_parameter(int tmp1, int tmp2, int tmp3, int tmp4, int tmp5);
-    int Evaluate (const chessBoard& _cb);
 
+
+    int Evaluate (const chessBoard& _cb);
 };
 
 extern Evaluation ev;

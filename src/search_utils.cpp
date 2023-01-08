@@ -78,119 +78,6 @@ moveOrderClass::reset()
 
 #endif
 
-/* #ifndef SEARCH_DATA
-
-int
-search_data::best_move()
-{ return move[depth - 1].first; }
-
-int
-search_data::last_depth()
-{ return depth - 1; }
-
-double
-search_data::last_eval()
-{
-    float eval = static_cast<float>(move[depth - 1].second) / 100.0f;
-    return eval * static_cast<float>(2 * side2move - 1);
-}
-
-int
-search_data::eval()
-{ return move[depth - 1].second; }
-
-void
-search_data::set_to_move(int pc)
-{ side2move = pc; }
-
-void
-search_data::update(int _d, int _e, int line[])
-{
-    for (int i = 0; i < _d; i++)
-        pvAlpha[i] = line[i];
-    move[depth++] = std::make_pair(line[0], _e);
-}
-
-void
-search_data::reset()
-{
-    max_ply = max_qs_ply = depth = 0;
-    for (int i = 0; i < maxPly; i++)
-        move[i] = std::make_pair(0, 0);
-    for (int i = 0; i < maxPly; i++)
-        pvAlpha[i] = 0;
-}
-
-void
-search_data::set_depth_zero_move(int __m)
-{
-    depth = 0;
-    move[depth++] = std::make_pair(__m, 0);
-}
-
-bool
-search_data::is_part_of_pv(int __m)
-{    
-    for (int i = 0; i < depth; i++)
-        if (pvAlpha[i] == __m) return true;
-    return false;
-}
-
-bool
-search_data::use_verification_Search()
-{    
-    if (depth < 4) return false;
-    if (last_eval() > 70) return false;
-
-    using std::max;
-    using std::min;
-
-    auto alpha = move[depth - 1];
-    auto beta  = move[depth - 2];
-    auto delta = move[depth - 3];
-    
-    if ((alpha.first != beta.first) or (alpha.first != delta.first)) return true;
-
-    int lower = min(min(alpha.second, beta.second), delta.second);
-    int upper = max(max(alpha.second, beta.second), delta.second);
-
-    if (upper - lower > 300) return true;
-    return false;
-}
-
-bool
-search_data::move_verified()
-{
-    if (std::abs(last_eval()) > 70) return true;
-    
-    std::pair<int, int> alpha = move[depth - 1], beta = move[depth - 2];
-
-    if (alpha.first != beta.first) return false;    
-    int lower = std::min(alpha.second, beta.second);
-    int upper = std::max(alpha.second, beta.second);
-
-    if (upper - lower > 300) return false;
-    return true;
-}
-
-void
-search_data::init(int color, int zMove)
-{
-    info.set_to_move(color);
-    info.set_depth_zero_move(zMove);
-}
-
-void
-search_data::set_discard_result(int zMove)
-{
-    if (zMove == -1)    
-        move[depth++] = std::make_pair(zMove, negInf / 2);
-    if (zMove == -2)
-        move[depth++] = std::make_pair(zMove, 0);
-}
-
-#endif */
-
 #ifndef TEST_POSITION
 
 test_position::test_position(string f, int d, uint64_t nc, int index)
@@ -234,7 +121,6 @@ test_position::print()
 std::vector<std::string>
 split(const string &__s, char sep)
 {
-
     std::vector<std::string> res;
     size_t prev = 0, __n = __s.length();
     

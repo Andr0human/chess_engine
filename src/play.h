@@ -55,7 +55,7 @@ class playboard : public chessBoard
     }
 
     public:
-
+    // Init
     playboard()
     : threads(1), mDepth(maxDepth), movetime(default_search_time),
     search_curr_pos(false), to_quit(false) {}

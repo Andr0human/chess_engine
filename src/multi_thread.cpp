@@ -84,7 +84,6 @@ bulk_MultiCount(chessBoard &_cb, int depth)
 void
 MakeMove_MultiIterative(chessBoard &primary, int mDepth, double search_time)
 {
-
     // A Zero depth Move is produced in case we don't have time to do a search of depth 1
     int zero_move = createMoveOrderList(primary), eval = 0;
     // info.reset();
@@ -125,13 +124,11 @@ MakeMove_MultiIterative(chessBoard &primary, int mDepth, double search_time)
         if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;   // If found a checkmate
         moc.sortList(pvArray[0]);
     }
-
 }
 
 int
 thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
 {
-
     if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
 
@@ -197,8 +194,7 @@ thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
 
 int
 pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
-{    
-
+{
     if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
 
