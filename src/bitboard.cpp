@@ -20,9 +20,9 @@ void
 chessBoard::set_position_with_fen(const string& fen) noexcept
 {
     // Split the elements from fen.
-    const auto text_split = [] (const std::string &__s, char sep)
+    const auto text_split = [] (const string &__s, char sep)
     {
-        std::vector<std::string> res;
+        vector<string> res;
         size_t prev = 0, __n = __s.length();
         
         for (size_t i = 0; i < __n; i++)
@@ -454,26 +454,21 @@ chessBoard::three_move_repetition() const noexcept
     return pos_count >= 1;
 }
 
-const std::string
+const string
 chessBoard::fen() const
 {
-    std::string generated_fen;
-    int zero = 0;
-
     const auto piece_no_to_char = [] (const int piece_no)
     {
-        char res = 'P';
-        int piece = piece_no & 7;
+        const int pvalues[7] = {0, 80, 66, 78, 82, 81, 75};
 
-        if (piece == 6) res = 'K';
-        else if (piece == 5) res = 'Q';
-        else if (piece == 4) res = 'R';
-        else if (piece == 3) res = 'N';
-        else if (piece == 2) res = 'B';
+        int v = pvalues[piece_no & 7]
+              + ((piece_no & 8) ^ 8) * 4;
 
-        if ((piece_no & 8) == 0) res += 32;
-        return res;
+        return static_cast<char>(v);
     };
+
+    string generated_fen;
+    int zero = 0;
     
     for(int j = 7; j >= 0; j--)
     {
@@ -587,7 +582,7 @@ chessBoard::Reset()
 }
 
 void
-chessBoard::fill_with_piece(std::string arr[], uint64_t value, char ch) const
+chessBoard::fill_with_piece(string arr[], uint64_t value, char ch) const
 {
     while (value != 0)
     {
