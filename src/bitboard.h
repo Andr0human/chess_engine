@@ -14,6 +14,7 @@ using std::string;
 using std::vector;
 
 using MoveType = int;
+using PieceType = int;
 
 extern uint64_t tmp_total_counter;
 extern uint64_t tmp_this_counter;

@@ -39,9 +39,9 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
         return res;
     };
 
-    const auto char_to_piece_no = [] (const char ch)
+    const auto char_to_piece_type = [] (const char ch)
     {
-        const int piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
+        const PieceType piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
 
         const char piece = ch < 'a' ? ch : ch - 32;
         int v = static_cast<int>(piece);
@@ -55,29 +55,24 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
     
     {
         // Generating board and Pieces array
-        int rank = 7, col = 0;
-        for (const char ch : elements[0])
+
+        int square = 56;
+        for (const char elem : elements[0])
         {
-            if (ch >= '1' && ch <= '9') {
-                col += ch - '0';
-            } else if (ch == '/') {
-                rank--;
-                col = 0;
-            } else {
-                board[8 * rank + col] = char_to_piece_no(ch);
-                col++;
+            if (isdigit(elem))
+                square += static_cast<int>(elem - '0');
+            else if (elem == '/')
+                square -= (square & 7) ? ((square & 7) + 8) : (16);
+            else
+            {
+                PieceType __x = char_to_piece_type(elem);
+                board[square] = __x;
+                Pieces[__x] |= 1ULL << square;
+                Pieces[(__x & 8) + 7] |= 1ULL << square;
+                square++;
             }
         }
-
-        for (int i = 0; i < 64; i++)
-            if (board[i]) Pieces[board[i]] |= 1ULL << i;
-        
-        for (int i = 1; i <= 6; i++) {
-            Pieces[ 7] |= Pieces[i];
-            Pieces[15] |= Pieces[8 + i];
-        }
     }
-
 
     // Extracting which color to play
     color = (elements[1] == "w" ? 1 : 0);
