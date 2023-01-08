@@ -9,7 +9,8 @@
 #define __abs(x) (x >= 0 ? x : -(x))
 #define dist_btw(x1, y1, x2, y2) (__abs((x1 - x2)) + __abs((y1 - y2)))
 
-namespace plt {
+namespace plt
+{
 
 extern uint64_t NtBoard[64], KBoard[64];
 extern uint64_t uBoard[64], dBoard[64], rBoard[64], lBoard[64];

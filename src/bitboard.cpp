@@ -16,28 +16,12 @@ chessBoard::chessBoard()
     for (int i = 0; i < 16; i++) Pieces[i] = 0; 
 }
 
+chessBoard::chessBoard(const string& fen)
+{ set_position_with_fen(fen); }
+
 void
 chessBoard::set_position_with_fen(const string& fen) noexcept
 {
-    // Split the elements from fen.
-    const auto text_split = [] (const string &__s, char sep)
-    {
-        vector<string> res;
-        size_t prev = 0, __n = __s.length();
-        
-        for (size_t i = 0; i < __n; i++)
-        {
-            if (__s[i] != sep) continue;
-            
-            if (i > prev)
-                res.push_back(__s.substr(prev, i - prev));
-            prev = i + 1;
-        }
-
-        if (__n > prev)
-            res.push_back(__s.substr(prev, __n - prev));
-        return res;
-    };
 
     const auto char_to_piece_type = [] (const char ch)
     {
@@ -51,7 +35,9 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
              + (ch < 'a' ? 8 : 0);
     };
 
-    const auto elements = text_split(fen, ' ');
+    
+    // Split the elements from FEN.
+    const vector<string> elements = base_utils::split(fen, ' ');
     
     {
         // Generating board and Pieces array
@@ -104,9 +90,6 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
     // Generate hash-value for current position
     Hash_Value = generate_hashKey();
 }
-
-chessBoard::chessBoard(const string& fen)
-{ set_position_with_fen(fen); }
 
 
 void

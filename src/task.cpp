@@ -37,12 +37,12 @@ get_test_positions(string filename)
     {
         getline(infile, text);
         if (text == "") break;
-        tmp = split(text, '|');
+        tmp = base_utils::split(text, '|');
         name = "--";
         if (tmp.size() == 3) name = tmp[2].substr(1);
 
         pos = tmp[0];
-        tmp = split(tmp[1], ' ');
+        tmp = base_utils::split(tmp[1], ' ');
         res.emplace_back(test_position(pos, std::stoi(tmp[0]), std::stoi(tmp[1]), name));
     }
 
@@ -66,9 +66,19 @@ accuracy_test()
             getline(infile, line);
             if (line.empty()) break;
 
-            auto elements = split(line, '|');
-            const auto nodes = to_nums(split(elements[1], ' '));
-            tests.push_back(movegen_test_position(strip(elements[0]), nodes));
+            auto elements = base_utils::split(line, '|');
+
+            const auto nodes_string = base_utils::split(elements[1], ' ');
+            vector<uint64_t> nodes(nodes_string.size());
+
+            std::transform(begin(nodes_string), end(nodes_string), begin(nodes),
+                [] (const string& __s) {
+                    return std::stoull(__s);
+                }
+            );
+
+            // const auto nodes = to_nums(base_utils::split(elements[1], ' '));
+            tests.push_back(movegen_test_position(base_utils::strip(elements[0]), nodes));
         }
 
         infile.close();
@@ -207,27 +217,17 @@ speed_test()
 
 void
 direct_search(const vector<string> &_args)
-{    
-    perf::Timer _t("Direct_Search");
+{
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : startFen;
 
     const double search_time = (__n >= 3) ?
         std::stod(_args[2]) : static_cast<double>(default_search_time);
-    
-    // alloted_search_time = default_search_time;
-    // alloted_extra_time  = 0;
-
-    // if (__n >= 3) alloted_search_time = std::stod(_args[2]);
-    // if (__n >= 4) alloted_extra_time  = std::stod(_args[3]);
 
     chessBoard primary = fen;
     primary.show();
 
     search_iterative(primary, maxDepth, search_time);
-
-    // MakeMove_Iterative(primary, 11, false);
-    // MakeMove_MultiIterative(primary, maxDepth, true);
     info.show_search_results(primary);
 }
 
@@ -306,7 +306,7 @@ debug_movegen(const vector<string> &_args)
 void task(int argc, char *argv[])
 {
     const vector<string> argument_list =
-        extract_argument_list(argc, argv);
+        base_utils::extract_argument_list(argc, argv);
 
     string command = argument_list.empty() ? "" : argument_list[0];
 

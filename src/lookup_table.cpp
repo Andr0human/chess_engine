@@ -2,17 +2,21 @@
 
 #include "lookup_table.h"
 
-uint64_t plt::NtBoard[64], plt::KBoard[64];
-uint64_t plt::uBoard[64], plt::dBoard[64], plt::rBoard[64], plt::lBoard[64];
-uint64_t plt::urBoard[64], plt::drBoard[64], plt::ulBoard[64], plt::dlBoard[64];
-uint64_t plt::diag_Board[64], plt::line_Board[64];
-uint64_t plt::pBoard[2][64], plt::pcBoard[2][64];
-uint64_t plt::d_ry[64], plt::ad_ry[64];
-uint64_t plt::LRboard[8][258], plt::UDboard[8][258];
-// uint64_t plt::ad_bd[8][258], plt::d_bd[8][258];
+
+namespace plt
+{
+
+uint64_t NtBoard[64], KBoard[64];
+uint64_t uBoard[64], dBoard[64], rBoard[64], lBoard[64];
+uint64_t urBoard[64], drBoard[64], ulBoard[64], dlBoard[64];
+uint64_t diag_Board[64], line_Board[64];
+uint64_t pBoard[2][64], pcBoard[2][64];
+uint64_t d_ry[64], ad_ry[64];
+uint64_t LRboard[8][258], UDboard[8][258];
+// uint64_t ad_bd[8][258], d_bd[8][258];
 
 void
-plt::build_sliding_table(uint64_t _arr[], int index, int index_inc, int inc_x, int inc_y)
+build_sliding_table(uint64_t _arr[], int index, int index_inc, int inc_x, int inc_y)
 {
     for (int idx = index;; idx += index_inc)
     {
@@ -29,7 +33,7 @@ plt::build_sliding_table(uint64_t _arr[], int index, int index_inc, int inc_x, i
 }
 
 void
-plt::build_knight_king_table(uint64_t _arr[], int nt)
+build_knight_king_table(uint64_t _arr[], int nt)
 {
     // nt = 1, builds table for knight, nt = 0, build table for king
 
@@ -50,7 +54,7 @@ plt::build_knight_king_table(uint64_t _arr[], int nt)
 }
 
 void
-plt::build_pawn_table(uint64_t _arr[], int dir, bool captures)
+build_pawn_table(uint64_t _arr[], int dir, bool captures)
 {    
     for (int i = 0; i < 64; i++)
     {
@@ -70,42 +74,42 @@ plt::build_pawn_table(uint64_t _arr[], int dir, bool captures)
 }
 
 void
-plt::merge_table(uint64_t to_table[], uint64_t from_table1[], uint64_t from_table2[])
+merge_table(uint64_t to_table[], uint64_t from_table1[], uint64_t from_table2[])
 {
     for (int i = 0; i < 64; i++)
         to_table[i] |= from_table1[i] | from_table2[i];
 }
 
 void
-plt::set_zero(uint64_t table[])
+set_zero(uint64_t table[])
 {
     for (int i = 0; i < 64; i++)
         table[i] = 0;
 }
 
 uint64_t
-plt::solution(int idx, uint64_t Apieces)
+solution(int idx, uint64_t Apieces)
 {
-    uint64_t res, val, ans = plt::rBoard[idx] ^ plt::lBoard[idx];
+    uint64_t res, val, ans = rBoard[idx] ^ lBoard[idx];
     
-    res = plt::rBoard[idx] & Apieces;
+    res = rBoard[idx] & Apieces;
     if (res)
     {
         val = res ^ (res & (res - 1));
-        ans ^= plt::rBoard[__builtin_popcountll(val - 1)];
+        ans ^= rBoard[__builtin_popcountll(val - 1)];
     }
-    res = plt::lBoard[idx] & Apieces;
+    res = lBoard[idx] & Apieces;
     if (res)
     {
         val = (res ? (1ULL << (63 - __builtin_clzll(res))) : 0);
-        ans ^= plt::lBoard[__builtin_popcountll(val - 1)];
+        ans ^= lBoard[__builtin_popcountll(val - 1)];
     }
     
     return ans;
 }
 
 uint64_t
-plt::convert_to(uint64_t N, int a, int b)
+convert_to(uint64_t N, int a, int b)
 {
     uint64_t res = 0;
 
@@ -119,7 +123,7 @@ plt::convert_to(uint64_t N, int a, int b)
 }
 
 void
-plt::generate_sol_array(uint64_t _arr[8][256])
+generate_sol_array(uint64_t _arr[8][256])
 {
     for (int i = 0; i < 8; i++)
         for (int j = 0; j < 256; j++)
@@ -127,7 +131,7 @@ plt::generate_sol_array(uint64_t _arr[8][256])
 }
 
 void
-plt::build_rook_bishop_table(uint64_t sol_arr[8][256], uint64_t _arr[8][258], uint64_t mod, int a, int b)
+build_rook_bishop_table(uint64_t sol_arr[8][256], uint64_t _arr[8][258], uint64_t mod, int a, int b)
 {
     for (int i = 0; i < 8; i++)
     {
@@ -142,7 +146,7 @@ plt::build_rook_bishop_table(uint64_t sol_arr[8][256], uint64_t _arr[8][258], ui
 }
 
 void
-plt::init()
+init()
 {    
     build_sliding_table(uBoard, 56,  1,  0, -1);
     build_sliding_table(dBoard,  7, -1,  0,  1);
@@ -182,9 +186,12 @@ plt::init()
 
     // uint64_t sol_array[8][256];
     // generate_sol_array(sol_array);
-    // build_rook_bishop_table(sol_array, plt::LRboard, 0, 1, 0);
-    // build_rook_bishop_table(sol_array, plt::UDboard, 258, 8, 0);
-    // build_rook_bishop_table(sol_array, plt::d_bd, 257, 7, 1);
-    // build_rook_bishop_table(sol_array, plt::ad_bd, 258, 9, 0);
+    // build_rook_bishop_table(sol_array, LRboard, 0, 1, 0);
+    // build_rook_bishop_table(sol_array, UDboard, 258, 8, 0);
+    // build_rook_bishop_table(sol_array, d_bd, 257, 7, 1);
+    // build_rook_bishop_table(sol_array, ad_bd, 258, 9, 0);
+}
+
+
 }
 

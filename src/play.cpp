@@ -45,7 +45,7 @@ read_commands(const string& __s, playboard& board)
     using std::stoi;
     using std::stod;
 
-    std::vector<string> args = split(__s, ' ');
+    std::vector<string> args = base_utils::split(__s, ' ');
     size_t index = 0;
 
 
@@ -60,7 +60,7 @@ read_commands(const string& __s, playboard& board)
         {
             puts("position command found!");
             
-            const string fen = strip(args[index + 1], '"');
+            const string fen = base_utils::strip(args[index + 1], '"');
             board.set_new_position(fen);
         }
         else if (arg == "moves")

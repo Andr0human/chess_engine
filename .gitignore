@@ -1,6 +1,7 @@
 .vscode
 /Utility/test_data/
 
+base_utils.o
 bitboard.o
 lookup_table.o
 tt.o

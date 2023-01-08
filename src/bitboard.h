@@ -2,59 +2,14 @@
 #ifndef BITBOARD_H
 #define BITBOARD_H
 
+
+#include "base_utils.h"
 #include "tt.h"
-#include <iostream>
-#include <cstring>          // For memset
-#include <vector>
 
-
-using std::cout;
-using std::endl;
-using std::string;
-using std::vector;
-
-using MoveType = int;
-using PieceType = int;
 
 extern uint64_t tmp_total_counter;
 extern uint64_t tmp_this_counter;
 
-
-#ifndef BIT_MANIPULATION
-
-inline int
-__ppcnt(const uint64_t N) 
-{ return __builtin_popcountll(N); }
-
-inline int
-idx_no(const uint64_t N)
-{ return __builtin_popcountll(N - 1); }
-
-inline int
-lSb_idx(const uint64_t N)
-{ return __builtin_ctzll(N | (1ULL << 63)); }
-
-inline int
-mSb_idx(const uint64_t N)
-{ return __builtin_clzll(N | 1) ^ 63; }
-
-inline uint64_t
-lSb(const uint64_t N)
-{ return N ^ (N & (N - 1)); }
-
-inline uint64_t
-mSb(const uint64_t N)
-{ return (N!=0) ? (1ULL << (__builtin_clzll(N)^63)) : (0); }
-
-inline uint64_t
-l_shift(const uint64_t val, const int shift)
-{ return val << shift; }
-
-inline uint64_t
-r_shift(const uint64_t val, const int shift)
-{ return val >> shift; }
-
-#endif
 
 class chessBoard
 {

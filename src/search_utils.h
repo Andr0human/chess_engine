@@ -5,9 +5,9 @@
 
 
 #include <iomanip>
+#include "perf.h"
 #include "bitboard.h"
 #include "movegen.h"
-#include "perf.h"
 
 enum search_flag:int
 {
@@ -278,26 +278,6 @@ movegen_test_position
 // extern search_data info;
 extern SearchData info;
 extern moveOrderClass moc;
-
-vector<string>
-split(const string &__s, char sep);
-string
-strip(string __s, char sep = ' ');
-
-/**
- * @brief Returns a vector of strings stripped from both ends
- * 
- * @param list vector of strings
- * @return vector<string> 
- */
-vector<string>
-strip(vector<string> list);
-vector<uint64_t>
-to_nums(const vector<string>& list);
-vector<string>
-extract_argument_list(int argc, char *argv[]);
-void
-bits_on_board(uint64_t value);
 
 
 #endif

@@ -2,7 +2,7 @@
 
 #include "search_utils.h"
 
-// search_data info;
+
 SearchData info;
 moveOrderClass moc;
 
@@ -112,111 +112,6 @@ test_position::print()
 {
     cout << name << " : " << fen << "\n" << "|   Depth : " \
     << depth << "\t|   Nodes : " << nodeCount << "\t|\n" << endl;
-}
-
-#endif
-
-#ifndef UTILs
-
-std::vector<std::string>
-split(const string &__s, char sep)
-{
-    std::vector<std::string> res;
-    size_t prev = 0, __n = __s.length();
-    
-    int in_case = 0;
-
-    for (size_t i = 0; i < __n; i++)
-    {
-        int val = static_cast<int>(__s[i]);
-        if (val == 34 or val == 39)
-            in_case ^= 1;
-
-        if (__s[i] != sep or (in_case == 1)) continue;
-        
-        if (i > prev)
-            res.push_back(__s.substr(prev, i - prev));
-        prev = i + 1;
-    }
-
-    if (__n > prev)
-        res.push_back(__s.substr(prev, __n - prev));
-    return res;
-}
-
-string
-strip(string __s, char sep)
-{    
-    if (__s.empty()) return __s;
-
-    while (!__s.empty() and (__s.back() == sep))
-        __s.pop_back();
-    
-    for (size_t i = 0; i < __s.size() / 2; i++)
-        std::swap(__s[i], __s[__s.size() - 1 - i]);
-
-    while ((!__s.empty()) and (__s.back() == sep))
-        __s.pop_back();
-    
-    for (size_t i = 0; i < __s.size() / 2; i++)
-        std::swap(__s[i], __s[__s.size() - 1 - i]);
-    
-    return __s;
-}
-
-vector<string>
-strip(vector<string> list)
-{
-    for (auto &word : list) word = strip(word);
-    return list;
-}
-
-vector<uint64_t>
-to_nums(const vector<string>& list)
-{
-    vector<uint64_t> nums(list.size());
-    for (size_t i = 0; i < list.size(); i++)
-        nums[i] = std::stoull(list[i]);
-
-    return nums;
-}
-
-
-vector<string>
-extract_argument_list(int argc, char *argv[])
-{
-    vector<string> result(argc - 1);
-    
-    for (int i = 1; i < argc; i++)
-        result[i - 1] = string(argv[i]);
-    
-    return result;
-}
-
-void
-bits_on_board(uint64_t value)
-{
-    std::string arr[8];
-    for (int i = 0; i < 8; i++) arr[i] = "........";
-
-    while (value)
-    {
-        const int idx = lSb_idx(value);
-        const int x = idx & 7, y = (idx - x) >> 3;
-        arr[7 - y][x] = '1';
-        value &= value - 1;
-    }
-
-    const string s = "+---+---+---+---+---+---+---+---+\n";
-    cout << s;
-    for (const auto &row : arr)
-    {
-        cout << "| ";
-        for (const char ch : row)
-            cout << ch << " | ";
-        cout << "\n" << s;
-    }
-    cout << endl;
 }
 
 #endif
