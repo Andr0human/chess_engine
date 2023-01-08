@@ -6,8 +6,6 @@ int main(int argc, char **argv)
     FAST_IO();
     init();
     task(argc, argv);
-
-    // tt_test();
 }
 
 

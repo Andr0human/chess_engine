@@ -1,6 +1,4 @@
 
-
-#include <iomanip>
 #include "search.h"
 
 MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
@@ -14,54 +12,6 @@ void
 movcpy(MoveType* pTarget, const MoveType* pSource, int n)
 { while (n-- && (*pTarget++ = *pSource++)); }
 
-
-string
-readable_pv_line(chessBoard board, const vector<MoveType>& pv)
-{
-    string res;
-    for (const MoveType move : pv) {
-        if (move == 0) break;
-        res += print(move, board) + string(" ");
-        board.MakeMove(move);
-    }
-    return res;
-}
-
-
-void
-curr_depth_status(const chessBoard& _cb)
-{
-    cout << std::setprecision(2);
-    
-    const size_t depth = info.last_depth();
-    const auto& [move, eval] = info.last_iter_result();
-    const double eval_conv = static_cast<double>(eval) / 100.0;
-
-
-    cout << "Depth " << ((depth < 10) ? (" ") : (""))
-         << depth << " | Eval : " << eval_conv << "\t| PV = "
-         << readable_pv_line(_cb, info.last_pv_line()) << endl;
-
-
-    cout << std::setprecision(3);
-}
-
-void
-Show_Searched_Info(chessBoard& _cb)
-{
-    const auto&[move, eval] = info.last_iter_result();
-    const double eval_conv = static_cast<double>(eval) / 100.0;
-
-    puts("------ SEARCH-INFO ------");
-
-    cout << "Depth Searched = " << info.last_depth() << '\n'
-         << "Best Move = " << print(move, _cb) << '\n'
-         << "Eval = " << eval_conv << '\n'
-         << "Line = " << readable_pv_line(_cb, info.last_pv_line())
-         << endl;
-
-    puts("-------------------------");
-}
 
 void
 reset_pv_line()

@@ -259,20 +259,20 @@ split(const string &__s, char sep)
 }
 
 string
-strip(string __s)
+strip(string __s, char sep)
 {    
     if (__s.empty()) return __s;
 
-    while (!__s.empty() &&__s.back() == ' ')
+    while (!__s.empty() and (__s.back() == sep))
         __s.pop_back();
     
-    for (size_t i = 0; i < __s.size(); i++)
+    for (size_t i = 0; i < __s.size() / 2; i++)
         std::swap(__s[i], __s[__s.size() - 1 - i]);
 
-    while (!__s.empty() &&__s.back() == ' ')
+    while ((!__s.empty()) and (__s.back() == sep))
         __s.pop_back();
     
-    for (size_t i = 0; i < __s.size(); i++)
+    for (size_t i = 0; i < __s.size() / 2; i++)
         std::swap(__s[i], __s[__s.size() - 1 - i]);
     
     return __s;

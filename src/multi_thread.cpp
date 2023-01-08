@@ -119,7 +119,7 @@ MakeMove_MultiIterative(chessBoard &primary, int mDepth, double search_time)
             within_valWindow = true;
             valWindowCnt = 0;
             // info.update(depth, eval, pvArray);
-            curr_depth_status(primary);
+            // curr_depth_status(primary);
             depth++;
         }
         if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;   // If found a checkmate

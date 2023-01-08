@@ -83,7 +83,7 @@ accuracy_test()
         {
             const auto depth = test.depth();
             chessBoard _cb = test.fen();
-            uint64_t found = bulkCount(_cb, static_cast<int>(depth));
+            uint64_t found = bulkcount(_cb, static_cast<int>(depth));
 
             if (found != test.expected_nodes(depth))
                 return false;
@@ -106,7 +106,7 @@ accuracy_test()
 
             for (uint64_t dep = 1; dep <= depth; dep++)
             {
-                const auto found = bulkCount(_cb, static_cast<int>(dep));
+                const auto found = bulkcount(_cb, static_cast<int>(dep));
 
                 if (found == test.expected_nodes(dep))
                     continue;
@@ -140,7 +140,7 @@ accuracy_test()
 
     for (uint64_t depth = 1; depth <= maxDepth; depth++)
         cout << best_case.expected_nodes(depth)
-             << " | " << bulkCount(_cb, static_cast<int>(depth)) << endl;
+             << " | " << bulkcount(_cb, static_cast<int>(depth)) << endl;
 }
 
 void
@@ -188,7 +188,7 @@ speed_test()
 
         const auto start = perf::now();
         for (int i = 0; i < 3; i++)
-            bulkCount(board, pos.depth);
+            bulkcount(board, pos.depth);
         
         const auto end = perf::now();
         const auto duration = duration_cast<microseconds>(end - start);
@@ -224,11 +224,11 @@ direct_search(const vector<string> &_args)
     chessBoard primary = fen;
     primary.show();
 
-    MakeMove_Iterative(primary, maxDepth, search_time);
+    search_iterative(primary, maxDepth, search_time);
 
     // MakeMove_Iterative(primary, 11, false);
     // MakeMove_MultiIterative(primary, maxDepth, true);
-    Show_Searched_Info(primary);
+    info.show_search_results(primary);
 }
 
 void
@@ -242,7 +242,7 @@ node_count(const vector<string> &_args)
     cout << "Fen = " << fen << '\n';
     cout << "Depth = " << depth << "\n" << endl;
 
-    const auto &[nodes, t] = perf::run_algo(bulkCount, _cb, depth);
+    const auto &[nodes, t] = perf::run_algo(bulkcount, _cb, depth);
 
     cout << "Nodes(single-thread) = " << nodes << '\n';
     cout << "Time (single-thread) = " << t << " sec.\n";
@@ -290,7 +290,7 @@ debug_movegen(const vector<string> &_args)
     for (const auto move : myMoves)
     {
         _cb.MakeMove(move);
-        const auto current = bulkCount(_cb, dep - 1);
+        const auto current = bulkcount(_cb, dep - 1);
         out << moveName(move) << " : " << current << '\n';
         // out << print(move, _cb) << " : " << current << '\n';
         _cb.UnmakeMove();

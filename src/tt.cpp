@@ -39,7 +39,7 @@ Transposition_Table::resize(int preset)
 }
 
 std::string
-Transposition_Table::size() const
+Transposition_Table::size() const noexcept
 {
     uint64_t table_size = sizeof(Zobrist_HashKey) * TT_SIZE * 2;
 
@@ -114,4 +114,14 @@ Transposition_Table::lookup_position
     return lookup(secondary_tt_table[index]);
 }
 
+
+void
+Transposition_Table::clear() noexcept
+{
+    for (size_t i = 0; i < TT_SIZE; i++)
+    {
+        primary_tt_table[i].clear();
+        secondary_tt_table[i].clear();
+    }
+}
 

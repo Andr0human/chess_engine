@@ -4,10 +4,10 @@
 #define SEARCH_UTILS_H
 
 
+#include <iomanip>
 #include "bitboard.h"
 #include "movegen.h"
 #include "perf.h"
-#include <iostream>
 
 enum search_flag:int
 {
@@ -28,6 +28,7 @@ enum search_flag:int
     HASHEMPTY = 0, HASHEXACT = 1,
     HASHALPHA = 2, HASHBETA  = 3,
 };
+
 
 
 class moveOrderClass
@@ -63,6 +64,7 @@ class moveOrderClass
 };
 
 
+
 class SearchData
 {
     private:
@@ -75,11 +77,27 @@ class SearchData
     // Time provided to find move for current position (in secs.)
     double time_alloted;
 
+    // Time spend on searching for move in position (in secs.)
+    double time_on_search;
+
     // Stores the pv of the lastest searched depth
     vector<MoveType> last_pv;
 
     // Stores the <best_move, eval> for each depth during search.
     vector<std::pair<MoveType, int>> move_eval;
+
+
+    static string
+    readable_pv_line(chessBoard board, const vector<MoveType>& pv) noexcept
+    {
+        string res;
+        for (const MoveType move : pv) {
+            if (move == 0) break;
+            res += print(move, board) + string(" ");
+            board.MakeMove(move);
+        }
+        return res;
+    }
 
     public:
     // Init
@@ -87,7 +105,8 @@ class SearchData
     : StartTime(perf::now()) {}
 
     SearchData(int __side, double __time_alloted, MoveType zero_move)
-    : StartTime(perf::now()), side(__side), time_alloted(__time_alloted), move_eval({std::make_pair(zero_move, 0)}) {}
+    : StartTime(perf::now()), side(__side), time_alloted(__time_alloted)
+    , move_eval({std::make_pair(zero_move, 0)}) {}
     
 
     double
@@ -135,71 +154,59 @@ class SearchData
     }
 
     void
+    search_completed() noexcept
+    {
+        perf_time duration = perf::now() - StartTime;
+        time_on_search = duration.count();
+    }
+
+    double
+    search_time() const noexcept
+    { return time_on_search; }
+
+    void
     set_discard_result(MoveType zero_move) noexcept
     {
         int eval = (zero_move == -1) ? (negInf / 2) :(0);
         move_eval.emplace_back(std::make_pair(zero_move, eval));
     }
 
+    // Prints the result of search_iterative
+    void
+    show_search_results(chessBoard board)
+    {
+        const auto&[move, eval] = last_iter_result();
+        const double eval_conv = static_cast<double>(eval) / 100.0;
 
+        puts("------ SEARCH-INFO ------");
 
+        cout << "Depth Searched = " << (move_eval.size() - 1) << '\n'
+             << "Best Move = " << print(move, board) << '\n'
+             << "Eval = " << eval_conv << '\n'
+             << "Line = " << readable_pv_line(board, last_pv) << '\n'
+             << "Time_Spend = " << time_on_search << " secs." << endl;
+
+        puts("-------------------------");
+    }
+
+    // Prints the results of last searched depth
+    void
+    show_last_depth_result(chessBoard board) const noexcept
+    {
+        cout << std::setprecision(2);
+    
+        const size_t depth = (move_eval.size() - 1);
+        const auto& [move, eval] = move_eval.back();
+        const double eval_conv = static_cast<double>(eval) / 100.0;
+
+        cout << "Depth " << ((depth < 10) ? (" ") : ("")) << depth << " | "
+             << "Eval : " << eval_conv << "\t| "
+             << "PV = " << readable_pv_line(board, last_pv) << endl;
+
+        cout << std::setprecision(3);
+    }
 };
 
-
-
-
-/* class search_data
-{
-    private:
-    int depth;
-    std::pair<int, int> move[maxPly];
-    public:
-    int side2move;
-    int max_ply, max_qs_ply;
-    int pvAlpha[maxPly];
-
-    search_data()
-    { depth = max_ply = max_qs_ply = 0; }
-
-    int
-    best_move();
-
-    int
-    last_depth();
-
-    double
-    last_eval();
-
-    int
-    eval();
-
-    void
-    set_to_move(int pc);
-
-    void
-    update(int _d, int _e, int line[]);
-
-    void
-    reset();
-
-    void
-    set_depth_zero_move(int __m);
-
-    bool
-    is_part_of_pv(int __m);
-
-    bool
-    use_verification_Search();
-
-    bool
-    move_verified();
-
-    void
-    init(int color, int zMove);
-
-    void
-    set_discard_result(int zMove);
-}; */
 
 
 class test_position
@@ -221,6 +228,8 @@ class test_position
     void
     print();
 };
+
+
 
 class
 movegen_test_position
@@ -273,7 +282,7 @@ extern moveOrderClass moc;
 vector<string>
 split(const string &__s, char sep);
 string
-strip(string __s);
+strip(string __s, char sep = ' ');
 
 /**
  * @brief Returns a vector of strings stripped from both ends

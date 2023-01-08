@@ -18,8 +18,6 @@ extern const string startFen;
 // Utility
 
 void movcpy (MoveType* pTarget, const MoveType* pSource, int n);
-void curr_depth_status(const chessBoard &_cb);
-void Show_Searched_Info(chessBoard &_cb);
 void reset_pv_line();
 int checkmate_score(int ply);
 

@@ -11,15 +11,6 @@
 
 class Zobrist_HashKey
 {
-    private:
-    void
-    clear()
-    {
-        key = 0;
-        depth = move = 0;
-        eval = flag = 0;
-    }
-
     public:
     uint64_t key;
     int32_t depth, move;
@@ -27,6 +18,14 @@ class Zobrist_HashKey
 
     Zobrist_HashKey() noexcept
     { clear(); }
+
+    void
+    clear() noexcept
+    {
+        key = 0;
+        depth = move = 0;
+        eval = flag = 0;
+    }
 
     void
     show() const noexcept
@@ -80,7 +79,10 @@ class Transposition_Table
     resize(int preset = 0);
 
     std::string
-    size() const;
+    size() const noexcept;
+
+    void
+    clear() noexcept;
 
     uint64_t
     hash_key(int __pos) const noexcept

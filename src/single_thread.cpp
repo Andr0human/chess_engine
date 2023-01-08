@@ -5,7 +5,7 @@
 #ifndef SINGLE_THREAD_NEGAMAX
 
 uint64_t
-bulkCount(chessBoard &_cb, int depth)
+bulkcount(chessBoard &_cb, int depth)
 {
     if (depth <= 0) return 1;
 
@@ -18,7 +18,7 @@ bulkCount(chessBoard &_cb, int depth)
     for (const auto move : myMoves)
     {
         _cb.MakeMove(move);
-        answer += bulkCount(_cb, depth - 1);
+        answer += bulkcount(_cb, depth - 1);
         _cb.UnmakeMove();
     }
 
@@ -76,10 +76,12 @@ negaMax_root(chessBoard &_cb, int depth)
 
 #endif
 
+
 #ifndef SINGLE_THREAD_SEARCH
 
+
 void
-MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
+search_iterative(chessBoard board, int mDepth, double search_time)
 {
     // A Zero depth Move is produced in case we don't even have time to do a search of depth 1
     reset_pv_line();
@@ -100,7 +102,7 @@ MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
     for (int depth = 1; depth <= mDepth;)
     {
         // pre_status(depth, valWindowCnt);
-        int eval = pv_rootAlphaBeta(board, alpha, beta, depth);
+        int eval = pv_root_alphabeta(board, alpha, beta, depth);
         // post_status(board, pvArray[0], eval, start_point);
 
         if (info.time_over())
@@ -123,16 +125,19 @@ MakeMove_Iterative(chessBoard board, int mDepth, double search_time)
             valWindowCnt = 0;
 
             info.add_current_depth_result(depth, eval, pvArray);
-            curr_depth_status(board);
+            // curr_depth_status(board);
+            info.show_last_depth_result(board);
             depth++;
         }
         if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;   // If found a checkmate
         moc.sortList(pvArray[0]);                                               // Sort Moves according to time.
     }
+
+    info.search_completed();
 }
 
 int
-AlphaBeta(chessBoard& __pos, int depth,
+alphabeta(chessBoard& __pos, int depth,
     int alpha, int beta, int ply, int pvIndex) 
 {
     if (info.time_over())
@@ -188,7 +193,7 @@ AlphaBeta(chessBoard& __pos, int depth,
 
     // Try LMR_search,
     if (ok_to_do_LMR(depth, myMoves))
-        return LMR_search(__pos, myMoves, depth, alpha, beta, ply, pvIndex);
+        return lmr_search(__pos, myMoves, depth, alpha, beta, ply, pvIndex);
 
     
     // Set pvArray, for storing the search_tree
@@ -199,7 +204,7 @@ AlphaBeta(chessBoard& __pos, int depth,
     for (const auto move : myMoves)
     {
         __pos.MakeMove(move);
-        eval = -AlphaBeta(__pos, depth - 1,
+        eval = -alphabeta(__pos, depth - 1,
                 -beta, -alpha, ply + 1, pvNextIndex);
 
         __pos.UnmakeMove();
@@ -240,7 +245,7 @@ AlphaBeta(chessBoard& __pos, int depth,
 
 
 int
-pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
+pv_root_alphabeta(chessBoard& _cb, int alpha, int beta, int depth)
 {
     perf_clock startTime;
     perf_ns_time duration;
@@ -260,14 +265,14 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
         if ((i < LMR_LIMIT) or interesting_move(move, _cb))
         {
             _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
         else
         {
             R = root_reduction(depth, i);
             _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
 
             if (info.time_over())
@@ -277,7 +282,7 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
             {
                 startTime = perf::now();
                 _cb.MakeMove(move);
-                eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+                eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
         }
@@ -302,7 +307,7 @@ pv_rootAlphaBeta(chessBoard& _cb, int alpha, int beta, int depth)
 }
 
 int
-LMR_search(chessBoard &_cb, MoveList& myMoves,
+lmr_search(chessBoard &_cb, MoveList& myMoves,
     int depth, int alpha, int beta, int ply, int pvIndex)
 {
     int eval, hashf = HASHALPHA, R, i = 0;
@@ -313,7 +318,7 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
         if (i < LMR_LIMIT || interesting_move(move, _cb))
         {
             _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
         }
         else
@@ -321,7 +326,7 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
             R = reduction(depth, i);
             
             _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
 
 
@@ -331,7 +336,7 @@ LMR_search(chessBoard &_cb, MoveList& myMoves,
             if (eval > alpha)
             {
                 _cb.MakeMove(move);
-                eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+                eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
         }

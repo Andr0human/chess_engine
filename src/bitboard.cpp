@@ -59,7 +59,8 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
     {
         // Generating board and Pieces array
         int rank = 7, col = 0;
-        for (const char ch : elements[0]) {
+        for (const char ch : elements[0])
+        {
             if (ch >= '1' && ch <= '9') {
                 col += ch - '0';
             } else if (ch == '/') {
@@ -627,7 +628,7 @@ chessBoard::show() const noexcept
         res += " |\n" + s;
     }
 
-    cout << res;
+    cout << res << endl;
 }
 
 bool
