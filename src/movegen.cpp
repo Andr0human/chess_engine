@@ -157,10 +157,10 @@ enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
     
     const auto shift = _cb.color == 1 ? l_shift : r_shift;
 
-    if ((shift(l_pawns, 7 + (own >> 2)) & _ep) && en_passant_recheck(eps + (2 * emy - 9), _cb))
+    if ((shift(l_pawns, 7 + (own >> 2)) & _ep) and en_passant_recheck(eps + (2 * emy - 9), _cb))
         Add_m_Pawns(eps + (2 * emy - 9), _ep, _cb, myMoves);
 
-    if ((shift(r_pawns, 7 + (emy >> 2)) & _ep) && en_passant_recheck(eps + (2 * emy - 7), _cb))
+    if ((shift(r_pawns, 7 + (emy >> 2)) & _ep) and en_passant_recheck(eps + (2 * emy - 7), _cb))
         Add_m_Pawns(eps + (2 * emy - 7), _ep, _cb, myMoves);
 }
 
@@ -170,10 +170,10 @@ promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
 {
     while (pawns)
     {
-        const int idx = next_idx(pawns);
-        const uint64_t res = ( plt::pBoard[_cb.color][idx] & move_sq)
-                           | (plt::pcBoard[_cb.color][idx] & capt_sq);
-        Add_pm_Pawns(idx, res, _cb, myMoves);
+        int __pos = next_idx(pawns);
+        uint64_t res = ( plt::pBoard[_cb.color][__pos] & move_sq)
+                     | (plt::pcBoard[_cb.color][__pos] & capt_sq);
+        Add_pm_Pawns(__pos, res, _cb, myMoves);
     }
 }
 
@@ -185,6 +185,8 @@ pawn_movement(const chessBoard &_cb, MoveList &myMoves,
     const uint64_t Rank27[2] = {Rank2, Rank7};
     const uint64_t Rank63[2] = {Rank6, Rank3};
 
+    const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
+
     const int own = _cb.color << 3;
     const int emy = own ^ 8;
 
@@ -193,14 +195,13 @@ pawn_movement(const chessBoard &_cb, MoveList &myMoves,
     const auto n_pawns = pawns ^ e_pawns;
     const auto l_pawns = n_pawns & RightAttkingPawns;
     const auto r_pawns = n_pawns &  LeftAttkingPawns;
+    const auto s_pawns = (shift(n_pawns, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
 
     const auto free_sq = ~ALL_BOTH;
     const auto enemyP  = ALL(emy);
     const auto capt_sq = (atk_area &  enemyP) * (KA) + ( enemyP) * (1 - KA);
     const auto move_sq = (atk_area ^ capt_sq) * (KA) + (free_sq) * (1 - KA);
 
-    const auto shift   = _cb.color == 1 ? l_shift : r_shift;
-    const auto s_pawns = (shift(n_pawns, 8) & free_sq) & Rank63[_cb.color];
 
     enpassant_pawns(_cb, myMoves, l_pawns, r_pawns, KA);
     promotion_pawns(_cb, myMoves, move_sq, capt_sq, e_pawns);
@@ -482,7 +483,7 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
 #ifndef LEGAL_MOVES_CHECK
 
 static uint64_t
-can_pinned_pieces_move(const chessBoard& _cb, const int KA)
+legal_pinned_pieces_move(const chessBoard& _cb)
 {
     using std::make_pair;
 
@@ -519,7 +520,7 @@ can_pinned_pieces_move(const chessBoard& _cb, const int KA)
 
         pinned_pieces |= first_piece;
 
-        if (KA == 1) return false;
+        if (_cb.KA == 1) return false;
 
         if ((first_piece & ownP) != 0)
         {
@@ -556,96 +557,92 @@ can_pinned_pieces_move(const chessBoard& _cb, const int KA)
         return false;
     };
 
-    if (can_pinned(lSb, plt::rBoard,  rq, erq, '-')) return 1;
-    if (can_pinned(mSb, plt::lBoard,  rq, erq, '-')) return 1;
-    if (can_pinned(lSb, plt::uBoard,  rq, erq, 's')) return 1;
-    if (can_pinned(mSb, plt::dBoard,  rq, erq, 's')) return 1;
-    
-    if (can_pinned(lSb, plt::urBoard, bq, ebq, 'c')) return 1;
-    if (can_pinned(lSb, plt::ulBoard, bq, ebq, 'c')) return 1;
-    if (can_pinned(mSb, plt::drBoard, bq, ebq, 'c')) return 1;
-    if (can_pinned(mSb, plt::dlBoard, bq, ebq, 'c')) return 1;
+    if (   can_pinned(lSb, plt::rBoard,  rq, erq, '-')
+        or can_pinned(mSb, plt::lBoard,  rq, erq, '-')
+        or can_pinned(lSb, plt::uBoard,  rq, erq, 's')
+        or can_pinned(mSb, plt::dBoard,  rq, erq, 's')) return 1;
+
+    if (   can_pinned(lSb, plt::urBoard, bq, ebq, 'c')
+        or can_pinned(lSb, plt::ulBoard, bq, ebq, 'c')
+        or can_pinned(mSb, plt::drBoard, bq, ebq, 'c')
+        or can_pinned(mSb, plt::dlBoard, bq, ebq, 'c')) return 1;
 
     return pinned_pieces;
 }
 
 static bool
-can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
-    const int KA, const uint64_t atk_area)
+legal_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces, const uint64_t atk_area)
 {
-    const int own = OWN;
+    const uint64_t Rank27[2] = {Rank2, Rank7};
+    const uint64_t Rank63[2] = {Rank6, Rank3};
+    const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
+
+    const int own = _cb.color << 3;
     const int emy = own ^ 8;
 
-    const uint64_t pawns = PAWN(own) ^ pinned_pieces;
-    const uint64_t _Ap = ALL_BOTH, free_sq = ~_Ap;
-    const int eps = _cb.csep & 127;
-    const uint64_t _ep = 1ULL << eps;
-    const int kpos = idx_no(KING(own));
-
-    const uint64_t capt_sq = KA == 0 ? ALL(emy) : atk_area & ALL(emy);
-    const uint64_t move_sq = atk_area ^ capt_sq;
-
-    const uint64_t l_pawns = PAWN(own) & RightAttkingPawns;
-    const uint64_t r_pawns = PAWN(own) &  LeftAttkingPawns;
-
-
-    if (_cb.color == 1)
+    const auto legal_enpassant_pawns = [&] (uint64_t l_pawns, uint64_t r_pawns, int ep)
     {
-        if (KA == 0 || (KA == 1 && (plt::pcBoard[1][kpos] & capt_sq)))
-        {
-            if (((l_pawns << 9) & _ep) && en_passant_recheck(eps - 9, _cb))
-                return true;
+        const int kpos = idx_no(KING(own));
+        uint64_t ep_square = 1ULL << ep;
 
-            if (((r_pawns << 7) & _ep) && en_passant_recheck(eps - 7, _cb))
-                return true;
+        if ((ep == 64) or (_cb.KA == 1 and !(plt::pcBoard[_cb.color][kpos] & PAWN(emy))))
+            return false;
+
+        return ((shift(l_pawns, 7 + (own >> 2)) & ep_square) and en_passant_recheck(ep + (2 * emy - 9), _cb))
+            or ((shift(r_pawns, 7 + (emy >> 2)) & ep_square) and en_passant_recheck(ep + (2 * emy - 7), _cb));
+    };
+
+    const auto legal_promotion_pawns = [&] (uint64_t pawns, uint64_t move_sq, uint64_t capt_sq)
+    {
+        uint64_t valid_squares = 0;
+        while (pawns)
+        {
+            const int __pos = next_idx(pawns);
+            valid_squares |= ( plt::pBoard[_cb.color][__pos] & move_sq)
+                           | (plt::pcBoard[_cb.color][__pos] & capt_sq);
         }
 
-        if ((l_pawns << 9) & capt_sq) return true;
-        if ((r_pawns << 7) & capt_sq) return true;
+        return (valid_squares != 0);
+    };
 
-        const uint64_t flask = (pawns << 8) & free_sq;
-        const uint64_t s_pawns = (flask >> 8) & Rank2;
+    
+    uint64_t pawns   = PAWN(own) ^ (PAWN(own) & pinned_pieces);
+    uint64_t e_pawns = pawns & Rank27[_cb.color];
+    uint64_t n_pawns = pawns ^ e_pawns;
+    uint64_t l_pawns = n_pawns & RightAttkingPawns;
+    uint64_t r_pawns = n_pawns &  LeftAttkingPawns;
+    uint64_t s_pawns = (shift(n_pawns, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
 
-        if (KA == 0 && flask) return true;
-        if (KA == 1 && flask)
-        {
-            if (flask & move_sq) return true;
-            if ((s_pawns << 16) & move_sq) return true;
-        }
+    uint64_t free_sq = ~ALL_BOTH;
+    uint64_t enemyP  = ALL(emy);
+    uint64_t capt_sq = (atk_area &  enemyP) * (_cb.KA) + ( enemyP) * (1 - _cb.KA);
+    uint64_t move_sq = (atk_area ^ capt_sq) * (_cb.KA) + (free_sq) * (1 - _cb.KA);
 
-        return false;
-    }
 
-    if (KA == 0 || (KA == 1 && (plt::pcBoard[0][kpos] & capt_sq)))
-    {
-        if (((l_pawns >> 7) & _ep) && en_passant_recheck(eps + 7, _cb))
-            return true;
+    if (legal_enpassant_pawns(l_pawns, r_pawns, _cb.csep & 127))
+        return true;
+    
+    if (legal_promotion_pawns(e_pawns, move_sq, capt_sq))
+        return true;
 
-        if (((r_pawns >> 9) & _ep) && en_passant_recheck(eps + 9, _cb))
-            return true;
-    }
+    uint64_t valid_squares = 0;
+    
+    // Capture Squares
+    valid_squares |= shift(l_pawns, 7 + (own >> 2)) & capt_sq;
+    valid_squares |= shift(r_pawns, 7 + (emy >> 2)) & capt_sq;
 
-    if ((l_pawns >> 7) & capt_sq) return true;
-    if ((r_pawns >> 9) & capt_sq) return true;
+    // Non-Captures Squares
+    valid_squares |= shift(s_pawns, 8) & move_sq;
+    valid_squares |= shift(n_pawns, 8) & move_sq;
 
-    const uint64_t flask = (pawns >> 8) & free_sq;
-    const uint64_t s_pawns = (flask << 8) & Rank7;
-
-    if (KA == 0 && flask) return true;
-    if (KA == 1 && flask)
-    {
-        if (flask & move_sq) return true;
-        if ((s_pawns >> 16) & move_sq) return true;
-    }
-
-    return false;
+    return (valid_squares != 0);
 }
 
 static bool
-can_piece_move(const chessBoard &_cb, const int KA)
+legal_piece_move(const chessBoard &_cb)
 {
-    const auto pinned_pieces = can_pinned_pieces_move(_cb, KA);
-    const auto filter = KA * _cb.Pieces[0] + (1 - KA) * AllSquares;
+    const auto pinned_pieces = legal_pinned_pieces_move(_cb);
+    const auto filter = _cb.KA * _cb.Pieces[0] + (1 - _cb.KA) * AllSquares;
 
     bool legal = static_cast<bool>(pinned_pieces & 1);
 
@@ -653,19 +650,20 @@ can_piece_move(const chessBoard &_cb, const int KA)
 
     const auto canMove = [&] (const auto &__f, uint64_t piece)
     {
-        piece = piece ^ (piece & pinned_pieces);
+        piece &= ~pinned_pieces;
+        uint64_t legal_squares = 0;
 
         while (piece != 0) {
             const int __pos = next_idx(piece);
-            if (__f(__pos, _cb) & filter) return true;
+            legal_squares |= __f(__pos, _cb) & filter;
         }
 
-        return false;
+        return (legal_squares != 0);
     };
 
     const int own = OWN;
 
-    legal = legal ? true : can_pawns_move(_cb, pinned_pieces, KA, _cb.Pieces[0]);
+    legal = legal ? true : legal_pawns_move(_cb, pinned_pieces, _cb.Pieces[0]);
     legal = legal ? true : canMove(KnightMovement, KNIGHT(own));
     legal = legal ? true : canMove(BishopMovement, BISHOP(own));
     legal = legal ? true : canMove(RookMovement  ,   ROOK(own));
@@ -675,7 +673,7 @@ can_piece_move(const chessBoard &_cb, const int KA)
 }
 
 static bool
-canKingMove(const chessBoard& _cb, uint64_t attacked_squares)
+legal_king_move(const chessBoard& _cb, uint64_t attacked_squares)
 {
     const int kpos = idx_no(KING(OWN));
     const uint64_t K_sq = plt::KBoard[kpos];
@@ -769,29 +767,6 @@ f_prune_move(MoveType move, chessBoard& _cb)
 
 #ifndef GENERATOR
 
-/* 
-MoveList generateMoves(const chessBoard &board, bool qs_only) {
-    
-    MoveList myMoves;
-
-    uint64_t Attacked_sq = generate_AttackedSquares(board);          // Generate all squares attacked by opp. pieces
-    KAinfo ka_pieces = findkingAttackers(board, Attacked_sq);   // Find all opp. pieces attacking our king
-
-    myMoves.set(board.color, ka_pieces.attackers, qs_only);    // Store all extra info besides legal moves
-
-    if (ka_pieces.attackers == 0)                               // Gen. all legal moves if king is not in check
-        KA0_pieceMovement(board, myMoves);
-
-    if (ka_pieces.attackers == 1)                               // Gen. all legal moves if king is in check
-        KA1_pieceMovement(board, ka_pieces, myMoves);
-
-    KingMoves(board, myMoves, Attacked_sq);                     // Gen. all legal moves for King
-    return myMoves;
-
-}
-*/
-
-
 
 bool
 has_legal_moves(chessBoard& _cb)
@@ -799,11 +774,11 @@ has_legal_moves(chessBoard& _cb)
     _cb.remove_movegen_extra_data();
 
     king_attackers(_cb);
-    if ((_cb.KA < 2) and can_piece_move(_cb, _cb.KA))
+    if ((_cb.KA < 2) and legal_piece_move(_cb))
         return true;
 
     _cb.Pieces[8] = generate_AttackedSquares(_cb);
-    return canKingMove(_cb, _cb.Pieces[8]);
+    return legal_king_move(_cb, _cb.Pieces[8]);
 }
 
 MoveList
@@ -849,6 +824,7 @@ generate_moves(chessBoard& _cb, bool qs_only)
     _cb.remove_movegen_extra_data();
     return myMoves;
 }
+
 
 #endif
 
