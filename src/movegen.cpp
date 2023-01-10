@@ -265,7 +265,7 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
     
 
     const auto pins_check = [&] (const auto &__f, const uint64_t *table,
-            uint64_t sliding_piece, uint64_t emy_sliding_piece, char pawn)
+        uint64_t sliding_piece, uint64_t emy_sliding_piece, char pawn)
     {
         const uint64_t pieces = table[kpos] & _Ap;
         const uint64_t first_piece  = __f(pieces);
@@ -287,13 +287,13 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
             return add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
 
-        const int eps   = _cb.csep & 127;
-        const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
-
         const uint64_t Rank63[2] = {Rank6, Rank3};
 
-        uint64_t n_pawn = first_piece;
-        uint64_t s_pawn = (shift(n_pawn, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
+        const int eps    = _cb.csep & 127;
+        const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
+
+        uint64_t n_pawn  = first_piece;
+        uint64_t s_pawn  = (shift(n_pawn, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
         uint64_t free_sq = ~ALL_BOTH;
 
         if (pawn == 's' and (first_piece & PAWN(own)))
@@ -483,7 +483,7 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
 #ifndef LEGAL_MOVES_CHECK
 
 static uint64_t
-legal_pinned_pieces_move(const chessBoard& _cb)
+legal_pinned_pieces(const chessBoard& _cb)
 {
     using std::make_pair;
 
@@ -509,43 +509,38 @@ legal_pinned_pieces_move(const chessBoard& _cb)
             const uint64_t ownP, const uint64_t emyP, const char pawn) -> bool
     {
         const uint64_t pieces = table[kpos] & _Ap;
-        const uint64_t first_piece = __f(pieces);
+        const uint64_t first_piece  = __f(pieces);
         const uint64_t second_piece = __f(pieces ^ first_piece);
 
         const int index_f = idx_no(first_piece);
         const int index_s = idx_no(second_piece);
 
-        if ((first_piece & ALL(own)) == 0 ||
-            (second_piece & emyP) == 0) return false;
+        if (  !(first_piece & ALL(own))
+            or (!(second_piece & emyP))) return false;
 
         pinned_pieces |= first_piece;
 
         if (_cb.KA == 1) return false;
 
         if ((first_piece & ownP) != 0)
-        {
-            const uint64_t dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
-            return dest_sq != 0;
-        }
+            return ((table[kpos] ^ table[index_s] ^ first_piece) != 0);
 
-        const int color = _cb.color;
-        const int side  = 2 * color - 1;
-        const int eps   = _cb.csep & 127;
+
+        const uint64_t Rank63[2] = {Rank6, Rank3};
+
+        const int eps    = _cb.csep & 127;
+        const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
+
+        uint64_t n_pawn  = first_piece;
+        uint64_t s_pawn  = (shift(n_pawn, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
+        uint64_t free_sq = ~ALL_BOTH;
 
         if (pawn == 's' && (first_piece & PAWN(own)))
-        {
-            uint64_t dest_sq = plt::pBoard[color][index_f] & (~_Ap);
-            uint64_t second_rank = color == 1 ? Rank2 : Rank7;
-
-            if (dest_sq && (first_piece & second_rank))
-                dest_sq |= plt::pBoard[color][index_f + 8 * side] & (~_Ap);
-            
-            return dest_sq != 0;
-        }
+            return ((shift(n_pawn, 8) | shift(s_pawn, 8)) & free_sq) != 0;
 
         if (pawn == 'c' && (first_piece & PAWN(own)))
         {
-            uint64_t capt_sq = plt::pcBoard[color][index_f];
+            uint64_t capt_sq = plt::pcBoard[_cb.color][index_f];
             uint64_t dest_sq = capt_sq & second_piece;
 
             if (eps != 64 && (table[kpos] & capt_sq & (1ULL << eps)) != 0)
@@ -641,7 +636,7 @@ legal_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces, const uint
 static bool
 legal_piece_move(const chessBoard &_cb)
 {
-    const auto pinned_pieces = legal_pinned_pieces_move(_cb);
+    const auto pinned_pieces = legal_pinned_pieces(_cb);
     const auto filter = _cb.KA * _cb.Pieces[0] + (1 - _cb.KA) * AllSquares;
 
     bool legal = static_cast<bool>(pinned_pieces & 1);
