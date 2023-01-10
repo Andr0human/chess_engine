@@ -11,7 +11,7 @@
 
 #ifndef MOVEGEN_UTILS
 
-inline MoveType
+static inline MoveType
 gen_move_priority(const chessBoard& __b, const int ip, const int fp)
 {
     int res = 0;
@@ -23,7 +23,7 @@ gen_move_priority(const chessBoard& __b, const int ip, const int fp)
     return res;
 }
 
-inline MoveType
+static inline MoveType
 gen_pawn_move_priority(const chessBoard& __b, const int ip, const int fp)
 {
     int res = 5;
@@ -34,7 +34,7 @@ gen_pawn_move_priority(const chessBoard& __b, const int ip, const int fp)
     return res;
 }
 
-inline MoveType
+static inline MoveType
 encode_move(const chessBoard &__b, const int ip, const int fp, const int pr)
 {
     const int pt  = __b.board[ip] & 7;
@@ -47,7 +47,7 @@ encode_move(const chessBoard &__b, const int ip, const int fp, const int pr)
     return gen_move;
 }
 
-bool
+static bool
 en_passant_recheck(int ip, const chessBoard& _cb)
 {
     const int own = _cb.color << 3;
@@ -70,7 +70,7 @@ en_passant_recheck(int ip, const chessBoard& _cb)
     return true;
 }
 
-inline void
+static inline void
 Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
@@ -94,7 +94,7 @@ Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoard &_cb, Mov
     }
 }
 
-inline void
+static inline void
 Add_m_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
@@ -112,7 +112,7 @@ Add_m_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMove
     }
 }
 
-inline void
+static inline void
 Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
@@ -142,7 +142,7 @@ Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMov
 
 #ifndef PAWNS
 
-inline void
+static inline void
 enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
     const uint64_t l_pawns, const uint64_t r_pawns, const int KA)
 {
@@ -164,7 +164,7 @@ enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
         Add_m_Pawns(eps + (2 * emy - 7), _ep, _cb, myMoves);
 }
 
-inline void
+static inline void
 promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
     const uint64_t move_sq, const uint64_t capt_sq, uint64_t pawns)
 {
@@ -178,7 +178,7 @@ promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
 }
 
 
-inline void
+static inline void
 pawn_movement(const chessBoard &_cb, MoveList &myMoves,
     const uint64_t pin_pieces, const int KA, const uint64_t atk_area)
 {
@@ -215,35 +215,35 @@ pawn_movement(const chessBoard &_cb, MoveList &myMoves,
 #endif
 
 
-inline uint64_t
+static inline uint64_t
 KnightMovement(int idx, const chessBoard& _cb)
 {
     const uint64_t dest_sqaures = knight_atk_sq(idx, 0);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-inline uint64_t
+static inline uint64_t
 BishopMovement(int idx, const chessBoard& _cb)
 {
     const uint64_t dest_sqaures = bishop_atk_sq(idx, ALL_BOTH);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-inline uint64_t
+static inline uint64_t
 RookMovement(int idx, const chessBoard& _cb)
 {
     const uint64_t dest_sqaures = rook_atk_sq(idx, ALL_BOTH);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-inline uint64_t
+static inline uint64_t
 QueenMovement(int idx, const chessBoard &_cb)
 {
     const uint64_t dest_sqaures = queen_atk_sq(idx, ALL_BOTH);
     return dest_sqaures ^ (dest_sqaures & ALL(OWN));
 }
 
-uint64_t
+static uint64_t
 pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
 {
     const int own = _cb.color << 3;
@@ -334,7 +334,7 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
     return pinned_pieces;
 } 
 
-void
+static void
 piece_movement(const chessBoard &_cb, MoveList &myMoves, const int KA)
 {
     const uint64_t pinned_pieces = pinned_pieces_list(_cb, myMoves, KA);
@@ -342,7 +342,7 @@ piece_movement(const chessBoard &_cb, MoveList &myMoves, const int KA)
 
     const auto Add_Vaild_Dest_Sq = [&] (const auto &__f, uint64_t piece)
     {
-        piece ^= (piece & pinned_pieces);
+        piece &= ~pinned_pieces;
         while (piece != 0)
         {
             const int __pos = next_idx(piece);
@@ -363,7 +363,7 @@ piece_movement(const chessBoard &_cb, MoveList &myMoves, const int KA)
 
 #ifndef KING_MOVE_GENERATION
 
-uint64_t
+static uint64_t
 generate_AttackedSquares(const chessBoard& _cb)
 {
     uint64_t ans = 0;
@@ -389,7 +389,7 @@ generate_AttackedSquares(const chessBoard& _cb)
     return ans;
 }
 
-void
+static void
 king_attackers(chessBoard &_cb)
 {    
     const uint64_t attacked_sq = _cb.Pieces[8];
@@ -436,7 +436,7 @@ king_attackers(chessBoard &_cb)
     _cb.Pieces[0] = attk_area;
 }
 
-void
+static void
 KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
 {
     const auto add_castle_move = [&_cb, &myMoves] (const int ip, const int fp)
@@ -444,20 +444,20 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
         const int pt = 6;
         const int priority = 20 << 21;
         const int side = _cb.color << 20;
-        const int enc_move = priority + side + (pt << 12) + (fp << 6) + ip;
+        const MoveType enc_move = priority + side + (pt << 12) + (fp << 6) + ip;
         myMoves.Add(enc_move);
     };
 
     const int kpos = idx_no(KING(OWN));
     const uint64_t K_sq = plt::KBoard[kpos];
-    const uint64_t ans = K_sq ^ (K_sq & (ALL(OWN) | Attacked_Sq));
+    const uint64_t ans = K_sq & (~(ALL(OWN) | Attacked_Sq));
 
     add_move_to_list(kpos, ans, _cb, myMoves);
 
     if (!(_cb.csep & 1920) || ((1ULL << kpos) & Attacked_Sq)) return;
 
     const uint64_t Apieces = ALL_BOTH;
-    const uint64_t enemy_attacked_sqs = Apieces | Attacked_Sq;
+    const uint64_t covered_squares = Apieces | Attacked_Sq;
 
     const int shift         = 56 * (_cb.color ^ 1);
     const uint64_t l_mid_sq = 2ULL << shift;
@@ -468,11 +468,11 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
     const uint64_t queen_side = 128 << (2 * _cb.color);
 
     // Can castle king_side  and no pieces are in-between
-    if ((_cb.csep & king_side) and !(r_sq & enemy_attacked_sqs))
+    if ((_cb.csep & king_side) and !(r_sq & covered_squares))
         add_castle_move(kpos, 6 + shift);
     
     // Can castle queen_side and no pieces are in-between
-    if ((_cb.csep & queen_side) and !(Apieces & l_mid_sq) and !(l_sq & enemy_attacked_sqs))
+    if ((_cb.csep & queen_side) and !(Apieces & l_mid_sq) and !(l_sq & covered_squares))
         add_castle_move(kpos, 2 + shift);
 }
 
@@ -481,7 +481,7 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
 
 #ifndef LEGAL_MOVES_CHECK
 
-uint64_t
+static uint64_t
 can_pinned_pieces_move(const chessBoard& _cb, const int KA)
 {
     using std::make_pair;
@@ -569,7 +569,7 @@ can_pinned_pieces_move(const chessBoard& _cb, const int KA)
     return pinned_pieces;
 }
 
-bool
+static bool
 can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
     const int KA, const uint64_t atk_area)
 {
@@ -641,7 +641,7 @@ can_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces,
     return false;
 }
 
-bool
+static bool
 can_piece_move(const chessBoard &_cb, const int KA)
 {
     const auto pinned_pieces = can_pinned_pieces_move(_cb, KA);
@@ -674,33 +674,34 @@ can_piece_move(const chessBoard &_cb, const int KA)
     return legal;
 }
 
-uint64_t
-canKingMove(const chessBoard& _cb, uint64_t Attacked_Squares)
+static bool
+canKingMove(const chessBoard& _cb, uint64_t attacked_squares)
 {
-    const uint64_t _Ap = ALL_BOTH;
     const int kpos = idx_no(KING(OWN));
-    uint64_t ans, Ksquares = plt::KBoard[kpos], opd = _Ap | Attacked_Squares;
-    ans = Ksquares ^ (Ksquares & (ALL(OWN) | Attacked_Squares));
+    const uint64_t K_sq = plt::KBoard[kpos];
+
+    const uint64_t legal_squares = K_sq & (~(ALL(OWN) | attacked_squares));
+
+    // If no castling is possible or king is attacked by a enemy piece
+    if (!(_cb.csep & 1920) or ((1ULL << kpos) & attacked_squares))
+        return (legal_squares != 0);
+
+    const uint64_t Apieces = ALL_BOTH;
+    const uint64_t covered_squares = Apieces | attacked_squares;
+
+    const int shift         = 56 * (_cb.color ^ 1);
+    const uint64_t l_mid_sq = 2ULL << shift;
+    const uint64_t r_sq     = 96ULL << shift;
+    const uint64_t l_sq     = 12ULL << shift;
+
+    const uint64_t king_side  = 256 << (2 * _cb.color);
+    const uint64_t queen_side = 128 << (2 * _cb.color);
     
-    if (ans) return 1;
-    if (!(_cb.csep & 1920)) return 0;
-
-    if (_cb.color == 1 && !((1ULL << kpos) & Attacked_Squares))
-    {
-        if (_cb.csep & 1024)
-            if (!(96 & opd)) return 1;
-        if (_cb.csep & 512)
-            if (!(_Ap & 2) && !(12 & opd)) return 1;
-    }
-    if (_cb.color == 0 && !((1ULL << kpos) & Attacked_Squares))
-    {
-        if (_cb.csep & 256)
-            if (!(opd & 6917529027641081856ULL)) return 1;
-        if (_cb.csep & 128)
-            if (!(_Ap & 144115188075855872ULL) && !(opd & 864691128455135232ULL)) return 1;
-    }
-
-    return 0;
+    // Legal moves possible if king can castle (king or queen) side
+    // and no squares between king and rook is attacked by enemy piece
+    // or occupied by own piece. 
+    return ((_cb.csep &  king_side) and !(r_sq & covered_squares))
+        or ((_cb.csep & queen_side) and !(Apieces & l_mid_sq) and !(l_sq & covered_squares));
 }
 
 #endif
@@ -739,7 +740,7 @@ interesting_move(MoveType move, chessBoard& _cb)
     if ((pt & 7) == 6 && std::abs(fp - ip) == 2) return true;
 
     _cb.MakeMove(move);
-    bool res = Incheck(_cb);
+    bool res = in_check(_cb);
     _cb.UnmakeMove();
 
     return res;
@@ -757,7 +758,7 @@ f_prune_move(MoveType move, chessBoard& _cb)
         if (((1ULL << fp) & Rank18)) return true;
     }
     _cb.MakeMove(move);
-    bool _in_check = Incheck(_cb);
+    bool _in_check = in_check(_cb);
     _cb.UnmakeMove();
     if (_in_check) return true;
 
@@ -791,22 +792,25 @@ MoveList generateMoves(const chessBoard &board, bool qs_only) {
 */
 
 
-// Returns true if board position has at least one legal move.
+
 bool
-has_legal_moves(chessBoard &_cb)
+has_legal_moves(chessBoard& _cb)
 {
     _cb.remove_movegen_extra_data();
 
     king_attackers(_cb);
-    if (_cb.KA < 2 && can_piece_move(_cb, _cb.KA)) return true;
+    if ((_cb.KA < 2) and can_piece_move(_cb, _cb.KA))
+        return true;
 
     _cb.Pieces[8] = generate_AttackedSquares(_cb);
     return canKingMove(_cb, _cb.Pieces[8]);
 }
 
 MoveList
-generate_moves(chessBoard &_cb, bool qs_only)
+generate_moves(chessBoard& _cb, bool qs_only)
 {
+    //TODO: Add functionality to generate captures only
+
     /**
      * @brief 
      * enemy_attacked_sq => represents all the squares on board that are attacked by
