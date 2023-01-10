@@ -190,17 +190,17 @@ pawn_movement(const chessBoard &_cb, MoveList &myMoves,
     const int own = _cb.color << 3;
     const int emy = own ^ 8;
 
-    const auto pawns   = PAWN(own) ^ (PAWN(own) & pin_pieces);
-    const auto e_pawns = pawns & Rank27[_cb.color];
-    const auto n_pawns = pawns ^ e_pawns;
-    const auto l_pawns = n_pawns & RightAttkingPawns;
-    const auto r_pawns = n_pawns &  LeftAttkingPawns;
-    const auto s_pawns = (shift(n_pawns, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
+    uint64_t pawns   = PAWN(own) & (~pin_pieces);
+    uint64_t e_pawns = pawns & Rank27[_cb.color];
+    uint64_t n_pawns = pawns ^ e_pawns;
+    uint64_t l_pawns = n_pawns & RightAttkingPawns;
+    uint64_t r_pawns = n_pawns &  LeftAttkingPawns;
+    uint64_t s_pawns = (shift(n_pawns, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
 
-    const auto free_sq = ~ALL_BOTH;
-    const auto enemyP  = ALL(emy);
-    const auto capt_sq = (atk_area &  enemyP) * (KA) + ( enemyP) * (1 - KA);
-    const auto move_sq = (atk_area ^ capt_sq) * (KA) + (free_sq) * (1 - KA);
+    uint64_t free_sq = ~ALL_BOTH;
+    uint64_t enemyP  = ALL(emy);
+    uint64_t capt_sq = (atk_area &  enemyP) * (KA) + ( enemyP) * (1 - KA);
+    uint64_t move_sq = (atk_area ^ capt_sq) * (KA) + (free_sq) * (1 - KA);
 
 
     enpassant_pawns(_cb, myMoves, l_pawns, r_pawns, KA);
@@ -260,51 +260,53 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
 
     uint64_t pinned_pieces = 0;
 
-    if ((plt::line_Board[kpos] & erq) == 0 &&
+    if ((plt::line_Board[kpos] & erq) == 0 and
         (plt::diag_Board[kpos] & ebq) == 0) return 0ULL;
     
 
     const auto pins_check = [&] (const auto &__f, const uint64_t *table,
-            uint64_t ownP, uint64_t emyP, char pawn)
+            uint64_t sliding_piece, uint64_t emy_sliding_piece, char pawn)
     {
         const uint64_t pieces = table[kpos] & _Ap;
-        const uint64_t first_piece = __f(pieces);
+        const uint64_t first_piece  = __f(pieces);
         const uint64_t second_piece = __f(pieces ^ first_piece);
 
         const int index_f = idx_no(first_piece);
         const int index_s = idx_no(second_piece);
 
-        if ((first_piece & ALL(own)) == 0 ||
-            (second_piece & emyP) == 0) return;
+        if (   !(first_piece  & ALL(own))
+            or !(second_piece & emy_sliding_piece)) return;
 
         pinned_pieces |= first_piece;
 
         if (KA == 1) return;
 
-        if ((first_piece & ownP) != 0)
+        if ((first_piece & sliding_piece) != 0)
         {
             const uint64_t dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
-            add_move_to_list(index_f, dest_sq, _cb, myMoves);
+            return add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
-        
-        const int color = _cb.color;
-        const int side  = 2 * color - 1;
+
         const int eps   = _cb.csep & 127;
+        const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
 
-        if (pawn == 's' && (first_piece & PAWN(own)))
+        const uint64_t Rank63[2] = {Rank6, Rank3};
+
+        uint64_t n_pawn = first_piece;
+        uint64_t s_pawn = (shift(n_pawn, 8) & (~ALL_BOTH)) & Rank63[_cb.color];
+        uint64_t free_sq = ~ALL_BOTH;
+
+        if (pawn == 's' and (first_piece & PAWN(own)))
         {
-            uint64_t dest_sq = plt::pBoard[color][index_f] & (~_Ap);
-            uint64_t second_rank = color == 1 ? Rank2 : Rank7;
+            uint64_t dest_sq = (shift(n_pawn, 8) | shift(s_pawn, 8)) & free_sq;
 
-            if (dest_sq && (first_piece & second_rank))
-                dest_sq |= plt::pBoard[color][index_f + 8 * side] & (~_Ap);
-            
-            add_move_to_list(index_f, dest_sq, _cb, myMoves);
+            //TODO: Replace below function for pawn-specific one.
+            return add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
 
-        if (pawn == 'c' && (first_piece & PAWN(own)))
+        if (pawn == 'c' and (first_piece & PAWN(own)))
         {
-            uint64_t capt_sq = plt::pcBoard[color][index_f];
+            uint64_t capt_sq = plt::pcBoard[_cb.color][index_f];
             uint64_t dest_sq = capt_sq & second_piece;
 
             if (eps != 64 && (table[kpos] & capt_sq & (1ULL << eps)) != 0)
@@ -315,8 +317,6 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
             else
                 add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
-
-        return;
     };
 
 
