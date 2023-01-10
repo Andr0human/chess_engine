@@ -11,13 +11,13 @@
 #define OWN ((_cb.color) << 3)
 #define EMY ((_cb.color ^ 1) << 3)
 
-#define PAWN(x)   _cb.Pieces[x + 1]
-#define BISHOP(x) _cb.Pieces[x + 2]
-#define KNIGHT(x) _cb.Pieces[x + 3]
-#define ROOK(x)   _cb.Pieces[x + 4]
-#define QUEEN(x)  _cb.Pieces[x + 5]
-#define KING(x)   _cb.Pieces[x + 6]
-#define ALL(x)    _cb.Pieces[x + 7]
+#define PAWN(x)   _cb.Pieces[(x) + 1]
+#define BISHOP(x) _cb.Pieces[(x) + 2]
+#define KNIGHT(x) _cb.Pieces[(x) + 3]
+#define ROOK(x)   _cb.Pieces[(x) + 4]
+#define QUEEN(x)  _cb.Pieces[(x) + 5]
+#define KING(x)   _cb.Pieces[(x) + 6]
+#define ALL(x)    _cb.Pieces[(x) + 7]
 #define ALL_BOTH  (_cb.Pieces[15] | _cb.Pieces[7])
 
 
@@ -67,7 +67,7 @@ class MoveList
     : __begin(pMoves), __end(pMoves), pColor(1), cpt_only(false) {}
 
     inline void
-    set(int t_cl, bool qs_only)
+    set(int t_cl, bool qs_only) noexcept
     {
         pColor = t_cl;
         cpt_only = qs_only;
@@ -94,37 +94,89 @@ class MoveList
 
 
 
+/**
+ * @brief CheckData stores squares for which if pieces lands
+ *        results in a check for the enemy king.
+ */
+class CheckData
+{
+    public:
+    // (Queen + Rook) landing results in a check
+    uint64_t LineSquares;
+
+    // (Queen + Bishop) landing results in a check
+    uint64_t DiagonalSquares;
+
+    // Knight landing results in a check
+    uint64_t KnightSquares;
+
+    // Pawns landing results in a check
+    uint64_t PawnSquares;
+
+    inline CheckData() {}
+
+    inline CheckData(uint64_t __rook, uint64_t __bishop, uint64_t __knight, uint64_t __pawn)
+    : LineSquares(__rook), DiagonalSquares(__bishop), KnightSquares(__knight), PawnSquares(__pawn) {}
+
+    inline uint64_t
+    squares_for_piece(const PieceType piece)
+    {
+        if (piece == 1)
+            return PawnSquares;
+        if (piece == 2)
+            return DiagonalSquares;
+        if (piece == 3)
+            return KnightSquares;
+        if (piece == 4)
+            return LineSquares;
+        return (LineSquares | DiagonalSquares);
+    }
+};
+
+
+
+
+
+
 // Returns and removes the lsb_idx
-inline int next_idx(uint64_t &__n) {
-    const int res = __builtin_ctzll(__n);
-    __n &= __n - 1;
+inline int
+next_idx(uint64_t &__x)
+{
+    const int res = __builtin_ctzll(__x);
+    __x &= __x - 1;
     return res;
 }
 
 // Prints all the info on the encoded-move
-void decode_move(const MoveType encoded_move);
+void
+decode_move(const MoveType encoded_move);
 
 
 
 
 
 
-inline MoveType gen_base_move(const chessBoard& _cb, int ip);
+inline MoveType
+gen_base_move(const chessBoard& _cb, int ip);
 
-inline void add_cap_moves(const int ip, uint64_t endSquares, const MoveType base,
+inline
+void add_cap_moves(const int ip, uint64_t endSquares, const MoveType base,
     const chessBoard& _cb, MoveList& myMoves);
 
-inline void add_quiet_moves(uint64_t endSquares, const MoveType base,
+inline void
+add_quiet_moves(uint64_t endSquares, const MoveType base,
     const chessBoard& _cb, MoveList& myMoves);
 
-void add_move_to_list(const int ip, uint64_t endSquares,
+void
+add_move_to_list(const int ip, uint64_t endSquares,
     const chessBoard& _cb, MoveList& myMoves);
 
 
 
 
 
-void add_quiet_pawn_moves(uint64_t endSquares, const int shift,
+void
+add_quiet_pawn_moves(uint64_t endSquares, const int shift,
     const chessBoard& _cb, MoveList& myMoves);
 
 
@@ -135,24 +187,30 @@ void add_quiet_pawn_moves(uint64_t endSquares, const int shift,
 
 
 // Returns all squares attacked by all pawns from side to move
-uint64_t pawn_atk_sq(const chessBoard& _cb, const int enemy);
+uint64_t
+pawn_atk_sq(const chessBoard& _cb, const int enemy);
 
 // Returns all squares attacked by bishop on index __pos
-uint64_t bishop_atk_sq(const int __pos, const uint64_t _Ap);
+uint64_t
+bishop_atk_sq(const int __pos, const uint64_t _Ap);
 
 // Returns all squares attacked by knight on index __pos
-uint64_t knight_atk_sq(const int __pos, const uint64_t _Ap);
+uint64_t
+knight_atk_sq(const int __pos, const uint64_t _Ap);
 
 // Returns all squares attacked by rook on index __pos
-uint64_t rook_atk_sq(const int __pos, const uint64_t _Ap);
+uint64_t
+rook_atk_sq(const int __pos, const uint64_t _Ap);
 
 // Returns all squares attacked by queen on index __pos
-uint64_t queen_atk_sq(const int __pos, const uint64_t _Ap);
+uint64_t
+queen_atk_sq(const int __pos, const uint64_t _Ap);
 
 
 
 
-
+CheckData
+find_check_squares(const chessBoard& _cb, bool own_king = true);
 
 
 /**
@@ -162,7 +220,18 @@ uint64_t queen_atk_sq(const int __pos, const uint64_t _Ap);
  * @return true 
  * @return false 
  */
-bool Incheck(const chessBoard& _cb);
+
+/**
+ * @brief Checks if side to move is in check
+ * 
+ * @param _cb 
+ * @param own_king To check for king for side-to-move or opposite.
+ * @return true 
+ * @return false 
+ */
+bool
+in_check(const chessBoard& _cb, bool own_king = true);
+
 
 /**
  * @brief Returns string readable move from encoded-move.
@@ -172,7 +241,9 @@ bool Incheck(const chessBoard& _cb);
  * @param _cb board position
  * @return string 
  */
-string print(MoveType move, chessBoard& _cb);
+string
+print(const MoveType move, const chessBoard& _cb);
+
 
 /**
  * @brief Prints all encoded-moves in list to human-readable strings
@@ -180,7 +251,8 @@ string print(MoveType move, chessBoard& _cb);
  * @param _cb board position
  * @param myMoves Movelist for board positions.
  */
-void print(const MoveList& myMoves, chessBoard& _cb);
+void
+print(const MoveList& myMoves, const chessBoard& _cb);
 
 
 

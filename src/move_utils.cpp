@@ -1,5 +1,4 @@
 
-
 #include "move_utils.h"
 
 
@@ -155,7 +154,7 @@ knight_atk_sq(const int __pos, const uint64_t _Ap)
 uint64_t
 rook_atk_sq(const int __pos, const uint64_t _Ap)
 {
-    const auto area = [__pos, _Ap] (const uint64_t *table, const auto &__func)
+    const auto area = [__pos, _Ap] (const uint64_t *table, const auto& __func)
     { return table[__func(table[__pos] & _Ap)]; };
 
     return plt::line_Board[__pos] ^
@@ -169,151 +168,180 @@ queen_atk_sq(const int __pos, const uint64_t _Ap)
 
 
 
-bool
-Incheck(const chessBoard& _cb)
+
+CheckData
+find_check_squares(const chessBoard& _cb, bool own_king)
 {
-    const int kpos = idx_no(KING(OWN));
-    uint64_t res, Apieces = ALL_BOTH;
-    const int emy = EMY;
-    
-    // (Rook + Queen) Check
-    res = rook_atk_sq(kpos, Apieces);
-    if ((res & (ROOK(emy) ^ QUEEN(emy)))) return true;
+    // int kpos = own_king ? idx_no(KING(OWN)) : idx_no(KING(EMY));
 
-    // (Bishop + Queen) Check
-    res = bishop_atk_sq(kpos, Apieces);
-    if ((res & (BISHOP(emy) ^ QUEEN(emy)))) return true;
+    int own_side = _cb.color ^ (!own_king);
+    int kpos = idx_no(KING(own_side << 3));
 
-    // Knight Check
-    res = knight_atk_sq(kpos, Apieces);
-    if ((res & KNIGHT(emy))) return true;
+    uint64_t Apieces = ALL_BOTH;
 
-    // Pawn Check
-    res = plt::pcBoard[_cb.color][kpos];
-    if ((res & PAWN(emy))) return true;
+    uint64_t res1 = rook_atk_sq(kpos, Apieces);
+    uint64_t res2 = bishop_atk_sq(kpos, Apieces);
+    uint64_t res3 = knight_atk_sq(kpos, Apieces);
+    uint64_t res4 = plt::pcBoard[own_side][kpos];
 
-    return false;
+    return CheckData(res1, res2, res3, res4);
 }
+
+
+
+
+
+// Returns if the king for the side to move is in check.
+bool
+in_check(const chessBoard& _cb, bool own_king)
+{
+    const int emy = (_cb.color ^ own_king) << 3;
+    CheckData check = find_check_squares(_cb, own_king);
+
+    return (check.LineSquares     & (  ROOK(emy) | QUEEN(emy)))
+        or (check.DiagonalSquares & (BISHOP(emy) | QUEEN(emy)))
+        or (check.KnightSquares   &  KNIGHT(emy) )
+        or (check.PawnSquares     &    PAWN(emy) );
+}
+
 
 string
-print(MoveType move, chessBoard& _cb)
-{    
-    string res;
-    if (!move) return "null";
+print(const MoveType move, const chessBoard& _cb)
+{
+    // In case of no move, return null
+    if (move == 0)
+        return string("null");
 
-    const int ip = move & 63, fp = (move >> 6) & 63;
-    const int ip_x = ip & 7, fp_x = fp & 7;
-    const int ip_y = (ip - ip_x) >> 3, fp_y = (fp - fp_x) >> 3;
-    const int _pt = ((move >> 12) & 7), _cpt = ((move >> 15) & 7);
-    const int color = (_cb.board[ip] > 8 ? 1 : 0);
-    const uint64_t Apieces = ALL_BOTH;
+    const auto index_to_row = [] (int row)
+    { return string(1, static_cast<char>(row + 49)); };
 
-    const auto idx_to_row = [](int value)
-    { return (char)('a' + value); };
+    const auto index_to_col = [] (int col)
+    { return string(1, static_cast<char>(col + 97)); };
+
+    const auto index_to_square = [&] (int row, int col)
+    { return index_to_col(col) + index_to_row(row); };
+
     
-    const auto idx_to_col = [](int value)
-    { return (char)('1' + value); };
+    const int  ip =  move       & 63;
+    const int  fp = (move >> 6) & 63;
+
+    const int ip_col = ip & 7;
+    const int fp_col = fp & 7;
+
+    const int ip_row = (ip - ip_col) >> 3;
+    const int fp_row = (fp - fp_col) >> 3;
+
+    const int  pt = ((move >> 12) & 7);
+    const int cpt = ((move >> 15) & 7);
+
+
+    CheckData checks = find_check_squares(_cb, false);
+    bool move_gives_check = checks.squares_for_piece(pt) & (1ULL << fp);
+
+
+    uint64_t (*check_for_piece[4])(int, uint64_t) =
+        {bishop_atk_sq, knight_atk_sq, rook_atk_sq, queen_atk_sq};
+
     
-    const auto add_to_string = [&res](char a, char b)
+    const char piece_names[4] =
+        {'B', 'N', 'R', 'Q'};
+
+    const auto print_move_pawn = [&] ()
     {
-        res.push_back(a);
-        res.push_back(b);
-    };
-    
-    const auto fill_move = [&](uint64_t area, char piece)
-    {
-        bool row = true, col = true, found = false;
-
-        res = piece;
-        area &= _cb.Pieces[OWN + _pt];
-        area ^= 1ULL << ip;
-
-        while (area)
-        {
-            found = true;
-            const int idx = next_idx(area);
-            const int x = idx & 7, y = (idx - x) >> 3;
-            if (x == ip_x) col = false;
-            if (y == ip_y) row = false;
-        }
-        if (found)
-        {
-            if (col) res += idx_to_row(ip_x);
-            else if (row) res += idx_to_col(ip_y);
-            else add_to_string(idx_to_row(ip_x), idx_to_col(ip_y));
-        }
-        if (_cpt) res += 'x';
-        add_to_string(idx_to_row(fp_x), idx_to_col(fp_y));
-    };
-
-    // Can ruin the whole search if passed an invalid move.
-    _cb.MakeMove(move);
-    bool checks = Incheck(_cb);
-    _cb.UnmakeMove();
-    
-    if (_pt == 1)
-    {
-        bool enp = false;
-        if (std::abs(fp_x - ip_x) == 1 && !_cpt) enp = true;
+        string pawn_captures
+            = (std::abs(ip_col - fp_col) == 1)
+            ? (index_to_col(ip_col) + "x") : "";
         
-        if (_cpt || enp)
-            add_to_string(idx_to_row(ip_x), 'x');
+        string gives_check = move_gives_check ? "+" : "";
+        string dest_square = index_to_square(fp_row, fp_col);
 
-        add_to_string(idx_to_row(fp_x), idx_to_col(fp_y));
+        // No promotion
+        if (((1ULL << fp) & Rank18) == 0)
+            return pawn_captures + dest_square + gives_check;
 
-        int ppt = -1;
-        if ((color == 1 && fp_y == 7) || (color == 0 && fp_y == 0))
-            ppt = (move >> 18) & 3;
-        if (!ppt) res += "=B";
-        else if (ppt == 1) res += "=N";
-        else if (ppt == 2) res += "=R";
-        else if (ppt == 3) res += "=Q";
-    }
-    else if (_pt == 2)
+        int ppt = (move >> 18) & 3;
+        string promoted_piece = string("=") + string(1, piece_names[ppt]);
+
+        bool ppt_gives_check = checks.squares_for_piece(ppt + 2) & (1ULL << fp);
+
+        return pawn_captures + dest_square
+             + promoted_piece
+             + (ppt_gives_check ? "+" : "");
+    };
+
+    const auto print_move_king = [&] (const string piece_name)
     {
-        fill_move(bishop_atk_sq(fp, Apieces), 'B');
-    }
-    else if (_pt == 3)
+        // Castling
+        if (std::abs(ip_col - fp_col) == 2)
+            return ((1ULL << fp) & FileG) ? string("O-O") : string("O-O-O");
+        
+        string captures = (cpt != 0) ? "x" : "";
+
+        return piece_name + captures + index_to_square(fp_row, fp_col);
+    };
+
+    const auto print_move_piece = [&] (const auto& __func, string piece_name)
     {
-        fill_move(knight_atk_sq(fp, Apieces), 'N');
-    }
-    else if (_pt == 4)
-    {
-        fill_move(rook_atk_sq(fp, Apieces), 'R');
-    }
-    else if (_pt == 5)
-    {
-        fill_move(queen_atk_sq(fp, Apieces), 'Q');
-    }
-    else if (_pt == 6)
-    {
-        if (abs(fp_x - ip_x) == 2)
+        string captures    = (cpt != 0)       ? "x" : "";
+        string gives_check = move_gives_check ? "+" : "";
+
+        string end_part = captures
+                        + index_to_square(fp_row, fp_col)
+                        + gives_check;
+
+        uint64_t pieces = (__func(fp, ALL_BOTH) & _cb.Pieces[OWN + pt]) ^ (1ULL << ip);
+
+        if (pieces == 0)
+            return piece_name + end_part;
+
+
+        bool row = true, col = true;
+
+        while (pieces > 0)
         {
-            if (fp == 2 || fp == 58) res = "O-O-O";
-            else if (fp == 6 || fp == 62) res = "O-O";
+            const int __pos = next_idx(pieces);
+
+            const int __pos_col = __pos & 7;
+            const int __pos_row = (__pos - __pos_col) >> 3;
+
+            if (__pos_col == ip_col) col = false;
+            if (__pos_row == ip_row) row = false;
         }
-        else
-        {
-            res += "K";
-            if (_cpt) res += 'x';
-            res += idx_to_row(fp_x);
-            res += static_cast<char>(fp_y + 49);
-        }
-    }
-    
-    if (checks) res += "+";
-    return res;
+
+        if (col)
+            return piece_name + index_to_col(ip_col) + end_part;
+
+        if (row)
+            return piece_name + index_to_row(ip_row) + end_part;
+
+        return piece_name
+             + index_to_square(ip_row, ip_col)
+             + end_part;
+    };
+
+
+    if (pt == 1)
+        return print_move_pawn();
+
+    if (pt == 6)
+        return print_move_king("K");
+
+    return print_move_piece(check_for_piece[pt - 2], string(1, piece_names[pt - 2]));
 }
 
+
 void
-print(const MoveList& myMoves, chessBoard& _cb)
+print(const MoveList& myMoves, const chessBoard& _cb)
 {
     cout << "MoveCount : " << myMoves.size() << '\n';
     
     int move_no = 0;
     for (const MoveType move : myMoves)
-        cout << (++move_no) << "\t| " << print(move, _cb) << "\t| "
-             << move << '\n';
+    {
+        string result = print(move, _cb);
+        cout << (++move_no) << " \t| "  << result
+             << string(8 - result.size(), ' ') << "| " << move << '\n';
+    }
 
     cout << endl;
 }
