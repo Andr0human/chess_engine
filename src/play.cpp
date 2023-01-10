@@ -116,8 +116,6 @@ execute_commands(playboard& board)
         info.show_search_results(__pos);
         board.search_done();
 
-        //! Need to play the move on the board
-
         const MoveType MOVE_FILTER = 2097151;
         const auto& [move, eval] = info.last_iter_result();
         const double in_decimal = static_cast<double>(eval) / 100;

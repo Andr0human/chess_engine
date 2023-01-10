@@ -13,7 +13,7 @@
 
 extern MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
 extern MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
-extern const string startFen;
+extern const string StartFen;
 
 // Utility
 

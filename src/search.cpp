@@ -3,7 +3,7 @@
 
 MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
 MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
-const string startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 #ifndef TOOLS
 

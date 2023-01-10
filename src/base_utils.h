@@ -17,6 +17,7 @@ using std::endl;
 
 using MoveType  = int;
 using PieceType = int;
+using Square    = int;
 
 
 

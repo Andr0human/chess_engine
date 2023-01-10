@@ -219,7 +219,7 @@ void
 direct_search(const vector<string> &_args)
 {
     const size_t __n = _args.size();
-    const string fen = __n > 1 ? _args[1] : startFen;
+    const string fen = __n > 1 ? _args[1] : StartFen;
 
     const double search_time = (__n >= 3) ?
         std::stod(_args[2]) : static_cast<double>(default_search_time);
@@ -235,7 +235,7 @@ void
 node_count(const vector<string> &_args)
 {
     const size_t __n = _args.size();
-    const string fen = __n > 1 ? _args[1] : startFen;
+    const string fen = __n > 1 ? _args[1] : StartFen;
     const int depth  = __n > 2 ? stoi(_args[2]) : 6;
     chessBoard _cb   = fen;
 
@@ -279,7 +279,7 @@ debug_movegen(const vector<string> &_args)
     };
 
     const auto __n = _args.size();
-    const auto fen = __n > 1 ? _args[1] : startFen;
+    const auto fen = __n > 1 ? _args[1] : StartFen;
     const auto dep = __n > 2 ? stoi(_args[2]) : 2;
     const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
     
