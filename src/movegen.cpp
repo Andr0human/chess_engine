@@ -74,7 +74,6 @@ static inline void
 Add_shift_Pawns(uint64_t endSquares, const int shift, const chessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
-    myMoves.canMove = true;
 
     if (myMoves.cpt_only)
     {
@@ -98,7 +97,6 @@ static inline void
 Add_m_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
-    myMoves.canMove = true;
 
     if (myMoves.cpt_only) endSquares &= ALL(EMY);
     
@@ -116,8 +114,7 @@ static inline void
 Add_pm_Pawns(int ip, uint64_t endSquares, const chessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
-    
-    myMoves.canMove = true;
+
     if (myMoves.cpt_only) endSquares &= ALL(EMY);
     
     myMoves.canPromote = true;
@@ -217,32 +214,22 @@ pawn_movement(const chessBoard &_cb, MoveList &myMoves,
 
 
 static inline uint64_t
-KnightMovement(int idx, const chessBoard& _cb)
-{
-    const uint64_t dest_sqaures = knight_atk_sq(idx, 0);
-    return dest_sqaures ^ (dest_sqaures & ALL(OWN));
-}
+knight_legal_squares(int __pos, uint64_t _Op, uint64_t _Ap)
+{ return ~_Op & knight_atk_sq(__pos, _Ap); }
 
 static inline uint64_t
-BishopMovement(int idx, const chessBoard& _cb)
-{
-    const uint64_t dest_sqaures = bishop_atk_sq(idx, ALL_BOTH);
-    return dest_sqaures ^ (dest_sqaures & ALL(OWN));
-}
+bishop_legal_squares(int __pos, uint64_t _Op, uint64_t _Ap)
+{ return ~_Op & bishop_atk_sq(__pos, _Ap); }
 
 static inline uint64_t
-RookMovement(int idx, const chessBoard& _cb)
-{
-    const uint64_t dest_sqaures = rook_atk_sq(idx, ALL_BOTH);
-    return dest_sqaures ^ (dest_sqaures & ALL(OWN));
-}
+rook_legal_squares(int __pos, uint64_t _Op, uint64_t _Ap)
+{ return ~_Op & rook_atk_sq(__pos, _Ap); }
 
 static inline uint64_t
-QueenMovement(int idx, const chessBoard &_cb)
-{
-    const uint64_t dest_sqaures = queen_atk_sq(idx, ALL_BOTH);
-    return dest_sqaures ^ (dest_sqaures & ALL(OWN));
-}
+queen_legal_squares(int __pos, uint64_t _Op, uint64_t _Ap)
+{ return ~_Op & queen_atk_sq(__pos, _Ap); }
+
+
 
 static uint64_t
 pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
@@ -341,23 +328,26 @@ piece_movement(const chessBoard &_cb, MoveList &myMoves, const int KA)
     const uint64_t pinned_pieces = pinned_pieces_list(_cb, myMoves, KA);
     const uint64_t valid_sq = KA * _cb.Pieces[0] + (1 - KA) * AllSquares;
 
+    const uint64_t own_pieces = ALL(OWN);
+    const uint64_t all_pieces = ALL(WHITE) | ALL(BLACK);
+
     const auto Add_Vaild_Dest_Sq = [&] (const auto &__f, uint64_t piece)
     {
         piece &= ~pinned_pieces;
         while (piece != 0)
         {
             const int __pos = next_idx(piece);
-            add_move_to_list(__pos, __f(__pos, _cb) & valid_sq, _cb, myMoves);
+            add_move_to_list(__pos,
+                __f(__pos, own_pieces, all_pieces) & valid_sq, _cb, myMoves);
         }
     };
 
-    const int own = OWN;
     pawn_movement(_cb, myMoves, pinned_pieces, KA, _cb.Pieces[0]);
 
-    Add_Vaild_Dest_Sq(BishopMovement, BISHOP(own));
-    Add_Vaild_Dest_Sq(KnightMovement, KNIGHT(own));
-    Add_Vaild_Dest_Sq(RookMovement  , ROOK(own)  );
-    Add_Vaild_Dest_Sq(QueenMovement , QUEEN(own) );
+    Add_Vaild_Dest_Sq(bishop_legal_squares, BISHOP(OWN));
+    Add_Vaild_Dest_Sq(knight_legal_squares, KNIGHT(OWN));
+    Add_Vaild_Dest_Sq(rook_legal_squares  , ROOK(OWN));
+    Add_Vaild_Dest_Sq(queen_legal_squares , QUEEN(OWN));
 }
 
 #endif
@@ -639,32 +629,31 @@ legal_piece_move(const chessBoard &_cb)
     const auto pinned_pieces = legal_pinned_pieces(_cb);
     const auto filter = _cb.KA * _cb.Pieces[0] + (1 - _cb.KA) * AllSquares;
 
-    bool legal = static_cast<bool>(pinned_pieces & 1);
 
-    if (legal) return true;
+    if (pinned_pieces & 1)
+        return true;
+
+    const uint64_t  my_pieces = ALL(OWN);
+    const uint64_t all_pieces = ALL(WHITE) | ALL(BLACK);
 
     const auto canMove = [&] (const auto &__f, uint64_t piece)
     {
         piece &= ~pinned_pieces;
         uint64_t legal_squares = 0;
 
-        while (piece != 0) {
-            const int __pos = next_idx(piece);
-            legal_squares |= __f(__pos, _cb) & filter;
-        }
+        while (piece != 0)
+            legal_squares |= __f(next_idx(piece), my_pieces, all_pieces) & filter;
 
         return (legal_squares != 0);
     };
 
     const int own = OWN;
 
-    legal = legal ? true : legal_pawns_move(_cb, pinned_pieces, _cb.Pieces[0]);
-    legal = legal ? true : canMove(KnightMovement, KNIGHT(own));
-    legal = legal ? true : canMove(BishopMovement, BISHOP(own));
-    legal = legal ? true : canMove(RookMovement  ,   ROOK(own));
-    legal = legal ? true : canMove(QueenMovement ,  QUEEN(own));
-
-    return legal;
+    return legal_pawns_move(_cb, pinned_pieces, _cb.Pieces[0])
+        or canMove(knight_legal_squares, KNIGHT(own))
+        or canMove(bishop_legal_squares, BISHOP(own))
+        or canMove(rook_legal_squares  ,   ROOK(own))
+        or canMove(queen_legal_squares ,  QUEEN(own));
 }
 
 static bool
@@ -804,6 +793,8 @@ generate_moves(chessBoard& _cb, bool qs_only)
     **/
 
     MoveList myMoves;
+
+    myMoves.cpt_only = qs_only;
 
     if (_cb.enemy_attacked_sq_generated() == false)
         _cb.Pieces[8] = generate_AttackedSquares(_cb);

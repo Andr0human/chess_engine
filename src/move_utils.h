@@ -61,7 +61,7 @@ class MoveList
     MoveType pMoves[120];
     int pColor;
     
-    bool canMove, cpt_only, canPromote;
+    bool cpt_only, canPromote;
 
     MoveList()
     : __begin(pMoves), __end(pMoves), pColor(1), cpt_only(false) {}
@@ -71,7 +71,7 @@ class MoveList
     {
         pColor = t_cl;
         cpt_only = qs_only;
-        canMove = canPromote = false;
+        canPromote = false;
         __begin = __end = pMoves;
     }
 
