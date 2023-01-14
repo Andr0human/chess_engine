@@ -22,6 +22,8 @@ chessBoard::chessBoard(const string& fen)
 void
 chessBoard::set_position_with_fen(const string& fen) noexcept
 {
+    using std::stoi;
+
     const auto char_to_piece_type = [] (const char ch)
     {
         const PieceType piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
@@ -34,6 +36,13 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
              + (ch < 'a' ? 8 : 0);
     };
 
+    {
+        csep = 0;
+        halfmove = 0;
+        fullmove = 1;
+        KA = -1;
+        moveNum = 0;
+    }
     
     // Split the elements from FEN.
     const vector<string> elements = base_utils::split(fen, ' ');
@@ -63,7 +72,7 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
     color = (elements[1][0] & 1);
     
     // Extracting castle-info
-    csep = 0;
+    
     for (char ch : elements[2])
     {
         if (ch == 'K') csep |= 1024;
@@ -77,14 +86,8 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
     else csep |= 28 + ((2 * color - 1) * 12) + (elements[3][0] - 'a');
 
     // Extracting half-move and full-move
-    using std::stoi;
     if (elements.size() == 6)
         halfmove = stoi(elements[4]), fullmove = stoi(elements[5]);
-    else
-        halfmove = 0, fullmove = 1;
-
-    KA = -1;
-    moveNum = 0;
 
     // Generate hash-value for current position
     Hash_Value = generate_hashKey();
@@ -465,9 +468,11 @@ chessBoard::fen() const
             generated_fen.push_back(static_cast<char>(zero + 48));              // '0' + zero
             zero = 0;
         }
-        if (j != 0)
-            generated_fen.push_back('/');
+
+        generated_fen.push_back('/');
     }
+
+    generated_fen.pop_back();
 
     generated_fen += " ";
     generated_fen += (color == 1) ? "w " : "b ";

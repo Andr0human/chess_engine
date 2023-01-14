@@ -23,8 +23,7 @@ class chessBoard
     int moveNum = 0;
 
     void
-    fill_with_piece(std::string arr[], uint64_t val, char ch)
-    const;
+    fill_with_piece(std::string arr[], uint64_t val, char ch) const;
 
     // MakeMove-Subparts
 
@@ -163,6 +162,19 @@ class chessBoard
 
     inline bool king_in_check() const noexcept
     { return KA > 0; }
+
+    inline bool side() const noexcept
+    { return color; }
+
+    inline bool side_emy() const noexcept
+    { return color ^ 1; }
+
+    inline int king_pos() const noexcept
+    { return idx_no(Pieces[(color << 3) + 6]); }
+
+    inline int king_pos_emy() const noexcept
+    { return idx_no(Pieces[((color ^ 1) << 3) + 6]); }
+
 };
 
 
