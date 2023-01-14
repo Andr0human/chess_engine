@@ -174,7 +174,6 @@ class chessBoard
 
     inline int king_pos_emy() const noexcept
     { return idx_no(Pieces[((color ^ 1) << 3) + 6]); }
-
 };
 
 

@@ -24,7 +24,7 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
 {
     using std::stoi;
 
-    const auto char_to_piece_type = [] (const char ch)
+    const auto char_to_piece_type = [] (char ch)
     {
         const PieceType piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
 
@@ -36,6 +36,16 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
              + (ch < 'a' ? 8 : 0);
     };
 
+    const auto castling_rights = [&] (char ch)
+    {
+        if (ch == '-')
+            return;
+
+        int v = static_cast<int>(ch);
+        csep |= 1ULL << (10 - (v % 5));
+    };
+
+
     {
         csep = 0;
         halfmove = 0;
@@ -43,7 +53,8 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
         KA = -1;
         moveNum = 0;
     }
-    
+
+
     // Split the elements from FEN.
     const vector<string> elements = base_utils::split(fen, ' ');
     
@@ -72,14 +83,8 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
     color = (elements[1][0] & 1);
     
     // Extracting castle-info
-    
     for (char ch : elements[2])
-    {
-        if (ch == 'K') csep |= 1024;
-        else if (ch == 'Q') csep |= 512;
-        else if (ch == 'k') csep |= 256;
-        else if (ch == 'q') csep |= 128;
-    }
+        castling_rights(ch);
 
     // Extracting en-passant square
     if (elements[3] == "-") csep |= 64;
@@ -187,8 +192,8 @@ void
 chessBoard::update_csep(int old_csep, int new_csep) noexcept
 {
     #if defined(TRANSPOSITION_TABLE_H)
-    Hash_Value ^= TT.hash_key((old_csep >> 7) + 66);
-    Hash_Value ^= TT.hash_key((new_csep >> 7) + 66);
+        Hash_Value ^= TT.hash_key((old_csep >> 7) + 66);
+        Hash_Value ^= TT.hash_key((new_csep >> 7) + 66);
     #endif
 }
 
@@ -330,7 +335,6 @@ chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove) noexcept
             Hash_Value ^= TT.hashkey_update(own + 4, __p1) ^ TT.hashkey_update(own + 4, __p2);
             Hash_Value ^= TT.hash_key(0);
         #endif
-        // Should update color value in HashKey
     }
 }
 
@@ -444,6 +448,30 @@ chessBoard::fen() const
         return static_cast<char>(v);
     };
 
+    const auto add_zeros_to_fen = [] (string& __s, int& zeros)
+    {
+        if (zeros == 0)
+            return;
+        
+        __s.push_back(static_cast<char>(zeros + 48));
+        zeros = 0;
+    };
+
+    const auto add_castle_to_fen = [&] (string& __s)
+    {
+        if ((csep & 1920) == 0)
+            return __s.push_back('-');
+
+        for (int i = 0; i < 4; i++)
+        {
+            int state = ((i & 1) *  6)
+                      + ((i & 2) * 16) + 75;
+            
+            if ((1ULL << (10 - i)) & csep)
+                __s.push_back(static_cast<char>(state));
+        }
+    };
+
     string generated_fen;
     int zero = 0;
     
@@ -455,20 +483,12 @@ chessBoard::fen() const
                 zero++;
             else
             {
-                if (zero)
-                {
-                    generated_fen.push_back(static_cast<char>(zero + 48));      // '0' + zero
-                    zero = 0;
-                }
+                add_zeros_to_fen(generated_fen, zero);
                 generated_fen.push_back(piece_no_to_char(board[8 * j + i]));
             }
         }
-        if (zero != 0)
-        {
-            generated_fen.push_back(static_cast<char>(zero + 48));              // '0' + zero
-            zero = 0;
-        }
 
+        add_zeros_to_fen(generated_fen, zero);
         generated_fen.push_back('/');
     }
 
@@ -477,11 +497,7 @@ chessBoard::fen() const
     generated_fen += " ";
     generated_fen += (color == 1) ? "w " : "b ";
 
-    if (csep & 1024) generated_fen.push_back('K');
-    if (csep &  512) generated_fen.push_back('Q');
-    if (csep &  256) generated_fen.push_back('k');
-    if (csep &  128) generated_fen.push_back('q');
-    if ((csep & 1920) == 0) generated_fen.push_back('-');
+    add_castle_to_fen(generated_fen);
     generated_fen.push_back(' ');
 
     if ((csep & 64) != 0)
