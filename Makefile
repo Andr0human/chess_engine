@@ -76,6 +76,12 @@ clean:
 	$(RM) $(call FIXPATH,$(OBJECTS))
 	@echo Cleanup complete!
 
+
+.PHONY: clean_ob
+clean_ob:
+	$(RM) $(call FIXPATH,$(OBJECTS))
+	@echo Object-files Cleanup complete!
+
 run: all
 	./$(OUTPUTMAIN)
 	@echo Executing 'run: all' complete!
@@ -91,6 +97,8 @@ help:
 	@echo "make clean"
 	@echo ""
 	@echo "To clear all .o files, type:"
+	@echo ""
+	@echo "make clean_ob"
 	@echo ""
 	@echo "For help, type:"
 	@echo ""
