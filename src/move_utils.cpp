@@ -143,13 +143,14 @@ pawn_atk_sq(const chessBoard& _cb, int side)
 
 uint64_t
 bishop_atk_sq(int __pos, uint64_t _Ap)
-{
-    const auto area = [__pos, _Ap] (const uint64_t *table, const auto& __func)
-    { return table[__func(table[__pos] & _Ap)]; };
+{    
+    uint64_t magic = plt::BishopMagics[__pos];
+    uint64_t bits  = plt::BishopShifts[__pos];
+    uint64_t mask  = plt::BishopMasks[__pos];
+    uint64_t start = plt::BishopStartIndex[__pos];
 
-    return plt::diag_Board[__pos] ^
-          (area(plt::ulBoard, lSb_idx) ^ area(plt::urBoard, lSb_idx)
-         ^ area(plt::dlBoard, mSb_idx) ^ area(plt::drBoard, mSb_idx));
+    uint64_t occupancy = (magic * (_Ap & mask)) >> bits;
+    return plt::BishopMovesLookUp[start + occupancy];
 }
 
 uint64_t
@@ -159,12 +160,13 @@ knight_atk_sq(int __pos, uint64_t _Ap)
 uint64_t
 rook_atk_sq(int __pos, uint64_t _Ap)
 {
-    const auto area = [__pos, _Ap] (const uint64_t *table, const auto& __func)
-    { return table[__func(table[__pos] & _Ap)]; };
+    uint64_t magic = plt::RookMagics[__pos];
+    uint64_t bits  = plt::RookShifts[__pos];
+    uint64_t mask  = plt::RookMasks[__pos];
+    uint64_t start = plt::RookStartIndex[__pos];
 
-    return plt::line_Board[__pos] ^
-          (area(plt::uBoard, lSb_idx) ^ area(plt::dBoard, mSb_idx)
-         ^ area(plt::rBoard, lSb_idx) ^ area(plt::lBoard, mSb_idx));
+    uint64_t occupancy = (magic * (_Ap & mask)) >> bits;
+    return plt::RookMovesLookUp[start + occupancy];
 }
 
 uint64_t

@@ -18,8 +18,19 @@ extern uint64_t urBoard[64], drBoard[64], ulBoard[64], dlBoard[64];
 extern uint64_t diag_Board[64], line_Board[64];
 extern uint64_t pBoard[2][64], pcBoard[2][64];
 extern uint64_t d_ry[64], ad_ry[64];
-// extern uint64_t LRboard[8][258], UDboard[8][258];
-// extern uint64_t ad_bd[8][258], d_bd[8][258];
+
+
+extern const uint64_t RookMagics[64];
+extern const int RookShifts[64];
+extern uint64_t RookMasks[64];
+extern uint64_t RookMovesLookUp[115698];
+extern uint64_t RookStartIndex[64];
+extern uint64_t BishopStartIndex[64];
+
+extern const uint64_t BishopMagics[64];
+extern const int BishopShifts[64];
+extern uint64_t BishopMasks[64];
+extern uint64_t BishopMovesLookUp[5248];
 
 void
 init();
