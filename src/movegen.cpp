@@ -370,7 +370,7 @@ generate_AttackedSquares(const chessBoard& _cb)
 
     const int emy = EMY;
 
-    ans |= pawn_atk_sq(_cb, 1);
+    ans |= pawn_atk_sq(_cb, _cb.side_emy());
     ans |= attacked_squares(bishop_atk_sq, BISHOP(emy));
     ans |= attacked_squares(knight_atk_sq, KNIGHT(emy));
     ans |= attacked_squares(rook_atk_sq  , ROOK(emy));
@@ -382,7 +382,7 @@ generate_AttackedSquares(const chessBoard& _cb)
 
 static void
 king_attackers(chessBoard &_cb)
-{    
+{
     const uint64_t attacked_sq = _cb.Pieces[8];
 
     if (attacked_sq && ((KING(OWN) & attacked_sq)) == 0)
@@ -390,14 +390,14 @@ king_attackers(chessBoard &_cb)
         _cb.KA = 0;
         return;
     }
-    
+
     const int kpos = idx_no(KING(OWN));
     const int emy = EMY;
     const uint64_t _Ap = ALL_BOTH;
     int attk_count = 0;
     uint64_t attk_area = 0;
 
-    const auto add_piece = [&] (const auto &__f, const uint64_t enemy)
+    const auto add_piece = [&] (const auto& __f, const uint64_t enemy)
     {
         const uint64_t area  = __f(kpos, _Ap);
         const uint64_t piece = area & enemy;

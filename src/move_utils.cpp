@@ -3,7 +3,7 @@
 
 
 void
-decode_move(const MoveType move)
+decode_move(MoveType move)
 {
     const int ip  = move & 63;
     const int fp  = (move >> 6) & 63;
@@ -45,8 +45,8 @@ gen_base_move(const chessBoard& _cb, int ip)
 }
 
 inline void
-add_cap_moves(const int ip, uint64_t endSquares,
-    const MoveType base_move, const chessBoard& _cb, MoveList& myMoves)
+add_cap_moves(int ip, uint64_t endSquares,
+    MoveType base_move, const chessBoard& _cb, MoveList& myMoves)
 {
     const auto cap_priority = [] (const int pt, const int cpt)
     { return (cpt - pt + 16); };
@@ -73,7 +73,7 @@ add_cap_moves(const int ip, uint64_t endSquares,
 }
 
 inline void
-add_quiet_moves(uint64_t endSquares, const MoveType base_move,
+add_quiet_moves(uint64_t endSquares, MoveType base_move,
     const chessBoard& _cb, MoveList& myMoves)
 {
     const auto encode_full_move = [] (const int base, const int fp, const int pr)
@@ -92,9 +92,12 @@ add_quiet_moves(uint64_t endSquares, const MoveType base_move,
 }
 
 void
-add_move_to_list(const int ip, uint64_t endSquares,
+add_move_to_list(int ip, uint64_t endSquares,
     const chessBoard& _cb, MoveList& myMoves)
 {
+    if (myMoves.cpt_only)
+        endSquares = endSquares & ALL(EMY);
+
     const uint64_t cap_Squares = endSquares & ALL(EMY);
     const uint64_t quiet_Squares = endSquares ^ cap_Squares;
     const MoveType base_move = gen_base_move(_cb, ip);
@@ -107,8 +110,11 @@ add_move_to_list(const int ip, uint64_t endSquares,
 
 void
 add_quiet_pawn_moves(uint64_t endSquares,
-    const int shift, const chessBoard& _cb, MoveList& myMoves)
+    int shift, const chessBoard& _cb, MoveList& myMoves)
 {
+    if (myMoves.cpt_only)
+        return;
+
     const int pt = 1;
     const int side = _cb.color << 20;
 
@@ -125,11 +131,10 @@ add_quiet_pawn_moves(uint64_t endSquares,
 
 
 uint64_t
-pawn_atk_sq(const chessBoard& _cb, const int enemy)
+pawn_atk_sq(const chessBoard& _cb, int side)
 {
-    const int side = _cb.color ^ enemy;
-    const int inc  = 2 * side - 1;
-    const uint64_t pawns = _cb.Pieces[8 * side + 1];
+    int inc  = 2 * side - 1;
+    uint64_t pawns = _cb.Pieces[8 * side + 1];
     const auto shifter = (side == 1) ? l_shift : r_shift;
 
     return shifter(pawns & RightAttkingPawns, 8 + inc) |
@@ -137,9 +142,9 @@ pawn_atk_sq(const chessBoard& _cb, const int enemy)
 }
 
 uint64_t
-bishop_atk_sq(const int __pos, const uint64_t _Ap)
+bishop_atk_sq(int __pos, uint64_t _Ap)
 {
-    const auto area = [__pos, _Ap] (const uint64_t *table, const auto &__func)
+    const auto area = [__pos, _Ap] (const uint64_t *table, const auto& __func)
     { return table[__func(table[__pos] & _Ap)]; };
 
     return plt::diag_Board[__pos] ^
@@ -148,11 +153,11 @@ bishop_atk_sq(const int __pos, const uint64_t _Ap)
 }
 
 uint64_t
-knight_atk_sq(const int __pos, const uint64_t _Ap)
+knight_atk_sq(int __pos, uint64_t _Ap)
 { return plt::NtBoard[__pos] + (_Ap - _Ap); }
 
 uint64_t
-rook_atk_sq(const int __pos, const uint64_t _Ap)
+rook_atk_sq(int __pos, uint64_t _Ap)
 {
     const auto area = [__pos, _Ap] (const uint64_t *table, const auto& __func)
     { return table[__func(table[__pos] & _Ap)]; };
@@ -163,17 +168,15 @@ rook_atk_sq(const int __pos, const uint64_t _Ap)
 }
 
 uint64_t
-queen_atk_sq(const int __pos, const uint64_t _Ap)
+queen_atk_sq(int __pos, uint64_t _Ap)
 { return bishop_atk_sq(__pos, _Ap) ^ rook_atk_sq(__pos, _Ap); }
 
 
 
 
-CheckData
+/* CheckData
 find_check_squares(const chessBoard& _cb, bool own_king)
 {
-    // int kpos = own_king ? idx_no(KING(OWN)) : idx_no(KING(EMY));
-
     int own_side = _cb.color ^ (!own_king);
     int kpos = idx_no(KING(own_side << 3));
 
@@ -186,8 +189,72 @@ find_check_squares(const chessBoard& _cb, bool own_king)
 
     return CheckData(res1, res2, res3, res4);
 }
+ */
+
+CheckData
+find_check_squares(int kpos, int side, uint64_t Apieces)
+{
+    uint64_t res1 = rook_atk_sq(kpos, Apieces);
+    uint64_t res2 = bishop_atk_sq(kpos, Apieces);
+    uint64_t res3 = knight_atk_sq(kpos, Apieces);
+    uint64_t res4 = plt::pcBoard[side][kpos];
+
+    return CheckData(res1, res2, res3, res4);
+}
 
 
+uint64_t apiece_after_makemove(MoveType move, uint64_t _Ap)
+{
+    using std::abs;
+    int ip  = (move & 63);
+    int fp  = (move >> 6) & 63;
+
+    int pt  = (move >> 12) & 7;
+    int cpt = (move >> 15) & 7;
+
+    int side = (move >> 20) & 1;
+
+    uint64_t swap_indexes = (1ULL << ip) ^ (1ULL << fp);
+
+    if ((abs(fp - ip) == 7 or abs(fp - ip) == 9) and (cpt == 0))
+    {
+        int cap_pawn_fp = fp - 8 * (2 * side - 1);
+        return _Ap ^ swap_indexes ^ (1ULL << cap_pawn_fp);
+    }
+
+    if (pt == 6 and abs(fp - ip) == 2)
+    {
+        uint64_t rooks_indexes =
+            (fp > ip ? 160ULL : 9ULL) << (56 * (side ^ 1));
+        
+        return _Ap ^ rooks_indexes ^ swap_indexes;
+    }
+
+    if (cpt != 0)
+        _Ap ^= (1ULL << fp);
+
+    return _Ap ^ swap_indexes;
+}
+
+
+bool
+move_gives_check(MoveType move, const chessBoard& _cb)
+{
+    int ip = move & 63;
+    int fp = (move >> 6) & 63;
+
+    int pt = (move >> 12) & 7;
+
+    uint64_t Apieces = ALL(WHITE) | ALL(BLACK);
+
+    // For direct checks
+    CheckData checks = find_check_squares(_cb.king_pos_emy(), _cb.side_emy(), Apieces);
+
+    if (checks.squares_for_piece(pt) & (1ULL << fp))
+        return true;
+
+    return false;
+}
 
 
 
@@ -196,7 +263,7 @@ bool
 in_check(const chessBoard& _cb, bool own_king)
 {
     const int emy = (_cb.color ^ own_king) << 3;
-    CheckData check = find_check_squares(_cb, own_king);
+    CheckData check = find_check_squares(_cb.king_pos(), _cb.side(), ALL(WHITE) | ALL(BLACK));
 
     return (check.LineSquares     & (  ROOK(emy) | QUEEN(emy)))
         or (check.DiagonalSquares & (BISHOP(emy) | QUEEN(emy)))
@@ -206,7 +273,7 @@ in_check(const chessBoard& _cb, bool own_king)
 
 
 string
-print(const MoveType move, const chessBoard& _cb)
+print(MoveType move, const chessBoard& _cb)
 {
     // In case of no move, return null
     if (move == 0)
@@ -221,7 +288,7 @@ print(const MoveType move, const chessBoard& _cb)
     const auto index_to_square = [&] (int row, int col)
     { return index_to_col(col) + index_to_row(row); };
 
-    
+
     const int  ip =  move       & 63;
     const int  fp = (move >> 6) & 63;
 
@@ -234,8 +301,13 @@ print(const MoveType move, const chessBoard& _cb)
     const int  pt = ((move >> 12) & 7);
     const int cpt = ((move >> 15) & 7);
 
+    uint64_t Apieces = ALL(WHITE) | ALL(BLACK);
 
-    CheckData checks = find_check_squares(_cb, false);
+
+    // CheckData checks = find_check_squares(_cb, false);
+
+    CheckData checks = find_check_squares(_cb.king_pos_emy(), _cb.side_emy(), Apieces);
+
     bool move_gives_check = checks.squares_for_piece(pt) & (1ULL << fp);
 
 

@@ -113,10 +113,14 @@ class CheckData
     // Pawns landing results in a check
     uint64_t PawnSquares;
 
+
+    //TODO: Add Code for this.
+    uint64_t KingSquares;
+
     inline CheckData() {}
 
-    inline CheckData(uint64_t __rook, uint64_t __bishop, uint64_t __knight, uint64_t __pawn)
-    : LineSquares(__rook), DiagonalSquares(__bishop), KnightSquares(__knight), PawnSquares(__pawn) {}
+    inline CheckData(uint64_t __r, uint64_t __b, uint64_t __k, uint64_t __p)
+    : LineSquares(__r), DiagonalSquares(__b), KnightSquares(__k), PawnSquares(__p) {}
 
     inline uint64_t
     squares_for_piece(const PieceType piece)
@@ -149,7 +153,7 @@ next_idx(uint64_t &__x)
 
 // Prints all the info on the encoded-move
 void
-decode_move(const MoveType encoded_move);
+decode_move(MoveType encoded_move);
 
 
 
@@ -160,15 +164,15 @@ inline MoveType
 gen_base_move(const chessBoard& _cb, int ip);
 
 inline
-void add_cap_moves(const int ip, uint64_t endSquares, const MoveType base,
+void add_cap_moves(int ip, uint64_t endSquares, MoveType base,
     const chessBoard& _cb, MoveList& myMoves);
 
 inline void
-add_quiet_moves(uint64_t endSquares, const MoveType base,
+add_quiet_moves(uint64_t endSquares, MoveType base,
     const chessBoard& _cb, MoveList& myMoves);
 
 void
-add_move_to_list(const int ip, uint64_t endSquares,
+add_move_to_list(int ip, uint64_t endSquares,
     const chessBoard& _cb, MoveList& myMoves);
 
 
@@ -176,7 +180,7 @@ add_move_to_list(const int ip, uint64_t endSquares,
 
 
 void
-add_quiet_pawn_moves(uint64_t endSquares, const int shift,
+add_quiet_pawn_moves(uint64_t endSquares, int shift,
     const chessBoard& _cb, MoveList& myMoves);
 
 
@@ -188,29 +192,29 @@ add_quiet_pawn_moves(uint64_t endSquares, const int shift,
 
 // Returns all squares attacked by all pawns from side to move
 uint64_t
-pawn_atk_sq(const chessBoard& _cb, const int enemy);
+pawn_atk_sq(const chessBoard& _cb, int side);
 
 // Returns all squares attacked by bishop on index __pos
 uint64_t
-bishop_atk_sq(const int __pos, const uint64_t _Ap);
+bishop_atk_sq(int __pos, uint64_t _Ap);
 
 // Returns all squares attacked by knight on index __pos
 uint64_t
-knight_atk_sq(const int __pos, const uint64_t _Ap);
+knight_atk_sq(int __pos, uint64_t _Ap);
 
 // Returns all squares attacked by rook on index __pos
 uint64_t
-rook_atk_sq(const int __pos, const uint64_t _Ap);
+rook_atk_sq(int __pos, const uint64_t _Ap);
 
 // Returns all squares attacked by queen on index __pos
 uint64_t
-queen_atk_sq(const int __pos, const uint64_t _Ap);
+queen_atk_sq(int __pos, uint64_t _Ap);
 
 
 
 
-CheckData
-find_check_squares(const chessBoard& _cb, bool own_king = true);
+// CheckData
+// find_check_squares(const chessBoard& _cb, bool own_king = true);
 
 
 /**
@@ -242,7 +246,7 @@ in_check(const chessBoard& _cb, bool own_king = true);
  * @return string 
  */
 string
-print(const MoveType move, const chessBoard& _cb);
+print(MoveType move, const chessBoard& _cb);
 
 
 /**
