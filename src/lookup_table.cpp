@@ -7,46 +7,57 @@
 namespace plt
 {
 
-uint64_t NtBoard[64], KBoard[64];
-uint64_t uBoard[64], dBoard[64], rBoard[64], lBoard[64];
-uint64_t urBoard[64], drBoard[64], ulBoard[64], dlBoard[64];
-uint64_t diag_Board[64], line_Board[64];
-uint64_t pBoard[2][64], pcBoard[2][64];
-uint64_t d_ry[64], ad_ry[64];
+uint64_t    UpMasks[64];
+uint64_t  DownMasks[64];
+uint64_t  LeftMasks[64];
+uint64_t RightMasks[64];
 
-uint64_t RookMasks[64];
+uint64_t   UpRightMasks[64];
+uint64_t    UpLeftMasks[64];
+uint64_t DownRightMasks[64];
+uint64_t  DownLeftMasks[64];
+
+uint64_t     LineMasks[64];
+uint64_t DiagonalMasks[64];
+
+uint64_t   RookMasks[64];
 uint64_t BishopMasks[64];
+uint64_t KnightMasks[64];
+uint64_t   KingMasks[64];
 
-uint64_t RookStartIndex[64];
+uint64_t        PawnMasks[2][64];
+uint64_t PawnCaptureMasks[2][64];
+
+uint64_t   RookStartIndex[64];
 uint64_t BishopStartIndex[64];
 
-uint64_t RookMovesLookUp[115698];
+uint64_t   RookMovesLookUp[106495];
 uint64_t BishopMovesLookUp[5248];
 
-const uint64_t RookMagics[64] = {
-     0x68000814008B4A0, 0xEA0008529CE671CA, 0x4820000431113861, 0x1600020063144099, 0xCE1E254B3BA3A1E2, 0xD7FFB4393C870D9B, 0x1E00080200331AA4, 0x5E000102004BA584, 
+
+uint64_t RookMagics[64] = {
+     0x68000814008B4A0, 0x8600114481020020, 0x1F000AC0F1002001, 0x1600020063144099, 0xCE1E254B3BA3A1E2, 0x61000C00A1002812, 0x1E00080200331AA4, 0x5E000102004BA584, 
     0x5DF88002400A8927, 0x1D2700210186C007,  0x27A0025F20081C1, 0x1676002040A8B200, 0xA7AE00044A002150, 0x24AE002912006410, 0x552A000528243200, 0xD7A1002346009500, 
-    0x18B189800BE14003, 0x35D5C1C000E01001,   0x79B20042006082, 0x402E420010E02A01, 0x14B501000800910C, 0x49013AD02889EAD0, 0x72AEC40012087330, 0xA0A46A000A91410C, 
+    0x18B189800BE14003, 0x35D5C1C000E01001,   0x79B20042006082, 0x402E420010E02A01, 0x14B501000800910C, 0x9F1B0100189A0400, 0x72AEC40012087330, 0xA0A46A000A91410C, 
     0x553E400080022A82, 0xE7D70602004280A3, 0xECF7F501002000C4, 0x779015DE000DFC41, 0xCEAA002200046930, 0xD949003300083C00, 0xD581D85C00302633, 0x26CE83120005C884, 
-    0x6CA9400662800083, 0x15F5874206002300, 0xA81AC02001001502, 0xEDCEDFE151201480, 0x2D55D600460020D2, 0x29B1402438013020, 0xD357769004003817, 0xF0E5CA80F6000401, 
-    0x92CE834003E28009, 0xE1DA410586020027, 0x9FE2048040B60020, 0xF0585459C17E80A7, 0xF31CE801005D0010, 0x2CE2007470760028, 0x2E80B1101E640008, 0xBBFC4769285A0014, 
+    0x6CA9400662800083, 0x15F5874206002300, 0xA81AC02001001502, 0xCC01420012002049, 0x2D55D600460020D2, 0x29B1402438013020, 0xD357769004003817, 0xF0E5CA80F6000401, 
+    0x92CE834003E28009, 0xE1DA410586020027, 0x9FE2048040B60020, 0x203FB00104090020, 0xF31CE801005D0010, 0x2CE2007470760028, 0x2E80B1101E640008, 0xBBFC4769285A0014, 
     0xC8B2018700225200, 0x74DE47058200E600, 0x6A3D36008164C200, 0x1A2E5A9BCE003A00, 0x733A003870E02600, 0x6D02001550386200, 0x5058B015B6181C00, 0x3C8088E31F83F600, 
     0x93D60083630254C2, 0x5218204001910381, 0xD13C6832008260C2, 0xE59E00C238522012, 0x701200AC50982006, 0xE6B600348308101E, 0x3E9D78060690091C, 0xFA315A8C0F38A902
 };
 
-const int RookShifts[64] = {
-    52, 52, 52, 52, 52, 52, 53, 52, 
+int RookShifts[64] = {
+    52, 53, 53, 52, 52, 53, 53, 52, 
     53, 54, 54, 54, 54, 54, 54, 53, 
-    53, 54, 54, 54, 54, 53, 54, 53, 
     53, 54, 54, 54, 54, 54, 54, 53, 
-    53, 54, 54, 53, 54, 54, 54, 53, 
-    53, 54, 54, 53, 54, 54, 54, 53, 
+    53, 54, 54, 54, 54, 54, 54, 53, 
+    53, 54, 54, 54, 54, 54, 54, 53, 
+    53, 54, 54, 54, 54, 54, 54, 53, 
     53, 54, 54, 54, 54, 54, 54, 53, 
     52, 53, 53, 53, 53, 53, 53, 52
 };
 
-
-const uint64_t BishopMagics[64] = {
+uint64_t BishopMagics[64] = {
     0xC17820058E05C10A, 0xD64E4C58028F0605, 0x2884780208C84BD4, 0x17DC4C0980A3E81E, 0x807C04209FE149EC, 0x9CF4F3E16786090D, 0xED0A5A0620A03652, 0xC124818808051430, 
     0xB51458CE5C081A17, 0xC9A4780AD80366ED, 0x488578184B04A6F3, 0xD36D882081ABFD8B, 0xA3EA63F35E48A68C, 0xD5A8920190A81095, 0x7C731BEBD6EBAF4A, 0x7E7F28340CC8A7C3, 
     0xF816947223301C03, 0xC89456D02C180DDD, 0xF59C13E80A4C0008, 0xC248033C2041F1AA, 0xFD6087D400A012D5, 0x6CC6802348200804, 0xA50C9F012B4EF288, 0x1520457F07480C1E, 
@@ -57,7 +68,7 @@ const uint64_t BishopMagics[64] = {
     0x165AF40B080A103E, 0x2DD4D902839058AD, 0xFE4FCD7B12231075, 0xB265FF1781840C0B, 0x50E49B7311A6020E, 0x1F1AF5200A161606, 0x7A0F700C07542C00, 0x839CB842080E0010
 };
 
-const int BishopShifts[64] = {
+int BishopShifts[64] = {
     58, 59, 59, 59, 59, 59, 59, 58, 
     59, 59, 59, 59, 59, 59, 59, 59, 
     59, 59, 57, 57, 57, 57, 59, 59, 
@@ -129,17 +140,16 @@ generate_blockers(uint64_t mask, uint64_t* blockers)
         mask &= mask - 1;
     }
 
-    int __cn = 1 << __n;
+    int __cn = 0;
 
-    int cnt = 0;
-    for (int i = 0; i < __cn; i++)
+    for (int i = 0; i < (1 << __n); i++)
     {
     	uint64_t res = 0;
 
     	for (int j = 0; j < __n; j++)
     		if ((1 << j) & i) res |= list[j];
 
-    	blockers[cnt++] = res;
+    	blockers[__cn++] = res;
     }
 
     return __cn;
@@ -216,7 +226,7 @@ build_lookup_table(uint64_t* masks, const uint64_t* magic_table, const int* shif
 
 
 static void
-build_sliding_table(uint64_t _arr[], int index, int index_inc, int inc_x, int inc_y)
+build_sliding_table(uint64_t* _arr, int index, int index_inc, int inc_x, int inc_y)
 {
     for (int idx = index;; idx += index_inc)
     {
@@ -233,7 +243,7 @@ build_sliding_table(uint64_t _arr[], int index, int index_inc, int inc_x, int in
 
 
 static void
-build_knight_table(uint64_t _arr[])
+build_knight_table(uint64_t* _arr)
 {
     const int inc_x[2] = {2, -2};
     const int inc_y[2] = {1, -1};
@@ -262,7 +272,7 @@ build_knight_table(uint64_t _arr[])
 
 
 static void
-build_king_table(uint64_t _arr[])
+build_king_table(uint64_t* _arr)
 {
     const int inc[2] = {1, -1};
 
@@ -293,7 +303,7 @@ build_king_table(uint64_t _arr[])
 
 
 static void
-build_pawn_table(uint64_t _arr[], int dir, bool captures)
+build_pawn_table(uint64_t* _arr, int dir, bool captures)
 {    
     for (int i = 0; i < 64; i++)
     {
@@ -314,7 +324,7 @@ build_pawn_table(uint64_t _arr[], int dir, bool captures)
 
 
 static void
-merge_table(uint64_t to_table[], uint64_t from_table1[], uint64_t from_table2[])
+merge_table(uint64_t* to_table, uint64_t* from_table1, uint64_t* from_table2)
 {
     for (int i = 0; i < 64; i++)
         to_table[i] |= from_table1[i] | from_table2[i];
@@ -322,7 +332,7 @@ merge_table(uint64_t to_table[], uint64_t from_table1[], uint64_t from_table2[])
 
 
 static void
-set_zero(uint64_t table[])
+set_zero(uint64_t* table)
 {
     for (int i = 0; i < 64; i++)
         table[i] = 0;
@@ -332,48 +342,41 @@ set_zero(uint64_t table[])
 void
 init()
 {    
-    build_sliding_table(uBoard, 56,  1,  0, -1);
-    build_sliding_table(dBoard,  7, -1,  0,  1);
-    build_sliding_table(rBoard,  7,  8, -1,  0);
-    build_sliding_table(lBoard,  0,  8,  1,  0);
+    build_sliding_table(   UpMasks, 56,  1,  0, -1);
+    build_sliding_table( DownMasks,  7, -1,  0,  1);
+    build_sliding_table(RightMasks,  7,  8, -1,  0);
+    build_sliding_table( LeftMasks,  0,  8,  1,  0);
 
-    build_sliding_table(urBoard, 63, -8, -1, -1);
-    build_sliding_table(urBoard, 56,  1, -1, -1);
-    build_sliding_table(dlBoard,  0,  8,  1,  1);
-    build_sliding_table(dlBoard,  7, -1,  1,  1);
-    build_sliding_table(ulBoard, 56,  1,  1, -1);
-    build_sliding_table(ulBoard, 56, -8,  1, -1);
-    build_sliding_table(drBoard,  7,  8, -1,  1);
-    build_sliding_table(drBoard,  7, -1, -1,  1);
+    build_sliding_table(  UpRightMasks, 63, -8, -1, -1);
+    build_sliding_table(  UpRightMasks, 56,  1, -1, -1);
+    build_sliding_table( DownLeftMasks,  0,  8,  1,  1);
+    build_sliding_table( DownLeftMasks,  7, -1,  1,  1);
+    build_sliding_table(   UpLeftMasks, 56,  1,  1, -1);
+    build_sliding_table(   UpLeftMasks, 56, -8,  1, -1);
+    build_sliding_table(DownRightMasks,  7,  8, -1,  1);
+    build_sliding_table(DownRightMasks,  7, -1, -1,  1);
 
+    build_knight_table(KnightMasks);
+    build_king_table(KingMasks);
 
-    build_knight_table(NtBoard);
-    build_king_table(KBoard);
+    build_pawn_table( PawnMasks[1],  1, false);
+    build_pawn_table( PawnMasks[0], -1, false);
+    build_pawn_table(PawnCaptureMasks[1],  1,  true);
+    build_pawn_table(PawnCaptureMasks[0], -1,  true);
 
-    build_pawn_table( pBoard[1],  1, false);
-    build_pawn_table( pBoard[0], -1, false);
-    build_pawn_table(pcBoard[1],  1,  true);
-    build_pawn_table(pcBoard[0], -1,  true);
+    set_zero(DiagonalMasks);
+    set_zero(LineMasks);
 
-    set_zero(d_ry);
-    set_zero(ad_ry);
-    set_zero(diag_Board);
-    set_zero(line_Board);
+    merge_table(DiagonalMasks,   UpRightMasks,   UpLeftMasks);
+    merge_table(DiagonalMasks, DownRightMasks, DownLeftMasks);
 
-    merge_table( d_ry, ulBoard, drBoard);
-    merge_table(ad_ry, urBoard, dlBoard);
-
-    merge_table(diag_Board, urBoard, ulBoard);
-    merge_table(diag_Board, drBoard, dlBoard);
-
-    merge_table(line_Board, uBoard, dBoard);
-    merge_table(line_Board, lBoard, rBoard);
+    merge_table(LineMasks,   UpMasks,  DownMasks);
+    merge_table(LineMasks, LeftMasks, RightMasks);
 
     build_rook_bishop_masks();
     build_lookup_table(  RookMasks,   RookMagics,   RookShifts,   RookStartIndex,   RookMovesLookUp,   rook_squares_basic);
     build_lookup_table(BishopMasks, BishopMagics, BishopShifts, BishopStartIndex, BishopMovesLookUp, bishop_squares_basic);
 }
-
 
 }
 

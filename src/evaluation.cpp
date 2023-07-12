@@ -227,21 +227,21 @@ Evaluation::WhitePawns_Structure(const chessBoard& _cb)
     {
         val = pawns ^ (pawns & (pawns - 1));
         int idx = idx_no(val), x = idx & 7, y = (idx - x) >> 3;
-        res = plt::uBoard[idx] & PAWN(BLACK);
+        res = plt::UpMasks[idx] & PAWN(BLACK);
         if (!res) score += pass_points + (4 * y);
         if (x == 0)
         {
-            res = plt::uBoard[idx + 1] & PAWN(BLACK);
+            res = plt::UpMasks[idx + 1] & PAWN(BLACK);
             if (!res) score += corner_points + (4 * y);
         }
         else if (x == 7)
         {
-            res = plt::uBoard[idx - 1] & PAWN(BLACK);
+            res = plt::UpMasks[idx - 1] & PAWN(BLACK);
             if (!res) score += corner_points + (4 * y);
         }
         else if (x > 0 && x < 7)
         {
-            res = (plt::uBoard[idx + 1] ^ plt::uBoard[idx - 1]) & PAWN(BLACK);
+            res = (plt::UpMasks[idx + 1] ^ plt::UpMasks[idx - 1]) & PAWN(BLACK);
             if (!res) score += central_points + (4 * y);
         }
         pawns &= pawns - 1;
@@ -274,21 +274,21 @@ Evaluation::BlackPawns_Structure(const chessBoard& _cb)
     {
         val = pawns ^ (pawns & (pawns - 1));
         int idx = idx_no(val), x = idx & 7, y = (idx - x) >> 3;
-        res = plt::dBoard[idx] & PAWN(WHITE);
+        res = plt::DownMasks[idx] & PAWN(WHITE);
         if (!res) score += pass_points + (4 * (7 - y));
         if (x == 0)
         {
-            res = plt::dBoard[idx + 1] & PAWN(WHITE);
+            res = plt::DownMasks[idx + 1] & PAWN(WHITE);
             if (!res) score += corner_points + (4 * (7 - y));
         }
         else if (x == 7)
         {
-            res = plt::dBoard[idx - 1] & PAWN(WHITE);
+            res = plt::DownMasks[idx - 1] & PAWN(WHITE);
             if (!res) score += corner_points + (4 * (7 - y));
         }
         else if (x > 0 && x < 7)
         {
-            res = (plt::dBoard[idx + 1] ^ plt::uBoard[idx - 1]) & PAWN(WHITE);
+            res = (plt::DownMasks[idx + 1] ^ plt::UpMasks[idx - 1]) & PAWN(WHITE);
             if (!res) score += central_points + (4 * (7 - y));
         }
         pawns &= pawns - 1;
@@ -313,8 +313,8 @@ Evaluation::White_attk_Strength(const chessBoard& _cb)
 {
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(BLACK));
-    const uint64_t attk_sq = plt::KBoard[kpos]
-                      | (kpos > 7 ? plt::KBoard[kpos - 8] : 0);
+    const uint64_t attk_sq = plt::KingMasks[kpos]
+                      | (kpos > 7 ? plt::KingMasks[kpos - 8] : 0);
 
     const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece) {
         int res = 0;
@@ -342,8 +342,8 @@ Evaluation::Black_attk_Strength(const chessBoard& _cb)
 {
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(WHITE));
-    const uint64_t attk_sq = plt::KBoard[kpos]
-                      | (kpos < 56 ? plt::KBoard[kpos + 8] : 0);
+    const uint64_t attk_sq = plt::KingMasks[kpos]
+                      | (kpos < 56 ? plt::KingMasks[kpos + 8] : 0);
 
     const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece)
     {
@@ -375,20 +375,20 @@ Evaluation::White_King_Safety(const chessBoard& _cb)
     int kpos = idx_no(KING(WHITE)), kx = kpos & 7, ky = (kpos - kx) >> 3;
     int score = 0, open_files = 0, defenders[2];
 
-    res = plt::uBoard[kpos];
+    res = plt::UpMasks[kpos];
     if (!(res & PAWN(WHITE))) open_files++;
     if (kx) {
-        res = plt::uBoard[kpos - 1];
+        res = plt::UpMasks[kpos - 1];
         if (!(res & PAWN(WHITE))) open_files++;
     }
     if (kx != 7) {
-        res = plt::uBoard[kpos + 1];
+        res = plt::UpMasks[kpos + 1];
         if (!(res & PAWN(WHITE))) open_files++;
     }
     score -= 24 * (open_files * open_files);
     
-    res = plt::KBoard[kpos];
-    if (ky != 7) res |= plt::KBoard[kpos + 8];
+    res = plt::KingMasks[kpos];
+    if (ky != 7) res |= plt::KingMasks[kpos + 8];
     defenders[0] = __ppcnt((res & (BISHOP(WHITE) ^ KNIGHT(WHITE) ^ ROOK(WHITE) ^ QUEEN(WHITE))));
     defenders[1] = __ppcnt((res & PAWN(WHITE)));
 
@@ -403,22 +403,22 @@ Evaluation::Black_King_Safety(const chessBoard& _cb)
     int kpos = idx_no(KING(BLACK)), kx = kpos & 7, ky = (kpos - kx) >> 3;
     int score = 0, open_files = 0, defenders[2];
 
-    res = plt::dBoard[kpos];
+    res = plt::DownMasks[kpos];
     if (!(res & PAWN(BLACK))) open_files++;
     if (kx)
     {
-        res = plt::dBoard[kpos - 1];
+        res = plt::DownMasks[kpos - 1];
         if (!(res & PAWN(BLACK))) open_files++;
     }
     if (kx != 7)
     {
-        res = plt::dBoard[kpos + 1];
+        res = plt::DownMasks[kpos + 1];
         if (!(res & PAWN(BLACK))) open_files++;
     }
     score -= 24 * (open_files * open_files);
     
-    res = plt::KBoard[kpos];
-    if (ky) res |= plt::KBoard[kpos - 8];
+    res = plt::KingMasks[kpos];
+    if (ky) res |= plt::KingMasks[kpos - 8];
     defenders[0] = __ppcnt((res & (KNIGHT(BLACK) ^ BISHOP(BLACK) ^ ROOK(BLACK) ^ QUEEN(BLACK))));
     defenders[1] = __ppcnt((res & PAWN(BLACK)));
 

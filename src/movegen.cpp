@@ -59,9 +59,9 @@ en_passant_recheck(int ip, const chessBoard& _cb)
     const uint64_t ebq = QUEEN(emy) ^ BISHOP(emy);
     uint64_t Ap = ALL_BOTH ^ ((1ULL << ip) | (1ULL << (eps - 8 * (2 * _cb.color - 1))));
 
-    const uint64_t res  = mSb((plt::lBoard[kpos] & Ap)) | lSb((plt::rBoard[kpos] & Ap));
-    const uint64_t tmp1 = mSb((plt::dlBoard[kpos] & Ap)) | lSb((plt::urBoard[kpos] & Ap));
-    const uint64_t tmp2 = lSb((plt::ulBoard[kpos] & Ap)) | mSb((plt::drBoard[kpos] & Ap));
+    const uint64_t res  = mSb((plt::LeftMasks[kpos] & Ap)) | lSb((plt::RightMasks[kpos] & Ap));
+    const uint64_t tmp1 = mSb((plt::DownLeftMasks[kpos] & Ap)) | lSb((plt::UpRightMasks[kpos] & Ap));
+    const uint64_t tmp2 = lSb((plt::UpLeftMasks[kpos] & Ap)) | mSb((plt::DownRightMasks[kpos] & Ap));
 
     if (res & erq) return false;
     // Board has to be invalid for this check
@@ -149,7 +149,7 @@ enpassant_pawns(const chessBoard &_cb, MoveList &myMoves,
     const int eps = _cb.csep & 127;
     const uint64_t _ep = 1ULL << eps;
 
-    if (eps == 64 || (KA == 1 && !(plt::pcBoard[_cb.color][kpos] & PAWN(emy))))
+    if (eps == 64 || (KA == 1 && !(plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy))))
         return;
     
     const auto shift = _cb.color == 1 ? l_shift : r_shift;
@@ -168,8 +168,8 @@ promotion_pawns(const chessBoard &_cb, MoveList &myMoves,
     while (pawns)
     {
         int __pos = next_idx(pawns);
-        uint64_t res = ( plt::pBoard[_cb.color][__pos] & move_sq)
-                     | (plt::pcBoard[_cb.color][__pos] & capt_sq);
+        uint64_t res = (plt::PawnMasks[_cb.color][__pos] & move_sq)
+                     | (plt::PawnCaptureMasks[_cb.color][__pos] & capt_sq);
         Add_pm_Pawns(__pos, res, _cb, myMoves);
     }
 }
@@ -247,8 +247,8 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
 
     uint64_t pinned_pieces = 0;
 
-    if ((plt::line_Board[kpos] & erq) == 0 and
-        (plt::diag_Board[kpos] & ebq) == 0) return 0ULL;
+    if ((    plt::LineMasks[kpos] & erq) == 0 and
+        (plt::DiagonalMasks[kpos] & ebq) == 0) return 0ULL;
     
 
     const auto pins_check = [&] (const auto &__f, const uint64_t *table,
@@ -293,7 +293,7 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
 
         if (pawn == 'c' and (first_piece & PAWN(own)))
         {
-            uint64_t capt_sq = plt::pcBoard[_cb.color][index_f];
+            uint64_t capt_sq = plt::PawnCaptureMasks[_cb.color][index_f];
             uint64_t dest_sq = capt_sq & second_piece;
 
             if (eps != 64 && (table[kpos] & capt_sq & (1ULL << eps)) != 0)
@@ -307,17 +307,17 @@ pinned_pieces_list(const chessBoard &_cb, MoveList &myMoves, const int KA)
     };
 
 
-    pins_check(lSb, plt::rBoard, rq, erq, '-');
-    pins_check(mSb, plt::lBoard, rq, erq, '-');
+    pins_check(lSb, plt::RightMasks, rq, erq, '-');
+    pins_check(mSb, plt::LeftMasks, rq, erq, '-');
     
-    pins_check(lSb, plt::uBoard, rq, erq, 's');
-    pins_check(mSb, plt::dBoard, rq, erq, 's');
+    pins_check(lSb, plt::UpMasks, rq, erq, 's');
+    pins_check(mSb, plt::DownMasks, rq, erq, 's');
     
-    pins_check(lSb, plt::urBoard, bq, ebq, 'c');
-    pins_check(lSb, plt::ulBoard, bq, ebq, 'c');
+    pins_check(lSb, plt::UpRightMasks, bq, ebq, 'c');
+    pins_check(lSb, plt::UpLeftMasks, bq, ebq, 'c');
     
-    pins_check(mSb, plt::drBoard, bq, ebq, 'c');
-    pins_check(mSb, plt::dlBoard, bq, ebq, 'c');
+    pins_check(mSb, plt::DownRightMasks, bq, ebq, 'c');
+    pins_check(mSb, plt::DownLeftMasks, bq, ebq, 'c');
 
     return pinned_pieces;
 } 
@@ -375,7 +375,7 @@ generate_AttackedSquares(const chessBoard& _cb)
     ans |= attacked_squares(knight_atk_sq, KNIGHT(emy));
     ans |= attacked_squares(rook_atk_sq  , ROOK(emy));
     ans |= attacked_squares(queen_atk_sq , QUEEN(emy));
-    ans |= plt::KBoard[idx_no(KING(emy))];
+    ans |= plt::KingMasks[idx_no(KING(emy))];
 
     return ans;
 }
@@ -415,7 +415,7 @@ king_attackers(chessBoard &_cb)
     add_piece(bishop_atk_sq, QUEEN(emy) ^ BISHOP(emy));
     add_piece(knight_atk_sq, KNIGHT(emy));
 
-    const uint64_t pawn_sq = plt::pcBoard[_cb.color][kpos] & PAWN(emy);
+    const uint64_t pawn_sq = plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy);
     if (pawn_sq)
     {
         ++attk_count;
@@ -440,7 +440,7 @@ KingMoves(const chessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
     };
 
     const int kpos = idx_no(KING(OWN));
-    const uint64_t K_sq = plt::KBoard[kpos];
+    const uint64_t K_sq = plt::KingMasks[kpos];
     const uint64_t ans = K_sq & (~(ALL(OWN) | Attacked_Sq));
 
     add_move_to_list(kpos, ans, _cb, myMoves);
@@ -489,8 +489,8 @@ legal_pinned_pieces(const chessBoard& _cb)
     const uint64_t  bq = QUEEN(own) | BISHOP(own);
     uint64_t pinned_pieces = 0;
 
-    const uint64_t ray_line = plt::line_Board[kpos];
-    const uint64_t ray_diag = plt::diag_Board[kpos];
+    const uint64_t ray_line = plt::LineMasks[kpos];
+    const uint64_t ray_diag = plt::DiagonalMasks[kpos];
     
     if (!((ray_line & erq) | (ray_diag & ebq)))
         return 0;
@@ -530,7 +530,7 @@ legal_pinned_pieces(const chessBoard& _cb)
 
         if (pawn == 'c' && (first_piece & PAWN(own)))
         {
-            uint64_t capt_sq = plt::pcBoard[_cb.color][index_f];
+            uint64_t capt_sq = plt::PawnCaptureMasks[_cb.color][index_f];
             uint64_t dest_sq = capt_sq & second_piece;
 
             if (eps != 64 && (table[kpos] & capt_sq & (1ULL << eps)) != 0)
@@ -542,15 +542,15 @@ legal_pinned_pieces(const chessBoard& _cb)
         return false;
     };
 
-    if (   can_pinned(lSb, plt::rBoard,  rq, erq, '-')
-        or can_pinned(mSb, plt::lBoard,  rq, erq, '-')
-        or can_pinned(lSb, plt::uBoard,  rq, erq, 's')
-        or can_pinned(mSb, plt::dBoard,  rq, erq, 's')) return 1;
+    if (   can_pinned(lSb, plt::RightMasks,  rq, erq, '-')
+        or can_pinned(mSb, plt::LeftMasks,  rq, erq, '-')
+        or can_pinned(lSb, plt::UpMasks,  rq, erq, 's')
+        or can_pinned(mSb, plt::DownMasks,  rq, erq, 's')) return 1;
 
-    if (   can_pinned(lSb, plt::urBoard, bq, ebq, 'c')
-        or can_pinned(lSb, plt::ulBoard, bq, ebq, 'c')
-        or can_pinned(mSb, plt::drBoard, bq, ebq, 'c')
-        or can_pinned(mSb, plt::dlBoard, bq, ebq, 'c')) return 1;
+    if (   can_pinned(lSb, plt::UpRightMasks, bq, ebq, 'c')
+        or can_pinned(lSb, plt::UpLeftMasks, bq, ebq, 'c')
+        or can_pinned(mSb, plt::DownRightMasks, bq, ebq, 'c')
+        or can_pinned(mSb, plt::DownLeftMasks, bq, ebq, 'c')) return 1;
 
     return pinned_pieces;
 }
@@ -570,7 +570,7 @@ legal_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces, const uint
         const int kpos = idx_no(KING(own));
         uint64_t ep_square = 1ULL << ep;
 
-        if ((ep == 64) or (_cb.KA == 1 and !(plt::pcBoard[_cb.color][kpos] & PAWN(emy))))
+        if ((ep == 64) or (_cb.KA == 1 and !(plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy))))
             return false;
 
         return ((shift(l_pawns, 7 + (own >> 2)) & ep_square) and en_passant_recheck(ep + (2 * emy - 9), _cb))
@@ -583,8 +583,8 @@ legal_pawns_move(const chessBoard &_cb, const uint64_t pinned_pieces, const uint
         while (pawns)
         {
             const int __pos = next_idx(pawns);
-            valid_squares |= ( plt::pBoard[_cb.color][__pos] & move_sq)
-                           | (plt::pcBoard[_cb.color][__pos] & capt_sq);
+            valid_squares |= ( plt::PawnMasks[_cb.color][__pos] & move_sq)
+                           | (plt::PawnCaptureMasks[_cb.color][__pos] & capt_sq);
         }
 
         return (valid_squares != 0);
@@ -660,7 +660,7 @@ static bool
 legal_king_move(const chessBoard& _cb, uint64_t attacked_squares)
 {
     const int kpos = idx_no(KING(OWN));
-    const uint64_t K_sq = plt::KBoard[kpos];
+    const uint64_t K_sq = plt::KingMasks[kpos];
 
     const uint64_t legal_squares = K_sq & (~(ALL(OWN) | attacked_squares));
 
@@ -695,16 +695,16 @@ is_passad_pawn(int idx, chessBoard& _cb)
 {
     if (_cb.color == 1)
     {
-        uint64_t res = plt::uBoard[idx];
-        if ((idx & 7) >= 1) res |= plt::uBoard[idx - 1];
-        if ((idx & 7) <= 6) res |= plt::uBoard[idx + 1];
+        uint64_t res = plt::UpMasks[idx];
+        if ((idx & 7) >= 1) res |= plt::UpMasks[idx - 1];
+        if ((idx & 7) <= 6) res |= plt::UpMasks[idx + 1];
         if (res & PAWN(BLACK)) return false;
         return true;
     }
 
-    uint64_t res = plt::dBoard[idx];
-    if ((idx & 7) >= 1) res |= plt::dBoard[idx - 1];
-    if ((idx & 7) <= 6) res |= plt::dBoard[idx + 1];
+    uint64_t res = plt::DownMasks[idx];
+    if ((idx & 7) >= 1) res |= plt::DownMasks[idx - 1];
+    if ((idx & 7) <= 6) res |= plt::DownMasks[idx + 1];
     if (res & PAWN(WHITE)) return false;
     return true;
 }

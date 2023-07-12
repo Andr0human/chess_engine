@@ -155,7 +155,7 @@ bishop_atk_sq(int __pos, uint64_t _Ap)
 
 uint64_t
 knight_atk_sq(int __pos, uint64_t _Ap)
-{ return plt::NtBoard[__pos] + (_Ap - _Ap); }
+{ return plt::KnightMasks[__pos] + (_Ap - _Ap); }
 
 uint64_t
 rook_atk_sq(int __pos, uint64_t _Ap)
@@ -187,7 +187,7 @@ find_check_squares(const chessBoard& _cb, bool own_king)
     uint64_t res1 = rook_atk_sq(kpos, Apieces);
     uint64_t res2 = bishop_atk_sq(kpos, Apieces);
     uint64_t res3 = knight_atk_sq(kpos, Apieces);
-    uint64_t res4 = plt::pcBoard[own_side][kpos];
+    uint64_t res4 = plt::PawnCaptureMasks[own_side][kpos];
 
     return CheckData(res1, res2, res3, res4);
 }
@@ -199,7 +199,7 @@ find_check_squares(int kpos, int side, uint64_t Apieces)
     uint64_t res1 = rook_atk_sq(kpos, Apieces);
     uint64_t res2 = bishop_atk_sq(kpos, Apieces);
     uint64_t res3 = knight_atk_sq(kpos, Apieces);
-    uint64_t res4 = plt::pcBoard[side][kpos];
+    uint64_t res4 = plt::PawnCaptureMasks[side][kpos];
 
     return CheckData(res1, res2, res3, res4);
 }
