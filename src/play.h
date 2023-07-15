@@ -19,7 +19,11 @@
  * moves - play the current in move(s) in set position. (Do a legality-check first)
  * moves <move1> <move2> ... <movei>
 
- * movetime - time allocated for the search in secs. [default : 2 sec.]
+ * time - time allocated for the search in secs. [default : 2 sec.]
+
+ * input - set input file for chess_engine
+
+ * output - set output file for chess_engine
 
  * threads - threads used for the search
 
@@ -32,7 +36,7 @@
 ***/
 
 
-class playboard : public chessBoard
+class playboard : public ChessBoard
 {
     private:
     // Max threas to use for search
@@ -41,7 +45,7 @@ class playboard : public chessBoard
     // Max depth to search
     size_t mDepth;
     double movetime;
-    bool search_curr_pos;
+    bool go_receive;
     bool to_quit;
 
     vector<MoveType> moves;
@@ -58,7 +62,7 @@ class playboard : public chessBoard
     // Init
     playboard()
     : threads(1), mDepth(maxDepth), movetime(default_search_time),
-    search_curr_pos(false), to_quit(false) {}
+    go_receive(false), to_quit(false) {}
 
     void
     set_thread(size_t __tc) noexcept
@@ -78,14 +82,14 @@ class playboard : public chessBoard
 
     void
     ready_search() noexcept
-    { search_curr_pos = true; }
+    { go_receive = true; }
 
     void
     search_done() noexcept
-    { search_curr_pos = false; }
+    { go_receive = false; }
 
-    bool init_search() const noexcept
-    { return search_curr_pos; }
+    bool to_search() const noexcept
+    { return go_receive; }
 
     void
     ready_quit() noexcept
@@ -102,7 +106,7 @@ class playboard : public chessBoard
     }
 
     void
-    play_moves_before_search(vector<string>& list, size_t start) noexcept
+    play_moves_before_search(const vector<string>& list, size_t start) noexcept
     {
         while (start < list.size() and is_numeric(list[start]))
             moves.push_back(std::stoi(list[start++]));
@@ -127,6 +131,9 @@ class playboard : public chessBoard
     void
     play_moves() noexcept
     {
+        cout << "Fen before => " << fen() << endl;
+        cout << "moves => ";
+
         const auto pawn_move = [] (MoveType move)
         { return ((move >> 12) & 7) == 1; };
 
@@ -141,9 +148,13 @@ class playboard : public chessBoard
             if (pawn_move(move) or captures(move) or en_passant(move, csep))
                 prev_keys.clear();
 
+            cout << print(move, *this) << " ";
             MakeMove(move);
             prev_keys.push_back(Hash_Value);
         }
+
+        cout << endl;
+        cout << "Fen after  => " << fen() << endl;
 
         moves.clear();
     }
@@ -151,6 +162,17 @@ class playboard : public chessBoard
     vector<uint64_t>
     get_prev_hashkeys() const noexcept
     { return prev_keys; }
+
+    bool
+    integrity_check() const noexcept
+    {
+        if (prev_keys.empty())
+            return true;
+        
+        uint64_t last_key = prev_keys.back();
+        return generate_hashKey() == last_key;
+    }
+
 };
 
 

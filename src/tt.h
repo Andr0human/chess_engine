@@ -9,14 +9,14 @@
 #include <random>
 
 
-class Zobrist_HashKey
+class ZobristHashKey
 {
     public:
     uint64_t key;
     int32_t depth, move;
     int32_t eval, flag;
 
-    Zobrist_HashKey() noexcept
+    ZobristHashKey() noexcept
     { clear(); }
 
     void
@@ -39,7 +39,7 @@ class Zobrist_HashKey
     }
 };
 
-class Transposition_Table
+class TranspositionTable
 {
     const static int HASHEMPTY = 0;
     const static int HASHEXACT = 1;
@@ -57,8 +57,8 @@ class Transposition_Table
 
     uint64_t TT_SIZE = 0;
 
-    Zobrist_HashKey *primary_tt_table;
-    Zobrist_HashKey *secondary_tt_table;
+    ZobristHashKey *primary_tt_table;
+    ZobristHashKey *secondary_tt_table;
 
     uint64_t HashIndex[HASH_INDEXES_SIZE];    
 
@@ -70,9 +70,9 @@ class Transposition_Table
 
     public:
     // Initialize Transposition Table
-    Transposition_Table() { }
+    TranspositionTable() { }
 
-    Transposition_Table(int preset)
+    TranspositionTable(int preset)
     { resize(preset); }
 
     void
@@ -99,7 +99,7 @@ class Transposition_Table
 };
 
 
-extern Transposition_Table TT;
+extern TranspositionTable TT;
 
 #endif
 

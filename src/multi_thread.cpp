@@ -17,7 +17,7 @@ thread_search_info::thread_search_info()
 }
 
 void
-thread_search_info::set(chessBoard &tmp_board, MoveList &tmp,
+thread_search_info::set(ChessBoard &tmp_board, MoveList &tmp,
     int t_dep, int ta, int tb, int tply, int pv_idx, int start)
 {
     threads_available = beta_cut = false;
@@ -51,7 +51,7 @@ thread_search_info::result()
 #ifndef NODECOUNT
 
 uint64_t
-bulk_MultiCount(chessBoard &_cb, int depth)
+bulk_MultiCount(ChessBoard &_cb, int depth)
 {
     if (depth <= 0) return 1;
 
@@ -82,7 +82,7 @@ bulk_MultiCount(chessBoard &_cb, int depth)
 #ifndef MULTI_THREAD_SEARCH
 
 void
-MakeMove_MultiIterative(chessBoard &primary, int mDepth, double search_time)
+MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
 {
     // A Zero depth Move is produced in case we don't have time to do a search of depth 1
     int zero_move = createMoveOrderList(primary), eval = 0;
@@ -127,7 +127,7 @@ MakeMove_MultiIterative(chessBoard &primary, int mDepth, double search_time)
 }
 
 int
-thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
+thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
 {
     if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
@@ -193,7 +193,7 @@ thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
 }
 
 int
-pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
+pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex)
 {
     if (depth <= 0)
         return QuieSearch(_cb, alpha, beta, ply, 0);
@@ -279,7 +279,7 @@ pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
 }
 
 int
-pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth)
+pv_multiAlphaBetaRoot(ChessBoard &_cb, int alpha, int beta, int depth)
 {
     MoveList myMoves = generate_moves(_cb);
     moc.setMoveOrder(myMoves);
@@ -346,7 +346,7 @@ pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth)
 }
 
 int
-LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex)
+LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex)
 {
     int eval, hashf = HASHALPHA;
     int pvNextIndex = pvIndex + maxPly - ply;
@@ -399,7 +399,7 @@ LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, i
 }
 
 bool
-fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex)
+fm_Search(ChessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex)
 {
     // No need to pick reduction as this is first move
     int pvNextIndex = pvIndex + maxPly - ply;
@@ -419,7 +419,7 @@ fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &
 }
 
 bool
-first_rm_search(chessBoard &_cb, int move, int depth, int &alpha, int &beta)
+first_rm_search(ChessBoard &_cb, int move, int depth, int &alpha, int &beta)
 {
     // rm_search => root_move_search
 
@@ -484,7 +484,7 @@ run_threads(char runtype, int sourceArr[])
 void
 worker_Count(int thread_num)
 {
-    chessBoard _cb;
+    ChessBoard _cb;
     mute.lock();
     _cb = thread_data.Board;
     int depth = thread_data.depth;
@@ -512,7 +512,7 @@ worker_Count(int thread_num)
 void
 worker_alphabeta(int thread_num, int sourceArr[])
 {
-    chessBoard _cb;
+    ChessBoard _cb;
     mute.lock();
     _cb = thread_data.Board;
     int depth   = thread_data.depth;
@@ -562,7 +562,7 @@ worker_alphabeta(int thread_num, int sourceArr[])
 void
 worker_root_alphabeta(int thread_num, int sourceArr[])
 {
-    chessBoard _cb;
+    ChessBoard _cb;
     mute.lock();
     _cb = thread_data.Board;
     int depth   = thread_data.depth;

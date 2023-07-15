@@ -31,7 +31,7 @@ enum search_flag:int
 
 
 
-class moveOrderClass
+class MoveOrderClass
 {
     private:
     std::pair<int, double> moves[156];
@@ -51,7 +51,7 @@ class moveOrderClass
     insert(uint64_t idx, double time_taken);
 
     void
-    mprint(chessBoard &cb);
+    mprint(ChessBoard &cb);
 
     int
     get_move(uint64_t index);
@@ -88,7 +88,7 @@ class SearchData
 
 
     static string
-    readable_pv_line(chessBoard board, const vector<MoveType>& pv) noexcept
+    readable_pv_line(ChessBoard board, const vector<MoveType>& pv) noexcept
     {
         string res;
         for (const MoveType move : pv) {
@@ -173,7 +173,7 @@ class SearchData
 
     // Prints the result of search_iterative
     void
-    show_search_results(chessBoard board)
+    show_search_results(ChessBoard board)
     {
         const auto&[move, eval] = last_iter_result();
         const double eval_conv = static_cast<double>(eval) / 100.0;
@@ -191,7 +191,7 @@ class SearchData
 
     // Prints the results of last searched depth
     void
-    show_last_depth_result(chessBoard board) const noexcept
+    show_last_depth_result(ChessBoard board) const noexcept
     {
         cout << std::setprecision(2);
     
@@ -209,18 +209,18 @@ class SearchData
 
 
 
-class test_position
+class TestPosition
 {
     public:
     string fen, name;
     int depth;
     uint64_t nodeCount = 0;
 
-    test_position() {}
+    TestPosition() {}
 
-    test_position(string f, int d, uint64_t nc, string n);
+    TestPosition(string f, int d, uint64_t nc, string n);
 
-    test_position(string f, int d, uint64_t nc, int index);
+    TestPosition(string f, int d, uint64_t nc, int index);
 
     void
     generate_name(int index);
@@ -232,18 +232,18 @@ class test_position
 
 
 class
-movegen_test_position
+MovegenTestPosition
 {
     string pos_fen;
     vector<uint64_t> nodes;
 
     public:
-    movegen_test_position() {}
+    MovegenTestPosition() {}
 
-    movegen_test_position(const string& _fen, const vector<uint64_t>& _nodes)
+    MovegenTestPosition(const string& _fen, const vector<uint64_t>& _nodes)
     : pos_fen(_fen), nodes(_nodes) {}
 
-    movegen_test_position(const string&& _fen, const vector<uint64_t>&& _nodes)
+    MovegenTestPosition(const string&& _fen, const vector<uint64_t>&& _nodes)
     : pos_fen(std::move(_fen)), nodes(std::move(_nodes)) {}
 
     uint64_t
@@ -277,7 +277,7 @@ movegen_test_position
 
 // extern search_data info;
 extern SearchData info;
-extern moveOrderClass moc;
+extern MoveOrderClass moc;
 
 
 #endif

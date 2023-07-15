@@ -161,19 +161,19 @@ decode_move(MoveType encoded_move);
 
 
 inline MoveType
-gen_base_move(const chessBoard& _cb, int ip);
+gen_base_move(const ChessBoard& _cb, int ip);
 
 inline
 void add_cap_moves(int ip, uint64_t endSquares, MoveType base,
-    const chessBoard& _cb, MoveList& myMoves);
+    const ChessBoard& _cb, MoveList& myMoves);
 
 inline void
 add_quiet_moves(uint64_t endSquares, MoveType base,
-    const chessBoard& _cb, MoveList& myMoves);
+    const ChessBoard& _cb, MoveList& myMoves);
 
 void
 add_move_to_list(int ip, uint64_t endSquares,
-    const chessBoard& _cb, MoveList& myMoves);
+    const ChessBoard& _cb, MoveList& myMoves);
 
 
 
@@ -181,7 +181,7 @@ add_move_to_list(int ip, uint64_t endSquares,
 
 void
 add_quiet_pawn_moves(uint64_t endSquares, int shift,
-    const chessBoard& _cb, MoveList& myMoves);
+    const ChessBoard& _cb, MoveList& myMoves);
 
 
 
@@ -192,7 +192,7 @@ add_quiet_pawn_moves(uint64_t endSquares, int shift,
 
 // Returns all squares attacked by all pawns from side to move
 uint64_t
-pawn_atk_sq(const chessBoard& _cb, int side);
+pawn_atk_sq(const ChessBoard& _cb, int side);
 
 // Returns all squares attacked by bishop on index __pos
 uint64_t
@@ -214,7 +214,7 @@ queen_atk_sq(int __pos, uint64_t _Ap);
 
 
 // CheckData
-// find_check_squares(const chessBoard& _cb, bool own_king = true);
+// find_check_squares(const ChessBoard& _cb, bool own_king = true);
 
 
 /**
@@ -234,7 +234,7 @@ queen_atk_sq(int __pos, uint64_t _Ap);
  * @return false 
  */
 bool
-in_check(const chessBoard& _cb, bool own_king = true);
+in_check(const ChessBoard& _cb, bool own_king = true);
 
 
 /**
@@ -246,7 +246,7 @@ in_check(const chessBoard& _cb, bool own_king = true);
  * @return string 
  */
 string
-print(MoveType move, const chessBoard& _cb);
+print(MoveType move, const ChessBoard& _cb);
 
 
 /**
@@ -256,7 +256,7 @@ print(MoveType move, const chessBoard& _cb);
  * @param myMoves Movelist for board positions.
  */
 void
-print(const MoveList& myMoves, const chessBoard& _cb);
+print(const MoveList& myMoves, const ChessBoard& _cb);
 
 
 

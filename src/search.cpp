@@ -62,7 +62,7 @@ order_generated_moves(MoveList& myMoves, bool pv_moves)
 }
 
 int
-createMoveOrderList(chessBoard& _cb)
+createMoveOrderList(ChessBoard& _cb)
 {
     /* Stores time used to evaluate each root move.
     Useful in ordering root moves in iterative search. */
@@ -80,7 +80,7 @@ createMoveOrderList(chessBoard& _cb)
 }
 
 bool
-is_valid_move(MoveType move, chessBoard _cb)
+is_valid_move(MoveType move, ChessBoard _cb)
 {
     int ip = move & 63, vMove/* , fp = (move >> 6) & 63 */;                      // Get Init. and Dest. Square from encoded move.
 
@@ -147,7 +147,7 @@ reduction (int depth, int move_no)
 }
 
 int
-MaterialCount(chessBoard& _cb)
+MaterialCount(ChessBoard& _cb)
 {
     int answer = 0;
     answer += 100 * (__ppcnt (PAWN(WHITE))  + __ppcnt(PAWN(BLACK)));
@@ -163,7 +163,7 @@ MaterialCount(chessBoard& _cb)
 #ifndef SEARCH_COMMON
 
 int
-QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
+QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
 {    
     // Check if Time Left for Search
     if (info.time_over())
@@ -213,7 +213,7 @@ QuieSearch(chessBoard& _cb, int alpha, int beta, int ply, int __dol)
 }
 
 int
-AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply)
+AlphaBeta_noPV(ChessBoard &_cb, int depth, int alpha, int beta, int ply)
 {
     if (has_legal_moves(_cb) == false)
         return _cb.king_in_check() ? checkmate_score(ply) : 0;

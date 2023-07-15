@@ -23,21 +23,21 @@ int checkmate_score(int ply);
 
 // Move_Generator
 void order_generated_moves(MoveList& myMoves, bool pv_moves);
-int createMoveOrderList(chessBoard &_cb);
-bool is_valid_move(MoveType move, chessBoard _cb);
+int createMoveOrderList(ChessBoard &_cb);
+bool is_valid_move(MoveType move, ChessBoard _cb);
 
 // Search_Checks
-// bool ok_to_do_nullmove(chessBoard& _cb);
-// bool ok_to_fprune(int depth, chessBoard& _cb, MoveList& myMoves, int beta);
+// bool ok_to_do_nullmove(ChessBoard& _cb);
+// bool ok_to_fprune(int depth, ChessBoard& _cb, MoveList& myMoves, int beta);
 // int apply_search_extensions(MoveList& myMoves);
 bool ok_to_do_LMR(int depth, MoveList& myMoves);
 int root_reduction(int depth, int num);
 int reduction (int depth, int num);
-int MaterialCount(chessBoard& _cb);
+int MaterialCount(ChessBoard& _cb);
 
 // Search
-int QuieSearch(chessBoard &_cb, int alpha, int beta, int ply, int __dol);
-int AlphaBeta_noPV(chessBoard &_cb, int depth, int alpha, int beta, int ply);
+int QuieSearch(ChessBoard &_cb, int alpha, int beta, int ply, int __dol);
+int AlphaBeta_noPV(ChessBoard &_cb, int depth, int alpha, int beta, int ply);
 
 
 #endif

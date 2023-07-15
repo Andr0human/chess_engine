@@ -5,7 +5,7 @@
 uint64_t tmp_total_counter = 0;
 uint64_t tmp_this_counter = 0;
 
-chessBoard::chessBoard()
+ChessBoard::ChessBoard()
 {
     color = 1;
     csep = moveNum = 0;
@@ -16,11 +16,11 @@ chessBoard::chessBoard()
     for (int i = 0; i < 16; i++) Pieces[i] = 0; 
 }
 
-chessBoard::chessBoard(const string& fen)
+ChessBoard::ChessBoard(const string& fen)
 { set_position_with_fen(fen); }
 
 void
-chessBoard::set_position_with_fen(const string& fen) noexcept
+ChessBoard::set_position_with_fen(const string& fen) noexcept
 {
     using std::stoi;
 
@@ -100,7 +100,7 @@ chessBoard::set_position_with_fen(const string& fen) noexcept
 
 
 void
-chessBoard::MakeMove(const MoveType move) noexcept
+ChessBoard::MakeMove(const MoveType move) noexcept
 {
     // Init and Dest. sq
     const int ip = move & 63;
@@ -189,7 +189,7 @@ chessBoard::MakeMove(const MoveType move) noexcept
 }
 
 void
-chessBoard::update_csep(int old_csep, int new_csep) noexcept
+ChessBoard::update_csep(int old_csep, int new_csep) noexcept
 {
     #if defined(TRANSPOSITION_TABLE_H)
         Hash_Value ^= TT.hash_key((old_csep >> 7) + 66);
@@ -198,7 +198,7 @@ chessBoard::update_csep(int old_csep, int new_csep) noexcept
 }
 
 void
-chessBoard::make_move_castle_check(const int piece, const int sq) noexcept
+ChessBoard::make_move_castle_check(const int piece, const int sq) noexcept
 {
     // piece - at (init) or (dest) square.
 
@@ -217,7 +217,7 @@ chessBoard::make_move_castle_check(const int piece, const int sq) noexcept
 }
 
 void
-chessBoard::make_move_double_pawn_push(int ip, int fp) noexcept
+ChessBoard::make_move_double_pawn_push(int ip, int fp) noexcept
 {
     int own = color << 3;
     csep = (csep & 1920) | ((ip + fp) >> 1);
@@ -237,7 +237,7 @@ chessBoard::make_move_double_pawn_push(int ip, int fp) noexcept
 }
 
 void
-chessBoard::make_move_enpassant(int ip, int ep) noexcept
+ChessBoard::make_move_enpassant(int ip, int ep) noexcept
 {
     int own = color << 3;
     int emy = own ^ 8;
@@ -263,7 +263,7 @@ chessBoard::make_move_enpassant(int ip, int ep) noexcept
 }
 
 void
-chessBoard::make_move_pawn_promotion(const MoveType move) noexcept
+ChessBoard::make_move_pawn_promotion(const MoveType move) noexcept
 {
     int ip  = move & 63;
     int fp  = (move >> 6) & 63;
@@ -298,7 +298,7 @@ chessBoard::make_move_pawn_promotion(const MoveType move) noexcept
 }
 
 void
-chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove) noexcept
+ChessBoard::make_move_castling(int ip, int fp, bool call_from_makemove) noexcept
 {
     int own = color << 3;
     
@@ -339,7 +339,7 @@ chessBoard::make_move_castling(int ip, int fp, bool call_from_makemove) noexcept
 }
 
 void
-chessBoard::UnmakeMove() noexcept
+ChessBoard::UnmakeMove() noexcept
 {
     if (moveNum <= 0) return;
 
@@ -393,7 +393,7 @@ chessBoard::UnmakeMove() noexcept
 }
 
 void
-chessBoard::auxilary_table_update(const MoveType move)
+ChessBoard::auxilary_table_update(const MoveType move)
 {
     aux_table_move[moveNum] = move;
     aux_table_csep[moveNum] = csep;
@@ -402,7 +402,7 @@ chessBoard::auxilary_table_update(const MoveType move)
 }
 
 int
-chessBoard::auxilary_table_revert()
+ChessBoard::auxilary_table_revert()
 {
     moveNum--;
     csep = aux_table_csep[moveNum];
@@ -412,7 +412,7 @@ chessBoard::auxilary_table_revert()
 }
 
 void
-chessBoard::add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept
+ChessBoard::add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept
 {
     for (const uint64_t key : prev_keys)
     {
@@ -424,7 +424,7 @@ chessBoard::add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept
 }
 
 bool
-chessBoard::three_move_repetition() const noexcept
+ChessBoard::three_move_repetition() const noexcept
 {
     int pos_count = 0;
 
@@ -436,7 +436,7 @@ chessBoard::three_move_repetition() const noexcept
 }
 
 const string
-chessBoard::fen() const
+ChessBoard::fen() const
 {
     const auto piece_no_to_char = [] (const int piece_no)
     {
@@ -515,7 +515,7 @@ chessBoard::fen() const
 }
 
 uint64_t
-chessBoard::generate_hashKey() const
+ChessBoard::generate_hashKey() const
 {    
     uint64_t key = 0;
 
@@ -550,14 +550,14 @@ chessBoard::generate_hashKey() const
 }
 
 void
-chessBoard::MakeNullMove()
+ChessBoard::MakeNullMove()
 {
     csep = (csep & 1920) ^ 64;
     // Hash_Value ^= TT.HashIndex[0];
     color ^= 1;
 }
 
-void chessBoard::UnmakeNullMove()
+void ChessBoard::UnmakeNullMove()
 {
     // Update to not use t_csep form external source
     // csep = t_csep;
@@ -567,7 +567,7 @@ void chessBoard::UnmakeNullMove()
 }
 
 void
-chessBoard::Reset()
+ChessBoard::Reset()
 { 
     for (int i = 0; i < 64; i++) board[i] = 0;
     for (int i = 0; i < 16; i++) Pieces[i] = 0;
@@ -577,7 +577,7 @@ chessBoard::Reset()
 }
 
 void
-chessBoard::fill_with_piece(string arr[], uint64_t value, char ch) const
+ChessBoard::fill_with_piece(string arr[], uint64_t value, char ch) const
 {
     while (value != 0)
     {
@@ -590,7 +590,7 @@ chessBoard::fill_with_piece(string arr[], uint64_t value, char ch) const
 }
 
 void
-chessBoard::show() const noexcept
+ChessBoard::show() const noexcept
 {
     string arr[8];
     for (int i = 0; i < 8; i++) arr[i] = "........";
@@ -622,7 +622,7 @@ chessBoard::show() const noexcept
 }
 
 bool
-chessBoard::operator==(const chessBoard& other)
+ChessBoard::operator==(const ChessBoard& other)
 {
     for (int i = 0; i < 64; i++)
         if (board[i] != other.board[i]) return false;
@@ -639,5 +639,5 @@ chessBoard::operator==(const chessBoard& other)
 }
 
 bool
-chessBoard::operator!= (const chessBoard& other)
+ChessBoard::operator!= (const ChessBoard& other)
 { return !(*this == other); }

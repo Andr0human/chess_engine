@@ -1,23 +1,7 @@
 .vscode
 /Utility/test_data/
 
-base_utils.o
-bitboard.o
-lookup_table.o
-tt.o
-search_utils.o
-elsa.o
-movegen.o
-search.o
-PieceSquareTable.o
-single_thread.o
-task.o
-evaluation.o
-move_utils.o
-play.o
-ponder.o
-multi_thread.o
-elsa_in
-elsa_out
-elsa
-elsa.exe
+*.o
+*.in
+*.out
+*.exe

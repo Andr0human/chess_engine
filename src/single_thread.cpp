@@ -5,7 +5,7 @@
 #ifndef SINGLE_THREAD_NEGAMAX
 
 uint64_t
-bulkcount(chessBoard &_cb, int depth)
+bulkcount(ChessBoard &_cb, int depth)
 {
     if (depth <= 0) return 1;
 
@@ -26,7 +26,7 @@ bulkcount(chessBoard &_cb, int depth)
 }
 
 int
-negaMax(chessBoard &_cb, int depth)
+negaMax(ChessBoard &_cb, int depth)
 {
     if (depth <= 0)
         return ev.Evaluate(_cb);
@@ -47,7 +47,7 @@ negaMax(chessBoard &_cb, int depth)
 }
 
 std::pair<MoveType, int>
-negaMax_root(chessBoard &_cb, int depth)
+negaMax_root(ChessBoard &_cb, int depth)
 {
     if (has_legal_moves(_cb) == false)
     {
@@ -81,7 +81,7 @@ negaMax_root(chessBoard &_cb, int depth)
 
 
 void
-search_iterative(chessBoard board, int mDepth, double search_time)
+search_iterative(ChessBoard board, int mDepth, double search_time)
 {
     // A Zero depth Move is produced in case we don't even have time to do a search of depth 1
     reset_pv_line();
@@ -137,7 +137,7 @@ search_iterative(chessBoard board, int mDepth, double search_time)
 }
 
 int
-alphabeta(chessBoard& __pos, int depth,
+alphabeta(ChessBoard& __pos, int depth,
     int alpha, int beta, int ply, int pvIndex) 
 {
     if (info.time_over())
@@ -245,7 +245,7 @@ alphabeta(chessBoard& __pos, int depth,
 
 
 int
-pv_root_alphabeta(chessBoard& _cb, int alpha, int beta, int depth)
+pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
 {
     perf_clock startTime;
     perf_ns_time duration;
@@ -307,7 +307,7 @@ pv_root_alphabeta(chessBoard& _cb, int alpha, int beta, int depth)
 }
 
 int
-lmr_search(chessBoard &_cb, MoveList& myMoves,
+lmr_search(ChessBoard &_cb, MoveList& myMoves,
     int depth, int alpha, int beta, int ply, int pvIndex)
 {
     int eval, hashf = HASHALPHA, R, i = 0;

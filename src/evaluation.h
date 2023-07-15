@@ -25,32 +25,32 @@ class Evaluation
 
     void config_weights();
     void set_material_strength();
-    void MaterialCount(const chessBoard& _cb);
+    void MaterialCount(const ChessBoard& _cb);
     int material_strength();
 
     // PIECE_SQUARE_TABLE_STRENGTH
-    int piece_strength(const chessBoard &_cb) const;
-    int king_strength(const chessBoard& _cb) const;
+    int piece_strength(const ChessBoard &_cb) const;
+    int king_strength(const ChessBoard& _cb) const;
 
     // MOBILITY
-    int piece_mobility(const chessBoard &_cb) const;
+    int piece_mobility(const ChessBoard &_cb) const;
 
-    int WhitePawns_Structure(const chessBoard& _cb);
-    int BlackPawns_Structure(const chessBoard& _cb);
+    int WhitePawns_Structure(const ChessBoard& _cb);
+    int BlackPawns_Structure(const ChessBoard& _cb);
 
     // ATTACK_STRENGTH
-    int White_attk_Strength(const chessBoard& _cb);
-    int Black_attk_Strength(const chessBoard& _cb);
-    int White_King_Safety(const chessBoard& _cb);
-    int Black_King_Safety(const chessBoard& _cb);
-    int attack_strength(const chessBoard& _cb);
+    int White_attk_Strength(const ChessBoard& _cb);
+    int Black_attk_Strength(const ChessBoard& _cb);
+    int White_King_Safety(const ChessBoard& _cb);
+    int Black_King_Safety(const ChessBoard& _cb);
+    int attack_strength(const ChessBoard& _cb);
 
     public:
     // Set the weights for evaluation
     void set_parameter(int tmp1, int tmp2, int tmp3, int tmp4, int tmp5);
 
 
-    int Evaluate (const chessBoard& _cb);
+    int Evaluate (const ChessBoard& _cb);
 };
 
 extern Evaluation ev;

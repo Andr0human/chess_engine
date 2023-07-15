@@ -13,7 +13,7 @@
 
 struct thread_search_info
 {
-    chessBoard Board;
+    ChessBoard Board;
     bool beta_cut, threads_available, time_left;
 
     uint64_t moveCount;
@@ -26,7 +26,7 @@ struct thread_search_info
     thread_search_info ();
 
     void
-    set(chessBoard &tmp_board, MoveList &tmp, int t_dep, int ta, int tb, int tply, int pv_idx, int start);
+    set(ChessBoard &tmp_board, MoveList &tmp, int t_dep, int ta, int tb, int tply, int pv_idx, int start);
 
     int
     get_index() noexcept;
@@ -53,28 +53,28 @@ worker_root_alphabeta(int thread_num, int sourceArr[]);
 
 
 uint64_t
-bulk_MultiCount(chessBoard &_cb, int depth);
+bulk_MultiCount(ChessBoard &_cb, int depth);
 
 void
-MakeMove_MultiIterative(chessBoard &primary, int mDepth = maxDepth, double search_time = default_search_time);
+MakeMove_MultiIterative(ChessBoard &primary, int mDepth = maxDepth, double search_time = default_search_time);
 
 int
-thread_AlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
+thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
 
 int
-pv_multiAlphaBeta(chessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
+pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
 
 int
-pv_multiAlphaBetaRoot(chessBoard &_cb, int alpha, int beta, int depth);
+pv_multiAlphaBetaRoot(ChessBoard &_cb, int alpha, int beta, int depth);
 
 int
-LMR_threadSearch(chessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex);
+LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex);
 
 bool
-fm_Search(chessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex);
+fm_Search(ChessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex);
 
 bool
-first_rm_search(chessBoard &_cb, int __move, int depth, int &alpha, int &beta);
+first_rm_search(ChessBoard &_cb, int __move, int depth, int &alpha, int &beta);
 
 extern std::thread td[maxThreadCount];
 extern thread_search_info thread_data;

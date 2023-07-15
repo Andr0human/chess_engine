@@ -11,11 +11,11 @@ extern uint64_t tmp_total_counter;
 extern uint64_t tmp_this_counter;
 
 
-class chessBoard
+class ChessBoard
 {
     private:
     static const int pieceOfs = 470, ofs = 7;
-    static const int max_moveNum = 60;
+    static const int max_moveNum = 200;
 
     MoveType aux_table_move[max_moveNum];
     int aux_table_csep[max_moveNum];
@@ -23,7 +23,7 @@ class chessBoard
     int moveNum = 0;
 
     void
-    fill_with_piece(std::string arr[], uint64_t val, char ch) const;
+    fill_with_piece(std::string* arr, uint64_t val, char ch) const;
 
     // MakeMove-Subparts
 
@@ -96,9 +96,9 @@ class chessBoard
      **/
     uint64_t Pieces[16]{0};
 
-    chessBoard();
+    ChessBoard();
     
-    chessBoard(const std::string& fen);
+    ChessBoard(const std::string& fen);
 
     void
     set_position_with_fen(const string& fen) noexcept;
@@ -147,9 +147,9 @@ class chessBoard
     void
     Reset();
 
-    bool operator== (const chessBoard& other);
+    bool operator== (const ChessBoard& other);
 
-    bool operator!= (const chessBoard& other);
+    bool operator!= (const ChessBoard& other);
 
     inline bool enemy_attacked_sq_generated() const noexcept
     { return Pieces[8] != 0; }

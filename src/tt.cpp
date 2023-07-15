@@ -2,10 +2,10 @@
 
 #include "tt.h"
 
-Transposition_Table TT;
+TranspositionTable TT;
 
 void
-Transposition_Table::get_random_keys() noexcept
+TranspositionTable::get_random_keys() noexcept
 {
     std::mt19937_64 rng(1557);
     for (int i = 0; i < HASH_INDEXES_SIZE; i++) 
@@ -13,7 +13,7 @@ Transposition_Table::get_random_keys() noexcept
 }
 
 void
-Transposition_Table::free_tables()
+TranspositionTable::free_tables()
 {
     if (TT_SIZE == 0)
         return;
@@ -23,14 +23,14 @@ Transposition_Table::free_tables()
 }
 
 void
-Transposition_Table::allocate_tables()
+TranspositionTable::allocate_tables()
 {
-    primary_tt_table = new Zobrist_HashKey[TT_SIZE]();
-    secondary_tt_table = new Zobrist_HashKey[TT_SIZE]();
+    primary_tt_table = new ZobristHashKey[TT_SIZE]();
+    secondary_tt_table = new ZobristHashKey[TT_SIZE]();
 }
 
 void
-Transposition_Table::resize(int preset)
+TranspositionTable::resize(int preset)
 {
     get_random_keys();
     free_tables();
@@ -39,9 +39,9 @@ Transposition_Table::resize(int preset)
 }
 
 std::string
-Transposition_Table::size() const noexcept
+TranspositionTable::size() const noexcept
 {
-    uint64_t table_size = sizeof(Zobrist_HashKey) * TT_SIZE * 2;
+    uint64_t table_size = sizeof(ZobristHashKey) * TT_SIZE * 2;
 
     const uint64_t KB = 1024, MB = KB * KB, GB = MB * KB;
 
@@ -55,7 +55,7 @@ Transposition_Table::size() const noexcept
 }
 
 uint64_t
-Transposition_Table::hashkey_update
+TranspositionTable::hashkey_update
     (int piece, int __pos) const noexcept
 {
     const int offset = 85;
@@ -67,10 +67,10 @@ Transposition_Table::hashkey_update
 }
 
 void
-Transposition_Table::record_position
+TranspositionTable::record_position
     (uint64_t zkey, int depth, int move, int eval, int flag) noexcept
 {
-    const auto add_entry = [&] (Zobrist_HashKey& __pos)
+    const auto add_entry = [&] (ZobristHashKey& __pos)
     {
         __pos.key = zkey;
         __pos.depth = depth;
@@ -90,12 +90,12 @@ Transposition_Table::record_position
 
 
 int
-Transposition_Table::lookup_position
+TranspositionTable::lookup_position
     (uint64_t zkey, int depth, int alpha, int beta) const noexcept
 {
     const int32_t UNKNOWN_VALUE = 5567899;
 
-    const auto lookup = [&] (const Zobrist_HashKey &__pos)
+    const auto lookup = [&] (const ZobristHashKey &__pos)
     {
         if (__pos.key == zkey && __pos.depth > depth) {
             if (__pos.flag == HASHEXACT) return __pos.eval;
@@ -116,7 +116,7 @@ Transposition_Table::lookup_position
 
 
 void
-Transposition_Table::clear() noexcept
+TranspositionTable::clear() noexcept
 {
     for (size_t i = 0; i < TT_SIZE; i++)
     {

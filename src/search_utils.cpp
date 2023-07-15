@@ -4,13 +4,13 @@
 
 
 SearchData info;
-moveOrderClass moc;
+MoveOrderClass moc;
 
 
 #ifndef MOVE_ORDER_CLASS
 
 void
-moveOrderClass::initialise(MoveList& myMoves)
+MoveOrderClass::initialise(MoveList& myMoves)
 {
     mCount = myMoves.size();
     for (uint64_t i = 0; i < mCount; i++)
@@ -18,11 +18,11 @@ moveOrderClass::initialise(MoveList& myMoves)
 }
 
 void
-moveOrderClass::insert(uint64_t idx, double time_taken)
+MoveOrderClass::insert(uint64_t idx, double time_taken)
 { moves[idx].second = time_taken; }
 
 void
-moveOrderClass::sortList(int best_move)
+MoveOrderClass::sortList(int best_move)
 {
     for (uint64_t i = 0; i < mCount; i++)
     {
@@ -43,7 +43,7 @@ moveOrderClass::sortList(int best_move)
 }
 
 void
-moveOrderClass::setMoveOrder(MoveList& myMoves)
+MoveOrderClass::setMoveOrder(MoveList& myMoves)
 {
     for (uint64_t i = 0; i < mCount; i++) {
         int curr = moves[i].first;
@@ -54,7 +54,7 @@ moveOrderClass::setMoveOrder(MoveList& myMoves)
 }
 
 void
-moveOrderClass::mprint(chessBoard& cb)
+MoveOrderClass::mprint(ChessBoard& cb)
 {
     for (uint64_t i = 0; i < mCount; i++)
         cout << i + 1 << ") " << print(moves[i].first, cb)
@@ -62,15 +62,15 @@ moveOrderClass::mprint(chessBoard& cb)
 }
 
 int
-moveOrderClass::get_move(uint64_t index)
+MoveOrderClass::get_move(uint64_t index)
 { return moves[index].first; }
 
 uint64_t
-moveOrderClass::moveCount()
+MoveOrderClass::moveCount()
 { return mCount; }
 
 void
-moveOrderClass::reset()
+MoveOrderClass::reset()
 {
     for (uint64_t i = 0; i < mCount; i++)
         moves[i].second = 0;
@@ -80,7 +80,7 @@ moveOrderClass::reset()
 
 #ifndef TEST_POSITION
 
-test_position::test_position(string f, int d, uint64_t nc, int index)
+TestPosition::TestPosition(string f, int d, uint64_t nc, int index)
 {
     fen = f;
     depth = d;
@@ -88,7 +88,7 @@ test_position::test_position(string f, int d, uint64_t nc, int index)
     generate_name(index);
 }
 
-test_position::test_position(string f, int d, uint64_t nc, string n)
+TestPosition::TestPosition(string f, int d, uint64_t nc, string n)
 {
     fen = f;
     name = n;
@@ -97,7 +97,7 @@ test_position::test_position(string f, int d, uint64_t nc, string n)
 }
 
 void
-test_position::generate_name(int index)
+TestPosition::generate_name(int index)
 {
     if (index == 1) name = "pawn";
     else if (index == 2) name = "bishop";
@@ -108,7 +108,7 @@ test_position::generate_name(int index)
 }
 
 void
-test_position::print()
+TestPosition::print()
 {
     cout << name << " : " << fen << "\n" << "|   Depth : " \
     << depth << "\t|   Nodes : " << nodeCount << "\t|\n" << endl;

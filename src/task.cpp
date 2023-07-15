@@ -23,7 +23,7 @@ init()
     #endif
 }
 
-vector<test_position>
+vector<TestPosition>
 get_test_positions(string filename)
 {
     std::ifstream infile;
@@ -31,7 +31,7 @@ get_test_positions(string filename)
 
     string pos, text, name;
     vector<string> tmp;
-    vector<test_position> res;
+    vector<TestPosition> res;
 
     while (true)
     {
@@ -43,7 +43,7 @@ get_test_positions(string filename)
 
         pos = tmp[0];
         tmp = base_utils::split(tmp[1], ' ');
-        res.emplace_back(test_position(pos, std::stoi(tmp[0]), std::stoi(tmp[1]), name));
+        res.emplace_back(TestPosition(pos, std::stoi(tmp[0]), std::stoi(tmp[1]), name));
     }
 
     infile.close();
@@ -59,7 +59,7 @@ accuracy_test()
         std::ifstream infile(file_path);
 
         string line;
-        vector<movegen_test_position> tests;
+        vector<MovegenTestPosition> tests;
 
         while (true)
         {
@@ -78,21 +78,21 @@ accuracy_test()
             );
 
             // const auto nodes = to_nums(base_utils::split(elements[1], ' '));
-            tests.push_back(movegen_test_position(base_utils::strip(elements[0]), nodes));
+            tests.push_back(MovegenTestPosition(base_utils::strip(elements[0]), nodes));
         }
 
         infile.close();
         return tests;
     };
 
-    const auto run_tests = [] (const vector<movegen_test_position>& tests)
+    const auto run_tests = [] (const vector<MovegenTestPosition>& tests)
     {
         int pos_no = 1;
 
         for (const auto& test : tests)
         {
             const auto depth = test.depth();
-            chessBoard _cb = test.fen();
+            ChessBoard _cb = test.fen();
             uint64_t found = bulkcount(_cb, static_cast<int>(depth));
 
             if (found != test.expected_nodes(depth))
@@ -104,7 +104,7 @@ accuracy_test()
         return true;
     };
 
-    const auto failed_tests = [] (const vector<movegen_test_position>& tests)
+    const auto failed_tests = [] (const vector<MovegenTestPosition>& tests)
     {
         auto best_case = tests.front();
         uint64_t best_depth = 100;
@@ -112,7 +112,7 @@ accuracy_test()
         for (const auto& test : tests)
         {
             const auto depth = test.depth();
-            chessBoard _cb = test.fen();
+            ChessBoard _cb = test.fen();
 
             for (uint64_t dep = 1; dep <= depth; dep++)
             {
@@ -146,7 +146,7 @@ accuracy_test()
     cout << "Fen = " << best_case.fen() << endl;
 
     auto maxDepth = best_case.depth();
-    chessBoard _cb = best_case.fen();
+    ChessBoard _cb = best_case.fen();
 
     for (uint64_t depth = 1; depth <= maxDepth; depth++)
         cout << best_case.expected_nodes(depth)
@@ -192,7 +192,7 @@ speed_test()
 
     for (auto pos : positions)
     {
-        chessBoard board = pos.fen;
+        ChessBoard board = pos.fen;
         int64_t nodes_current = 3 * pos.nodeCount;
         int64_t time_current = 0;
 
@@ -224,7 +224,7 @@ direct_search(const vector<string> &_args)
     const double search_time = (__n >= 3) ?
         std::stod(_args[2]) : static_cast<double>(default_search_time);
 
-    chessBoard primary = fen;
+    ChessBoard primary = fen;
     primary.show();
 
     search_iterative(primary, maxDepth, search_time);
@@ -237,7 +237,7 @@ node_count(const vector<string> &_args)
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : StartFen;
     const int depth  = __n > 2 ? stoi(_args[2]) : 6;
-    chessBoard _cb   = fen;
+    ChessBoard _cb   = fen;
 
     cout << "Fen = " << fen << '\n';
     cout << "Depth = " << depth << "\n" << endl;
@@ -284,7 +284,7 @@ debug_movegen(const vector<string> &_args)
     const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
     
     std::ofstream out(_fn);
-    chessBoard _cb = fen;
+    ChessBoard _cb = fen;
     MoveList myMoves = generate_moves(_cb);
 
     for (const auto move : myMoves)
@@ -347,7 +347,7 @@ void task(int argc, char *argv[])
     {
         #if defined(PONDER_H)
             // Argument : elsa ponder "fen"
-            ponderSearch(chessBoard(argument_list[1]), true);
+            ponderSearch(ChessBoard(argument_list[1]), true);
         #endif
     }
     else if (command == "count")

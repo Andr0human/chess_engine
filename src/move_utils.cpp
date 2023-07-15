@@ -35,7 +35,7 @@ decode_move(MoveType move)
 
 
 inline MoveType
-gen_base_move(const chessBoard& _cb, int ip)
+gen_base_move(const ChessBoard& _cb, int ip)
 {
     const int pt =  _cb.board[ip] & 7;
     const int side = _cb.color << 20;
@@ -46,7 +46,7 @@ gen_base_move(const chessBoard& _cb, int ip)
 
 inline void
 add_cap_moves(int ip, uint64_t endSquares,
-    MoveType base_move, const chessBoard& _cb, MoveList& myMoves)
+    MoveType base_move, const ChessBoard& _cb, MoveList& myMoves)
 {
     const auto cap_priority = [] (const int pt, const int cpt)
     { return (cpt - pt + 16); };
@@ -74,7 +74,7 @@ add_cap_moves(int ip, uint64_t endSquares,
 
 inline void
 add_quiet_moves(uint64_t endSquares, MoveType base_move,
-    const chessBoard& _cb, MoveList& myMoves)
+    const ChessBoard& _cb, MoveList& myMoves)
 {
     const auto encode_full_move = [] (const int base, const int fp, const int pr)
     {
@@ -93,7 +93,7 @@ add_quiet_moves(uint64_t endSquares, MoveType base_move,
 
 void
 add_move_to_list(int ip, uint64_t endSquares,
-    const chessBoard& _cb, MoveList& myMoves)
+    const ChessBoard& _cb, MoveList& myMoves)
 {
     if (myMoves.cpt_only)
         endSquares = endSquares & ALL(EMY);
@@ -110,7 +110,7 @@ add_move_to_list(int ip, uint64_t endSquares,
 
 void
 add_quiet_pawn_moves(uint64_t endSquares,
-    int shift, const chessBoard& _cb, MoveList& myMoves)
+    int shift, const ChessBoard& _cb, MoveList& myMoves)
 {
     if (myMoves.cpt_only)
         return;
@@ -131,7 +131,7 @@ add_quiet_pawn_moves(uint64_t endSquares,
 
 
 uint64_t
-pawn_atk_sq(const chessBoard& _cb, int side)
+pawn_atk_sq(const ChessBoard& _cb, int side)
 {
     int inc  = 2 * side - 1;
     uint64_t pawns = _cb.Pieces[8 * side + 1];
@@ -177,7 +177,7 @@ queen_atk_sq(int __pos, uint64_t _Ap)
 
 
 /* CheckData
-find_check_squares(const chessBoard& _cb, bool own_king)
+find_check_squares(const ChessBoard& _cb, bool own_king)
 {
     int own_side = _cb.color ^ (!own_king);
     int kpos = idx_no(KING(own_side << 3));
@@ -240,7 +240,7 @@ uint64_t apiece_after_makemove(MoveType move, uint64_t _Ap)
 
 
 bool
-move_gives_check(MoveType move, const chessBoard& _cb)
+move_gives_check(MoveType move, const ChessBoard& _cb)
 {
     int ip = move & 63;
     int fp = (move >> 6) & 63;
@@ -262,7 +262,7 @@ move_gives_check(MoveType move, const chessBoard& _cb)
 
 // Returns if the king for the side to move is in check.
 bool
-in_check(const chessBoard& _cb, bool own_king)
+in_check(const ChessBoard& _cb, bool own_king)
 {
     const int emy = (_cb.color ^ own_king) << 3;
     CheckData check = find_check_squares(_cb.king_pos(), _cb.side(), ALL(WHITE) | ALL(BLACK));
@@ -275,7 +275,7 @@ in_check(const chessBoard& _cb, bool own_king)
 
 
 string
-print(MoveType move, const chessBoard& _cb)
+print(MoveType move, const ChessBoard& _cb)
 {
     // In case of no move, return null
     if (move == 0)
@@ -405,7 +405,7 @@ print(MoveType move, const chessBoard& _cb)
 
 
 void
-print(const MoveList& myMoves, const chessBoard& _cb)
+print(const MoveList& myMoves, const ChessBoard& _cb)
 {
     cout << "MoveCount : " << myMoves.size() << '\n';
     

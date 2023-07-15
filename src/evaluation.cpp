@@ -105,7 +105,7 @@ Evaluation::set_material_strength()
 }
 
 void
-Evaluation::MaterialCount(const chessBoard& _cb)
+Evaluation::MaterialCount(const ChessBoard& _cb)
 {
     wPawns   = __ppcnt(PAWN(WHITE));     bPawns = __ppcnt(PAWN(BLACK));
     wBishops = __ppcnt(BISHOP(WHITE)); bBishops = __ppcnt(BISHOP(BLACK));
@@ -135,7 +135,7 @@ Evaluation::material_strength()
 #ifndef SQUARE_TABLE
 
 int
-Evaluation::piece_strength(const chessBoard &_cb) const
+Evaluation::piece_strength(const ChessBoard &_cb) const
 {
     const auto str_score = [](uint64_t piece, const int *str_table)
     {
@@ -167,7 +167,7 @@ Evaluation::piece_strength(const chessBoard &_cb) const
 }
 
 int
-Evaluation::king_strength(const chessBoard& _cb) const
+Evaluation::king_strength(const ChessBoard& _cb) const
 {
     if (game_phase >= phase_counter)
         return WkMBoard[idx_no(KING(WHITE))] - BkMBoard[idx_no(KING(BLACK))];
@@ -179,7 +179,7 @@ Evaluation::king_strength(const chessBoard& _cb) const
 #ifndef MOBILITY
 
 int
-Evaluation::piece_mobility(const chessBoard &_cb) const
+Evaluation::piece_mobility(const ChessBoard &_cb) const
 {
     const auto mobility_calc = [] (const auto &__f, uint64_t piece, uint64_t _Ap) {
         uint64_t area = 0;
@@ -211,7 +211,7 @@ Evaluation::piece_mobility(const chessBoard &_cb) const
 #ifndef PAWN_STRUCTURE
 
 int
-Evaluation::WhitePawns_Structure(const chessBoard& _cb)
+Evaluation::WhitePawns_Structure(const ChessBoard& _cb)
 {
     uint64_t pawns = PAWN(WHITE), val, res;
     int score = 0, corner_points = 25, central_points = 15, pass_points = 10;
@@ -259,7 +259,7 @@ Evaluation::WhitePawns_Structure(const chessBoard& _cb)
 }
 
 int
-Evaluation::BlackPawns_Structure(const chessBoard& _cb)
+Evaluation::BlackPawns_Structure(const ChessBoard& _cb)
 {
     uint64_t pawns = PAWN(BLACK), val, res;
     int score = 0, corner_points = 25, central_points = 15, pass_points = 10;
@@ -309,7 +309,7 @@ Evaluation::BlackPawns_Structure(const chessBoard& _cb)
 #ifndef ATTACK_STRENGTH
 
 int
-Evaluation::White_attk_Strength(const chessBoard& _cb)
+Evaluation::White_attk_Strength(const ChessBoard& _cb)
 {
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(BLACK));
@@ -338,7 +338,7 @@ Evaluation::White_attk_Strength(const chessBoard& _cb)
 }
 
 int
-Evaluation::Black_attk_Strength(const chessBoard& _cb)
+Evaluation::Black_attk_Strength(const ChessBoard& _cb)
 {
     const uint64_t Apiece = ALL_BOTH;
     const int kpos = idx_no(KING(WHITE));
@@ -369,7 +369,7 @@ Evaluation::Black_attk_Strength(const chessBoard& _cb)
 }
 
 int
-Evaluation::White_King_Safety(const chessBoard& _cb)
+Evaluation::White_King_Safety(const ChessBoard& _cb)
 {
     uint64_t res;
     int kpos = idx_no(KING(WHITE)), kx = kpos & 7, ky = (kpos - kx) >> 3;
@@ -397,7 +397,7 @@ Evaluation::White_King_Safety(const chessBoard& _cb)
 }
 
 int
-Evaluation::Black_King_Safety(const chessBoard& _cb)
+Evaluation::Black_King_Safety(const ChessBoard& _cb)
 {
     uint64_t res;
     int kpos = idx_no(KING(BLACK)), kx = kpos & 7, ky = (kpos - kx) >> 3;
@@ -427,7 +427,7 @@ Evaluation::Black_King_Safety(const chessBoard& _cb)
 }
 
 int
-Evaluation::attack_strength(const chessBoard& _cb)
+Evaluation::attack_strength(const ChessBoard& _cb)
 {
     if (game_phase < phase_counter + 2) return 0;
 
@@ -482,7 +482,7 @@ void Evaluation::set_parameter (int tmp1, int tmp2, int tmp3, int tmp4, int tmp5
     pawn_struct_weight = (float)tmp5 / 10;
 }
 
-int Evaluation::Evaluate (const chessBoard& _cb)
+int Evaluation::Evaluate (const ChessBoard& _cb)
 {
     MaterialCount(_cb);
 
