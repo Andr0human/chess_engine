@@ -435,6 +435,10 @@ ChessBoard::three_move_repetition() const noexcept
     return pos_count >= 1;
 }
 
+bool
+ChessBoard::fifty_move_rule_draw() const noexcept
+{ return moveNum >= 100; }
+
 const string
 ChessBoard::fen() const
 {
@@ -577,45 +581,26 @@ ChessBoard::Reset()
 }
 
 void
-ChessBoard::fill_with_piece(string arr[], uint64_t value, char ch) const
-{
-    while (value != 0)
-    {
-        const int idx = lSb_idx(value);
-        value &= value - 1;
-
-        const int x = idx & 7, y = (idx - x) >> 3;
-        arr[x][y] = ch;
-    }
-}
-
-void
 ChessBoard::show() const noexcept
 {
-    string arr[8];
-    for (int i = 0; i < 8; i++) arr[i] = "........";
-
     const char _piece[16] = {
         '.', 'p', 'b', 'n', 'r', 'q', 'k', '.',
         '.', 'P', 'B', 'N', 'R', 'Q', 'K', '.'
     };
-
-    for (int i = 1; i <= 6; i++)
-    {
-        fill_with_piece(arr, Pieces[i], _piece[i]);
-        fill_with_piece(arr, Pieces[i + 8], _piece[i + 8]);
-    }
 
     const string s = " +---+---+---+---+---+---+---+---+\n";
 
     string gap = " | ";
     string res = s;
 
-    for (int j = 7; j >= 0; j--)
+    for (int sq = 56; sq >= 0; sq++)
     {
-        for (int i = 0; i < 8; i++)
-            res += gap + arr[i][j];
-        res += " |\n" + s;
+        res += gap + _piece[board[sq]];
+        if ((sq & 7) == 7)
+        {
+            sq -= 16;
+            res += " |\n" + s;
+        }
     }
 
     cout << res << endl;

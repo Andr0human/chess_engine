@@ -231,8 +231,7 @@ class TestPosition
 
 
 
-class
-MovegenTestPosition
+class MovegenTestPosition
 {
     string pos_fen;
     vector<uint64_t> nodes;

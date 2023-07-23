@@ -158,8 +158,8 @@ alphabeta(ChessBoard& __pos, int depth,
             return result;
         }
 
-        // 3-move repetition check
-        if (__pos.three_move_repetition())
+        // 3-move repetition check or 50-move-rule-draw
+        if (__pos.three_move_repetition() or __pos.fifty_move_rule_draw())
         {
             __pos.remove_movegen_extra_data();
             return DRAW_VALUE;

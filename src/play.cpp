@@ -4,7 +4,7 @@
 static string  inputfile;
 static string outputfile;
 
-void
+static void
 write_to_file(const string filename, const string message)
 {
     std::ofstream out(filename);
@@ -15,7 +15,7 @@ write_to_file(const string filename, const string message)
 }
 
 
-void
+static void
 get_input(string& __s)
 {
     const auto valid_args_found = [&__s] ()
@@ -31,7 +31,7 @@ get_input(string& __s)
 
 
     // Break between each read
-    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(3);
+    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(5);
 
     // Searching for a valid commandline
     while (valid_args_found() == false)
@@ -39,8 +39,21 @@ get_input(string& __s)
 }
 
 
-void
-read_init_commands(const vector<string>& init_args, playboard& __pos)
+static void
+write_search_result()
+{
+    const MoveType MOVE_FILTER = 2097151;
+    const auto& [move, eval] = info.last_iter_result();
+    const double in_decimal = static_cast<double>(eval) / 100;
+
+    string result = std::to_string(move & MOVE_FILTER) + string(" ")
+                  + std::to_string(in_decimal);
+
+    write_to_file(outputfile, result);
+}
+
+static void
+read_init_commands(const vector<string>& init_args, PlayBoard& __pos)
 {
     size_t index = 0;
 
@@ -75,8 +88,8 @@ read_init_commands(const vector<string>& init_args, playboard& __pos)
 }
 
 
-void
-read_commands(const vector<string>& args, playboard& __pos)
+static void
+read_commands(const vector<string>& args, PlayBoard& __pos)
 {
     using std::stoi;
     using std::stod;
@@ -92,12 +105,12 @@ read_commands(const vector<string>& args, playboard& __pos)
         }
         else if (arg == "moves")
         {
-            puts("moves command found!");
-            __pos.play_moves_before_search(args, index + 1);
+            puts("pre_moves found for position!");
+            __pos.add_premoves(args, index + 1);
         }
         else if (arg == "time")
         {
-            puts("movetime command found!");
+            puts("time command found!");
             __pos.set_movetime(stod(args[index + 1]));
         }
         else if (arg == "depth")
@@ -116,63 +129,32 @@ read_commands(const vector<string>& args, playboard& __pos)
 }
 
 
-void
-execute_commands(playboard& board)
+static void
+execute_late_commands(PlayBoard& board)
 {
-    /* if (board.integrity_check() == false)
-    {
-        puts("Integrity Check Failed");
-
-        puts("Board => ");
-        for (int i = 0; i < 64; i++)
-        {
-            if (board.board[i] != 0)
-                cout << i << " -> " << endl;
-        }
-
-        puts("Pieces => ");
-        for (int i = 0; i < 16; i++)
-            cout << i << " -> " << endl;
-
-        board.show();
-        system("pause");
-    } */
-
-
-
-
-
 
     // If prev moves to be made on board
-    if (board.to_play_moves())
-        board.play_moves();
+    if (board.premoves_exist())
+        board.play_premoves();
 
     // Start searching for best move in current position (go)
-    if (board.to_search())
+    if (board.do_search())
     {
-        ChessBoard __pos = board.fen();
+        ChessBoard __pos(board.fen());
 
         __pos.show();
         __pos.add_prev_board_positions(board.get_prev_hashkeys());
 
         search_iterative(__pos, maxDepth, board.get_movetime());
-        // Show_Searched_Info(__pos);
-        info.show_search_results(__pos);
         board.search_done();
 
-        const MoveType MOVE_FILTER = 2097151;
-        const auto& [move, eval] = info.last_iter_result();
-        const double in_decimal = static_cast<double>(eval) / 100;
+        info.show_search_results(__pos);
+        write_search_result();
 
-        string result = std::to_string(move & MOVE_FILTER) + string(" ")
-                      + std::to_string(in_decimal);
-
-        write_to_file(outputfile, result);
-
-        board.play_moves(vector<MoveType>{move});
+        int chosen_move = info.last_iter_result().first;
+        board.add_premoves(chosen_move);
         TT.clear();
     }
-
 }
 
 
@@ -182,9 +164,7 @@ play(const vector<string>& args)
     puts("PLAY mode started!");
 
     std::thread input_thread;
-    playboard board;
-
-    read_commands(args, board);
+    PlayBoard board;
 
     read_init_commands(args, board);
 
@@ -203,7 +183,7 @@ play(const vector<string>& args)
         write_to_file(inputfile, "");
         input_string.clear();
 
-        execute_commands(board);
+        execute_late_commands(board);
 
         if (board.do_quit())
             break;
