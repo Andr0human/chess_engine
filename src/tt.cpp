@@ -4,6 +4,18 @@
 
 TranspositionTable TT;
 
+//! TODO xorshift for Random HashKey Generation
+uint64_t
+xorshift64star(void)
+{
+    /* initial seed must be nonzero, don't use a static variable for the state if multithreaded */
+    static uint64_t x = 1237;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    return x * 0x2545F4914F6CDD1DULL;
+}
+
 void
 TranspositionTable::get_random_keys() noexcept
 {
@@ -43,7 +55,7 @@ TranspositionTable::size() const noexcept
 {
     uint64_t table_size = sizeof(ZobristHashKey) * TT_SIZE * 2;
 
-    const uint64_t KB = 1024, MB = KB * KB, GB = MB * KB;
+    uint64_t KB = 1024, MB = KB * KB, GB = MB * KB;
 
     if (table_size < MB)
         return std::to_string(table_size / KB) + std::string(" KB.");
@@ -51,15 +63,15 @@ TranspositionTable::size() const noexcept
     if (table_size < GB)
         return std::to_string(table_size / MB) + std::string(" MB.");
 
-    return std::to_string(static_cast<float>(table_size) / GB) + std::string(" GB.");
+    return std::to_string(static_cast<float>(table_size) / static_cast<float>(GB)) + std::string(" GB.");
 }
 
 uint64_t
 TranspositionTable::hashkey_update
     (int piece, int __pos) const noexcept
 {
-    const int offset = 85;
-    const int color = piece >> 3;
+    int offset = 85;
+    int color = piece >> 3;
     piece = (piece & 7) - 1;
 
     return HashIndex[ offset + __pos
@@ -79,8 +91,8 @@ TranspositionTable::record_position
         __pos.flag = flag;
     };
 
-    const uint64_t index = zkey % TT_SIZE;
-    const int primary_key_depth = primary_tt_table[index].depth;
+    uint64_t index = zkey % TT_SIZE;
+    int primary_key_depth = primary_tt_table[index].depth;
 
     if (depth > primary_key_depth)
         add_entry(primary_tt_table[index]);
@@ -93,7 +105,7 @@ int
 TranspositionTable::lookup_position
     (uint64_t zkey, int depth, int alpha, int beta) const noexcept
 {
-    const int32_t UNKNOWN_VALUE = 5567899;
+    int UNKNOWN_VALUE = 5567899;
 
     const auto lookup = [&] (const ZobristHashKey &__pos)
     {
@@ -106,9 +118,9 @@ TranspositionTable::lookup_position
         return UNKNOWN_VALUE;
     };
   
-    const uint64_t index = zkey % TT_SIZE;
+    uint64_t index = zkey % TT_SIZE;
 
-    int32_t res = lookup(primary_tt_table[index]);
+    int res = lookup(primary_tt_table[index]);
     if (res != UNKNOWN_VALUE) return res;
 
     return lookup(secondary_tt_table[index]);
