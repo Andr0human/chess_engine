@@ -12,34 +12,34 @@
 #ifndef MOVEGEN_UTILS
 
 static inline MoveType
-gen_move_priority(const ChessBoard& __b, const int ip, const int fp)
+gen_move_priority(const ChessBoard& __b, int ip, int fp)
 {
     int res = 0;
-    const int pt  =  __b.board[ip] & 7;
-    const int cpt = -__b.board[fp] & 7;
-    const int is_cpt = (bool)cpt;
+    int pt  =  __b.board[ip] & 7;
+    int cpt = -__b.board[fp] & 7;
+    int is_cpt = (bool)cpt;
 
     res += (cpt - pt + 16) * is_cpt;
     return res;
 }
 
 static inline MoveType
-gen_pawn_move_priority(const ChessBoard& __b, const int ip, const int fp)
+gen_pawn_move_priority(const ChessBoard& __b, int ip, int fp)
 {
     int res = 5;
-    const int pt  = __b.board[ip] & 7;
-    const int cpt = __b.board[fp] & 7;
+    int pt  = __b.board[ip] & 7;
+    int cpt = __b.board[fp] & 7;
 
     res += cpt ? (cpt - pt + 16) : 0;
     return res;
 }
 
 static inline MoveType
-encode_move(const ChessBoard &__b, const int ip, const int fp, const int pr)
+encode_move(const ChessBoard &__b, int ip, int fp, int pr)
 {
-    const int pt  = __b.board[ip] & 7;
-    const int cpt = __b.board[fp] & 7;
-    const int white_move = 1048576;
+    int pt  = __b.board[ip] & 7;
+    int cpt = __b.board[fp] & 7;
+    int white_move = 1048576;
     
     int gen_move = __b.board[ip] > 8 ? white_move : 0;
     
@@ -50,18 +50,18 @@ encode_move(const ChessBoard &__b, const int ip, const int fp, const int pr)
 static bool
 en_passant_recheck(int ip, const ChessBoard& _cb)
 {
-    const int own = _cb.color << 3;
-    const int emy = (_cb.color ^ 1) << 3;
+    int own = _cb.color << 3;
+    int emy = (_cb.color ^ 1) << 3;
 
-    const int kpos = idx_no(KING(own));
-    const int eps = _cb.csep & 127;
-    const uint64_t erq = QUEEN(emy) ^ ROOK(emy);
-    const uint64_t ebq = QUEEN(emy) ^ BISHOP(emy);
+    int kpos = idx_no(KING(own));
+    int eps = _cb.csep & 127;
+    uint64_t erq = QUEEN(emy) ^ ROOK(emy);
+    uint64_t ebq = QUEEN(emy) ^ BISHOP(emy);
     uint64_t Ap = ALL_BOTH ^ ((1ULL << ip) | (1ULL << (eps - 8 * (2 * _cb.color - 1))));
 
-    const uint64_t res  = mSb((plt::LeftMasks[kpos] & Ap)) | lSb((plt::RightMasks[kpos] & Ap));
-    const uint64_t tmp1 = mSb((plt::DownLeftMasks[kpos] & Ap)) | lSb((plt::UpRightMasks[kpos] & Ap));
-    const uint64_t tmp2 = lSb((plt::UpLeftMasks[kpos] & Ap)) | mSb((plt::DownRightMasks[kpos] & Ap));
+    uint64_t res  = mSb((plt::LeftMasks[kpos] & Ap)) | lSb((plt::RightMasks[kpos] & Ap));
+    uint64_t tmp1 = mSb((plt::DownLeftMasks[kpos] & Ap)) | lSb((plt::UpRightMasks[kpos] & Ap));
+    uint64_t tmp2 = lSb((plt::UpLeftMasks[kpos] & Ap)) | mSb((plt::DownRightMasks[kpos] & Ap));
 
     if (res & erq) return false;
     // Board has to be invalid for this check
@@ -71,7 +71,7 @@ en_passant_recheck(int ip, const ChessBoard& _cb)
 }
 
 static inline void
-Add_shift_Pawns(uint64_t endSquares, const int shift, const ChessBoard &_cb, MoveList &myMoves)
+Add_shift_Pawns(uint64_t endSquares, int shift, const ChessBoard &_cb, MoveList &myMoves)
 {
     if (!endSquares) return;
 
@@ -84,11 +84,11 @@ Add_shift_Pawns(uint64_t endSquares, const int shift, const ChessBoard &_cb, Mov
 
     while (endSquares)
     {
-        const int fp = next_idx(endSquares);
-        const int ip = fp + shift;
+        int fp = next_idx(endSquares);
+        int ip = fp + shift;
 
-        const int mv_priority = gen_pawn_move_priority(_cb, ip, fp);
-        const int move = encode_move(_cb, ip, fp, mv_priority);
+        int mv_priority = gen_pawn_move_priority(_cb, ip, fp);
+        int move = encode_move(_cb, ip, fp, mv_priority);
         myMoves.Add(move);   
     }
 }
@@ -99,12 +99,12 @@ Add_m_Pawns(int ip, uint64_t endSquares, const ChessBoard &_cb, MoveList &myMove
     if (!endSquares) return;
 
     if (myMoves.cpt_only) endSquares &= ALL(EMY);
-    
+
     while (endSquares)
     {    
-        const int fp = next_idx(endSquares);
-        const int mv_priority = gen_move_priority(_cb, ip, fp);
-        const int move = encode_move(_cb, ip, fp, mv_priority);
+        int fp = next_idx(endSquares);
+        int mv_priority = gen_move_priority(_cb, ip, fp);
+        int move = encode_move(_cb, ip, fp, mv_priority);
 
         myMoves.Add(move);
     }
@@ -121,10 +121,10 @@ Add_pm_Pawns(int ip, uint64_t endSquares, const ChessBoard &_cb, MoveList &myMov
     
     while (endSquares)
     {    
-        const int fp = next_idx(endSquares);
-        const int mv_priority = gen_move_priority(_cb, ip, fp);
-        const int move = encode_move(_cb, ip, fp, mv_priority);
-        const int pr = (move >> 21);
+        int fp = next_idx(endSquares);
+        int mv_priority = gen_move_priority(_cb, ip, fp);
+        int move = encode_move(_cb, ip, fp, mv_priority);
+        int pr = (move >> 21);
 
         myMoves.Add(((pr + 12) << 21) ^ move ^ 0xC0000);
         myMoves.Add(((pr +  9) << 21) ^ move ^ 0x80000);
@@ -141,13 +141,13 @@ Add_pm_Pawns(int ip, uint64_t endSquares, const ChessBoard &_cb, MoveList &myMov
 
 static inline void
 enpassant_pawns(const ChessBoard &_cb, MoveList &myMoves,
-    const uint64_t l_pawns, const uint64_t r_pawns, const int KA)
+    uint64_t l_pawns, uint64_t r_pawns, int KA)
 {
-    const int own = _cb.color << 3;
-    const int emy = own ^ 8;
-    const int kpos = idx_no(KING(own));
-    const int eps = _cb.csep & 127;
-    const uint64_t _ep = 1ULL << eps;
+    int own = _cb.color << 3;
+    int emy = own ^ 8;
+    int kpos = idx_no(KING(own));
+    int eps = _cb.csep & 127;
+    uint64_t _ep = 1ULL << eps;
 
     if (eps == 64 || (KA == 1 && !(plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy))))
         return;
@@ -163,7 +163,7 @@ enpassant_pawns(const ChessBoard &_cb, MoveList &myMoves,
 
 static inline void
 promotion_pawns(const ChessBoard &_cb, MoveList &myMoves,
-    const uint64_t move_sq, const uint64_t capt_sq, uint64_t pawns)
+    uint64_t move_sq, uint64_t capt_sq, uint64_t pawns)
 {
     while (pawns)
     {
@@ -177,15 +177,15 @@ promotion_pawns(const ChessBoard &_cb, MoveList &myMoves,
 
 static inline void
 pawn_movement(const ChessBoard &_cb, MoveList &myMoves,
-    const uint64_t pin_pieces, const int KA, const uint64_t atk_area)
+    uint64_t pin_pieces, int KA, uint64_t atk_area)
 {
-    const uint64_t Rank27[2] = {Rank2, Rank7};
-    const uint64_t Rank63[2] = {Rank6, Rank3};
+    uint64_t Rank27[2] = {Rank2, Rank7};
+    uint64_t Rank63[2] = {Rank6, Rank3};
 
     const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
 
-    const int own = _cb.color << 3;
-    const int emy = own ^ 8;
+    int own = _cb.color << 3;
+    int emy = own ^ 8;
 
     uint64_t pawns   = PAWN(own) & (~pin_pieces);
     uint64_t e_pawns = pawns & Rank27[_cb.color];
@@ -232,18 +232,18 @@ queen_legal_squares(int __pos, uint64_t _Op, uint64_t _Ap)
 
 
 static uint64_t
-pinned_pieces_list(const ChessBoard &_cb, MoveList &myMoves, const int KA)
+pinned_pieces_list(const ChessBoard &_cb, MoveList &myMoves, int KA)
 {
-    const int own = _cb.color << 3;
-    const int emy = (_cb.color ^ 1) << 3;
+    int own = _cb.color << 3;
+    int emy = (_cb.color ^ 1) << 3;
 
-    const int kpos = idx_no(KING(own));
-    const uint64_t _Ap = ALL_BOTH;
+    int kpos = idx_no(KING(own));
+    uint64_t _Ap = ALL_BOTH;
 
-    const uint64_t erq = QUEEN(emy) | ROOK(emy);
-    const uint64_t ebq = QUEEN(emy) | BISHOP(emy);
-    const uint64_t  rq = QUEEN(own) | ROOK(own);
-    const uint64_t  bq = QUEEN(own) | BISHOP(own);
+    uint64_t erq = QUEEN(emy) | ROOK(emy);
+    uint64_t ebq = QUEEN(emy) | BISHOP(emy);
+    uint64_t  rq = QUEEN(own) | ROOK(own);
+    uint64_t  bq = QUEEN(own) | BISHOP(own);
 
     uint64_t pinned_pieces = 0;
 
@@ -251,15 +251,15 @@ pinned_pieces_list(const ChessBoard &_cb, MoveList &myMoves, const int KA)
         (plt::DiagonalMasks[kpos] & ebq) == 0) return 0ULL;
     
 
-    const auto pins_check = [&] (const auto &__f, const uint64_t *table,
+    const auto pins_check = [&] (const auto &__f, uint64_t *table,
         uint64_t sliding_piece, uint64_t emy_sliding_piece, char pawn)
     {
-        const uint64_t pieces = table[kpos] & _Ap;
-        const uint64_t first_piece  = __f(pieces);
-        const uint64_t second_piece = __f(pieces ^ first_piece);
+        uint64_t pieces = table[kpos] & _Ap;
+        uint64_t first_piece  = __f(pieces);
+        uint64_t second_piece = __f(pieces ^ first_piece);
 
-        const int index_f = idx_no(first_piece);
-        const int index_s = idx_no(second_piece);
+        int index_f = idx_no(first_piece);
+        int index_s = idx_no(second_piece);
 
         if (   !(first_piece  & ALL(own))
             or !(second_piece & emy_sliding_piece)) return;
@@ -270,13 +270,13 @@ pinned_pieces_list(const ChessBoard &_cb, MoveList &myMoves, const int KA)
 
         if ((first_piece & sliding_piece) != 0)
         {
-            const uint64_t dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
+            uint64_t dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
             return add_move_to_list(index_f, dest_sq, _cb, myMoves);
         }
 
-        const uint64_t Rank63[2] = {Rank6, Rank3};
+        uint64_t Rank63[2] = {Rank6, Rank3};
 
-        const int eps    = _cb.csep & 127;
+        int eps    = _cb.csep & 127;
         const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
 
         uint64_t n_pawn  = first_piece;
@@ -323,20 +323,20 @@ pinned_pieces_list(const ChessBoard &_cb, MoveList &myMoves, const int KA)
 } 
 
 static void
-piece_movement(const ChessBoard &_cb, MoveList &myMoves, const int KA)
+piece_movement(const ChessBoard &_cb, MoveList &myMoves, int KA)
 {
-    const uint64_t pinned_pieces = pinned_pieces_list(_cb, myMoves, KA);
-    const uint64_t valid_sq = KA * _cb.Pieces[0] + (1 - KA) * AllSquares;
+    uint64_t pinned_pieces = pinned_pieces_list(_cb, myMoves, KA);
+    uint64_t valid_sq = KA * _cb.Pieces[0] + (1 - KA) * AllSquares;
 
-    const uint64_t own_pieces = ALL(OWN);
-    const uint64_t all_pieces = ALL(WHITE) | ALL(BLACK);
+    uint64_t own_pieces = ALL(OWN);
+    uint64_t all_pieces = ALL(WHITE) | ALL(BLACK);
 
     const auto Add_Vaild_Dest_Sq = [&] (const auto &__f, uint64_t piece)
     {
         piece &= ~pinned_pieces;
         while (piece != 0)
         {
-            const int __pos = next_idx(piece);
+            int __pos = next_idx(piece);
             add_move_to_list(__pos,
                 __f(__pos, own_pieces, all_pieces) & valid_sq, _cb, myMoves);
         }
@@ -358,7 +358,7 @@ static uint64_t
 generate_AttackedSquares(const ChessBoard& _cb)
 {
     uint64_t ans = 0;
-    const uint64_t Apieces = ALL_BOTH ^ KING(OWN);
+    uint64_t Apieces = ALL_BOTH ^ KING(OWN);
 
     const auto attacked_squares = [&] (const auto &__f, uint64_t piece)
     {
@@ -368,7 +368,7 @@ generate_AttackedSquares(const ChessBoard& _cb)
         return res;
     };
 
-    const int emy = EMY;
+    int emy = EMY;
 
     ans |= pawn_atk_sq(_cb, _cb.side_emy());
     ans |= attacked_squares(bishop_atk_sq, BISHOP(emy));
@@ -383,7 +383,7 @@ generate_AttackedSquares(const ChessBoard& _cb)
 static void
 king_attackers(ChessBoard &_cb)
 {
-    const uint64_t attacked_sq = _cb.Pieces[8];
+    uint64_t attacked_sq = _cb.Pieces[8];
 
     if (attacked_sq && ((KING(OWN) & attacked_sq)) == 0)
     {
@@ -391,16 +391,16 @@ king_attackers(ChessBoard &_cb)
         return;
     }
 
-    const int kpos = idx_no(KING(OWN));
-    const int emy = EMY;
-    const uint64_t _Ap = ALL_BOTH;
+    int kpos = idx_no(KING(OWN));
+    int emy = EMY;
+    uint64_t _Ap = ALL_BOTH;
     int attk_count = 0;
     uint64_t attk_area = 0;
 
-    const auto add_piece = [&] (const auto& __f, const uint64_t enemy)
+    const auto add_piece = [&] (const auto& __f, uint64_t enemy)
     {
-        const uint64_t area  = __f(kpos, _Ap);
-        const uint64_t piece = area & enemy;
+        uint64_t area  = __f(kpos, _Ap);
+        uint64_t piece = area & enemy;
 
         if (piece == 0) return;
 
@@ -415,7 +415,7 @@ king_attackers(ChessBoard &_cb)
     add_piece(bishop_atk_sq, QUEEN(emy) ^ BISHOP(emy));
     add_piece(knight_atk_sq, KNIGHT(emy));
 
-    const uint64_t pawn_sq = plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy);
+    uint64_t pawn_sq = plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy);
     if (pawn_sq)
     {
         ++attk_count;
@@ -428,35 +428,35 @@ king_attackers(ChessBoard &_cb)
 }
 
 static void
-KingMoves(const ChessBoard& _cb, MoveList& myMoves, const uint64_t Attacked_Sq)
+KingMoves(const ChessBoard& _cb, MoveList& myMoves, uint64_t Attacked_Sq)
 {
-    const auto add_castle_move = [&_cb, &myMoves] (const int ip, const int fp)
+    const auto add_castle_move = [&_cb, &myMoves] (int ip, int fp)
     {
-        const int pt = 6;
-        const int priority = 20 << 21;
-        const int side = _cb.color << 20;
-        const MoveType enc_move = priority + side + (pt << 12) + (fp << 6) + ip;
+        int pt = 6;
+        int priority = 20 << 21;
+        int side = _cb.color << 20;
+        MoveType enc_move = priority + side + (pt << 12) + (fp << 6) + ip;
         myMoves.Add(enc_move);
     };
 
-    const int kpos = idx_no(KING(OWN));
-    const uint64_t K_sq = plt::KingMasks[kpos];
-    const uint64_t ans = K_sq & (~(ALL(OWN) | Attacked_Sq));
+    int kpos = idx_no(KING(OWN));
+    uint64_t K_sq = plt::KingMasks[kpos];
+    uint64_t ans = K_sq & (~(ALL(OWN) | Attacked_Sq));
 
     add_move_to_list(kpos, ans, _cb, myMoves);
 
     if (!(_cb.csep & 1920) || ((1ULL << kpos) & Attacked_Sq)) return;
 
-    const uint64_t Apieces = ALL_BOTH;
-    const uint64_t covered_squares = Apieces | Attacked_Sq;
+    uint64_t Apieces = ALL_BOTH;
+    uint64_t covered_squares = Apieces | Attacked_Sq;
 
-    const int shift         = 56 * (_cb.color ^ 1);
-    const uint64_t l_mid_sq = 2ULL << shift;
-    const uint64_t r_sq     = 96ULL << shift;
-    const uint64_t l_sq     = 12ULL << shift;
+    int shift         = 56 * (_cb.color ^ 1);
+    uint64_t l_mid_sq = 2ULL << shift;
+    uint64_t r_sq     = 96ULL << shift;
+    uint64_t l_sq     = 12ULL << shift;
 
-    const uint64_t king_side  = 256 << (2 * _cb.color);
-    const uint64_t queen_side = 128 << (2 * _cb.color);
+    int king_side  = 256 << (2 * _cb.color);
+    int queen_side = 128 << (2 * _cb.color);
 
     // Can castle king_side  and no pieces are in-between
     if ((_cb.csep & king_side) and !(r_sq & covered_squares))
@@ -477,33 +477,33 @@ legal_pinned_pieces(const ChessBoard& _cb)
 {
     using std::make_pair;
 
-    const int own = OWN;
-    const int emy = EMY;
+    int own = OWN;
+    int emy = EMY;
 
-    const int kpos  = idx_no(KING(own));
-    const uint64_t _Ap = ALL(WHITE) | ALL(BLACK);
+    int kpos  = idx_no(KING(own));
+    uint64_t _Ap = ALL(WHITE) | ALL(BLACK);
     
-    const uint64_t erq = QUEEN(emy) | ROOK(emy);
-    const uint64_t ebq = QUEEN(emy) | BISHOP(emy);
-    const uint64_t  rq = QUEEN(own) | ROOK(own);
-    const uint64_t  bq = QUEEN(own) | BISHOP(own);
+    uint64_t erq = QUEEN(emy) | ROOK(emy);
+    uint64_t ebq = QUEEN(emy) | BISHOP(emy);
+    uint64_t  rq = QUEEN(own) | ROOK(own);
+    uint64_t  bq = QUEEN(own) | BISHOP(own);
     uint64_t pinned_pieces = 0;
 
-    const uint64_t ray_line = plt::LineMasks[kpos];
-    const uint64_t ray_diag = plt::DiagonalMasks[kpos];
+    uint64_t ray_line = plt::LineMasks[kpos];
+    uint64_t ray_diag = plt::DiagonalMasks[kpos];
     
     if (!((ray_line & erq) | (ray_diag & ebq)))
         return 0;
 
     const auto can_pinned = [&] (const auto &__f, const auto *table,
-            const uint64_t ownP, const uint64_t emyP, const char pawn) -> bool
+            uint64_t ownP, uint64_t emyP, const char pawn) -> bool
     {
-        const uint64_t pieces = table[kpos] & _Ap;
-        const uint64_t first_piece  = __f(pieces);
-        const uint64_t second_piece = __f(pieces ^ first_piece);
+        uint64_t pieces = table[kpos] & _Ap;
+        uint64_t first_piece  = __f(pieces);
+        uint64_t second_piece = __f(pieces ^ first_piece);
 
-        const int index_f = idx_no(first_piece);
-        const int index_s = idx_no(second_piece);
+        int index_f = idx_no(first_piece);
+        int index_s = idx_no(second_piece);
 
         if (  !(first_piece & ALL(own))
             or (!(second_piece & emyP))) return false;
@@ -516,9 +516,9 @@ legal_pinned_pieces(const ChessBoard& _cb)
             return ((table[kpos] ^ table[index_s] ^ first_piece) != 0);
 
 
-        const uint64_t Rank63[2] = {Rank6, Rank3};
+        uint64_t Rank63[2] = {Rank6, Rank3};
 
-        const int eps    = _cb.csep & 127;
+        int eps    = _cb.csep & 127;
         const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
 
         uint64_t n_pawn  = first_piece;
@@ -556,18 +556,18 @@ legal_pinned_pieces(const ChessBoard& _cb)
 }
 
 static bool
-legal_pawns_move(const ChessBoard &_cb, const uint64_t pinned_pieces, const uint64_t atk_area)
+legal_pawns_move(const ChessBoard &_cb, uint64_t pinned_pieces, uint64_t atk_area)
 {
-    const uint64_t Rank27[2] = {Rank2, Rank7};
-    const uint64_t Rank63[2] = {Rank6, Rank3};
+    uint64_t Rank27[2] = {Rank2, Rank7};
+    uint64_t Rank63[2] = {Rank6, Rank3};
     const auto shift = (_cb.color == 1) ? (l_shift) : (r_shift);
 
-    const int own = _cb.color << 3;
-    const int emy = own ^ 8;
+    int own = _cb.color << 3;
+    int emy = own ^ 8;
 
     const auto legal_enpassant_pawns = [&] (uint64_t l_pawns, uint64_t r_pawns, int ep)
     {
-        const int kpos = idx_no(KING(own));
+        int kpos = idx_no(KING(own));
         uint64_t ep_square = 1ULL << ep;
 
         if ((ep == 64) or (_cb.KA == 1 and !(plt::PawnCaptureMasks[_cb.color][kpos] & PAWN(emy))))
@@ -582,7 +582,7 @@ legal_pawns_move(const ChessBoard &_cb, const uint64_t pinned_pieces, const uint
         uint64_t valid_squares = 0;
         while (pawns)
         {
-            const int __pos = next_idx(pawns);
+            int __pos = next_idx(pawns);
             valid_squares |= ( plt::PawnMasks[_cb.color][__pos] & move_sq)
                            | (plt::PawnCaptureMasks[_cb.color][__pos] & capt_sq);
         }
@@ -633,8 +633,8 @@ legal_piece_move(const ChessBoard &_cb)
     if (pinned_pieces & 1)
         return true;
 
-    const uint64_t  my_pieces = ALL(OWN);
-    const uint64_t all_pieces = ALL(WHITE) | ALL(BLACK);
+    uint64_t  my_pieces = ALL(OWN);
+    uint64_t all_pieces = ALL(WHITE) | ALL(BLACK);
 
     const auto canMove = [&] (const auto &__f, uint64_t piece)
     {
@@ -647,7 +647,7 @@ legal_piece_move(const ChessBoard &_cb)
         return (legal_squares != 0);
     };
 
-    const int own = OWN;
+    int own = OWN;
 
     return legal_pawns_move(_cb, pinned_pieces, _cb.Pieces[0])
         or canMove(knight_legal_squares, KNIGHT(own))
@@ -659,25 +659,25 @@ legal_piece_move(const ChessBoard &_cb)
 static bool
 legal_king_move(const ChessBoard& _cb, uint64_t attacked_squares)
 {
-    const int kpos = idx_no(KING(OWN));
-    const uint64_t K_sq = plt::KingMasks[kpos];
+    int kpos = idx_no(KING(OWN));
+    uint64_t K_sq = plt::KingMasks[kpos];
 
-    const uint64_t legal_squares = K_sq & (~(ALL(OWN) | attacked_squares));
+    uint64_t legal_squares = K_sq & (~(ALL(OWN) | attacked_squares));
 
     // If no castling is possible or king is attacked by a enemy piece
     if (!(_cb.csep & 1920) or ((1ULL << kpos) & attacked_squares))
         return (legal_squares != 0);
 
-    const uint64_t Apieces = ALL_BOTH;
-    const uint64_t covered_squares = Apieces | attacked_squares;
+    uint64_t Apieces = ALL_BOTH;
+    uint64_t covered_squares = Apieces | attacked_squares;
 
-    const int shift         = 56 * (_cb.color ^ 1);
-    const uint64_t l_mid_sq = 2ULL << shift;
-    const uint64_t r_sq     = 96ULL << shift;
-    const uint64_t l_sq     = 12ULL << shift;
+    int shift         = 56 * (_cb.color ^ 1);
+    uint64_t l_mid_sq = 2ULL << shift;
+    uint64_t r_sq     = 96ULL << shift;
+    uint64_t l_sq     = 12ULL << shift;
 
-    const uint64_t king_side  = 256 << (2 * _cb.color);
-    const uint64_t queen_side = 128 << (2 * _cb.color);
+    uint64_t king_side  = 256 << (2 * _cb.color);
+    uint64_t queen_side = 128 << (2 * _cb.color);
     
     // Legal moves possible if king can castle (king or queen) side
     // and no squares between king and rook is attacked by enemy piece

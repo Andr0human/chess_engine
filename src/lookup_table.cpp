@@ -195,7 +195,7 @@ bishop_squares_basic(int sq, uint64_t blocker)
 }
 
 static void
-build_lookup_table(uint64_t* masks, const uint64_t* magic_table, const int* shift_table, uint64_t* start_index,
+build_lookup_table(uint64_t* masks, uint64_t* magic_table, int* shift_table, uint64_t* start_index,
                    uint64_t* lookup_table, uint64_t (*atk_square_gen)(int, uint64_t))
 {
 	uint64_t blockers[4096];

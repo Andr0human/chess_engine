@@ -138,12 +138,9 @@ class PlayBoard : public ChessBoard
         const auto captures = [] (MoveType move)
         { return ((move >> 15) & 7) > 0; };
 
-        const auto en_passant = [&] (MoveType move)
-        { return ((move >> 6) & 63) == (csep & 127); };
-
         for (const MoveType move : pre_moves)
         {
-            if (pawn_move(move) or captures(move) or en_passant(move))
+            if (pawn_move(move) or captures(move))
                 prev_keys.clear();
 
             MakeMove(move);

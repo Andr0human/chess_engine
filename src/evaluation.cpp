@@ -123,8 +123,8 @@ Evaluation::MaterialCount(const ChessBoard& _cb)
 int
 Evaluation::material_strength()
 {
-    const int wqn_val = queen_val + 8 * wPawns;
-    const int bqn_val = queen_val + 8 * bPawns;
+    int wqn_val = queen_val + 8 * wPawns;
+    int bqn_val = queen_val + 8 * bPawns;
     return   pawnVal * (  wPawns -   bPawns) + bishop_val * (wBishops - bBishops)
         + knight_val * (wKnights - bKnights) +   rook_val * (  wRooks -   bRooks)
         + ((wqn_val * wQueens) - (bqn_val * bQueens));
@@ -137,7 +137,7 @@ Evaluation::material_strength()
 int
 Evaluation::piece_strength(const ChessBoard &_cb) const
 {
-    const auto str_score = [](uint64_t piece, const int *str_table)
+    const auto str_score = [](uint64_t piece, int *str_table)
     {
         int score = 0;
         while (piece != 0)
@@ -146,22 +146,22 @@ Evaluation::piece_strength(const ChessBoard &_cb) const
     };
 
 
-    const int pawn_white = str_score(PAWN(WHITE), wpBoard);
-    const int pawn_black = str_score(PAWN(BLACK), bpBoard);
+    int pawn_white = str_score(PAWN(WHITE), wpBoard);
+    int pawn_black = str_score(PAWN(BLACK), bpBoard);
 
-    const int bishop_white = str_score(BISHOP(WHITE), wBoard);
-    const int bishop_black = str_score(BISHOP(BLACK), bBoard);
+    int bishop_white = str_score(BISHOP(WHITE), wBoard);
+    int bishop_black = str_score(BISHOP(BLACK), bBoard);
 
-    const int knight_white = str_score(KNIGHT(WHITE), NBoard);
-    const int knight_black = str_score(KNIGHT(BLACK), NBoard);
+    int knight_white = str_score(KNIGHT(WHITE), NBoard);
+    int knight_black = str_score(KNIGHT(BLACK), NBoard);
 
-    const int rook_white = str_score(ROOK(WHITE), wRBoard);
-    const int rook_black = str_score(ROOK(BLACK), bRBoard);
+    int rook_white = str_score(ROOK(WHITE), wRBoard);
+    int rook_black = str_score(ROOK(BLACK), bRBoard);
 
-    const int score = (pawn_white - pawn_black)
-                    + (bishop_white - bishop_black)
-                    + 2 * (knight_white - knight_black)
-                    + (rook_white - rook_black);
+    int score = (pawn_white - pawn_black)
+              + (bishop_white - bishop_black)
+              + 2 * (knight_white - knight_black)
+              + (rook_white - rook_black);
 
     return score;
 }
@@ -189,20 +189,20 @@ Evaluation::piece_mobility(const ChessBoard &_cb) const
         return __ppcnt(area);
     };
 
-    const uint64_t _Ap = PAWN(WHITE) ^ PAWN(BLACK);
+    uint64_t _Ap = PAWN(WHITE) ^ PAWN(BLACK);
 
-    const int bishop_white = mobility_calc(bishop_atk_sq, BISHOP(WHITE), _Ap);
-    const int bishop_black = mobility_calc(bishop_atk_sq, BISHOP(BLACK), _Ap);
+    int bishop_white = mobility_calc(bishop_atk_sq, BISHOP(WHITE), _Ap);
+    int bishop_black = mobility_calc(bishop_atk_sq, BISHOP(BLACK), _Ap);
 
-    const int knight_white = mobility_calc(knight_atk_sq, KNIGHT(WHITE), _Ap);
-    const int knight_black = mobility_calc(knight_atk_sq, KNIGHT(BLACK), _Ap);
+    int knight_white = mobility_calc(knight_atk_sq, KNIGHT(WHITE), _Ap);
+    int knight_black = mobility_calc(knight_atk_sq, KNIGHT(BLACK), _Ap);
 
-    const int rook_white = mobility_calc(rook_atk_sq, ROOK(WHITE), _Ap);
-    const int rook_black = mobility_calc(rook_atk_sq, ROOK(BLACK), _Ap);
+    int rook_white = mobility_calc(rook_atk_sq, ROOK(WHITE), _Ap);
+    int rook_black = mobility_calc(rook_atk_sq, ROOK(BLACK), _Ap);
 
-    const int score = (bishop_white - bishop_black)
-                    + 2 * (knight_white - knight_black)
-                    + (rook_white - rook_black);
+    int score = (bishop_white - bishop_black)
+              + 2 * (knight_white - knight_black)
+              + (rook_white - rook_black);
     return score;
 }
 
@@ -311,16 +311,16 @@ Evaluation::BlackPawns_Structure(const ChessBoard& _cb)
 int
 Evaluation::White_attk_Strength(const ChessBoard& _cb)
 {
-    const uint64_t Apiece = ALL_BOTH;
-    const int kpos = idx_no(KING(BLACK));
-    const uint64_t attk_sq = plt::KingMasks[kpos]
+    uint64_t Apiece = ALL_BOTH;
+    int kpos = idx_no(KING(BLACK));
+    uint64_t attk_sq = plt::KingMasks[kpos]
                       | (kpos > 7 ? plt::KingMasks[kpos - 8] : 0);
 
     const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece) {
         int res = 0;
         while (piece) {
-            const int idx = next_idx(piece);
-            const uint64_t area = __f(idx, Apiece);
+            int idx = next_idx(piece);
+            uint64_t area = __f(idx, Apiece);
             if (area & attk_sq) res++;
         }
         return res;
@@ -340,9 +340,9 @@ Evaluation::White_attk_Strength(const ChessBoard& _cb)
 int
 Evaluation::Black_attk_Strength(const ChessBoard& _cb)
 {
-    const uint64_t Apiece = ALL_BOTH;
-    const int kpos = idx_no(KING(WHITE));
-    const uint64_t attk_sq = plt::KingMasks[kpos]
+    uint64_t Apiece = ALL_BOTH;
+    int kpos = idx_no(KING(WHITE));
+    uint64_t attk_sq = plt::KingMasks[kpos]
                       | (kpos < 56 ? plt::KingMasks[kpos + 8] : 0);
 
     const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece)
@@ -350,8 +350,8 @@ Evaluation::Black_attk_Strength(const ChessBoard& _cb)
         int res = 0;
         while (piece)
         {
-            const int idx = next_idx(piece);
-            const uint64_t area = __f(idx, Apiece);
+            int idx = next_idx(piece);
+            uint64_t area = __f(idx, Apiece);
             if (area & attk_sq) res++;
         }
         return res;

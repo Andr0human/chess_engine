@@ -236,7 +236,7 @@ node_count(const vector<string> &_args)
 {
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : StartFen;
-    const int depth  = __n > 2 ? stoi(_args[2]) : 6;
+    int depth  = __n > 2 ? stoi(_args[2]) : 6;
     ChessBoard _cb   = fen;
 
     cout << "Fen = " << fen << '\n';
@@ -264,11 +264,11 @@ debug_movegen(const vector<string> &_args)
 
     const auto moveName = [] (int move)
     {
-        const int ip = (move & 63);
-        const int fp = (move >> 6) & 63;
+        int ip = (move & 63);
+        int fp = (move >> 6) & 63;
 
-        const int ix = ip & 7, iy = (ip - ix) >> 3;
-        const int fx = fp & 7, fy = (fp - fx) >> 3;
+        int ix = ip & 7, iy = (ip - ix) >> 3;
+        int fx = fp & 7, fy = (fp - fx) >> 3;
 
         char a1 = static_cast<char>(97 + ix);             // 'a' + ix
         char a2 = static_cast<char>(49 + iy);             // '1' + iy

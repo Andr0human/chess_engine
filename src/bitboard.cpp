@@ -103,19 +103,19 @@ void
 ChessBoard::MakeMove(const MoveType move) noexcept
 {
     // Init and Dest. sq
-    const int ip = move & 63;
-    const int fp = (move >> 6) & 63;
+    int ip = move & 63;
+    int fp = (move >> 6) & 63;
 
-    const uint64_t iPos = 1ULL << ip;
-    const uint64_t fPos = 1ULL << fp;
+    uint64_t iPos = 1ULL << ip;
+    uint64_t fPos = 1ULL << fp;
 
-    const int ep = csep & 127;
-    const int own = color << 3;
-    const int emy = (color ^ 1) << 3;
+    int ep = csep & 127;
+    int own = color << 3;
+    int emy = (color ^ 1) << 3;
 
     // Piece at init and dest. sq.
-    const int pt = board[ip];
-    const int cpt = board[fp];
+    int pt = board[ip];
+    int cpt = board[fp];
 
     auxilary_table_update(move);
 
@@ -123,7 +123,7 @@ ChessBoard::MakeMove(const MoveType move) noexcept
     board[fp] = pt;
 
     #if defined(TRANSPOSITION_TABLE_H)
-    
+
         if (ep != 64)
             Hash_Value ^= TT.hash_key(ep + 1);
 
@@ -155,7 +155,7 @@ ChessBoard::MakeMove(const MoveType move) noexcept
     if ((pt & 7) == 6)
     {
         int old_csep = csep;
-        const int filter = 2047 ^ (384 << (color * 2));
+        int filter = 2047 ^ (384 << (color * 2));
         csep &= filter;
 
         update_csep(old_csep, csep);
@@ -198,12 +198,12 @@ ChessBoard::update_csep(int old_csep, int new_csep) noexcept
 }
 
 void
-ChessBoard::make_move_castle_check(const int piece, const int sq) noexcept
+ChessBoard::make_move_castle_check(int piece, int sq) noexcept
 {
     // piece - at (init) or (dest) square.
 
-    const uint64_t CORNER_SQUARES = 0x8100000000000081;
-    const uint64_t bit_pos = 1ULL << sq;
+    uint64_t CORNER_SQUARES = 0x8100000000000081;
+    uint64_t bit_pos = 1ULL << sq;
 
     if ((bit_pos & CORNER_SQUARES) and (piece == 4))
     {
@@ -344,16 +344,16 @@ ChessBoard::UnmakeMove() noexcept
     if (moveNum <= 0) return;
 
     color ^= 1;
-    const int move = auxilary_table_revert();
+    int move = auxilary_table_revert();
 
-    const int ip = move & 63;
-    const int fp = (move >> 6) & 63;
-    const int ep = csep & 127;
+    int ip = move & 63;
+    int fp = (move >> 6) & 63;
+    int ep = csep & 127;
     
-    const uint64_t iPos = 1ULL << ip;
-    const uint64_t fPos = 1ULL << fp;
-    const int own = color << 3;
-    const int emy = (color ^ 1) << 3;
+    uint64_t iPos = 1ULL << ip;
+    uint64_t fPos = 1ULL << fp;
+    int own = color << 3;
+    int emy = (color ^ 1) << 3;
     int pt = ((move >> 12) & 7) ^ own;
     int cpt = ((move >> 15) & 7) ^ emy;
 
@@ -375,7 +375,7 @@ ChessBoard::UnmakeMove() noexcept
     {
         if (fp == ep)
         {
-            const int pawn_fp = ep - 8 * (2 * color - 1);
+            int pawn_fp = ep - 8 * (2 * color - 1);
             Pieces[emy + 1] ^= 1ULL << (pawn_fp);
             Pieces[emy + 7] ^= 1ULL << (pawn_fp);
             board[pawn_fp] = emy + 1;
@@ -414,7 +414,7 @@ ChessBoard::auxilary_table_revert()
 void
 ChessBoard::add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept
 {
-    for (const uint64_t key : prev_keys)
+    for (uint64_t key : prev_keys)
     {
         aux_table_move[moveNum] = 0;
         aux_table_csep[moveNum] = 0;
@@ -442,9 +442,9 @@ ChessBoard::fifty_move_rule_draw() const noexcept
 const string
 ChessBoard::fen() const
 {
-    const auto piece_no_to_char = [] (const int piece_no)
+    const auto piece_no_to_char = [] (int piece_no)
     {
-        const int pvalues[7] = {0, 80, 66, 78, 82, 81, 75};
+        int pvalues[7] = {0, 80, 66, 78, 82, 81, 75};
 
         int v = pvalues[piece_no & 7]
               + ((piece_no & 8) ^ 8) * 4;
@@ -525,7 +525,7 @@ ChessBoard::generate_hashKey() const
 
     #if defined(TRANSPOSITION_TABLE_H)
 
-        const int castle_offset = 66;
+        int castle_offset = 66;
         if (color == 0)
             key ^= TT.hash_key(0);
 
@@ -542,7 +542,7 @@ ChessBoard::generate_hashKey() const
             uint64_t __tmp = Pieces[piece];
             while (__tmp > 0)
             {
-                const int __pos = lSb_idx(__tmp);
+                int __pos = lSb_idx(__tmp);
                 __tmp &= __tmp - 1;
                 key ^= TT.hashkey_update(piece, __pos);
             }

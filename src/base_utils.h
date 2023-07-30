@@ -26,35 +26,35 @@ using Square    = int;
 #ifndef BIT_MANIPULATION
 
 inline int
-__ppcnt(const uint64_t __x) 
+__ppcnt(uint64_t __x) 
 { return __builtin_popcountll(__x); }
 
 inline int
-idx_no(const uint64_t __x)
+idx_no(uint64_t __x)
 { return __builtin_popcountll(__x - 1); }
 
 inline int
-lSb_idx(const uint64_t __x)
+lSb_idx(uint64_t __x)
 { return __builtin_ctzll(__x | (1ULL << 63)); }
 
 inline int
-mSb_idx(const uint64_t __x)
+mSb_idx(uint64_t __x)
 { return __builtin_clzll(__x | 1) ^ 63; }
 
 inline uint64_t
-lSb(const uint64_t __x)
+lSb(uint64_t __x)
 { return __x ^ (__x & (__x - 1)); }
 
 inline uint64_t
-mSb(const uint64_t __x)
+mSb(uint64_t __x)
 { return (__x != 0) ? (1ULL << (__builtin_clzll(__x) ^ 63)) : (0); }
 
 inline uint64_t
-l_shift(const uint64_t val, const int shift)
+l_shift(uint64_t val, int shift)
 { return val << shift; }
 
 inline uint64_t
-r_shift(const uint64_t val, const int shift)
+r_shift(uint64_t val, int shift)
 { return val >> shift; }
 
 #endif

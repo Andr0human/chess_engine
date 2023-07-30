@@ -146,7 +146,7 @@ class CheckData
 inline int
 next_idx(uint64_t &__x)
 {
-    const int res = __builtin_ctzll(__x);
+    int res = __builtin_ctzll(__x);
     __x &= __x - 1;
     return res;
 }
@@ -204,7 +204,7 @@ knight_atk_sq(int __pos, uint64_t _Ap);
 
 // Returns all squares attacked by rook on index __pos
 uint64_t
-rook_atk_sq(int __pos, const uint64_t _Ap);
+rook_atk_sq(int __pos, uint64_t _Ap);
 
 // Returns all squares attacked by queen on index __pos
 uint64_t

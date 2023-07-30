@@ -350,7 +350,7 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, i
 {
     int eval, hashf = HASHALPHA;
     int pvNextIndex = pvIndex + maxPly - ply;
-    const int __n = static_cast<int>(myMoves.size());
+    int __n = static_cast<int>(myMoves.size());
 
     for (int i = 0; i < __n; i++)
     {

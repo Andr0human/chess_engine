@@ -42,7 +42,7 @@ class ChessBoard
     { return (ip - fp == 2) | (fp - ip == 2);}
 
     void
-    make_move_castle_check(const int piece, const int sq) noexcept;
+    make_move_castle_check(int piece, int sq) noexcept;
 
     void
     make_move_enpassant(int ip, int fp) noexcept;
@@ -184,14 +184,6 @@ class ChessBoard
             str.    clr  ppt  cpt  pt  fp     ip
             00000   1    00   000  000 000000 000000
             25      20   19   17   14  11     5
-
-
-    nuint64_t = 0
-    captures = 1
-    castle = 2
-    en-passant = 3
-    promotion = 4, 5, 6, 7
-
 
 */
 
