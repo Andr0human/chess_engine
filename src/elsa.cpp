@@ -2,24 +2,11 @@
 #include "task.h"
 
 
-uint64_t xorshift64star(void) {
-    static uint64_t x = 1; /* initial seed must be nonzero, don't use a static variable for the state if multithreaded */
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    return x * 0x2545F4914F6CDD1DULL;
-}
-
-
 int main(int argc, char **argv)
 {
     FAST_IO();
     init();
     task(argc, argv);
-
-
-    for (int i = 0; i < 10; i++)
-        cout << xorshift64star() << endl;
 }
 
 
