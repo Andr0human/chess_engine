@@ -246,7 +246,7 @@ in_check(const ChessBoard& _cb, bool own_king = true);
  * @return string 
  */
 string
-print(MoveType move, const ChessBoard& _cb);
+print(MoveType move, ChessBoard _cb);
 
 
 /**

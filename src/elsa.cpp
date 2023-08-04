@@ -1,5 +1,9 @@
-
 #include "task.h"
+
+//! TODO Alpha-Beta lmr code.
+//! TODO Consistent function naming scheme.
+//! TODO info.time_over() speed_check.
+//! TODO Match-Test Elsa_version without displaying any console output (No search results in console).
 
 
 int main(int argc, char **argv)

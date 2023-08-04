@@ -275,7 +275,7 @@ in_check(const ChessBoard& _cb, bool own_king)
 
 
 string
-print(MoveType move, const ChessBoard& _cb)
+print(MoveType move, ChessBoard _cb)
 {
     // In case of no move, return null
     if (move == 0)
@@ -310,9 +310,9 @@ print(MoveType move, const ChessBoard& _cb)
 
     CheckData checks = find_check_squares(_cb.king_pos_emy(), _cb.side_emy(), Apieces);
 
-    bool move_gives_check = checks.squares_for_piece(pt) & (1ULL << fp);
-    string gives_check = move_gives_check ? "+" : "";
-
+    _cb.MakeMove(move);
+    string gives_check = in_check(_cb, true) ? "+" : "";
+    _cb.UnmakeMove();
 
     uint64_t (*check_for_piece[4])(int, uint64_t) =
         {bishop_atk_sq, knight_atk_sq, rook_atk_sq, queen_atk_sq};
@@ -355,12 +355,12 @@ print(MoveType move, const ChessBoard& _cb)
 
     const auto print_move_piece = [&] (const auto& __func, string piece_name)
     {
-        string captures    = (cpt != 0)       ? "x" : "";
+        string captures = (cpt != 0)       ? "x" : "";
 
         string end_part
             = captures + index_to_square(fp_row, fp_col) + gives_check;
 
-        uint64_t pieces = (__func(fp, ALL_BOTH) & _cb.Pieces[OWN + pt]) ^ (1ULL << ip);
+        uint64_t pieces = (__func(fp, Apieces) & _cb.Pieces[OWN + pt]) ^ (1ULL << ip);
 
         if (pieces == 0)
             return piece_name + end_part;
@@ -384,9 +384,7 @@ print(MoveType move, const ChessBoard& _cb)
         if (row)
             return piece_name + index_to_row(ip_row) + end_part;
 
-        return piece_name
-             + index_to_square(ip_row, ip_col)
-             + end_part;
+        return piece_name + index_to_square(ip_row, ip_col) + end_part;
     };
 
 

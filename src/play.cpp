@@ -132,7 +132,6 @@ read_commands(const vector<string>& args, PlayBoard& __pos)
 static void
 execute_late_commands(PlayBoard& board)
 {
-
     // If prev moves to be made on board
     if (board.premoves_exist())
         board.play_premoves();

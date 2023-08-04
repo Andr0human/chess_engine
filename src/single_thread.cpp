@@ -101,9 +101,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time)
 
     for (int depth = 1; depth <= mDepth;)
     {
-        // pre_status(depth, valWindowCnt);
         int eval = pv_root_alphabeta(board, alpha, beta, depth);
-        // post_status(board, pvArray[0], eval, start_point);
 
         if (info.time_over())
             break;
@@ -125,7 +123,6 @@ search_iterative(ChessBoard board, int mDepth, double search_time)
             valWindowCnt = 0;
 
             info.add_current_depth_result(depth, eval, pvArray);
-            // curr_depth_status(board);
             info.show_last_depth_result(board);
             depth++;
         }
@@ -143,11 +140,6 @@ alphabeta(ChessBoard& __pos, int depth,
     if (info.time_over())
         return TIMEOUT;
 
-    if (depth <= 0)
-    {
-        // Depth 0, starting Quiensense Search
-        return QuieSearch(__pos, alpha, beta, ply, 0);
-    }
 
     {
         // check/stalemate check
@@ -164,6 +156,13 @@ alphabeta(ChessBoard& __pos, int depth,
             __pos.remove_movegen_extra_data();
             return DRAW_VALUE;
         }
+    }
+
+
+    if (depth <= 0)
+    {
+        // Depth 0, starting Quiensense Search
+        return QuieSearch(__pos, alpha, beta, ply, 0);
     }
 
 
@@ -259,10 +258,10 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
     pvArray[pvIndex] = 0; // no pv yet
     pvNextIndex = pvIndex + maxPly - ply;
 
-    for (const auto move : myMoves)
+    for (const MoveType move : myMoves)
     {    
         startTime = perf::now();
-        if ((i < LMR_LIMIT) or interesting_move(move, _cb))
+        if ((i < LMR_LIMIT) or interesting_move(move, _cb) or depth < 2)
         {
             _cb.MakeMove(move);
             eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
