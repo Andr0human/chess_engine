@@ -203,7 +203,8 @@ QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
             _cb.MakeMove(move);                                             // Make current move
             int score = -QuieSearch(_cb, -beta, -alpha, ply + 1, __dol + 1);
             _cb.UnmakeMove();                                               // Takeback made move
-            if (__abs(score) == valUNKNOWN) return valUNKNOWN;
+            if (std::abs(score) == TIMEOUT)
+                return TIMEOUT;
             if (score >= beta) return beta;                                 // Check for Beta-cutoff
             if (score > alpha) alpha = score;                               // Check if a better move is found
         }

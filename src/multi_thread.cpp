@@ -84,13 +84,7 @@ bulk_MultiCount(ChessBoard &_cb, int depth)
 void
 MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
 {
-    // A Zero depth Move is produced in case we don't have time to do a search of depth 1
-    int zero_move = createMoveOrderList(primary), eval = 0;
-    // info.reset();
-    // info.set_to_move(primary.color);
-    // info.set_depth_zero_move(zero_move);
-
-    info = SearchData(primary.color, search_time, zero_move);
+    info = SearchData(primary, search_time);
 
     bool within_valWindow = true;
     int alpha = negInf, beta = posInf, valWindowCnt = 0;
@@ -98,7 +92,7 @@ MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
     for (int depth = 1; depth <= mDepth;)
     {
         // pre_status(depth, valWindowCnt);
-        eval = pv_multiAlphaBetaRoot(primary, alpha, beta, depth);
+        int eval = pv_multiAlphaBetaRoot(primary, alpha, beta, depth);
         // post_status(primary, pvArray[0], eval, global_time);
 
         if (__abs(eval) == valUNKNOWN) break;

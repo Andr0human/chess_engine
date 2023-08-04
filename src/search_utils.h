@@ -74,8 +74,10 @@ class SearchData
     // Store which side to play for search_position
     int side;
 
-    // Time provided to find move for current position (in secs.)
-    double time_alloted;
+    uint64_t check_counter;
+
+    // Time provided to find move for current position (in secs.)    
+    int64_t time_alloted;
 
     // Time spend on searching for move in position (in secs.)
     double time_on_search;
@@ -102,16 +104,22 @@ class SearchData
     public:
     // Init
     SearchData()
-    : StartTime(perf::now()) {}
+    : StartTime(perf::now()), check_counter(0) {}
 
-    SearchData(int __side, double __time_alloted, MoveType zero_move)
-    : StartTime(perf::now()), side(__side), time_alloted(__time_alloted)
-    , move_eval({std::make_pair(zero_move, 0)}) {}
+
+    SearchData(ChessBoard& pos, double _time_alloted)
+    {
+        StartTime = perf::now();
+        side = pos.color;
+        time_alloted = static_cast<uint64_t>(_time_alloted * 1e9);
+        check_counter = 0;
+
+        // A Zero depth Move is produced in case we
+        // don't have time to do a search of depth 1
+        MoveType zeroMove = generate_moves(pos).pMoves[0];
+        move_eval = {std::make_pair(zeroMove, 0)};
+    }
     
-
-    double
-    alloted_time_for_search() const noexcept
-    { return time_alloted; }
 
     std::pair<MoveType, int> last_iter_result() const noexcept
     { return move_eval.back(); }
@@ -137,9 +145,12 @@ class SearchData
     }
 
     bool
-    time_over() const noexcept
+    time_over() noexcept
     {
-        perf_time duration = perf::now() - StartTime;
+        if ((++check_counter & 3) != 0)
+            return false;
+
+        auto duration = perf::now() - StartTime;
         return duration.count() >= time_alloted;
     }
 
@@ -273,8 +284,6 @@ class MovegenTestPosition
 };
 
 
-
-// extern search_data info;
 extern SearchData info;
 extern MoveOrderClass moc;
 
