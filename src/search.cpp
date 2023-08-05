@@ -197,7 +197,6 @@ QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
     for (const MoveType move : myMoves)
     {
         int move_priority = (move >> 21) & 31;
-        // int cpt = ((move >> 15) & 7);
         if (move_priority > 10)
         {                                           // Check based on priority for captures & checks
             _cb.MakeMove(move);                                             // Make current move

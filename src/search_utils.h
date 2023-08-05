@@ -74,8 +74,8 @@ class SearchData
     // Store which side to play for search_position
     int side;
 
-    // Time provided to find move for current position (in secs.)    
-    int64_t time_alloted;
+    // Time provided to find move for current position (in secs.)
+    std::chrono::nanoseconds time_alloted;
 
     // Time spend on searching for move in position (in secs.)
     double time_on_search;
@@ -109,7 +109,8 @@ class SearchData
     {
         StartTime = perf::now();
         side = pos.color;
-        time_alloted = static_cast<uint64_t>(_time_alloted * 1e9);
+        std::chrono::duration<double> dur_obj(_time_alloted);
+        time_alloted = std::chrono::duration_cast<std::chrono::nanoseconds>(dur_obj);
 
         // A Zero depth Move is produced in case we
         // don't have time to do a search of depth 1
@@ -144,8 +145,8 @@ class SearchData
     bool
     time_over() noexcept
     {
-        auto duration = perf::now() - StartTime;
-        return duration.count() >= time_alloted;
+        std::chrono::nanoseconds duration = perf::now() - StartTime;
+        return duration >= time_alloted;
     }
 
     void
