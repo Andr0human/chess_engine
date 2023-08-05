@@ -102,7 +102,7 @@ class SearchData
     public:
     // Init
     SearchData()
-    : StartTime(perf::now()), timeout_hit(false) {}
+    : StartTime(perf::now()) {}
 
 
     SearchData(ChessBoard& pos, double _time_alloted)
@@ -110,7 +110,6 @@ class SearchData
         StartTime = perf::now();
         side = pos.color;
         time_alloted = static_cast<uint64_t>(_time_alloted * 1e9);
-        timeout_hit = false;
 
         // A Zero depth Move is produced in case we
         // don't have time to do a search of depth 1
