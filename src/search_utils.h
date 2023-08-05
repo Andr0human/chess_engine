@@ -74,7 +74,7 @@ class SearchData
     // Store which side to play for search_position
     int side;
 
-    uint64_t check_counter;
+    bool timeout_hit;
 
     // Time provided to find move for current position (in secs.)    
     int64_t time_alloted;
@@ -104,7 +104,7 @@ class SearchData
     public:
     // Init
     SearchData()
-    : StartTime(perf::now()), check_counter(0) {}
+    : StartTime(perf::now()), timeout_hit(false) {}
 
 
     SearchData(ChessBoard& pos, double _time_alloted)
@@ -112,7 +112,7 @@ class SearchData
         StartTime = perf::now();
         side = pos.color;
         time_alloted = static_cast<uint64_t>(_time_alloted * 1e9);
-        check_counter = 0;
+        timeout_hit = false;
 
         // A Zero depth Move is produced in case we
         // don't have time to do a search of depth 1
@@ -147,11 +147,11 @@ class SearchData
     bool
     time_over() noexcept
     {
-        if ((++check_counter & 3) != 0)
-            return false;
+        if (timeout_hit) return true;
 
         auto duration = perf::now() - StartTime;
-        return duration.count() >= time_alloted;
+        timeout_hit = duration.count() >= time_alloted;
+        return timeout_hit;
     }
 
     void

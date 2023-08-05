@@ -100,7 +100,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time)
     {
         int eval = pv_root_alphabeta(board, alpha, beta, depth);
 
-        if (std::abs(eval) == TIMEOUT)
+        if (info.time_over())
             break;
 
         if ((eval <= alpha) or (eval >= beta))
@@ -209,7 +209,7 @@ alphabeta(ChessBoard& __pos, int depth,
         __pos.UnmakeMove();
 
         // No time left!
-        if (std::abs(eval) == TIMEOUT)
+        if (info.time_over())
             return TIMEOUT;
 
         if (eval >= beta)
@@ -273,7 +273,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
             eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
 
-            if (std::abs(eval) == TIMEOUT)
+            if (info.time_over())
                 return TIMEOUT;
 
             if ((eval > alpha) and R)
@@ -288,7 +288,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
         duration = perf::now() - startTime;
         moc.insert(i, duration.count());
 
-        if (std::abs(eval) == TIMEOUT)
+        if (info.time_over())
             return TIMEOUT;
 
         if (eval > alpha)
@@ -328,7 +328,7 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
             _cb.UnmakeMove();
 
 
-            if (std::abs(eval) == TIMEOUT)
+            if (info.time_over())
                 return TIMEOUT;
 
             if (eval > alpha)
@@ -339,7 +339,7 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
             }
         }
 
-        if (std::abs(eval) == TIMEOUT)
+        if (info.time_over())
             return TIMEOUT;
 
         if (eval > alpha)
