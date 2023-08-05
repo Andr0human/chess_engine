@@ -74,8 +74,6 @@ class SearchData
     // Store which side to play for search_position
     int side;
 
-    bool timeout_hit;
-
     // Time provided to find move for current position (in secs.)    
     int64_t time_alloted;
 
@@ -147,11 +145,8 @@ class SearchData
     bool
     time_over() noexcept
     {
-        if (timeout_hit) return true;
-
         auto duration = perf::now() - StartTime;
-        timeout_hit = duration.count() >= time_alloted;
-        return timeout_hit;
+        return duration.count() >= time_alloted;
     }
 
     void
