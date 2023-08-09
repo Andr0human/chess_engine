@@ -20,6 +20,7 @@ class ChessBoard
     MoveType aux_table_move[max_moveNum];
     int aux_table_csep[max_moveNum];
     uint64_t aux_table_hash[max_moveNum];
+    int aux_table_halfmove[max_moveNum];
     int moveNum = 0;
 
 
@@ -101,8 +102,8 @@ class ChessBoard
     void
     set_position_with_fen(const string& fen) noexcept;
 
-    void
-    show() const noexcept;
+    string
+    visual_board() const noexcept;
 
     void
     MakeMove(const MoveType move) noexcept;

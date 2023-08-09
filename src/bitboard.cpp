@@ -92,10 +92,92 @@ ChessBoard::set_position_with_fen(const string& fen) noexcept
 
     // Extracting half-move and full-move
     if (elements.size() == 6)
-        halfmove = stoi(elements[4]), fullmove = stoi(elements[5]);
+    {
+        halfmove = stoi(elements[4]);
+        fullmove = stoi(elements[5]) * 2 + (color ^ 1);
+    }
 
     // Generate hash-value for current position
     Hash_Value = generate_hashKey();
+}
+
+const string
+ChessBoard::fen() const
+{
+    const auto piece_no_to_char = [] (int piece_no)
+    {
+        int pvalues[7] = {0, 80, 66, 78, 82, 81, 75};
+
+        int v = pvalues[piece_no & 7]
+              + ((piece_no & 8) ^ 8) * 4;
+
+        return static_cast<char>(v);
+    };
+
+    const auto add_zeros_to_fen = [] (string& __s, int& zeros)
+    {
+        if (zeros == 0)
+            return;
+        
+        __s.push_back(static_cast<char>(zeros + 48));
+        zeros = 0;
+    };
+
+    const auto add_castle_to_fen = [&] (string& __s)
+    {
+        if ((csep & 1920) == 0)
+            return __s.push_back('-');
+
+        for (int i = 0; i < 4; i++)
+        {
+            int state = ((i & 1) *  6)
+                      + ((i & 2) * 16) + 75;
+            
+            if ((1ULL << (10 - i)) & csep)
+                __s.push_back(static_cast<char>(state));
+        }
+    };
+
+    string generated_fen;
+    int zero = 0;
+    
+    for(int j = 7; j >= 0; j--)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (board[8 * j + i] == 0)
+                zero++;
+            else
+            {
+                add_zeros_to_fen(generated_fen, zero);
+                generated_fen.push_back(piece_no_to_char(board[8 * j + i]));
+            }
+        }
+
+        add_zeros_to_fen(generated_fen, zero);
+        generated_fen.push_back('/');
+    }
+
+    generated_fen.pop_back();
+
+    generated_fen += " ";
+    generated_fen += (color == 1) ? "w " : "b ";
+
+    add_castle_to_fen(generated_fen);
+    generated_fen.push_back(' ');
+
+    if ((csep & 64) != 0)
+        generated_fen += "- ";
+    else
+    {
+        generated_fen.push_back((csep & 7) + 'a');
+        generated_fen += (color == 1 ? "6 " : "3 ");
+    }
+
+    generated_fen += std::to_string(halfmove) + " " +
+                     std::to_string(fullmove >> 1);
+
+    return generated_fen;
 }
 
 
@@ -118,6 +200,9 @@ ChessBoard::MakeMove(const MoveType move) noexcept
     int cpt = board[fp];
 
     auxilary_table_update(move);
+
+    halfmove = ((cpt & 7) != 0 or ((pt & 7) == 1)) ? 0 : halfmove + 1;
+    fullmove++;
 
     board[ip] = 0;
     board[fp] = pt;
@@ -345,6 +430,7 @@ ChessBoard::UnmakeMove() noexcept
 
     color ^= 1;
     int move = auxilary_table_revert();
+    fullmove--;
 
     int ip = move & 63;
     int fp = (move >> 6) & 63;
@@ -398,6 +484,7 @@ ChessBoard::auxilary_table_update(const MoveType move)
     aux_table_move[moveNum] = move;
     aux_table_csep[moveNum] = csep;
     aux_table_hash[moveNum] = Hash_Value;
+    aux_table_halfmove[moveNum] = halfmove;
     ++moveNum;
 }
 
@@ -407,6 +494,7 @@ ChessBoard::auxilary_table_revert()
     moveNum--;
     csep = aux_table_csep[moveNum];
     Hash_Value = aux_table_hash[moveNum];
+    halfmove = aux_table_halfmove[moveNum];
 
     return aux_table_move[moveNum];
 }
@@ -427,6 +515,7 @@ bool
 ChessBoard::three_move_repetition() const noexcept
 {
     int pos_count = 0;
+    int last = std::max(0, moveNum - halfmove);
 
     for (int i = moveNum - 1; i >= 0; i--)
         if (Hash_Value == aux_table_hash[i])
@@ -437,86 +526,7 @@ ChessBoard::three_move_repetition() const noexcept
 
 bool
 ChessBoard::fifty_move_rule_draw() const noexcept
-{ return moveNum >= 100; }
-
-const string
-ChessBoard::fen() const
-{
-    const auto piece_no_to_char = [] (int piece_no)
-    {
-        int pvalues[7] = {0, 80, 66, 78, 82, 81, 75};
-
-        int v = pvalues[piece_no & 7]
-              + ((piece_no & 8) ^ 8) * 4;
-
-        return static_cast<char>(v);
-    };
-
-    const auto add_zeros_to_fen = [] (string& __s, int& zeros)
-    {
-        if (zeros == 0)
-            return;
-        
-        __s.push_back(static_cast<char>(zeros + 48));
-        zeros = 0;
-    };
-
-    const auto add_castle_to_fen = [&] (string& __s)
-    {
-        if ((csep & 1920) == 0)
-            return __s.push_back('-');
-
-        for (int i = 0; i < 4; i++)
-        {
-            int state = ((i & 1) *  6)
-                      + ((i & 2) * 16) + 75;
-            
-            if ((1ULL << (10 - i)) & csep)
-                __s.push_back(static_cast<char>(state));
-        }
-    };
-
-    string generated_fen;
-    int zero = 0;
-    
-    for(int j = 7; j >= 0; j--)
-    {
-        for (int i = 0; i < 8; i++)
-        {
-            if (board[8 * j + i] == 0)
-                zero++;
-            else
-            {
-                add_zeros_to_fen(generated_fen, zero);
-                generated_fen.push_back(piece_no_to_char(board[8 * j + i]));
-            }
-        }
-
-        add_zeros_to_fen(generated_fen, zero);
-        generated_fen.push_back('/');
-    }
-
-    generated_fen.pop_back();
-
-    generated_fen += " ";
-    generated_fen += (color == 1) ? "w " : "b ";
-
-    add_castle_to_fen(generated_fen);
-    generated_fen.push_back(' ');
-
-    if ((csep & 64) != 0)
-        generated_fen += "- ";
-    else
-    {
-        generated_fen.push_back((csep & 7) + 'a');
-        generated_fen += (color == 1 ? "6 " : "3 ");
-    }
-
-    generated_fen += std::to_string(halfmove) + " " +
-                     std::to_string(fullmove);
-
-    return generated_fen;
-}
+{ return halfmove >= 100; }
 
 uint64_t
 ChessBoard::generate_hashKey() const
@@ -580,8 +590,8 @@ ChessBoard::Reset()
     moveNum = 0;
 }
 
-void
-ChessBoard::show() const noexcept
+string
+ChessBoard::visual_board() const noexcept
 {
     const char _piece[16] = {
         '.', 'p', 'b', 'n', 'r', 'q', 'k', '.',
@@ -603,7 +613,7 @@ ChessBoard::show() const noexcept
         }
     }
 
-    cout << res << endl;
+    return res;
 }
 
 bool
