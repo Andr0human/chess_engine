@@ -714,13 +714,21 @@ interesting_move(MoveType move, ChessBoard& _cb)
 {
     int ip = move & 63, fp = (move >> 6) & 63, ep = _cb.csep & 127;
     int pt = _cb.board[ip], cpt = _cb.board[fp];
-    if (cpt) return true;
+
+    // If it captures a piece.
+    if (cpt != 0)
+        return true;
+    
+    // An enpassant-move or a passed pawn
     if ((pt & 7) == 1) {
         if (fp == ep) return true;
         if (is_passad_pawn(ip, _cb)) return true;
     }
+
+    // If its castling
     if ((pt & 7) == 6 && std::abs(fp - ip) == 2) return true;
 
+    // If the move gives a check.
     _cb.MakeMove(move);
     bool res = in_check(_cb);
     _cb.UnmakeMove();

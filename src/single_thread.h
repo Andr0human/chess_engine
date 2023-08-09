@@ -26,7 +26,7 @@ negaMax_root(ChessBoard &_cb, int depth);
  * @param use_timer Run a time-based search.
  */
 void
-search_iterative(ChessBoard primary, int mDepth = maxDepth, double search_time = default_search_time);
+search_iterative(ChessBoard primary, int mDepth = maxDepth, double search_time = default_search_time, std::ostream& ostream = std::cout);
 
 /**
  * @brief Returns the evaluation of a board at a given depth

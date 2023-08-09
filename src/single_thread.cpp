@@ -81,7 +81,7 @@ negaMax_root(ChessBoard &_cb, int depth)
 
 
 void
-search_iterative(ChessBoard board, int mDepth, double search_time)
+search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream& writer)
 {
     reset_pv_line();
 
@@ -120,7 +120,8 @@ search_iterative(ChessBoard board, int mDepth, double search_time)
             valWindowCnt = 0;
 
             info.add_current_depth_result(depth, eval, pvArray);
-            info.show_last_depth_result(board);
+            // info.show_last_depth_result(board);
+            writer << info.show_last_depth_result(board) << endl;
             depth++;
         }
         // If found a checkmate
@@ -194,7 +195,7 @@ alphabeta(ChessBoard& __pos, int depth,
     if (ok_to_do_LMR(depth, myMoves))
         return lmr_search(__pos, myMoves, depth, alpha, beta, ply, pvIndex);
 
-    
+
     // Set pvArray, for storing the search_tree
     pvArray[pvIndex] = 0; // no pv yet
     int pvNextIndex = pvIndex + maxPly - ply;
@@ -203,10 +204,12 @@ alphabeta(ChessBoard& __pos, int depth,
     for (const auto move : myMoves)
     {
         __pos.MakeMove(move);
-        eval = -alphabeta(__pos, depth - 1,
-                -beta, -alpha, ply + 1, pvNextIndex);
-
+        eval = -alphabeta(__pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
         __pos.UnmakeMove();
+
+        // int moveNo = 1;
+        // eval = play_move(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex);
+
 
         // No time left!
         if (info.time_over())
@@ -258,7 +261,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
     pvNextIndex = pvIndex + maxPly - ply;
 
     for (const MoveType move : myMoves)
-    {    
+    {
         startTime = perf::now();
         if ((i < LMR_LIMIT) or interesting_move(move, _cb) or depth < 2)
         {
@@ -276,7 +279,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
             if (info.time_over())
                 return TIMEOUT;
 
-            if ((eval > alpha) and R)
+            if ((R > 0) and (eval > alpha))
             {
                 startTime = perf::now();
                 _cb.MakeMove(move);
@@ -367,6 +370,42 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
     return alpha;
 }
 
+
+
+int play_move(ChessBoard &_cb, int move, int moveNo,
+    int depth, int alpha, int beta, int ply, int pvNextIndex)
+{
+    int eval;
+
+    if ((depth < 3) or (moveNo < LMR_LIMIT) or interesting_move(move, _cb))
+    {
+        // No reduction
+        _cb.MakeMove(move);
+        eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+        _cb.UnmakeMove();
+    }
+    else
+    {
+        int R = reduction(depth, moveNo);
+
+        _cb.MakeMove(move);
+        eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
+        _cb.UnmakeMove();
+
+        //! TODO Test after removing this condition (looks unnecessary)
+        if (info.time_over())
+            return TIMEOUT;
+
+        if (eval > alpha)
+        {
+            _cb.MakeMove(move);
+            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            _cb.UnmakeMove();
+        }
+    }
+
+    return eval;
+}
 
 
 #endif

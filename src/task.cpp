@@ -225,10 +225,10 @@ direct_search(const vector<string> &_args)
         std::stod(_args[2]) : static_cast<double>(default_search_time);
 
     ChessBoard primary = fen;
-    primary.show();
+    cout << primary.visual_board() << endl;
 
     search_iterative(primary, maxDepth, search_time);
-    info.show_search_results(primary);
+    cout << info.get_search_results(primary) << endl;
 }
 
 void

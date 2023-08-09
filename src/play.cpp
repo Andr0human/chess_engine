@@ -3,6 +3,7 @@
 
 static string  inputfile;
 static string outputfile;
+static std::ofstream logger;
 
 static void
 write_to_file(const string filename, const string message)
@@ -14,6 +15,11 @@ write_to_file(const string filename, const string message)
     out.close();
 }
 
+static void
+write_to_file(std::ostream& writer, const string& data)
+{
+    writer << data << endl;
+}
 
 static void
 get_input(string& __s)
@@ -69,13 +75,18 @@ read_init_commands(const vector<string>& init_args, PlayBoard& __pos)
             puts("Output path found!");
             outputfile = init_args[index + 1];
         }
+        else if (arg == "log")
+        {
+            puts("Logger Found!");
+            logger.open(init_args[index + 1]);
+        }
         else if (arg == "position")
         {
             const string fen = base_utils::strip(init_args[index + 1], '"');
             __pos.set_new_position(fen);
 
             puts("New position found!");
-            __pos.show();
+            cout << __pos.visual_board() << endl;
         }
         else if (arg == "threads")
         {
@@ -89,39 +100,42 @@ read_init_commands(const vector<string>& init_args, PlayBoard& __pos)
 
 
 static void
-read_commands(const vector<string>& args, PlayBoard& __pos)
+read_commands(const vector<string>& args, PlayBoard& position)
 {
     using std::stoi;
     using std::stod;
 
     size_t index = 0;
+    std::ostream& writer = logger.is_open() ? logger : std::cout;
 
     for (const string& arg : args)
     {   
         if (arg == "go")
         {
-            puts("go command found!");
-            __pos.ready_search();
+            // puts("go command found!");
+            write_to_file(writer, "go command found!");
+            position.ready_search();
         }
         else if (arg == "moves")
         {
-            puts("pre_moves found for position!");
-            __pos.add_premoves(args, index + 1);
+            // puts("pre_moves found for position!");
+            write_to_file(writer, "pre_moves found for position!");
+            position.add_premoves(args, index + 1);
         }
         else if (arg == "time")
         {
-            puts("time command found!");
-            __pos.set_movetime(stod(args[index + 1]));
+            write_to_file(writer, "time command found!");
+            position.set_movetime(stod(args[index + 1]));
         }
         else if (arg == "depth")
         {
-            puts("depth command found!");
-            __pos.set_depth(stoi(args[index + 1]));
+            write_to_file(writer, "depth command found!");
+            position.set_depth(stoi(args[index + 1]));
         }
         else if (arg == "quit")
         {
-            puts("quit command found!");
-            __pos.ready_quit();
+            write_to_file(writer, "quit command found!");
+            position.ready_quit();
         }
 
         index++;
@@ -141,13 +155,15 @@ execute_late_commands(PlayBoard& board)
     {
         ChessBoard __pos(board.fen());
 
-        __pos.show();
+        if (logger.is_open())
+            logger << __pos.visual_board() << endl;
         __pos.add_prev_board_positions(board.get_prev_hashkeys());
 
-        search_iterative(__pos, maxDepth, board.get_movetime());
+        search_iterative(__pos, maxDepth, board.get_movetime(), logger);
         board.search_done();
 
-        info.show_search_results(__pos);
+        if (logger.is_open())
+            logger << info.get_search_results(__pos) << endl;
         write_search_result();
 
         int chosen_move = info.last_iter_result().first;

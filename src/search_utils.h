@@ -178,38 +178,59 @@ class SearchData
     }
 
     // Prints the result of search_iterative
-    void
-    show_search_results(ChessBoard board)
+    string
+    get_search_results(ChessBoard board)
     {
         const auto&[move, eval] = last_iter_result();
         const double eval_conv = static_cast<double>(eval) / 100.0;
 
-        puts("------ SEARCH-INFO ------");
+        // puts("------ SEARCH-INFO ------");
 
-        cout << "Depth Searched = " << (move_eval.size() - 1) << '\n'
-             << "Best Move = " << print(move, board) << '\n'
-             << "Eval = " << eval_conv << '\n'
-             << "Line = " << readable_pv_line(board, last_pv) << '\n'
-             << "Time_Spend = " << time_on_search << " secs." << endl;
+        // cout << "Depth Searched = " << (move_eval.size() - 1) << '\n'
+        //      << "Best Move = " << print(move, board) << '\n'
+        //      << "Eval = " << eval_conv << '\n'
+        //      << "Line = " << readable_pv_line(board, last_pv) << '\n'
+        //      << "Time_Spend = " << time_on_search << " secs." << endl;
 
-        puts("-------------------------");
+        // puts("-------------------------");
+
+        string result = "------ SEARCH-INFO ------";
+
+        result +=
+          + "\nDepth Searched = " + std::to_string(move_eval.size() - 1)
+          + "\nBest Move = " + print(move, board)
+          + "\nEval = " + std::to_string(eval_conv)
+          + "\nLine = " + readable_pv_line(board, last_pv)
+          + "\nTime_Spend = " + std::to_string(time_on_search) + " sec."
+          + "\n-------------------------";
+        
+        return result;
     }
 
     // Prints the results of last searched depth
-    void
+    string
     show_last_depth_result(ChessBoard board) const noexcept
     {
-        cout << std::setprecision(2);
+        // cout << std::setprecision(2);
     
         const size_t depth = (move_eval.size() - 1);
         const auto& [move, eval] = move_eval.back();
         const double eval_conv = static_cast<double>(eval) / 100.0;
+        const string gap = (depth < 10) ? (" ") : ("");
 
-        cout << "Depth " << ((depth < 10) ? (" ") : ("")) << depth << " | "
-             << "Eval : " << eval_conv << "\t| "
-             << "PV = " << readable_pv_line(board, last_pv) << endl;
+        string result = "Depth " + gap + std::to_string(depth) + " | ";
 
-        cout << std::setprecision(3);
+        result +=
+            "Eval = " + std::to_string(eval_conv) + "\t| "
+          + "Pv = " + readable_pv_line(board, last_pv) + "\n";
+
+        // cout << "Depth " << ((depth < 10) ? (" ") : ("")) << depth << " | "
+        //      << "Eval : " << eval_conv << "\t| "
+        //      << "PV = " << readable_pv_line(board, last_pv) << endl;
+
+        // cout << std::setprecision(3);
+
+        return result;
     }
 };
 
