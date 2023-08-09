@@ -517,7 +517,7 @@ ChessBoard::three_move_repetition() const noexcept
     int pos_count = 0;
     int last = std::max(0, moveNum - halfmove);
 
-    for (int i = moveNum - 1; i >= 0; i--)
+    for (int i = moveNum - 1; i >= last; i--)
         if (Hash_Value == aux_table_hash[i])
             ++pos_count;
     
@@ -571,7 +571,8 @@ ChessBoard::MakeNullMove()
     color ^= 1;
 }
 
-void ChessBoard::UnmakeNullMove()
+void
+ChessBoard::UnmakeNullMove()
 {
     // Update to not use t_csep form external source
     // csep = t_csep;
