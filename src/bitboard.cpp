@@ -637,3 +637,13 @@ ChessBoard::operator==(const ChessBoard& other)
 bool
 ChessBoard::operator!= (const ChessBoard& other)
 { return !(*this == other); }
+
+
+vector<uint64_t>
+ChessBoard::prev_hash_list() const
+{
+    vector<uint64_t> res;
+    for (int i = 0; i < moveNum; i++)
+        res.push_back(aux_table_hash[i]);
+    return res;
+}

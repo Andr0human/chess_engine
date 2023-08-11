@@ -70,6 +70,9 @@ class ChessBoard
     int csep, halfmove, fullmove;
     uint64_t Hash_Value;
 
+    vector<uint64_t>
+    ChessBoard::prev_hash_list() const;
+
     /**
      * 1 -> Pawn
      * 2 -> Bishop

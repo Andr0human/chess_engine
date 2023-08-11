@@ -372,6 +372,12 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
         return;
     }
 
+    writer << "Prev hashes -> ";
+    auto prev_hashes = board.prev_hash_list();
+    for (auto hash : prev_hashes)
+        writer << hash << ' ';
+    writer << endl;
+
     info = SearchData(board, search_time);
 
     bool within_valWindow = true;

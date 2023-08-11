@@ -120,6 +120,7 @@ read_commands(const vector<string>& args, PlayBoard& position)
         {
             // puts("pre_moves found for position!");
             write_to_file(writer, "pre_moves found for position!");
+            writer << "pre_move -> " << args[index + 1] << endl;
             position.add_premoves(args, index + 1);
         }
         else if (arg == "time")
