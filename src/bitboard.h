@@ -71,7 +71,7 @@ class ChessBoard
     uint64_t Hash_Value;
 
     vector<uint64_t>
-    ChessBoard::prev_hash_list() const;
+    prev_hash_list() const;
 
     /**
      * 1 -> Pawn
