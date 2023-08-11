@@ -91,8 +91,11 @@ class SearchData
     readable_pv_line(ChessBoard board, const vector<MoveType>& pv) noexcept
     {
         string res;
-        for (const MoveType move : pv) {
-            if (move == 0) break;
+        for (const MoveType move : pv)
+        {
+            if (legal_move_for_position(move, board) == false)
+                break;
+            //! TODO : What if the move is invalid for current position?
             res += print(move, board) + string(" ");
             board.MakeMove(move);
         }
@@ -222,7 +225,7 @@ class SearchData
 
         result +=
             "Eval = " + std::to_string(eval_conv) + "\t| "
-          + "Pv = " + readable_pv_line(board, last_pv) + "\n";
+          + "Pv = " + readable_pv_line(board, last_pv);
 
         // cout << "Depth " << ((depth < 10) ? (" ") : ("")) << depth << " | "
         //      << "Eval : " << eval_conv << "\t| "

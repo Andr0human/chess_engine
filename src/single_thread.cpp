@@ -98,13 +98,18 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
 
     for (int depth = 1; depth <= mDepth;)
     {
+        writer << "Start Alphabeta for depth " << depth << endl;
         int eval = pv_root_alphabeta(board, alpha, beta, depth);
+        writer << "End   Alphabeta for depth " << depth << endl;
 
-        if (info.time_over())
+        if (info.time_over()) {
+            writer << "Timeout called!" << endl;
             break;
+        }
 
         if ((eval <= alpha) or (eval >= beta))
         {
+            writer << "Fell outside the window" << endl;
             // We fell outside the window, so try again with a wider Window
             valWindowCnt++;
             alpha = eval - (valWindow << valWindowCnt);
@@ -113,6 +118,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
         }
         else
         {
+            writer << "Can set next iteration." << endl;
             // Set up the window for the next iteration.
             alpha = eval - valWindow;
             beta  = eval + valWindow;
@@ -120,18 +126,24 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
             valWindowCnt = 0;
 
             info.add_current_depth_result(depth, eval, pvArray);
-            // info.show_last_depth_result(board);
+            writer << "Added result for current iteration!" << endl;
             writer << info.show_last_depth_result(board) << endl;
+
             depth++;
+            writer << "Values for next iteration set!" << endl;
         }
+
+        writer << "End Iteration" << endl;
         // If found a checkmate
         if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;
 
         // Sort Moves according to time it took to explore the move.
         moc.sortList(pvArray[0]);
+        writer << "Moves Sorted for next Iteration!\n" << endl;
     }
 
     info.search_completed();
+    writer << "Search Done!" << endl;
 }
 
 int
