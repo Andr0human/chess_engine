@@ -133,6 +133,33 @@ Add_pm_Pawns(int ip, uint64_t endSquares, const ChessBoard &_cb, MoveList &myMov
     }
 }
 
+bool
+legal_move_for_position(int move, ChessBoard& pos)
+{
+    int ip = move & 63;
+    int fp = (move >> 6) & 63;
+
+    int ipt = pos.board[ip];
+    int fpt = pos.board[fp];
+
+    int side = pos.color;
+
+    // If no piece on init_sq or piece_color != side_to_move
+    if (((ipt & 7) == 0) or (((ipt >> 3) & 1) != side))
+        return false;
+
+    // If capt_piece_color == side_to_move
+    if ((fpt != 0) and ((fpt >> 3) & 1) == side)
+        return false;
+
+    MoveList myMoves = generate_moves(pos, false);
+
+    for (MoveType legal_move : myMoves.pMoves)
+        if (move == legal_move) return true;
+    
+    return false;
+}
+
 #endif
 
 #ifndef Piece_Movement

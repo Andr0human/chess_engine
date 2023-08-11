@@ -13,6 +13,8 @@ bool is_passad_pawn(int idx, ChessBoard& _cb);
 bool interesting_move(MoveType move, ChessBoard& _cb);
 bool f_prune_move(MoveType move, ChessBoard& _cb);
 
+// Checks if move is valid for given position
+bool legal_move_for_position(int move, ChessBoard& pos);
 
 // Returns true if board position has at least one legal move.
 bool has_legal_moves(ChessBoard &_cb);
