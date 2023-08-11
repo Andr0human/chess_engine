@@ -80,72 +80,6 @@ negaMax_root(ChessBoard &_cb, int depth)
 #ifndef SINGLE_THREAD_SEARCH
 
 
-void
-search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream& writer)
-{
-    reset_pv_line();
-
-    if (has_legal_moves(board) == false)
-    {
-        puts("Position has no legal moves! Discarding Search.");
-        return;
-    }
-
-    info = SearchData(board, search_time);
-
-    bool within_valWindow = true;
-    int alpha = negInf, beta = posInf, valWindowCnt = 0;
-
-    for (int depth = 1; depth <= mDepth;)
-    {
-        writer << "Start Alphabeta for depth " << depth << endl;
-        int eval = pv_root_alphabeta(board, alpha, beta, depth);
-        writer << "End   Alphabeta for depth " << depth << endl;
-
-        if (info.time_over()) {
-            writer << "Timeout called!" << endl;
-            break;
-        }
-
-        if ((eval <= alpha) or (eval >= beta))
-        {
-            writer << "Fell outside the window" << endl;
-            // We fell outside the window, so try again with a wider Window
-            valWindowCnt++;
-            alpha = eval - (valWindow << valWindowCnt);
-            beta  = eval + (valWindow << valWindowCnt);
-            within_valWindow = false;
-        }
-        else
-        {
-            writer << "Can set next iteration." << endl;
-            // Set up the window for the next iteration.
-            alpha = eval - valWindow;
-            beta  = eval + valWindow;
-            within_valWindow = true;
-            valWindowCnt = 0;
-
-            info.add_current_depth_result(depth, eval, pvArray);
-            writer << "Added result for current iteration!" << endl;
-            writer << info.show_last_depth_result(board) << endl;
-
-            depth++;
-            writer << "Values for next iteration set!" << endl;
-        }
-
-        writer << "End Iteration" << endl;
-        // If found a checkmate
-        if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;
-
-        // Sort Moves according to time it took to explore the move.
-        moc.sortList(pvArray[0]);
-        writer << "Moves Sorted for next Iteration!\n" << endl;
-    }
-
-    info.search_completed();
-    writer << "Search Done!" << endl;
-}
-
 int
 alphabeta(ChessBoard& __pos, int depth,
     int alpha, int beta, int ply, int pvIndex) 
@@ -256,16 +190,17 @@ alphabeta(ChessBoard& __pos, int depth,
     return alpha;
 }
 
-
 int
-pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
+pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream& writer)
 {
     perf_clock startTime;
     perf_ns_time duration;
 
     int ply{0}, pvIndex{0}, eval, pvNextIndex, R, i = 0;
-    
+
+    writer << "Start Generate Moves!" << endl;
     MoveList myMoves = generate_moves(_cb);
+    writer << "End   Generate Moves!" << endl;
     moc.setMoveOrder(myMoves);
 
 
@@ -278,11 +213,14 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
         if ((i < LMR_LIMIT) or interesting_move(move, _cb) or depth < 2)
         {
             _cb.MakeMove(move);
+            writer << "Start AlphaBeta without R!" << endl;
             eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            writer << "End   AlphaBeta without R!" << endl;
             _cb.UnmakeMove();
         }
         else
         {
+            writer << "Start AlphaBeta with R!" << endl;
             R = root_reduction(depth, i);
             _cb.MakeMove(move);
             eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
@@ -298,6 +236,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
                 eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
+            writer << "End   AlphaBeta with R!" << endl;
         }
 
         duration = perf::now() - startTime;
@@ -310,7 +249,9 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
         {
             alpha = eval;
             pvArray[pvIndex] = myMoves.pMoves[i];
+            writer << "Start movcpy!" << endl;
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
+            writer << "End   movcpy!" << endl;
         }
         // if (alpha >= beta) return beta;
         ++i;
@@ -419,5 +360,63 @@ int play_move(ChessBoard &_cb, int move, int moveNo,
     return eval;
 }
 
+
+void
+search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream& writer)
+{
+    reset_pv_line();
+
+    if (has_legal_moves(board) == false)
+    {
+        puts("Position has no legal moves! Discarding Search.");
+        return;
+    }
+
+    info = SearchData(board, search_time);
+
+    bool within_valWindow = true;
+    int alpha = negInf, beta = posInf, valWindowCnt = 0;
+
+    for (int depth = 1; depth <= mDepth;)
+    {
+        writer << "Start root_Alphabeta for depth " << depth << endl;
+        int eval = pv_root_alphabeta(board, alpha, beta, depth, writer);
+        writer << "End   root_Alphabeta for depth " << depth << endl;
+
+        if (info.time_over())
+            break;
+
+        if ((eval <= alpha) or (eval >= beta))
+        {
+            // We fell outside the window, so try again with a wider Window
+            valWindowCnt++;
+            alpha = eval - (valWindow << valWindowCnt);
+            beta  = eval + (valWindow << valWindowCnt);
+            within_valWindow = false;
+        }
+        else
+        {
+            // Set up the window for the next iteration.
+            alpha = eval - valWindow;
+            beta  = eval + valWindow;
+            within_valWindow = true;
+            valWindowCnt = 0;
+
+            info.add_current_depth_result(depth, eval, pvArray);
+            writer << info.show_last_depth_result(board) << endl;
+
+            depth++;
+        }
+
+        // If found a checkmate
+        if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;
+
+        // Sort Moves according to time it took to explore the move.
+        moc.sortList(pvArray[0]);
+    }
+
+    info.search_completed();
+    writer << "Search Done!" << endl;
+}
 
 #endif
