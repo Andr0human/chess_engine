@@ -526,7 +526,7 @@ ChessBoard::three_move_repetition() const noexcept
 
 bool
 ChessBoard::fifty_move_rule_draw() const noexcept
-{ return halfmove >= 100; }
+{ return halfmove > 100; }
 
 uint64_t
 ChessBoard::generate_hashKey() const

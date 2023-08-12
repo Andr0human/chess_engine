@@ -8,7 +8,7 @@ CXX = g++
 
 # define any compile-time flags
 CXXFLAGS	:= -std=c++20 -g -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
-				# -static -static-libgcc -static-libstdc++\
+				-static -static-libgcc -static-libstdc++\
 				# -fsanitize=address
 
 # define output directory
