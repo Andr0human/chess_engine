@@ -26,7 +26,7 @@ using Square    = int;
 #ifndef BIT_MANIPULATION
 
 inline int
-__ppcnt(uint64_t __x) 
+popcount(uint64_t __x) 
 { return __builtin_popcountll(__x); }
 
 inline int

@@ -95,7 +95,6 @@ class SearchData
         {
             if (legal_move_for_position(move, board) == false)
                 break;
-            //! TODO : What if the move is invalid for current position?
             res += print(move, board) + string(" ");
             board.MakeMove(move);
         }
@@ -187,16 +186,6 @@ class SearchData
         const auto&[move, eval] = last_iter_result();
         const double eval_conv = static_cast<double>(eval) / 100.0;
 
-        // puts("------ SEARCH-INFO ------");
-
-        // cout << "Depth Searched = " << (move_eval.size() - 1) << '\n'
-        //      << "Best Move = " << print(move, board) << '\n'
-        //      << "Eval = " << eval_conv << '\n'
-        //      << "Line = " << readable_pv_line(board, last_pv) << '\n'
-        //      << "Time_Spend = " << time_on_search << " secs." << endl;
-
-        // puts("-------------------------");
-
         string result = "------ SEARCH-INFO ------";
 
         result +=
@@ -226,13 +215,6 @@ class SearchData
         result +=
             "Eval = " + std::to_string(eval_conv) + "\t| "
           + "Pv = " + readable_pv_line(board, last_pv);
-
-        // cout << "Depth " << ((depth < 10) ? (" ") : ("")) << depth << " | "
-        //      << "Eval : " << eval_conv << "\t| "
-        //      << "PV = " << readable_pv_line(board, last_pv) << endl;
-
-        // cout << std::setprecision(3);
-
         return result;
     }
 };

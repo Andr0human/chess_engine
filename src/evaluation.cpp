@@ -107,11 +107,11 @@ Evaluation::set_material_strength()
 void
 Evaluation::MaterialCount(const ChessBoard& _cb)
 {
-    wPawns   = __ppcnt(PAWN(WHITE));     bPawns = __ppcnt(PAWN(BLACK));
-    wBishops = __ppcnt(BISHOP(WHITE)); bBishops = __ppcnt(BISHOP(BLACK));
-    wKnights = __ppcnt(KNIGHT(WHITE)); bKnights = __ppcnt(KNIGHT(BLACK));
-    wRooks   = __ppcnt(ROOK(WHITE));     bRooks = __ppcnt(ROOK(BLACK));
-    wQueens  = __ppcnt(QUEEN(WHITE));   bQueens = __ppcnt(QUEEN(BLACK));
+    wPawns   = popcount(PAWN(WHITE));     bPawns = popcount(PAWN(BLACK));
+    wBishops = popcount(BISHOP(WHITE)); bBishops = popcount(BISHOP(BLACK));
+    wKnights = popcount(KNIGHT(WHITE)); bKnights = popcount(KNIGHT(BLACK));
+    wRooks   = popcount(ROOK(WHITE));     bRooks = popcount(ROOK(BLACK));
+    wQueens  = popcount(QUEEN(WHITE));   bQueens = popcount(QUEEN(BLACK));
     wPieces = wBishops + wKnights + wRooks + wQueens;
     bPieces = bBishops + bKnights + bRooks + bQueens;
     pieceCount = wPieces + bPieces;
@@ -186,7 +186,7 @@ Evaluation::piece_mobility(const ChessBoard &_cb) const
         while (piece != 0)
             area |= __f(next_idx(piece), _Ap);
 
-        return __ppcnt(area);
+        return popcount(area);
     };
 
     uint64_t _Ap = PAWN(WHITE) ^ PAWN(BLACK);
@@ -210,7 +210,7 @@ Evaluation::piece_mobility(const ChessBoard &_cb) const
 
 #ifndef PAWN_STRUCTURE
 
-int
+/* int
 Evaluation::WhitePawns_Structure(const ChessBoard& _cb)
 {
     uint64_t pawns = PAWN(WHITE), val, res;
@@ -250,7 +250,7 @@ Evaluation::WhitePawns_Structure(const ChessBoard& _cb)
     uint64_t column = 72340172838076673ULL;
     for (int i = 0; i < 7; i++)
     {
-        int cnt = __ppcnt((column & PAWN(WHITE)));
+        int cnt = popcount((column & PAWN(WHITE)));
         if (cnt == 2) score -= 40;
         if (cnt >= 3) score -= 120;
         column <<= 1;
@@ -296,11 +296,61 @@ Evaluation::BlackPawns_Structure(const ChessBoard& _cb)
     uint64_t column = 72340172838076673ULL;
     for (int i = 0; i < 7; i++)
     {
-        int cnt = __ppcnt((column & PAWN(BLACK)));
+        int cnt = popcount((column & PAWN(BLACK)));
         if (cnt == 2) score -= 40;
         if (cnt >= 3) score -= 120;
         column <<= 1;
     }
+    return score;
+}
+ */
+
+int PawnStructure(const ChessBoard& _cb, int side)
+{
+    const auto dist_to_king = [] (int x, int y, int kpos)
+    {
+        int kx = kpos & 7;
+        int ky = (kpos - kx) >> 3;
+        return std::min(abs(x - kx), abs(y - ky));
+    };
+
+    int score = 0;
+    uint64_t  pawns = _cb.Pieces[(side << 3) + 1];
+    uint64_t column = 72340172838076673ULL;
+
+    // Punish Double Pawns on same column
+    for (int i = 0; i < 7; i++)
+    {
+        int p = popcount(column & pawns);
+        score -= 32 * p * p;
+        column <<= 1;
+    }
+
+
+    uint64_t emy_pawns = _cb.Pieces[((side ^ 1) << 3) + 1];
+    while (pawns != 0)
+    {
+        int idx = next_idx(pawns);
+        if ((plt::PassedPawnMasks[side][idx] & emy_pawns) != 0)
+            continue;
+
+        int x = idx & 7;
+        int y = (idx - x) >> 3;
+        int d = (7 * (side ^ 1)) + y * (2 * side - 1);
+
+        // Reward for having passed pawn
+        score += 3 * d * d;
+
+        int  kpos = idx_no(_cb.Pieces[(side << 3) + 6]);
+        int ekpos = idx_no(_cb.Pieces[((side ^ 1) << 3) + 6]);
+
+        // Add score for king close to passed pawn and
+        // Reduce score if enemy king is close to pawn
+
+        int dist = dist_to_king(x, y, kpos) - dist_to_king(x, y, ekpos);
+        score += (dist * dist * dist) / 2;
+    }
+
     return score;
 }
 
@@ -389,8 +439,8 @@ Evaluation::White_King_Safety(const ChessBoard& _cb)
     
     res = plt::KingMasks[kpos];
     if (ky != 7) res |= plt::KingMasks[kpos + 8];
-    defenders[0] = __ppcnt((res & (BISHOP(WHITE) ^ KNIGHT(WHITE) ^ ROOK(WHITE) ^ QUEEN(WHITE))));
-    defenders[1] = __ppcnt((res & PAWN(WHITE)));
+    defenders[0] = popcount((res & (BISHOP(WHITE) ^ KNIGHT(WHITE) ^ ROOK(WHITE) ^ QUEEN(WHITE))));
+    defenders[1] = popcount((res & PAWN(WHITE)));
 
     score += (1 << (defenders[0] * 3)) + 12 * (defenders[1] * defenders[1]);
     return score;
@@ -419,8 +469,8 @@ Evaluation::Black_King_Safety(const ChessBoard& _cb)
     
     res = plt::KingMasks[kpos];
     if (ky) res |= plt::KingMasks[kpos - 8];
-    defenders[0] = __ppcnt((res & (KNIGHT(BLACK) ^ BISHOP(BLACK) ^ ROOK(BLACK) ^ QUEEN(BLACK))));
-    defenders[1] = __ppcnt((res & PAWN(BLACK)));
+    defenders[0] = popcount((res & (KNIGHT(BLACK) ^ BISHOP(BLACK) ^ ROOK(BLACK) ^ QUEEN(BLACK))));
+    defenders[1] = popcount((res & PAWN(BLACK)));
 
     score += (1 << (defenders[0] * 3)) + 12 * (defenders[1] * defenders[1]);
     return score;
@@ -496,7 +546,8 @@ int Evaluation::Evaluate (const ChessBoard& _cb)
 
     float pos_Str = static_cast<float>(piece_strength(_cb) + king_strength(_cb));
     float mobility = static_cast<float>(piece_mobility(_cb));
-    float pawn_structure = static_cast<float>(WhitePawns_Structure(_cb) - BlackPawns_Structure(_cb));
+    // float pawn_structure = static_cast<float>(WhitePawns_Structure(_cb) - BlackPawns_Structure(_cb));
+    float pawn_structure = static_cast<float>(PawnStructure(_cb, 1) - PawnStructure(_cb, 0));
     float attack_value = static_cast<float>(attack_strength(_cb));
 
     float eval = (material_weight * material_diff) + (positional_weight * pos_Str) 
@@ -507,7 +558,6 @@ int Evaluation::Evaluate (const ChessBoard& _cb)
     // if (std::abs(eval) > 3200) {
     //     cout << "Fen : " << _cb.fen() << endl;
     //     cout << "Attack Value : " << (attk_str_weight * attack_value) << endl;
-    //     // _cb.show();
     // }
 
     return static_cast<int>(eval) * (2 * _cb.color - 1);

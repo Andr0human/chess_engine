@@ -336,11 +336,6 @@ void task(int argc, char *argv[])
     }
     else if (command == "play")
     {
-        #if defined(PLAY_H)
-            // Argument : elsa play "fen"
-            start_game(argument_list);
-            play(argument_list);
-        #endif
         play(argument_list);
     }
     else if (command == "ponder")

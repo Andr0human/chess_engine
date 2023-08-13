@@ -37,7 +37,7 @@ get_input(string& __s)
 
 
     // Break between each read
-    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(5);
+    const auto WAIT_TIME_PER_CYCLE = std::chrono::microseconds(50);
 
     // Searching for a valid commandline
     while (valid_args_found() == false)
@@ -126,6 +126,7 @@ read_commands(const vector<string>& args, PlayBoard& position)
         else if (arg == "time")
         {
             write_to_file(writer, "time command found!");
+            writer << "Time for search : " << args[index + 1] << " sec." << endl;
             position.set_movetime(stod(args[index + 1]));
         }
         else if (arg == "depth")
@@ -155,9 +156,8 @@ execute_late_commands(PlayBoard& board)
     if (board.do_search())
     {
         ChessBoard __pos(board.fen());
+        logger << __pos.visual_board() << endl;
 
-        if (logger.is_open())
-            logger << __pos.visual_board() << endl;
         __pos.add_prev_board_positions(board.get_prev_hashkeys());
 
         search_iterative(__pos, maxDepth, board.get_movetime(), logger);
@@ -192,6 +192,7 @@ play(const vector<string>& args)
         input_thread = std::thread(get_input, std::ref(input_string));
         input_thread.join();
 
+        logger << "Input recieve -> " << input_string << endl;
         const auto commands = base_utils::split(input_string, ' ');
         read_commands(commands, board);
 

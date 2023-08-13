@@ -49,7 +49,6 @@ class PlayBoard : public ChessBoard
     bool to_quit;
 
     // Moves to be played on PlayBoard before starting Search
-    
     vector<MoveType> pre_moves;
     vector<uint64_t> prev_keys;
 
@@ -61,7 +60,6 @@ class PlayBoard : public ChessBoard
     }
 
     public:
-
     // Init
     PlayBoard()
     : threads(1), mDepth(maxDepth), movetime(default_search_time),
