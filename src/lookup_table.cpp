@@ -27,6 +27,7 @@ uint64_t   KingMasks[64];
 
 uint64_t        PawnMasks[2][64];
 uint64_t PawnCaptureMasks[2][64];
+uint64_t  PassedPawnMasks[2][64];
 
 uint64_t   RookStartIndex[64];
 uint64_t BishopStartIndex[64];
@@ -324,6 +325,20 @@ build_pawn_table(uint64_t* _arr, int dir, bool captures)
 
 
 static void
+build_passed_pawn_table(uint64_t* _arr, uint64_t* gen_table)
+{
+    for (int sq = 0; sq < 64; sq++)
+    {
+        uint64_t val = gen_table[sq];
+        
+        if ((sq & 7) < 7) val |= gen_table[sq + 1];
+        if ((sq & 7) > 0) val |= gen_table[sq - 1];
+        _arr[sq] = val;
+    }
+}
+
+
+static void
 merge_table(uint64_t* to_table, uint64_t* from_table1, uint64_t* from_table2)
 {
     for (int i = 0; i < 64; i++)
@@ -363,6 +378,9 @@ init()
     build_pawn_table( PawnMasks[0], -1, false);
     build_pawn_table(PawnCaptureMasks[1],  1,  true);
     build_pawn_table(PawnCaptureMasks[0], -1,  true);
+
+    build_passed_pawn_table(PassedPawnMasks[1],   UpMasks);
+    build_passed_pawn_table(PassedPawnMasks[0], DownMasks);
 
     set_zero(DiagonalMasks);
     set_zero(LineMasks);

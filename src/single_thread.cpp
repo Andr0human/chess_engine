@@ -213,14 +213,14 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
         if ((i < LMR_LIMIT) or interesting_move(move, _cb) or depth < 2)
         {
             _cb.MakeMove(move);
-            writer << "Start AlphaBeta without R!" << endl;
+            // writer << "Start AlphaBeta without R!" << endl;
             eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
-            writer << "End   AlphaBeta without R!" << endl;
+            // writer << "End   AlphaBeta without R!" << endl;
             _cb.UnmakeMove();
         }
         else
         {
-            writer << "Start AlphaBeta with R!" << endl;
+            // writer << "Start AlphaBeta with R!" << endl;
             R = root_reduction(depth, i);
             _cb.MakeMove(move);
             eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
@@ -236,7 +236,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
                 eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
-            writer << "End   AlphaBeta with R!" << endl;
+            // writer << "End   AlphaBeta with R!" << endl;
         }
 
         duration = perf::now() - startTime;
@@ -249,9 +249,9 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
         {
             alpha = eval;
             pvArray[pvIndex] = myMoves.pMoves[i];
-            writer << "Start movcpy!" << endl;
+            // writer << "Start movcpy!" << endl;
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
-            writer << "End   movcpy!" << endl;
+            // writer << "End   movcpy!" << endl;
         }
         // if (alpha >= beta) return beta;
         ++i;
@@ -368,15 +368,9 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
 
     if (has_legal_moves(board) == false)
     {
-        puts("Position has no legal moves! Discarding Search.");
+        writer << "Position has no legal moves! Discarding Search." << endl;
         return;
     }
-
-    writer << "Prev hashes -> ";
-    auto prev_hashes = board.prev_hash_list();
-    for (auto hash : prev_hashes)
-        writer << hash << ' ';
-    writer << endl;
 
     info = SearchData(board, search_time);
 

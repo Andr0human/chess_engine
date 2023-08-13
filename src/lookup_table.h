@@ -32,6 +32,7 @@ extern uint64_t   KingMasks[64];
 
 extern uint64_t        PawnMasks[2][64];
 extern uint64_t PawnCaptureMasks[2][64];
+extern uint64_t  PassedPawnMasks[2][64];
 
 extern uint64_t   RookStartIndex[64];
 extern uint64_t BishopStartIndex[64];

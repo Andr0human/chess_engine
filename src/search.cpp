@@ -150,11 +150,11 @@ int
 MaterialCount(ChessBoard& _cb)
 {
     int answer = 0;
-    answer += 100 * (__ppcnt (PAWN(WHITE))  + __ppcnt(PAWN(BLACK)));
-    answer += 300 * (__ppcnt(BISHOP(WHITE)) + __ppcnt(BISHOP(BLACK)));
-    answer += 300 * (__ppcnt(KNIGHT(WHITE)) + __ppcnt(KNIGHT(BLACK)));
-    answer += 500 * (__ppcnt(ROOK(WHITE))   + __ppcnt(ROOK(BLACK)));
-    answer += 900 * (__ppcnt(QUEEN(WHITE))  + __ppcnt(QUEEN(BLACK)));
+    answer += 100 * (popcount (PAWN(WHITE))  + popcount(PAWN(BLACK)));
+    answer += 300 * (popcount(BISHOP(WHITE)) + popcount(BISHOP(BLACK)));
+    answer += 300 * (popcount(KNIGHT(WHITE)) + popcount(KNIGHT(BLACK)));
+    answer += 500 * (popcount(ROOK(WHITE))   + popcount(ROOK(BLACK)));
+    answer += 900 * (popcount(QUEEN(WHITE))  + popcount(QUEEN(BLACK)));
     return answer;
 }
 
