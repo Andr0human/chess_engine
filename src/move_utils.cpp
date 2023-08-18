@@ -3,14 +3,14 @@
 
 
 void
-decode_move(MoveType move)
+decode_move(Move move)
 {
-    int ip  = move & 63;
-    int fp  = (move >> 6) & 63;
-    int pt  = (move >> 12) & 7;
-    int cpt = (move >> 15) & 7;
+    Square ip  = move & 63;
+    Square fp  = (move >> 6) & 63;
+    PieceType pt  = PieceType((move >> 12) & 7);
+    PieceType cpt = PieceType((move >> 15) & 7);
+    Color cl  = Color((move >> 20) & 1);
     int ppt = (move >> 18) & 3;
-    int cl  = (move >> 20) & 1;
     int pr  = (move >> 21) & 31;
 
     cout << "Start_Square : " << ip << '\n';
@@ -20,7 +20,7 @@ decode_move(MoveType move)
     cout << "Piece_color : " << (cl == 1 ? "White\n" : "Black\n");
     cout << "Move_Strength : " << pr << '\n';
 
-    if (pt == 1 && ((1ULL << fp) & Rank18))
+    if (pt == PAWN && ((1ULL << fp) & Rank18))
     {
         cout << "Promoted_to : ";
         if (ppt == 0) cout << "Bishop\n";
@@ -34,51 +34,49 @@ decode_move(MoveType move)
 
 
 
-inline MoveType
-gen_base_move(const ChessBoard& _cb, int ip)
+inline Move
+gen_base_move(const ChessBoard& _cb, Square ip)
 {
-    int pt =  _cb.board[ip] & 7;
-    int side = _cb.color << 20;
+    PieceType pt = type_of(_cb.piece_on_square(ip));
+    int color_bit = _cb.color << 20;
 
-    const MoveType base_move = side + (pt << 12) + ip;
+    const Move base_move = color_bit + (pt << 12) + ip;
     return base_move;
 }
 
 inline void
-add_cap_moves(int ip, uint64_t endSquares,
-    MoveType base_move, const ChessBoard& _cb, MoveList& myMoves)
+add_cap_moves(Square ip, Bitboard endSquares,
+    Move base_move, const ChessBoard& _cb, MoveList& myMoves)
 {
-    const auto cap_priority = [] (int pt, int cpt)
+    const auto cap_priority = [] (PieceType pt, PieceType cpt)
     { return (cpt - pt + 16); };
 
-    const auto encode_full_move = [] (int base,
-        int fp, int cpt, int move_pr)
+    const auto encode_full_move = [] (Move base,
+        Square fp, PieceType cpt, int move_pr)
     {
-        const MoveType e_move = base + (move_pr << 21) + (cpt << 15) + (fp << 6);
+        const Move e_move = base + (move_pr << 21) + (cpt << 15) + (fp << 6);
         return e_move;
     };
 
-    int pt = _cb.board[ip] & 7;
-    // int base_str = 8;
+    PieceType pt = type_of(_cb.piece_on_square(ip));
 
     while (endSquares != 0)
     {
-        int fp = next_idx(endSquares);
-        int cpt = _cb.board[fp] & 7;
-        int move_priority = cap_priority(pt, cpt);
-        
-        const MoveType enc_move = encode_full_move(base_move, fp, cpt, move_priority);
+        Square fp = next_idx(endSquares);
+        PieceType fpt = type_of(_cb.piece_on_square(fp));
+        int move_priority = cap_priority(pt, fpt);
+
+        const Move enc_move = encode_full_move(base_move, fp, fpt, move_priority);
         myMoves.Add(enc_move);
     }
 }
 
 inline void
-add_quiet_moves(uint64_t endSquares, MoveType base_move,
-    const ChessBoard& _cb, MoveList& myMoves)
+add_quiet_moves(Bitboard endSquares, Move base_move, MoveList& myMoves)
 {
-    const auto encode_full_move = [] (int base, int fp, int pr)
+    const auto encode_full_move = [] (Move base, Square fp, int pr)
     {
-        const MoveType e_move = base + (pr << 21) + (fp << 6);
+        const Move e_move = base + (pr << 21) + (fp << 6);
         return e_move;
     };
 
@@ -86,213 +84,146 @@ add_quiet_moves(uint64_t endSquares, MoveType base_move,
     {
         int fp = next_idx(endSquares);
         int move_priority = 0;
-        const MoveType enc_move = encode_full_move(base_move, fp, move_priority);
+        const Move enc_move = encode_full_move(base_move, fp, move_priority);
         myMoves.Add(enc_move);
     }
 }
 
 void
-add_move_to_list(int ip, uint64_t endSquares,
-    const ChessBoard& _cb, MoveList& myMoves)
+add_move_to_list(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves)
 {
+    Bitboard emy_pieces = _cb.piece(~_cb.color, PieceType::ALL);
     if (myMoves.cpt_only)
-        endSquares = endSquares & ALL(EMY);
+        endSquares = endSquares & emy_pieces;
 
-    uint64_t cap_Squares = endSquares & ALL(EMY);
-    uint64_t quiet_Squares = endSquares ^ cap_Squares;
-    const MoveType base_move = gen_base_move(_cb, ip);
+    Bitboard cap_Squares = endSquares & emy_pieces;
+    Bitboard quiet_Squares = endSquares ^ cap_Squares;
+    const Move base_move = gen_base_move(_cb, ip);
 
     add_cap_moves(ip, cap_Squares, base_move, _cb, myMoves);
-    add_quiet_moves(quiet_Squares, base_move, _cb, myMoves);
+    add_quiet_moves(quiet_Squares, base_move, myMoves);
 }
 
 
 
 void
-add_quiet_pawn_moves(uint64_t endSquares,
+add_quiet_pawn_moves(Bitboard endSquares,
     int shift, const ChessBoard& _cb, MoveList& myMoves)
 {
     if (myMoves.cpt_only)
         return;
 
-    int pt = 1;
-    int side = _cb.color << 20;
+    PieceType pt = PAWN;
+    int color_bit = _cb.color << 20;
 
-    const MoveType base_move = side + (pt << 12);
+    const Move base_move = color_bit + (pt << 12);
 
     while (endSquares != 0)
     {
-        int fp = next_idx(endSquares);
-        int ip = fp + shift;
-        const MoveType enc_move = base_move + (fp << 6) + ip;
+        Square fp = next_idx(endSquares);
+        Square ip = fp + shift;
+        const Move enc_move = base_move + (fp << 6) + ip;
         myMoves.Add(enc_move);
     }
 }
 
 
-uint64_t
-pawn_atk_sq(const ChessBoard& _cb, int side)
+Bitboard
+pawn_atk_sq(const ChessBoard& _cb, Color color)
 {
-    int inc  = 2 * side - 1;
-    uint64_t pawns = _cb.Pieces[8 * side + 1];
-    const auto shifter = (side == 1) ? l_shift : r_shift;
+    int inc  = 2 * int(color) - 1;
+    Bitboard pawns = _cb.piece(color, PAWN);
+    const auto shifter = (color == Color::WHITE) ? l_shift : r_shift;
 
     return shifter(pawns & RightAttkingPawns, 8 + inc) |
            shifter(pawns & LeftAttkingPawns , 8 - inc);
 }
 
-uint64_t
-bishop_atk_sq(int __pos, uint64_t _Ap)
+Bitboard
+bishop_atk_sq(Square __pos, Bitboard _Ap)
 {    
     uint64_t magic = plt::BishopMagics[__pos];
-    uint64_t bits  = plt::BishopShifts[__pos];
-    uint64_t mask  = plt::BishopMasks[__pos];
+    int      bits  = plt::BishopShifts[__pos];
+    Bitboard mask  = plt::BishopMasks[__pos];
     uint64_t start = plt::BishopStartIndex[__pos];
 
     uint64_t occupancy = (magic * (_Ap & mask)) >> bits;
     return plt::BishopMovesLookUp[start + occupancy];
 }
 
-uint64_t
-knight_atk_sq(int __pos, uint64_t _Ap)
+Bitboard
+knight_atk_sq(Square __pos, Bitboard _Ap)
 { return plt::KnightMasks[__pos] + (_Ap - _Ap); }
 
-uint64_t
-rook_atk_sq(int __pos, uint64_t _Ap)
+Bitboard
+rook_atk_sq(Square __pos, Bitboard _Ap)
 {
     uint64_t magic = plt::RookMagics[__pos];
-    uint64_t bits  = plt::RookShifts[__pos];
-    uint64_t mask  = plt::RookMasks[__pos];
+    int      bits  = plt::RookShifts[__pos];
+    Bitboard mask  = plt::RookMasks[__pos];
     uint64_t start = plt::RookStartIndex[__pos];
 
     uint64_t occupancy = (magic * (_Ap & mask)) >> bits;
     return plt::RookMovesLookUp[start + occupancy];
 }
 
-uint64_t
-queen_atk_sq(int __pos, uint64_t _Ap)
+Bitboard
+queen_atk_sq(Square __pos, Bitboard _Ap)
 { return bishop_atk_sq(__pos, _Ap) ^ rook_atk_sq(__pos, _Ap); }
 
 
 
 
-/* CheckData
-find_check_squares(const ChessBoard& _cb, bool own_king)
-{
-    int own_side = _cb.color ^ (!own_king);
-    int kpos = idx_no(KING(own_side << 3));
-
-    uint64_t Apieces = ALL_BOTH;
-
-    uint64_t res1 = rook_atk_sq(kpos, Apieces);
-    uint64_t res2 = bishop_atk_sq(kpos, Apieces);
-    uint64_t res3 = knight_atk_sq(kpos, Apieces);
-    uint64_t res4 = plt::PawnCaptureMasks[own_side][kpos];
-
-    return CheckData(res1, res2, res3, res4);
-}
- */
 
 CheckData
-find_check_squares(int kpos, int side, uint64_t Apieces)
+find_check_squares(const ChessBoard& _cb)
 {
-    uint64_t res1 = rook_atk_sq(kpos, Apieces);
-    uint64_t res2 = bishop_atk_sq(kpos, Apieces);
-    uint64_t res3 = knight_atk_sq(kpos, Apieces);
-    uint64_t res4 = plt::PawnCaptureMasks[side][kpos];
+    Color c_my = _cb.color;
+    Square kpos = idx_no(_cb.piece(c_my, KING));
+    Bitboard Apieces = _cb.All();
+
+    Bitboard res1 = rook_atk_sq(kpos, Apieces);
+    Bitboard res2 = bishop_atk_sq(kpos, Apieces);
+    Bitboard res3 = knight_atk_sq(kpos, Apieces);
+    Bitboard res4 = plt::PawnCaptureMasks[c_my][kpos];
 
     return CheckData(res1, res2, res3, res4);
 }
 
 
-uint64_t apiece_after_makemove(MoveType move, uint64_t _Ap)
-{
-    using std::abs;
-    int ip  = (move & 63);
-    int fp  = (move >> 6) & 63;
-
-    int pt  = (move >> 12) & 7;
-    int cpt = (move >> 15) & 7;
-
-    int side = (move >> 20) & 1;
-
-    uint64_t swap_indexes = (1ULL << ip) ^ (1ULL << fp);
-
-    if ((abs(fp - ip) == 7 or abs(fp - ip) == 9) and (cpt == 0))
-    {
-        int cap_pawn_fp = fp - 8 * (2 * side - 1);
-        return _Ap ^ swap_indexes ^ (1ULL << cap_pawn_fp);
-    }
-
-    if (pt == 6 and abs(fp - ip) == 2)
-    {
-        uint64_t rooks_indexes =
-            (fp > ip ? 160ULL : 9ULL) << (56 * (side ^ 1));
-        
-        return _Ap ^ rooks_indexes ^ swap_indexes;
-    }
-
-    if (cpt != 0)
-        _Ap ^= (1ULL << fp);
-
-    return _Ap ^ swap_indexes;
-}
-
-
+//  Checks if the king of the active side is in check.
 bool
-move_gives_check(MoveType move, const ChessBoard& _cb)
+in_check(const ChessBoard& _cb)
 {
-    int ip = move & 63;
-    int fp = (move >> 6) & 63;
+    Color c_emy = ~_cb.color;
+    CheckData check = find_check_squares(_cb);
 
-    int pt = (move >> 12) & 7;
-
-    uint64_t Apieces = ALL(WHITE) | ALL(BLACK);
-
-    // For direct checks
-    CheckData checks = find_check_squares(_cb.king_pos_emy(), _cb.side_emy(), Apieces);
-
-    if (checks.squares_for_piece(pt) & (1ULL << fp))
-        return true;
-
-    return false;
-}
-
-
-
-// Returns if the king for the side to move is in check.
-bool
-in_check(const ChessBoard& _cb, bool own_king)
-{
-    int emy = (_cb.color ^ own_king) << 3;
-    CheckData check = find_check_squares(_cb.king_pos(), _cb.side(), ALL(WHITE) | ALL(BLACK));
-
-    return (check.LineSquares     & (  ROOK(emy) | QUEEN(emy)))
-        or (check.DiagonalSquares & (BISHOP(emy) | QUEEN(emy)))
-        or (check.KnightSquares   &  KNIGHT(emy) )
-        or (check.PawnSquares     &    PAWN(emy) );
+    return (check.LineSquares     & (_cb.piece(c_emy, ROOK  ) | _cb.piece(c_emy, QUEEN)))
+        or (check.DiagonalSquares & (_cb.piece(c_emy, BISHOP) | _cb.piece(c_emy, QUEEN)))
+        or (check.KnightSquares   &  _cb.piece(c_emy, KNIGHT))
+        or (check.PawnSquares     &  _cb.piece(c_emy, PAWN  ));
 }
 
 
 string
-print(MoveType move, ChessBoard _cb)
+print(Move move, ChessBoard _cb)
 {
-    // In case of no move, return null
-    if (move == 0)
+    if (move == NULL_MOVE)
         return string("null");
 
-    const auto index_to_row = [] (int row)
-    { return string(1, static_cast<char>(row + 49)); };
+    const auto IndexToRow = [] (int row)
+    { return string(1, char(row + 49)); };
 
-    const auto index_to_col = [] (int col)
-    { return string(1, static_cast<char>(col + 97)); };
+    const auto IndexToCol = [] (int col)
+    { return string(1, char(col + 97)); };
 
-    const auto index_to_square = [&] (int row, int col)
-    { return index_to_col(col) + index_to_row(row); };
+    const auto IndexToSquare = [&] (int row, int col)
+    { return IndexToCol(col) + IndexToRow(row); };
 
+    const char piece_names[4] = {'B', 'N', 'R', 'Q'};
 
-    int  ip =  move       & 63;
-    int  fp = (move >> 6) & 63;
+    Square ip =  move       & 63;
+    Square fp = (move >> 6) & 63;
 
     int ip_col = ip & 7;
     int fp_col = fp & 7;
@@ -300,33 +231,24 @@ print(MoveType move, ChessBoard _cb)
     int ip_row = (ip - ip_col) >> 3;
     int fp_row = (fp - fp_col) >> 3;
 
-    int  pt = ((move >> 12) & 7);
-    int cpt = ((move >> 15) & 7);
+    PieceType  pt = PieceType((move >> 12) & 7);
+    PieceType cpt = PieceType((move >> 15) & 7);
 
-    uint64_t Apieces = ALL(WHITE) | ALL(BLACK);
-
-
-    // CheckData checks = find_check_squares(_cb, false);
-
-    CheckData checks = find_check_squares(_cb.king_pos_emy(), _cb.side_emy(), Apieces);
+    Bitboard Apieces = _cb.All();
 
     _cb.MakeMove(move);
-    string gives_check = in_check(_cb, true) ? "+" : "";
+    string gives_check = in_check(_cb) ? "+" : "";
     _cb.UnmakeMove();
 
-    uint64_t (*check_for_piece[4])(int, uint64_t) =
-        {bishop_atk_sq, knight_atk_sq, rook_atk_sq, queen_atk_sq};
+    string captures = (cpt != 0) ? "x" : "";
 
-    const char piece_names[4] = {'B', 'N', 'R', 'Q'};
-
-
-    const auto print_move_pawn = [&] ()
+    if (pt == PAWN)
     {
         string pawn_captures
             = (std::abs(ip_col - fp_col) == 1)
-            ? (index_to_col(ip_col) + "x") : "";
+            ? (IndexToCol(ip_col) + "x") : "";
 
-        string dest_square = index_to_square(fp_row, fp_col);
+        string dest_square = IndexToSquare(fp_row, fp_col);
 
         // No promotion
         if (((1ULL << fp) & Rank18) == 0)
@@ -335,66 +257,51 @@ print(MoveType move, ChessBoard _cb)
         int ppt = (move >> 18) & 3;
         string promoted_piece = string("=") + string(1, piece_names[ppt]);
 
-        bool ppt_gives_check = checks.squares_for_piece(ppt + 2) & (1ULL << fp);
+        return pawn_captures + dest_square + promoted_piece + gives_check;
+    }
 
-        return pawn_captures + dest_square
-             + promoted_piece
-             + (ppt_gives_check ? "+" : "");
-    };
-
-    const auto print_move_king = [&] (const string piece_name)
+    if (pt == KING)
     {
+        Bitboard fpos = 1ULL << fp;
         // Castling
         if (std::abs(ip_col - fp_col) == 2)
-            return ((1ULL << fp) & FileG) ? string("O-O") : string("O-O-O");
+            return string((fpos & FileG) ? "O-O" : "O-O-O") + gives_check;
 
-        string captures = (cpt != 0) ? "x" : "";
+        return string("K") + captures + IndexToSquare(fp_row, fp_col) + gives_check;
+    }
 
-        return piece_name + captures + index_to_square(fp_row, fp_col) + gives_check;
-    };
+    // If piece is [BISHOP, KNIGHT, ROOK, QUEEN]
+    Bitboard pieces =
+        (pt == BISHOP ? bishop_atk_sq(fp, Apieces) :
+        (pt == KNIGHT ? knight_atk_sq(fp, Apieces) :
+        (pt == ROOK   ?   rook_atk_sq(fp, Apieces) :
+        queen_atk_sq(fp, Apieces))));
 
-    const auto print_move_piece = [&] (const auto& __func, string piece_name)
+    pieces = (pieces & _cb.piece(_cb.color, pt)) ^ (1ULL << ip);
+
+    string piece_name = string(1, piece_names[pt - 2]);
+    string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;
+
+    if (pieces == 0)
+        return piece_name + end_part;
+    
+    bool row = true, col = true;
+
+    while (pieces > 0)
     {
-        string captures = (cpt != 0)       ? "x" : "";
+        Square __pos = next_idx(pieces);
 
-        string end_part
-            = captures + index_to_square(fp_row, fp_col) + gives_check;
+        int __pos_col = __pos & 7;
+        int __pos_row = (__pos - __pos_col) >> 3;
 
-        uint64_t pieces = (__func(fp, Apieces) & _cb.Pieces[OWN + pt]) ^ (1ULL << ip);
+        if (__pos_col == ip_col) col = false;
+        if (__pos_row == ip_row) row = false;
+    }
 
-        if (pieces == 0)
-            return piece_name + end_part;
+    if (col) return piece_name + IndexToCol(ip_col) + end_part;
+    if (row) return piece_name + IndexToRow(ip_row) + end_part;
 
-        bool row = true, col = true;
-
-        while (pieces > 0)
-        {
-            int __pos = next_idx(pieces);
-
-            int __pos_col = __pos & 7;
-            int __pos_row = (__pos - __pos_col) >> 3;
-
-            if (__pos_col == ip_col) col = false;
-            if (__pos_row == ip_row) row = false;
-        }
-
-        if (col)
-            return piece_name + index_to_col(ip_col) + end_part;
-
-        if (row)
-            return piece_name + index_to_row(ip_row) + end_part;
-
-        return piece_name + index_to_square(ip_row, ip_col) + end_part;
-    };
-
-
-    if (pt == 1)
-        return print_move_pawn();
-
-    if (pt == 6)
-        return print_move_king("K");
-
-    return print_move_piece(check_for_piece[pt - 2], string(1, piece_names[pt - 2]));
+    return piece_name + IndexToSquare(ip_row, ip_col) + end_part;
 }
 
 
@@ -404,7 +311,7 @@ print(const MoveList& myMoves, const ChessBoard& _cb)
     cout << "MoveCount : " << myMoves.size() << '\n';
     
     int move_no = 0;
-    for (const MoveType move : myMoves)
+    for (const Move move : myMoves)
     {
         string result = print(move, _cb);
         cout << (++move_no) << " \t| "  << result

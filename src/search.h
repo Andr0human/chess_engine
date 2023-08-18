@@ -11,20 +11,20 @@
 
 // Variables
 
-extern MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
-extern MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
+extern Move pvArray[(MAX_PLY * MAX_PLY + MAX_PLY) / 2];
+extern Move thread_array[MAX_THREADS][(MAX_PLY * MAX_PLY) / 2];
 extern const string StartFen;
 
 // Utility
 
-void movcpy (MoveType* pTarget, const MoveType* pSource, int n);
+void movcpy (Move* pTarget, const Move* pSource, int n);
 void reset_pv_line();
 int checkmate_score(int ply);
 
 // Move_Generator
 void order_generated_moves(MoveList& myMoves, bool pv_moves);
 int createMoveOrderList(ChessBoard &_cb);
-bool is_valid_move(MoveType move, ChessBoard _cb);
+bool is_valid_move(Move move, ChessBoard _cb);
 
 // Search_Checks
 // bool ok_to_do_nullmove(ChessBoard& _cb);

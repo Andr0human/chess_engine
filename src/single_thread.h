@@ -15,7 +15,7 @@ bulkcount(ChessBoard &_cb, int depth);
 int
 negaMax(ChessBoard &_cb, int depth);
 
-std::pair<MoveType, int>
+std::pair<Move, int>
 negaMax_root(ChessBoard &_cb, int depth);
 
 /**
@@ -26,7 +26,7 @@ negaMax_root(ChessBoard &_cb, int depth);
  * @param use_timer Run a time-based search.
  */
 void
-search_iterative(ChessBoard primary, int mDepth = maxDepth, double search_time = default_search_time, std::ostream& ostream = std::cout);
+search_iterative(ChessBoard primary, int mDepth = MAX_DEPTH, double search_time = DEFAULT_SEARCH_TIME, std::ostream& ostream = std::cout);
 
 /**
  * @brief Returns the evaluation of a board at a given depth

@@ -9,32 +9,11 @@
 #include "bitboard.h"
 #include "movegen.h"
 
-enum search_flag:int
-{
-    ofs = 7,
-    maxMoves = 156, maxPly = 40,
-    maxDepth = 36, default_search_time = 2,
-    nullmove = 0,
-    base_cap_str = 10,
-    maxThreadCount = 12,
-    quit = 1, opp_move = 2, self_move = 4,
-    negInf = -16000, posInf = 16000, valWindow = 4, LMR_LIMIT = 4,
-
-    TIMEOUT = 1112223334,
-    DRAW_VALUE = -25,
-
-
-    valUNKNOWN = 5567899,
-    HASHEMPTY = 0, HASHEXACT = 1,
-    HASHALPHA = 2, HASHBETA  = 3,
-};
-
-
 
 class MoveOrderClass
 {
     private:
-    std::pair<int, double> moves[156];
+    std::pair<int, double> moves[MAX_MOVES];
     uint64_t mCount = 0;
 
     public:
@@ -81,17 +60,17 @@ class SearchData
     double time_on_search;
 
     // Stores the pv of the lastest searched depth
-    vector<MoveType> last_pv;
+    vector<Move> last_pv;
 
     // Stores the <best_move, eval> for each depth during search.
-    vector<std::pair<MoveType, int>> move_eval;
+    vector<std::pair<Move, int>> move_eval;
 
 
     static string
-    readable_pv_line(ChessBoard board, const vector<MoveType>& pv) noexcept
+    readable_pv_line(ChessBoard board, const vector<Move>& pv) noexcept
     {
         string res;
-        for (const MoveType move : pv)
+        for (const Move move : pv)
         {
             if (legal_move_for_position(move, board) == false)
                 break;
@@ -116,15 +95,15 @@ class SearchData
 
         // A Zero depth Move is produced in case we
         // don't have time to do a search of depth 1
-        MoveType zeroMove = generate_moves(pos).pMoves[0];
+        Move zeroMove = generate_moves(pos).pMoves[0];
         move_eval = {std::make_pair(zeroMove, 0)};
     }
     
 
-    std::pair<MoveType, int> last_iter_result() const noexcept
+    std::pair<Move, int> last_iter_result() const noexcept
     { return move_eval.back(); }
 
-    MoveType
+    Move
     last_move() const noexcept
     { return move_eval.back().first; }
 
@@ -132,14 +111,14 @@ class SearchData
     last_depth() const noexcept
     { return move_eval.size() - 1; }
 
-    vector<MoveType>
+    vector<Move>
     last_pv_line() const noexcept
     { return last_pv; }
 
     bool
-    is_part_of_pv(MoveType move) const noexcept
+    is_part_of_pv(Move move) const noexcept
     {
-        for (MoveType pv_move : last_pv)
+        for (Move pv_move : last_pv)
             if (move == pv_move) return true;
         return false;
     }
@@ -173,9 +152,9 @@ class SearchData
     { return time_on_search; }
 
     void
-    set_discard_result(MoveType zero_move) noexcept
+    set_discard_result(Move zero_move) noexcept
     {
-        int eval = (zero_move == -1) ? (negInf / 2) :(0);
+        int eval = (zero_move == -1) ? (-VALUE_INF) :(0);
         move_eval.emplace_back(std::make_pair(zero_move, eval));
     }
 

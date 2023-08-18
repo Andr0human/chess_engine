@@ -105,8 +105,6 @@ int
 TranspositionTable::lookup_position
     (uint64_t zkey, int depth, int alpha, int beta) const noexcept
 {
-    int UNKNOWN_VALUE = 5567899;
-
     const auto lookup = [&] (const ZobristHashKey &__pos)
     {
         if (__pos.key == zkey && __pos.depth > depth) {
@@ -115,13 +113,13 @@ TranspositionTable::lookup_position
             if (__pos.flag == HASHBETA  && __pos.eval >= beta ) return beta;
         }
 
-        return UNKNOWN_VALUE;
+        return int(VALUE_UNKNOWN);
     };
   
     uint64_t index = zkey % TT_SIZE;
 
     int res = lookup(primary_tt_table[index]);
-    if (res != UNKNOWN_VALUE) return res;
+    if (res != VALUE_UNKNOWN) return res;
 
     return lookup(secondary_tt_table[index]);
 }

@@ -9,12 +9,12 @@
 #include "move_utils.h"
 
 
-bool is_passad_pawn(int idx, ChessBoard& _cb);
-bool interesting_move(MoveType move, ChessBoard& _cb);
-bool f_prune_move(MoveType move, ChessBoard& _cb);
+bool is_passad_pawn(Square idx, ChessBoard& _cb);
+bool interesting_move(Move move, ChessBoard& _cb);
+bool f_prune_move(Move move, ChessBoard& _cb);
 
 // Checks if move is valid for given position
-bool legal_move_for_position(int move, ChessBoard& pos);
+bool legal_move_for_position(Move move, ChessBoard& pos);
 
 // Returns true if board position has at least one legal move.
 bool has_legal_moves(ChessBoard &_cb);
@@ -26,6 +26,6 @@ bool has_legal_moves(ChessBoard &_cb);
  * @param qs_only 
  * @return MoveList 
  */
-MoveList generate_moves(ChessBoard &_cb, bool qs_only = false);
+MoveList generate_moves(ChessBoard& _cb, bool qs_only = false);
 
 #endif

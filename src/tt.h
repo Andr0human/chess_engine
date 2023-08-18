@@ -3,8 +3,7 @@
 #ifndef TRANSPOSITION_TABLE_H
 #define TRANSPOSITION_TABLE_H
 
-
-#include <cstdint>
+#include "types.h"
 #include <iostream>
 #include <random>
 

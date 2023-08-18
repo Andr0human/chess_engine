@@ -222,12 +222,12 @@ direct_search(const vector<string> &_args)
     const string fen = __n > 1 ? _args[1] : StartFen;
 
     const double search_time = (__n >= 3) ?
-        std::stod(_args[2]) : static_cast<double>(default_search_time);
+        std::stod(_args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
 
     ChessBoard primary = fen;
     cout << primary.visual_board() << endl;
 
-    search_iterative(primary, maxDepth, search_time);
+    search_iterative(primary, MAX_DEPTH, search_time);
     cout << info.get_search_results(primary) << endl;
 }
 

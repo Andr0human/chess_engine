@@ -9,8 +9,9 @@
 
 class Evaluation
 {
-    int wPawns, wKnights, wBishops, wRooks, wQueens, wPieces;
-    int bPawns, bKnights, bBishops, bRooks, bQueens, bPieces;
+    int w_pawns, w_knights, w_bishops, w_rooks, w_queens, w_pieces;
+    int b_pawns, b_knights, b_bishops, b_rooks, b_queens, b_pieces;
+
     int pawnVal = 100, bishop_val = 330, knight_val = 300, rook_val = 500, queen_val = 900;
     int position_weight = 0;
     int pieceCount = 0, game_phase = 0, phase_counter = 16;
@@ -34,9 +35,6 @@ class Evaluation
 
     // MOBILITY
     int piece_mobility(const ChessBoard &_cb) const;
-
-    int WhitePawns_Structure(const ChessBoard& _cb);
-    int BlackPawns_Structure(const ChessBoard& _cb);
 
     // ATTACK_STRENGTH
     int White_attk_Strength(const ChessBoard& _cb);

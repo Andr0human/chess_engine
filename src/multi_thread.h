@@ -56,7 +56,7 @@ uint64_t
 bulk_MultiCount(ChessBoard &_cb, int depth);
 
 void
-MakeMove_MultiIterative(ChessBoard &primary, int mDepth = maxDepth, double search_time = default_search_time);
+MakeMove_MultiIterative(ChessBoard &primary, int mDepth = MAX_DEPTH, double search_time = DEFAULT_SEARCH_TIME);
 
 int
 thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
@@ -76,7 +76,7 @@ fm_Search(ChessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &
 bool
 first_rm_search(ChessBoard &_cb, int __move, int depth, int &alpha, int &beta);
 
-extern std::thread td[maxThreadCount];
+extern std::thread td[MAX_THREADS];
 extern thread_search_info thread_data;
 extern std::mutex mute;
 

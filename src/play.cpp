@@ -48,7 +48,7 @@ get_input(string& __s)
 static void
 write_search_result()
 {
-    const MoveType MOVE_FILTER = 2097151;
+    const Move MOVE_FILTER = 2097151;
     const auto& [move, eval] = info.last_iter_result();
     const double in_decimal = static_cast<double>(eval) / 100;
 
@@ -148,9 +148,14 @@ read_commands(const vector<string>& args, PlayBoard& position)
 static void
 execute_late_commands(PlayBoard& board)
 {
+    std::ostream& writer = logger.is_open() ? logger : std::cout;
+
     // If prev moves to be made on board
-    if (board.premoves_exist())
+    if (board.premoves_exist()) {
+        write_to_file(writer, "Start Playing Premoves");
         board.play_premoves();
+        write_to_file(writer, "End   Playing Premoves");
+    }
 
     // Start searching for best move in current position (go)
     if (board.do_search())
@@ -158,14 +163,21 @@ execute_late_commands(PlayBoard& board)
         ChessBoard __pos(board.fen());
         logger << __pos.visual_board() << endl;
 
+        write_to_file(writer, "Start Add prev board positions");
         __pos.add_prev_board_positions(board.get_prev_hashkeys());
+        write_to_file(writer, "End   Add prev board positions");
 
-        search_iterative(__pos, maxDepth, board.get_movetime(), logger);
+        write_to_file(writer, "Start Search");
+        search_iterative(__pos, MAX_DEPTH, board.get_movetime(), logger);
+        write_to_file(writer, "End   Search");
         board.search_done();
 
         if (logger.is_open())
             logger << info.get_search_results(__pos) << endl;
+
+        write_to_file(writer, "Start Write Search Result");
         write_search_result();
+        write_to_file(writer, "End   Write Search Result");
 
         int chosen_move = info.last_iter_result().first;
         board.add_premoves(chosen_move);
@@ -196,9 +208,13 @@ play(const vector<string>& args)
         const auto commands = base_utils::split(input_string, ' ');
         read_commands(commands, board);
 
+        write_to_file(logger, "Start Emptying Input File");
+
         // Empty the input_string
         write_to_file(inputfile, "");
         input_string.clear();
+
+        write_to_file(logger, "End   Emptying Input File");
 
         execute_late_commands(board);
 

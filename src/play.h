@@ -49,7 +49,7 @@ class PlayBoard : public ChessBoard
     bool to_quit;
 
     // Moves to be played on PlayBoard before starting Search
-    vector<MoveType> pre_moves;
+    vector<Move> pre_moves;
     vector<uint64_t> prev_keys;
 
     bool is_numeric(const std::string& s)
@@ -62,7 +62,7 @@ class PlayBoard : public ChessBoard
     public:
     // Init
     PlayBoard()
-    : threads(1), mDepth(maxDepth), movetime(default_search_time),
+    : threads(1), mDepth(MAX_DEPTH), movetime(DEFAULT_SEARCH_TIME),
     go_receive(false), to_quit(false) {}
 
     void
@@ -117,7 +117,7 @@ class PlayBoard : public ChessBoard
     }
 
     void
-    add_premoves(const MoveType move)
+    add_premoves(const Move move)
     {
         pre_moves.push_back(move);
         play_premoves();
@@ -130,13 +130,13 @@ class PlayBoard : public ChessBoard
     void
     play_premoves() noexcept
     {
-        const auto pawn_move = [] (MoveType move)
+        const auto pawn_move = [] (Move move)
         { return ((move >> 12) & 7) == 1; };
 
-        const auto captures = [] (MoveType move)
+        const auto captures = [] (Move move)
         { return ((move >> 15) & 7) > 0; };
 
-        for (const MoveType move : pre_moves)
+        for (const Move move : pre_moves)
         {
             if (pawn_move(move) or captures(move))
                 prev_keys.clear();

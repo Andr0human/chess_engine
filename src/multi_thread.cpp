@@ -2,7 +2,7 @@
 
 #include "multi_thread.h"
 
-std::thread td[maxThreadCount];
+std::thread td[MAX_THREADS];
 thread_search_info thread_data;
 std::mutex mute;
 
@@ -29,7 +29,7 @@ thread_search_info::set(ChessBoard &tmp_board, MoveList &tmp,
     moveCount = tmp.size(); index = start; depth = t_dep;
     ply = tply; pvIndex = pv_idx, best_move = tmp.pMoves[0];
 
-    hashf = HASHALPHA;
+    hashf = HASH_ALPHA;
     alpha = ta; beta = tb;
 }
 
@@ -87,7 +87,7 @@ MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
     info = SearchData(primary, search_time);
 
     bool within_valWindow = true;
-    int alpha = negInf, beta = posInf, valWindowCnt = 0;
+    int alpha = -VALUE_INF, beta = VALUE_INF, valWindowCnt = 0;
     
     for (int depth = 1; depth <= mDepth;)
     {
@@ -95,27 +95,27 @@ MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
         int eval = pv_multiAlphaBetaRoot(primary, alpha, beta, depth);
         // post_status(primary, pvArray[0], eval, global_time);
 
-        if (__abs(eval) == valUNKNOWN) break;
+        if (__abs(eval) == VALUE_UNKNOWN) break;
         if ((eval <= alpha) || (eval >= beta))
         {
             // We fell outside the window, so try again with a wider Window
             valWindowCnt++;
-            alpha = eval - (valWindow << valWindowCnt);
-            beta = eval + (valWindow << valWindowCnt);
+            alpha = eval - (VALUE_WINDOW << valWindowCnt);
+            beta = eval + (VALUE_WINDOW << valWindowCnt);
             within_valWindow = false;
         }
         else
         {
             // Set up the window for the next iteration.
-            alpha = eval - valWindow;
-            beta  = eval + valWindow;
+            alpha = eval - VALUE_WINDOW;
+            beta  = eval + VALUE_WINDOW;
             within_valWindow = true;
             valWindowCnt = 0;
             // info.update(depth, eval, pvArray);
             // curr_depth_status(primary);
             depth++;
         }
-        if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;   // If found a checkmate
+        if (within_valWindow and (__abs(eval) >= VALUE_INF - 500)) break;   // If found a checkmate
         moc.sortList(pvArray[0]);
     }
 }
@@ -134,12 +134,12 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
     }
 
-    int hashf = HASHALPHA, tt_val, eval;
+    int hashf = HASH_ALPHA, tt_val, eval;
 
     #if defined(TRANSPOSITION_TABLE_H)
 
-        // if (ply && (tt_val = TT.ProbeSearchHistory(_cb.Hash_Value)) != valUNKNOWN) return 0;
-        if ((tt_val = TT.lookup_position(_cb.Hash_Value, depth, alpha, beta)) != valUNKNOWN) return tt_val;
+        // if (ply && (tt_val = TT.ProbeSearchHistory(_cb.Hash_Value)) != VALUE_UNKNOWN) return 0;
+        if ((tt_val = TT.lookup_position(_cb.Hash_Value, depth, alpha, beta)) != VALUE_UNKNOWN) return tt_val;
         // TT.RecordSearch(_cb.Hash_Value);
 
     #endif
@@ -148,7 +148,7 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
     order_generated_moves(myMoves, true);
 
     loc_arr[pvIndex] = 0; // no pv yet
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     if (ok_to_do_LMR(depth, myMoves))
         return LMR_threadSearch(_cb, loc_arr, myMoves, depth, alpha, beta, ply, pvIndex);
@@ -159,18 +159,18 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth,
         eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
         _cb.UnmakeMove();
         
-        if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+        if (__abs(eval) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
         if (eval > alpha)
         {
-            hashf = HASHEXACT;
+            hashf = HASH_EXACT;
             alpha = eval;
             loc_arr[pvIndex] = move;
-            movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, maxPly - ply - 1);
+            movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (alpha >= beta)
         {
             #if defined(TRANSPOSITION_TABLE_H)
-                TT.record_position(_cb.Hash_Value, depth, move, beta, HASHBETA);
+                TT.record_position(_cb.Hash_Value, depth, move, beta, HASH_BETA);
                 // TT.RemSearchHistory(_cb.Hash_Value);
             #endif
 
@@ -199,12 +199,12 @@ pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
     }
 
-    int hashf = HASHALPHA, tt_val;
+    int hashf = HASH_ALPHA, tt_val;
 
     #if defined(TRANSPOSITION_TABLE_H)
 
-        // if (ply && (tt_val = TT.ProbeSearchHistory(_cb.Hash_Value)) != valUNKNOWN) return 0;
-        if ((tt_val = TT.lookup_position(_cb.Hash_Value, depth, alpha, beta)) != valUNKNOWN) return tt_val;
+        // if (ply && (tt_val = TT.ProbeSearchHistory(_cb.Hash_Value)) != VALUE_UNKNOWN) return 0;
+        if ((tt_val = TT.lookup_position(_cb.Hash_Value, depth, alpha, beta)) != VALUE_UNKNOWN) return tt_val;
         // TT.RecordSearch(_cb.Hash_Value);
 
     #endif
@@ -213,10 +213,10 @@ pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
     order_generated_moves(myMoves, true);
 
     loc_arr[pvIndex] = 0; // no pv yet
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     bool cut = fm_Search(_cb, loc_arr, depth, myMoves.pMoves[0], alpha, beta, ply, pvIndex);
-    if (__abs(alpha) == valUNKNOWN) return valUNKNOWN;
+    if (__abs(alpha) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
     if (cut)
     {
         // TT.RecordHash (myMoves.pMoves[0], _cb.Hash_Value, depth, beta, HASHBETA);
@@ -229,7 +229,7 @@ pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
         thread_data.set(_cb, myMoves, depth, alpha, beta, ply, pvIndex, 1);
         run_threads('a', loc_arr);
         
-        if (__abs(thread_data.alpha) == valUNKNOWN) return valUNKNOWN;
+        if (__abs(thread_data.alpha) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
 
         // TT.RemSearchHistory(_cb.Hash_Value);
         if (thread_data.beta_cut)
@@ -248,13 +248,13 @@ pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth
         int eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
         _cb.UnmakeMove();
 
-        if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+        if (__abs(eval) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
         if (eval > alpha)
         {
-            hashf = HASHEXACT;
+            hashf = HASH_EXACT;
             alpha = eval;
             loc_arr[pvIndex] = move;
-            movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, maxPly - ply - 1);
+            movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (alpha >= beta)
         {
@@ -296,7 +296,7 @@ pv_multiAlphaBetaRoot(ChessBoard &_cb, int alpha, int beta, int depth)
     // METHOD 2:
     TIME_POINT startTime, endTime;
     TIME_VARIABLE duration;
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     for (int i = 0; i < myMoves.__count; i++)
     {
@@ -327,12 +327,12 @@ pv_multiAlphaBetaRoot(ChessBoard &_cb, int alpha, int beta, int depth)
         duration = TIME_BTW(startTime, endTime);
         moc.insert(i, duration.count());
 
-        if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+        if (__abs(eval) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
         if (eval > alpha)
         {
             alpha = eval;
             pvArray[pvIndex] = move;
-            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
+            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (alpha >= beta) return beta;
     }
@@ -342,8 +342,8 @@ pv_multiAlphaBetaRoot(ChessBoard &_cb, int alpha, int beta, int depth)
 int
 LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex)
 {
-    int eval, hashf = HASHALPHA;
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int eval, hashf = HASH_ALPHA;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
     int __n = static_cast<int>(myMoves.size());
 
     for (int i = 0; i < __n; i++)
@@ -360,7 +360,7 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, i
             _cb.MakeMove(myMoves.pMoves[i]);
             eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
-            if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+            if (__abs(eval) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
             if (eval > alpha)
             {
                 _cb.MakeMove(myMoves.pMoves[i]);
@@ -368,13 +368,13 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, i
                 _cb.UnmakeMove();
             }
         }
-        if (__abs(eval) == valUNKNOWN) return valUNKNOWN;
+        if (__abs(eval) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
         if (eval > alpha)
         {
-            hashf = HASHEXACT;
+            hashf = HASH_EXACT;
             alpha = eval;
             loc_arr[pvIndex] = myMoves.pMoves[i];
-            movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, maxPly - ply - 1);
+            movcpy (loc_arr + pvIndex + 1, loc_arr + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (eval >= beta)
         {
@@ -396,7 +396,7 @@ bool
 fm_Search(ChessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex)
 {
     // No need to pick reduction as this is first move
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     _cb.MakeMove(move);
     int eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
@@ -406,7 +406,7 @@ fm_Search(ChessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &
     {
         alpha = eval;
         loc_arr[pvIndex] = move;
-        movcpy (loc_arr + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
+        movcpy (loc_arr + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
     }
     if (alpha >= beta) return true;
     return false;
@@ -421,7 +421,7 @@ first_rm_search(ChessBoard &_cb, int move, int depth, int &alpha, int &beta)
     perf_time duration;
 
     int ply = 0, pvIndex = 0;
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     startTime = perf::now();
     _cb.MakeMove(move);
@@ -432,7 +432,7 @@ first_rm_search(ChessBoard &_cb, int move, int depth, int &alpha, int &beta)
     moc.insert(0, duration.count() * 10000);
 
     pvArray[pvIndex] = move;
-    movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
+    movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
 
     if (alpha >= beta) return true;
     return false;
@@ -514,7 +514,7 @@ worker_alphabeta(int thread_num, int sourceArr[])
     int pvIndex = thread_data.pvIndex;
     mute.unlock();
 
-    int pvNextIndex  = pvIndex + maxPly - ply;
+    int pvNextIndex  = pvIndex + MAX_PLY - ply;
     int eval, move;
 
     while (true)
@@ -532,9 +532,9 @@ worker_alphabeta(int thread_num, int sourceArr[])
         eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
         _cb.UnmakeMove();
 
-        if (__abs(eval) == valUNKNOWN)
+        if (__abs(eval) == VALUE_UNKNOWN)
         {
-            thread_data.alpha = valUNKNOWN;
+            thread_data.alpha = VALUE_UNKNOWN;
             break;
         }
 
@@ -545,7 +545,7 @@ worker_alphabeta(int thread_num, int sourceArr[])
             thread_data.alpha = eval;
             thread_data.best_move = move;
             sourceArr[pvIndex] = move;
-            movcpy (sourceArr + pvIndex + 1, thread_array[thread_num] + pvNextIndex, maxPly - ply - 1);
+            movcpy (sourceArr + pvIndex + 1, thread_array[thread_num] + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (thread_data.alpha >= thread_data.beta) thread_data.beta_cut = true;
 
@@ -563,7 +563,7 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
     mute.unlock();
 
     int ply = 0, pvIndex = 0;
-    int pvNextIndex  = pvIndex + maxPly - ply;
+    int pvNextIndex  = pvIndex + MAX_PLY - ply;
     int eval, move;
 
     perf_clock startTime;
@@ -603,9 +603,9 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
             }
         }
 
-        if (__abs(eval) == valUNKNOWN)
+        if (__abs(eval) == VALUE_UNKNOWN)
         {
-            thread_data.alpha = valUNKNOWN;
+            thread_data.alpha = VALUE_UNKNOWN;
             break;
         }
 
@@ -619,7 +619,7 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
             thread_data.alpha = eval;
             thread_data.best_move = move;
             sourceArr[pvIndex] = move;
-            movcpy (sourceArr + pvIndex + 1, thread_array[thread_num] + pvNextIndex, maxPly - ply - 1);
+            movcpy (sourceArr + pvIndex + 1, thread_array[thread_num] + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (thread_data.alpha >= thread_data.beta) thread_data.beta_cut = true;
 

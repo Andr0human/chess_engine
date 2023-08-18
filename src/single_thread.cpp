@@ -35,7 +35,7 @@ negaMax(ChessBoard &_cb, int depth)
     if (myMoves.empty())
         return (_cb.king_in_check() ? checkmate_score(0) : 0);
 
-    int _eval = negInf;
+    int _eval = -VALUE_INF;
 
     for (const auto move : myMoves)
     {
@@ -46,7 +46,7 @@ negaMax(ChessBoard &_cb, int depth)
     return _eval;
 }
 
-std::pair<MoveType, int>
+std::pair<Move, int>
 negaMax_root(ChessBoard &_cb, int depth)
 {
     if (has_legal_moves(_cb) == false)
@@ -58,7 +58,7 @@ negaMax_root(ChessBoard &_cb, int depth)
     
     const auto myMoves = generate_moves(_cb);
 
-    int best = negInf, _bm = 0, eval;
+    int best = -VALUE_INF, _bm = 0, eval;
 
     for (const auto move : myMoves)
     {
@@ -101,7 +101,7 @@ alphabeta(ChessBoard& __pos, int depth,
         if (__pos.three_move_repetition() or __pos.fifty_move_rule_draw())
         {
             __pos.remove_movegen_extra_data();
-            return DRAW_VALUE;
+            return VALUE_DRAW;
         }
     }
 
@@ -123,7 +123,7 @@ alphabeta(ChessBoard& __pos, int depth,
             // Note : Need to check for check-mate/stale-mate possibility before TT_lookup,
             //        else can lead to search failures.
             int tt_val = TT.lookup_position(__pos.Hash_Value, depth, alpha, beta);
-            if (tt_val != valUNKNOWN)
+            if (tt_val != VALUE_UNKNOWN)
             {
                 __pos.remove_movegen_extra_data();
                 return tt_val;
@@ -144,8 +144,8 @@ alphabeta(ChessBoard& __pos, int depth,
 
     // Set pvArray, for storing the search_tree
     pvArray[pvIndex] = 0; // no pv yet
-    int pvNextIndex = pvIndex + maxPly - ply;
-    int hashf = HASHALPHA, eval;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
+    int hashf = HASH_ALPHA, eval;
 
     for (const auto move : myMoves)
     {
@@ -166,7 +166,7 @@ alphabeta(ChessBoard& __pos, int depth,
             // beta-cut found
 
             #if defined(TRANSPOSITION_TABLE_H)
-                TT.record_position(__pos.Hash_Value, depth, move, beta, HASHBETA);
+                TT.record_position(__pos.Hash_Value, depth, move, beta, HASH_BETA);
             #endif
             
             return beta;
@@ -175,11 +175,11 @@ alphabeta(ChessBoard& __pos, int depth,
         if (eval > alpha)
         {
             // Better move found, update the result
-            hashf = HASHEXACT;
+            hashf = HASH_EXACT;
             alpha = eval;
             pvArray[pvIndex] = move;
             movcpy (pvArray + pvIndex + 1,
-                    pvArray + pvNextIndex, maxPly - ply - 1);
+                    pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
     }
 
@@ -205,9 +205,9 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
 
 
     pvArray[pvIndex] = 0; // no pv yet
-    pvNextIndex = pvIndex + maxPly - ply;
+    pvNextIndex = pvIndex + MAX_PLY - ply;
 
-    for (const MoveType move : myMoves)
+    for (const Move move : myMoves)
     {
         startTime = perf::now();
         if ((i < LMR_LIMIT) or interesting_move(move, _cb) or depth < 2)
@@ -250,7 +250,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
             alpha = eval;
             pvArray[pvIndex] = myMoves.pMoves[i];
             // writer << "Start movcpy!" << endl;
-            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
+            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
             // writer << "End   movcpy!" << endl;
         }
         // if (alpha >= beta) return beta;
@@ -264,8 +264,8 @@ int
 lmr_search(ChessBoard &_cb, MoveList& myMoves,
     int depth, int alpha, int beta, int ply, int pvIndex)
 {
-    int eval, hashf = HASHALPHA, R, i = 0;
-    int pvNextIndex = pvIndex + maxPly - ply;
+    int eval, hashf = HASH_ALPHA, R, i = 0;
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     for (const auto move : myMoves)
     {
@@ -300,15 +300,15 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
 
         if (eval > alpha)
         {
-            hashf = HASHEXACT;
+            hashf = HASH_EXACT;
             alpha = eval;
             pvArray[pvIndex] = move;
-            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, maxPly - ply - 1);
+            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (eval >= beta)
         {
             #if defined(TRANSPOSITION_TABLE_H)
-                TT.record_position(_cb.Hash_Value, depth, move, beta, HASHBETA);
+                TT.record_position(_cb.Hash_Value, depth, move, beta, HASH_BETA);
             #endif
 
             return beta;
@@ -375,7 +375,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
     info = SearchData(board, search_time);
 
     bool within_valWindow = true;
-    int alpha = negInf, beta = posInf, valWindowCnt = 0;
+    int alpha = -VALUE_INF, beta = VALUE_INF, valWindowCnt = 0;
 
     for (int depth = 1; depth <= mDepth;)
     {
@@ -390,15 +390,15 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
         {
             // We fell outside the window, so try again with a wider Window
             valWindowCnt++;
-            alpha = eval - (valWindow << valWindowCnt);
-            beta  = eval + (valWindow << valWindowCnt);
+            alpha = eval - (VALUE_WINDOW << valWindowCnt);
+            beta  = eval + (VALUE_WINDOW << valWindowCnt);
             within_valWindow = false;
         }
         else
         {
             // Set up the window for the next iteration.
-            alpha = eval - valWindow;
-            beta  = eval + valWindow;
+            alpha = eval - VALUE_WINDOW;
+            beta  = eval + VALUE_WINDOW;
             within_valWindow = true;
             valWindowCnt = 0;
 
@@ -409,7 +409,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
         }
 
         // If found a checkmate
-        if (within_valWindow and (__abs(eval) >= (posInf >> 1) - 500)) break;
+        if (within_valWindow and (__abs(eval) >= VALUE_INF - 500)) break;
 
         // Sort Moves according to time it took to explore the move.
         moc.sortList(pvArray[0]);

@@ -1,15 +1,15 @@
 
 #include "search.h"
 
-MoveType pvArray[(maxPly * maxPly + maxPly) / 2];
-MoveType thread_array[maxThreadCount][(maxPly * maxPly) / 2];
+Move pvArray[(MAX_PLY * MAX_PLY + MAX_PLY) / 2];
+Move thread_array[MAX_THREADS][(MAX_PLY * MAX_PLY) / 2];
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 #ifndef TOOLS
 
 
 void
-movcpy(MoveType* pTarget, const MoveType* pSource, int n)
+movcpy(Move* pTarget, const Move* pSource, int n)
 { while (n-- && (*pTarget++ = *pSource++)); }
 
 
@@ -22,7 +22,7 @@ reset_pv_line()
 
 int
 checkmate_score(int ply)
-{ return (negInf >> 1) + (20 * ply); }
+{ return -VALUE_MATE + (20 * ply); }
 
 #endif
 
@@ -80,11 +80,11 @@ createMoveOrderList(ChessBoard& _cb)
 }
 
 bool
-is_valid_move(MoveType move, ChessBoard _cb)
+is_valid_move(Move move, ChessBoard _cb)
 {
     int ip = move & 63, vMove/* , fp = (move >> 6) & 63 */;                      // Get Init. and Dest. Square from encoded move.
 
-    if (!_cb.board[ip]) return false;                               // No piece on initial square
+    if (_cb.piece_on_square(ip) == NO_PIECE) return false;                               // No piece on initial square
     // if (_cb.pColor * _cb.Pieces[ip] < 0) return false;              // Piece of same colour to move
     // if (_cb.pColor * _cb.Pieces[fp] > 0) return false;              // No same colour for Initial and Dest Sq. Piece
 
@@ -150,11 +150,12 @@ int
 MaterialCount(ChessBoard& _cb)
 {
     int answer = 0;
-    answer += 100 * (popcount (PAWN(WHITE))  + popcount(PAWN(BLACK)));
-    answer += 300 * (popcount(BISHOP(WHITE)) + popcount(BISHOP(BLACK)));
-    answer += 300 * (popcount(KNIGHT(WHITE)) + popcount(KNIGHT(BLACK)));
-    answer += 500 * (popcount(ROOK(WHITE))   + popcount(ROOK(BLACK)));
-    answer += 900 * (popcount(QUEEN(WHITE))  + popcount(QUEEN(BLACK)));
+
+    answer += 100 * popcount((_cb.piece(WHITE, PAWN  )) | _cb.piece(BLACK, PAWN  ));
+    answer += 300 * popcount((_cb.piece(WHITE, BISHOP)) | _cb.piece(BLACK, BISHOP));
+    answer += 300 * popcount((_cb.piece(WHITE, KNIGHT)) | _cb.piece(BLACK, KNIGHT));
+    answer += 500 * popcount((_cb.piece(WHITE, ROOK  )) | _cb.piece(BLACK, ROOK  ));
+    answer += 900 * popcount((_cb.piece(WHITE, QUEEN )) | _cb.piece(BLACK, QUEEN ));
     return answer;
 }
 
@@ -194,7 +195,7 @@ QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
     auto myMoves = generate_moves(_cb, true);
     order_generated_moves(myMoves, false);
 
-    for (const MoveType move : myMoves)
+    for (const Move move : myMoves)
     {
         int move_priority = (move >> 21) & 31;
         if (move_priority > 10)
@@ -223,7 +224,7 @@ AlphaBeta_noPV(ChessBoard &_cb, int depth, int alpha, int beta, int ply)
     auto myMoves = generate_moves(_cb);
     order_generated_moves(myMoves, false);
 
-    for (const MoveType move : myMoves)
+    for (const Move move : myMoves)
     {
         _cb.MakeMove(move);
         int eval = -AlphaBeta_noPV(_cb, depth - 1, -beta, -alpha, ply + 1);

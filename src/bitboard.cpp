@@ -7,13 +7,13 @@ uint64_t tmp_this_counter = 0;
 
 ChessBoard::ChessBoard()
 {
-    color = 1;
+    color = Color::WHITE;
     csep = moveNum = 0;
     Hash_Value = 0;
     halfmove = fullmove = 0;
     KA = -1;
-    for (int i = 0; i < 64; i++) board[i] = 0;
-    for (int i = 0; i < 16; i++) Pieces[i] = 0; 
+    for (Square i = 0; i < 64; i++) board[i] = NO_PIECE;
+    for (int i = 0; i < 16; i++) piece_bb[i] = 0; 
 }
 
 ChessBoard::ChessBoard(const string& fen)
@@ -26,14 +26,14 @@ ChessBoard::set_position_with_fen(const string& fen) noexcept
 
     const auto char_to_piece_type = [] (char ch)
     {
-        const PieceType piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
+        const int piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
 
         const char piece = ch < 'a' ? ch : ch - 32;
         int v = static_cast<int>(piece);
 
         int index = ((v - 3) % 10) - 2;
-        return piece_no[index]
-             + (ch < 'a' ? 8 : 0);
+        return
+            piece_no[index] + (ch < 'a' ? 8 : 0);
     };
 
     const auto castling_rights = [&] (char ch)
@@ -45,15 +45,7 @@ ChessBoard::set_position_with_fen(const string& fen) noexcept
         csep |= 1ULL << (10 - (v % 5));
     };
 
-
-    {
-        csep = 0;
-        halfmove = 0;
-        fullmove = 1;
-        KA = -1;
-        moveNum = 0;
-    }
-
+    Reset();
 
     // Split the elements from FEN.
     const vector<string> elements = base_utils::split(fen, ' ');
@@ -70,18 +62,18 @@ ChessBoard::set_position_with_fen(const string& fen) noexcept
                 square -= (square & 7) ? ((square & 7) + 8) : (16);
             else
             {
-                PieceType __x = char_to_piece_type(elem);
+                Piece __x = Piece(char_to_piece_type(elem));
                 board[square] = __x;
-                Pieces[__x] |= 1ULL << square;
-                Pieces[(__x & 8) + 7] |= 1ULL << square;
+                piece_bb[__x] |= 1ULL << square;
+                piece_bb[(__x & 8) + 7] |= 1ULL << square;
                 square++;
             }
         }
     }
 
     // Extracting which color to play
-    color = (elements[1][0] & 1);
-    
+    color = Color(int(elements[1][0]) & 1);
+
     // Extracting castle-info
     for (char ch : elements[2])
         castling_rights(ch);
@@ -182,30 +174,33 @@ ChessBoard::fen() const
 
 
 void
-ChessBoard::MakeMove(const MoveType move) noexcept
+ChessBoard::MakeMove(Move move) noexcept
 {
     // Init and Dest. sq
-    int ip = move & 63;
-    int fp = (move >> 6) & 63;
+    Square ip = move & 63;
+    Square fp = (move >> 6) & 63;
 
-    uint64_t iPos = 1ULL << ip;
-    uint64_t fPos = 1ULL << fp;
+    Bitboard iPos = 1ULL << ip;
+    Bitboard fPos = 1ULL << fp;
 
     int ep = csep & 127;
     int own = color << 3;
     int emy = (color ^ 1) << 3;
 
+    PieceType it = PieceType((move >> 12) & 7);
+    PieceType ft = PieceType((move >> 15) & 7);
+
     // Piece at init and dest. sq.
-    int pt = board[ip];
-    int cpt = board[fp];
+    Piece ipt = board[ip];
+    Piece fpt = board[fp];
 
     auxilary_table_update(move);
 
-    halfmove = ((cpt & 7) != 0 or ((pt & 7) == 1)) ? 0 : halfmove + 1;
+    halfmove = (ft != PieceType::NONE) or (it == PieceType::PAWN) ? 0 : halfmove + 1;
     fullmove++;
 
-    board[ip] = 0;
-    board[fp] = pt;
+    board[ip] = NO_PIECE;
+    board[fp] = ipt;
 
     #if defined(TRANSPOSITION_TABLE_H)
 
@@ -218,13 +213,13 @@ ChessBoard::MakeMove(const MoveType move) noexcept
     csep = (csep & 1920) ^ 64;
 
     // Check if a rook is on dest. sq.
-    make_move_castle_check((move >> 15) & 7, fp);
+    make_move_castle_check(ft, fp);
 
     // Check if a rook is on init. sq.
-    make_move_castle_check((move >> 12) & 7, ip);
+    make_move_castle_check(it, ip);
 
     // Check for pawn special moves.
-    if ((pt & 7) == 1)
+    if (it == PieceType::PAWN)
     {
         if (is_double_pawn_push(ip, fp))
             return make_move_double_pawn_push(ip, fp);
@@ -237,7 +232,7 @@ ChessBoard::MakeMove(const MoveType move) noexcept
     }
 
     // Check for king moves.
-    if ((pt & 7) == 6)
+    if (it == PieceType::KING)
     {
         int old_csep = csep;
         int filter = 2047 ^ (384 << (color * 2));
@@ -246,29 +241,28 @@ ChessBoard::MakeMove(const MoveType move) noexcept
         update_csep(old_csep, csep);
 
         if (is_castling(ip, fp))
-            return make_move_castling(ip, fp, true);
+            return make_move_castling(ip, fp, 1);
     }
 
-    if (cpt != 0)
+    if (fpt != 0)
     {
-        Pieces[cpt] ^= fPos;
-        Pieces[emy + 7] ^= fPos;
+        piece_bb[fpt] ^= fPos;
+        piece_bb[emy + 7] ^= fPos;
 
         #if defined(TRANSPOSITION_TABLE_H)
-            // Hash_Value ^= TT.hash_key(pieceOfs + cpt_m * (fp + 1));
-            Hash_Value ^= TT.hashkey_update(cpt, fp);
+            Hash_Value ^= TT.hashkey_update(fpt, fp);
         #endif
     }
 
-    Pieces[pt] ^= iPos ^ fPos;
-    Pieces[own + 7] ^= iPos ^ fPos;
+    piece_bb[ipt] ^= iPos ^ fPos;
+    piece_bb[own + 7] ^= iPos ^ fPos;
 
     // Flip the sides.
-    color ^= 1;
+    color = ~color;
 
     #if defined(TRANSPOSITION_TABLE_H)
-        Hash_Value ^= TT.hashkey_update(pt, ip)
-                    ^ TT.hashkey_update(pt, fp)
+        Hash_Value ^= TT.hashkey_update(ipt, ip)
+                    ^ TT.hashkey_update(ipt, fp)
                     ^ TT.hash_key(0);
     #endif
 }
@@ -283,14 +277,14 @@ ChessBoard::update_csep(int old_csep, int new_csep) noexcept
 }
 
 void
-ChessBoard::make_move_castle_check(int piece, int sq) noexcept
+ChessBoard::make_move_castle_check(PieceType piece, Square sq) noexcept
 {
     // piece - at (init) or (dest) square.
 
-    uint64_t CORNER_SQUARES = 0x8100000000000081;
-    uint64_t bit_pos = 1ULL << sq;
+    Bitboard CORNER_SQUARES = 0x8100000000000081;
+    Bitboard bit_pos = 1ULL << sq;
 
-    if ((bit_pos & CORNER_SQUARES) and (piece == 4))
+    if ((bit_pos & CORNER_SQUARES) and (piece == PieceType::ROOK))
     {
         int old_csep = csep;
         int y = (sq + 1) >> 3;
@@ -302,13 +296,13 @@ ChessBoard::make_move_castle_check(int piece, int sq) noexcept
 }
 
 void
-ChessBoard::make_move_double_pawn_push(int ip, int fp) noexcept
+ChessBoard::make_move_double_pawn_push(Square ip, Square fp) noexcept
 {
     int own = color << 3;
     csep = (csep & 1920) | ((ip + fp) >> 1);
 
-    Pieces[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
-    Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+    piece_bb[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
+    piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
     #if defined(TRANSPOSITION_TABLE_H)
         // Add current enpassant-state to hash_value
@@ -318,26 +312,26 @@ ChessBoard::make_move_double_pawn_push(int ip, int fp) noexcept
                     ^ TT.hash_key(0);
     #endif
 
-    color ^= 1;
+    color = ~color;
 }
 
 void
-ChessBoard::make_move_enpassant(int ip, int ep) noexcept
+ChessBoard::make_move_enpassant(Square ip, Square ep) noexcept
 {
     int own = color << 3;
     int emy = own ^ 8;
-    int cap_pawn_fp = ep - 8 * (2 * color - 1);
+    Square cap_pawn_fp = ep - 8 * (2 * color - 1);
 
     // Remove opp. pawn from the Pieces-table
-    Pieces[emy + 1] ^= 1ULL << cap_pawn_fp;
-    Pieces[emy + 7] ^= 1ULL << cap_pawn_fp;
-    board[cap_pawn_fp] = 0;
+    piece_bb[emy + 1] ^= 1ULL << cap_pawn_fp;
+    piece_bb[emy + 7] ^= 1ULL << cap_pawn_fp;
+    board[cap_pawn_fp] = NO_PIECE;
 
     // Shift own pawn in Pieces-table
-    Pieces[own + 1] ^= (1ULL << ip) ^ (1ULL << ep);
-    Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << ep);
+    piece_bb[own + 1] ^= (1ULL << ip) ^ (1ULL << ep);
+    piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << ep);
 
-    color ^= 1;
+    color = ~color;
 
     #if defined(TRANSPOSITION_TABLE_H)
         Hash_Value ^= TT.hashkey_update(emy + 1, cap_pawn_fp);
@@ -348,32 +342,33 @@ ChessBoard::make_move_enpassant(int ip, int ep) noexcept
 }
 
 void
-ChessBoard::make_move_pawn_promotion(const MoveType move) noexcept
+ChessBoard::make_move_pawn_promotion(Move move) noexcept
 {
-    int ip  = move & 63;
-    int fp  = (move >> 6) & 63;
-    int cpt = (move >> 15) & 7;
+    Square ip  = move & 63;
+    Square fp  = (move >> 6) & 63;
+    PieceType cpt = PieceType((move >> 15) & 7);
 
     int own = color << 3;
     int emy = own ^ 8;
-    int new_pt = ((move >> 18) & 3) + 2;
+    PieceType new_pt = PieceType(((move >> 18) & 3) + 2);
 
-    Pieces[own + 1] ^= 1ULL << ip;
-    Pieces[own + new_pt] ^= 1ULL << fp;
-    Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
-    board[fp] = own + new_pt;
+    piece_bb[own + 1] ^= 1ULL << ip;
+    piece_bb[own + new_pt] ^= 1ULL << fp;
+    piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+    // board[fp] = own + new_pt;
+    board[fp] = make_piece(color, new_pt);
 
     if (cpt > 0)
     {
-        Pieces[emy + cpt] ^= 1ULL << fp;
-        Pieces[emy +   7] ^= 1ULL << fp;
+        piece_bb[emy + cpt] ^= 1ULL << fp;
+        piece_bb[emy +   7] ^= 1ULL << fp;
 
         #if defined(TRANSPOSITION_TABLE_H)
             Hash_Value ^= TT.hashkey_update(emy + cpt, fp);
         #endif
     }
 
-    color ^= 1;
+    color = ~color;
 
     #if defined(TRANSPOSITION_TABLE_H)
         Hash_Value ^= TT.hashkey_update(own + 1, ip);
@@ -383,34 +378,34 @@ ChessBoard::make_move_pawn_promotion(const MoveType move) noexcept
 }
 
 void
-ChessBoard::make_move_castling(int ip, int fp, bool call_from_makemove) noexcept
+ChessBoard::make_move_castling(Square ip, Square fp, int call_from_makemove) noexcept
 {
-    int own = color << 3;
+    int own = int(color) << 3;
     
-    uint64_t rooks_indexes =
-            (fp > ip ? 160ULL : 9ULL) << (56 * (color ^ 1));
+    Bitboard rooks_indexes =
+            (fp > ip ? 160ULL : 9ULL) << (56 * (~color));
 
-    Pieces[own + 4] ^= rooks_indexes;
-    Pieces[own + 7] ^= rooks_indexes;
+    piece_bb[own + 4] ^= rooks_indexes;
+    piece_bb[own + 7] ^= rooks_indexes;
 
-    int flask = static_cast<int>(!call_from_makemove) * (own + 4);
+    int flask = (!call_from_makemove) * (own + 4);
 
     if (fp > ip)
     {
-        board[ip + 3] = flask;
-        board[ip + 1] = (own + 4) ^ flask;
+        board[ip + 3] = Piece(flask);
+        board[ip + 1] = Piece((own + 4) ^ flask);
     }
     else
     {
-        board[ip - 4] = flask;
-        board[ip - 1] = (own + 4) ^ flask;
+        board[ip - 4] = Piece(flask);
+        board[ip - 1] = Piece((own + 4) ^ flask);
     }
 
     if (call_from_makemove)
     {
-        Pieces[own + 6] ^= (1ULL << ip) ^ (1ULL << fp);
-        Pieces[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
-        color ^= 1;
+        piece_bb[own + 6] ^= (1ULL << ip) ^ (1ULL << fp);
+        piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+        color = ~color;
 
 
         #if defined(TRANSPOSITION_TABLE_H)
@@ -428,87 +423,89 @@ ChessBoard::UnmakeMove() noexcept
 {
     if (moveNum <= 0) return;
 
-    color ^= 1;
-    int move = auxilary_table_revert();
+    color = ~color;
+    Move move = auxilary_table_revert();
     fullmove--;
 
-    int ip = move & 63;
-    int fp = (move >> 6) & 63;
-    int ep = csep & 127;
+    Square ip = move & 63;
+    Square fp = (move >> 6) & 63;
+    Square ep = csep & 127;
     
-    uint64_t iPos = 1ULL << ip;
-    uint64_t fPos = 1ULL << fp;
-    int own = color << 3;
-    int emy = (color ^ 1) << 3;
-    int pt = ((move >> 12) & 7) ^ own;
-    int cpt = ((move >> 15) & 7) ^ emy;
+    Bitboard iPos = 1ULL << ip;
+    Bitboard fPos = 1ULL << fp;
 
-    if (cpt == 8) cpt = 0;
+    int own =  color << 3;
+    int emy = (~color) << 3;
 
-    board[ip] = pt;
-    board[fp] = cpt;
+    PieceType it = PieceType((move >> 12) & 7);
+    PieceType ft = PieceType((move >> 15) & 7);
 
-    if (cpt)
+    Piece ipt = make_piece( color, it);
+    Piece fpt = make_piece(~color, ft);
+
+    if (fpt == 8) fpt = NO_PIECE;
+
+    board[ip] = ipt;
+    board[fp] = fpt;
+
+    if (fpt != NO_PIECE)
     {
-        Pieces[cpt] ^= fPos;
-        Pieces[emy + 7] ^= fPos;  
+        piece_bb[fpt] ^= fPos;
+        piece_bb[emy + 7] ^= fPos;  
     }
-    
-    Pieces[pt] ^= iPos ^ fPos;
-    Pieces[own + 7] ^= iPos ^ fPos;
 
-    if ((pt & 7) == 1)
+    piece_bb[ipt] ^= iPos ^ fPos;
+    piece_bb[own + 7] ^= iPos ^ fPos;
+
+    if (it == PAWN)
     {
         if (fp == ep)
         {
-            int pawn_fp = ep - 8 * (2 * color - 1);
-            Pieces[emy + 1] ^= 1ULL << (pawn_fp);
-            Pieces[emy + 7] ^= 1ULL << (pawn_fp);
-            board[pawn_fp] = emy + 1;
+            Square pawn_fp = ep - 8 * (2 * color - 1);
+            piece_bb[emy + 1] ^= 1ULL << (pawn_fp);
+            piece_bb[emy + 7] ^= 1ULL << (pawn_fp);
+            board[pawn_fp] = Piece(emy + 1);
         }
-        else if ((fPos & 0xFF000000000000FF))
+        else if ((fPos & 0xFF000000000000FF) != 0)
         {
-            pt = (((move >> 18) & 3) + 2) + own;
-            Pieces[own + 1] ^= fPos;
-            Pieces[pt] ^= fPos;
+            ipt = Piece((((move >> 18) & 3) + 2) + own);
+            piece_bb[own + 1] ^= fPos;
+            piece_bb[ipt] ^= fPos;
         }
     }
 
-    if ((pt & 7) == 6 and is_castling(ip, fp))
-        return make_move_castling(ip, fp, false);
+    if ((it == KING) and is_castling(ip, fp))
+        return make_move_castling(ip, fp, 0);
 }
 
 void
-ChessBoard::auxilary_table_update(const MoveType move)
+ChessBoard::auxilary_table_update(const Move move)
 {
-    aux_table_move[moveNum] = move;
-    aux_table_csep[moveNum] = csep;
-    aux_table_hash[moveNum] = Hash_Value;
-    aux_table_halfmove[moveNum] = halfmove;
-    ++moveNum;
+    // aux_table_move[moveNum] = move;
+    // aux_table_csep[moveNum] = csep;
+    // aux_table_hash[moveNum] = Hash_Value;
+    // aux_table_halfmove[moveNum] = halfmove;
+
+    //! TODO Test another method as well.
+    undo_info[moveNum++] = UndoInfo(move, csep, Hash_Value, halfmove);
 }
 
-int
+Move
 ChessBoard::auxilary_table_revert()
 {
     moveNum--;
-    csep = aux_table_csep[moveNum];
-    Hash_Value = aux_table_hash[moveNum];
-    halfmove = aux_table_halfmove[moveNum];
+    csep = undo_info[moveNum].csep;
+    Hash_Value = undo_info[moveNum].hash;
+    halfmove = undo_info[moveNum].halfmove;
 
-    return aux_table_move[moveNum];
+    return undo_info[moveNum].move;
 }
 
 void
-ChessBoard::add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept
+ChessBoard::add_prev_board_positions(const vector<Key>& prev_keys) noexcept
 {
-    for (uint64_t key : prev_keys)
-    {
-        aux_table_move[moveNum] = 0;
-        aux_table_csep[moveNum] = 0;
-        aux_table_hash[moveNum] = key;
-        ++moveNum;
-    }
+    for (Key key : prev_keys)
+        undo_info[moveNum++] = UndoInfo(0, 0, key, 0);
 }
 
 bool
@@ -518,7 +515,7 @@ ChessBoard::three_move_repetition() const noexcept
     int last = std::max(0, moveNum - halfmove);
 
     for (int i = moveNum - 1; i >= last; i--)
-        if (Hash_Value == aux_table_hash[i])
+        if (Hash_Value == undo_info[i].hash)
             ++pos_count;
     
     return pos_count >= 1;
@@ -528,10 +525,10 @@ bool
 ChessBoard::fifty_move_rule_draw() const noexcept
 { return halfmove > 100; }
 
-uint64_t
+Key
 ChessBoard::generate_hashKey() const
 {    
-    uint64_t key = 0;
+    Key key = 0;
 
     #if defined(TRANSPOSITION_TABLE_H)
 
@@ -549,10 +546,10 @@ ChessBoard::generate_hashKey() const
             if ((piece == 8) or (piece == 7))
                 continue;
 
-            uint64_t __tmp = Pieces[piece];
+            Bitboard __tmp = piece_bb[piece];
             while (__tmp > 0)
             {
-                int __pos = lSb_idx(__tmp);
+                Square __pos = lSb_idx(__tmp);
                 __tmp &= __tmp - 1;
                 key ^= TT.hashkey_update(piece, __pos);
             }
@@ -568,7 +565,7 @@ ChessBoard::MakeNullMove()
 {
     csep = (csep & 1920) ^ 64;
     // Hash_Value ^= TT.HashIndex[0];
-    color ^= 1;
+    color = ~color;
 }
 
 void
@@ -577,18 +574,25 @@ ChessBoard::UnmakeNullMove()
     // Update to not use t_csep form external source
     // csep = t_csep;
     // Hash_Value ^= TT.HashIndex[0];
-    color ^= 1;
+    color = ~color;
     // moveInvert(0, t_csep, t_HashVal);
 }
 
 void
 ChessBoard::Reset()
-{ 
-    for (int i = 0; i < 64; i++) board[i] = 0;
-    for (int i = 0; i < 16; i++) Pieces[i] = 0;
+{
+    for (Square i = 0; i < 64; i++) board[i] = NO_PIECE;
+    for (int i = 0; i < 16; i++) piece_bb[i] = 0;
     csep = 0;
     Hash_Value = 0;
     moveNum = 0;
+    KA = -1;
+    legal_squares_mask = 0;
+    enemy_attacked_squares = 0;
+    color = Color::WHITE;
+
+    halfmove = 0;
+    fullmove = 1;
 }
 
 string
@@ -604,7 +608,7 @@ ChessBoard::visual_board() const noexcept
     string gap = " | ";
     string res = s;
 
-    for (int sq = 56; sq >= 0; sq++)
+    for (Square sq = 56; sq >= 0; sq++)
     {
         res += gap + _piece[board[sq]];
         if ((sq & 7) == 7)
@@ -613,18 +617,17 @@ ChessBoard::visual_board() const noexcept
             res += " |\n" + s;
         }
     }
-
     return res;
 }
 
 bool
 ChessBoard::operator==(const ChessBoard& other)
 {
-    for (int i = 0; i < 64; i++)
+    for (Square i = 0; i < 64; i++)
         if (board[i] != other.board[i]) return false;
 
     for (int i = 0; i < 16; i++)
-        if (Pieces[i] != other.Pieces[i]) return false;
+        if (piece_bb[i] != other.piece_bb[i]) return false;
     
     if (csep != other.csep) return false;
     if (color != other.color) return false;
@@ -637,13 +640,3 @@ ChessBoard::operator==(const ChessBoard& other)
 bool
 ChessBoard::operator!= (const ChessBoard& other)
 { return !(*this == other); }
-
-
-vector<uint64_t>
-ChessBoard::prev_hash_list() const
-{
-    vector<uint64_t> res;
-    for (int i = 0; i < moveNum; i++)
-        res.push_back(aux_table_hash[i]);
-    return res;
-}
