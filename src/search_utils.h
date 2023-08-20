@@ -268,6 +268,10 @@ extern SearchData info;
 extern MoveOrderClass moc;
 
 
+int
+ExtensionDepth(const ChessBoard& pos, int numExtension);
+
+
 #endif
 
 

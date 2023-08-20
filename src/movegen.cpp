@@ -777,11 +777,12 @@ interesting_move(Move move, ChessBoard& _cb)
     if ((it == PieceType::KING) && std::abs(fp - ip) == 2) return true;
 
     // If the move gives a check.
-    _cb.MakeMove(move);
-    bool res = in_check(_cb);
-    _cb.UnmakeMove();
+    // _cb.MakeMove(move);
+    // bool res = in_check(_cb);
+    // _cb.UnmakeMove();
+    // return res;
 
-    return res;
+    return false;
 }
 
 bool

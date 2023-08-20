@@ -116,3 +116,17 @@ TestPosition::print()
 
 #endif
 
+
+
+int
+ExtensionDepth(const ChessBoard& pos, int numExtension)
+{
+    if (numExtension >= EXTENSION_LIMIT)
+        return 0;
+
+    if (pos.king_in_check())
+        return 1;
+    
+    return 0;
+}
+

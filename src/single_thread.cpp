@@ -82,7 +82,7 @@ negaMax_root(ChessBoard &_cb, int depth)
 
 int
 alphabeta(ChessBoard& __pos, int depth,
-    int alpha, int beta, int ply, int pvIndex) 
+    int alpha, int beta, int ply, int pvIndex, int numExtensions) 
 {
     if (info.time_over())
         return TIMEOUT;
@@ -137,10 +137,15 @@ alphabeta(ChessBoard& __pos, int depth,
     // Order moves according to heuristics for faster alpha-beta search
     order_generated_moves(myMoves, true);
 
+
     // Try LMR_search,
     if (ok_to_do_LMR(depth, myMoves))
-        return lmr_search(__pos, myMoves, depth, alpha, beta, ply, pvIndex);
+        return lmr_search(__pos, myMoves, depth, alpha, beta, ply, pvIndex, numExtensions);
 
+
+    // Search Extensions
+    int extension = ExtensionDepth(__pos, numExtensions);
+    depth = depth + extension;
 
     // Set pvArray, for storing the search_tree
     pvArray[pvIndex] = 0; // no pv yet
@@ -150,11 +155,11 @@ alphabeta(ChessBoard& __pos, int depth,
     for (const auto move : myMoves)
     {
         __pos.MakeMove(move);
-        eval = -alphabeta(__pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+        eval = -alphabeta(__pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions + extension);
         __pos.UnmakeMove();
 
         // int moveNo = 1;
-        // eval = play_move(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex);
+        // eval = play_move(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions + extension);
 
 
         // No time left!
@@ -214,7 +219,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
         {
             _cb.MakeMove(move);
             // writer << "Start AlphaBeta without R!" << endl;
-            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, 0);
             // writer << "End   AlphaBeta without R!" << endl;
             _cb.UnmakeMove();
         }
@@ -223,7 +228,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
             // writer << "Start AlphaBeta with R!" << endl;
             R = root_reduction(depth, i);
             _cb.MakeMove(move);
-            eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, 0);
             _cb.UnmakeMove();
 
             if (info.time_over())
@@ -233,7 +238,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
             {
                 startTime = perf::now();
                 _cb.MakeMove(move);
-                eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+                eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, 0);
                 _cb.UnmakeMove();
             }
             // writer << "End   AlphaBeta with R!" << endl;
@@ -262,8 +267,13 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
 
 int
 lmr_search(ChessBoard &_cb, MoveList& myMoves,
-    int depth, int alpha, int beta, int ply, int pvIndex)
+    int depth, int alpha, int beta, int ply, int pvIndex, int numExtensions)
 {
+
+    // Search Extensions
+    int extension = ExtensionDepth(_cb, numExtensions);
+    depth = depth + extension;
+
     int eval, hashf = HASH_ALPHA, R, i = 0;
     int pvNextIndex = pvIndex + MAX_PLY - ply;
 
@@ -272,7 +282,7 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
         if (i < LMR_LIMIT || interesting_move(move, _cb))
         {
             _cb.MakeMove(move);
-            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions + extension);
             _cb.UnmakeMove();
         }
         else
@@ -280,7 +290,7 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
             R = reduction(depth, i);
             
             _cb.MakeMove(move);
-            eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions + extension);
             _cb.UnmakeMove();
 
 
@@ -290,7 +300,7 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
             if (eval > alpha)
             {
                 _cb.MakeMove(move);
-                eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+                eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions + extension);
                 _cb.UnmakeMove();
             }
         }
@@ -326,7 +336,7 @@ lmr_search(ChessBoard &_cb, MoveList& myMoves,
 
 
 int play_move(ChessBoard &_cb, int move, int moveNo,
-    int depth, int alpha, int beta, int ply, int pvNextIndex)
+    int depth, int alpha, int beta, int ply, int pvNextIndex, int numExtensions)
 {
     int eval;
 
@@ -334,7 +344,7 @@ int play_move(ChessBoard &_cb, int move, int moveNo,
     {
         // No reduction
         _cb.MakeMove(move);
-        eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+        eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
         _cb.UnmakeMove();
     }
     else
@@ -342,7 +352,7 @@ int play_move(ChessBoard &_cb, int move, int moveNo,
         int R = reduction(depth, moveNo);
 
         _cb.MakeMove(move);
-        eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
+        eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
         _cb.UnmakeMove();
 
         //! TODO Test after removing this condition (looks unnecessary)
@@ -352,7 +362,7 @@ int play_move(ChessBoard &_cb, int move, int moveNo,
         if (eval > alpha)
         {
             _cb.MakeMove(move);
-            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+            eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
             _cb.UnmakeMove();
         }
     }

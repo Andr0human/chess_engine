@@ -49,6 +49,7 @@ enum Value: int
     MAX_PLY = 40,
     MAX_DEPTH = 36,
     LMR_LIMIT = 4,
+    EXTENSION_LIMIT = 12,
     VAL_WINDOW = 4,
     TIMEOUT = 1112223334,
     DEFAULT_SEARCH_TIME = 1,
