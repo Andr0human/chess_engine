@@ -180,7 +180,7 @@ QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
 
     // if (ka_pieces.attackers) return AlphaBeta_noPV(_cb, 1, alpha, beta, ply);
 
-    int stand_pat = ev.Evaluate(_cb);                                       // Get a 'Stand Pat' Score
+    int stand_pat = Evaluate(_cb);                       // Get a 'Stand Pat' Score
     if (stand_pat >= beta)
     {
         _cb.remove_movegen_extra_data();                 // Usually called at the end of move-generation.

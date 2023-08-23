@@ -9,7 +9,6 @@ bulkcount(ChessBoard &_cb, int depth)
 {
     if (depth <= 0) return 1;
 
-    // if (has_legal_moves(_cb) == false) return 0;
     const auto myMoves = generate_moves(_cb);
 
     if (depth == 1) return myMoves.size();
@@ -29,7 +28,7 @@ int
 negaMax(ChessBoard &_cb, int depth)
 {
     if (depth <= 0)
-        return ev.Evaluate(_cb);
+        return Evaluate(_cb);
 
     MoveList myMoves = generate_moves(_cb);
     if (myMoves.empty())
@@ -81,8 +80,7 @@ negaMax_root(ChessBoard &_cb, int depth)
 
 
 int
-alphabeta(ChessBoard& __pos, int depth,
-    int alpha, int beta, int ply, int pvIndex) 
+alphabeta(ChessBoard& __pos, int depth, int alpha, int beta, int ply, int pvIndex) 
 {
     if (info.time_over())
         return TIMEOUT;
@@ -136,6 +134,10 @@ alphabeta(ChessBoard& __pos, int depth,
 
     // Order moves according to heuristics for faster alpha-beta search
     order_generated_moves(myMoves, true);
+
+
+    // Search Extensions
+    depth = depth + search_extension(__pos);
 
     // Try LMR_search,
     if (ok_to_do_LMR(depth, myMoves))
@@ -191,16 +193,14 @@ alphabeta(ChessBoard& __pos, int depth,
 }
 
 int
-pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream& writer)
+pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth)
 {
     perf_clock startTime;
     perf_ns_time duration;
 
     int ply{0}, pvIndex{0}, eval, pvNextIndex, R, i = 0;
 
-    writer << "Start Generate Moves!" << endl;
     MoveList myMoves = generate_moves(_cb);
-    writer << "End   Generate Moves!" << endl;
     moc.setMoveOrder(myMoves);
 
 
@@ -213,14 +213,11 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
         if ((i < LMR_LIMIT) or interesting_move(move, _cb) or depth < 2)
         {
             _cb.MakeMove(move);
-            // writer << "Start AlphaBeta without R!" << endl;
             eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
-            // writer << "End   AlphaBeta without R!" << endl;
             _cb.UnmakeMove();
         }
         else
         {
-            // writer << "Start AlphaBeta with R!" << endl;
             R = root_reduction(depth, i);
             _cb.MakeMove(move);
             eval = -alphabeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex);
@@ -236,7 +233,6 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
                 eval = -alphabeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
                 _cb.UnmakeMove();
             }
-            // writer << "End   AlphaBeta with R!" << endl;
         }
 
         duration = perf::now() - startTime;
@@ -249,9 +245,7 @@ pv_root_alphabeta(ChessBoard& _cb, int alpha, int beta, int depth, std::ostream&
         {
             alpha = eval;
             pvArray[pvIndex] = myMoves.pMoves[i];
-            // writer << "Start movcpy!" << endl;
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
-            // writer << "End   movcpy!" << endl;
         }
         // if (alpha >= beta) return beta;
         ++i;
@@ -372,6 +366,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
         return;
     }
 
+
     info = SearchData(board, search_time);
 
     bool within_valWindow = true;
@@ -380,7 +375,7 @@ search_iterative(ChessBoard board, int mDepth, double search_time, std::ostream&
     for (int depth = 1; depth <= mDepth;)
     {
         writer << "Start root_Alphabeta for depth " << depth << endl;
-        int eval = pv_root_alphabeta(board, alpha, beta, depth, writer);
+        int eval = pv_root_alphabeta(board, alpha, beta, depth);
         writer << "End   root_Alphabeta for depth " << depth << endl;
 
         if (info.time_over())

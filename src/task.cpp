@@ -300,6 +300,23 @@ debug_movegen(const vector<string> &_args)
 }
 
 
+void
+show_update_info()
+{
+    cout <<
+        "Version: 2.0\n\n"
+        "Techniques Used:\n"
+        "- Mini-Max with AlphaBeta\n"
+        "- Quiescence Search\n"
+        "- Move Reordering (Time Based Move-Reordering at Root)\n"
+        "- Iterative-Deepening (Incremental Update by depth 1)\n"
+        "- Search Window (Window grows by 2 in case of falling outside the window)\n"
+        "- Transposition Table\n"
+        "- LMR with LMR_LIMIT(4)\n"
+        "- Search Extension\n"
+        "- New Eval System\n"
+        << endl;
+}
 
 
 
@@ -353,6 +370,10 @@ void task(int argc, char *argv[])
     else if (command == "debug")
     {
         debug_movegen(argument_list);
+    }
+    else if (command == "info")
+    {
+        show_update_info();
     }
     else
     {

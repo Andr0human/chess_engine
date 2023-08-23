@@ -777,11 +777,12 @@ interesting_move(Move move, ChessBoard& _cb)
     if ((it == PieceType::KING) && std::abs(fp - ip) == 2) return true;
 
     // If the move gives a check.
-    _cb.MakeMove(move);
-    bool res = in_check(_cb);
-    _cb.UnmakeMove();
+    // _cb.MakeMove(move);
+    // bool res = in_check(_cb);
+    // _cb.UnmakeMove();
 
-    return res;
+    // return res;
+    return false;
 }
 
 bool
@@ -805,6 +806,15 @@ f_prune_move(Move move, ChessBoard& _cb)
     if (_in_check) return true;
 
     return false;
+}
+
+
+int search_extension(const ChessBoard& pos)
+{
+    if (pos.KA > 1)
+        return 1;
+
+    return 0;
 }
 
 #endif

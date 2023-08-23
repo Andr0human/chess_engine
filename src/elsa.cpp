@@ -6,6 +6,7 @@
 //! TODO Test LMR condition is_passed_pawn(), castling
 //! TODO instead move_gives_check in LMR, use it as in search_extension.
 //! TODO More insufficient material positions in Evaluation.
+//! TODO Delta Pruning
 
 
 int main(int argc, char **argv)
