@@ -309,12 +309,13 @@ show_update_info()
         "- Mini-Max with AlphaBeta\n"
         "- Quiescence Search\n"
         "- Move Reordering (Time Based Move-Reordering at Root)\n"
+        "   - MVV-LVA\n"
+        "   - PV-move\n"
         "- Iterative-Deepening (Incremental Update by depth 1)\n"
         "- Search Window (Window grows by 2 in case of falling outside the window)\n"
         "- Transposition Table\n"
         "- LMR with LMR_LIMIT(4)\n"
         "- Search Extension\n"
-        "- New Eval System\n"
         << endl;
 }
 
