@@ -33,17 +33,10 @@ enum Piece: int
 };
 
 
-enum Value: int
+enum Search
 {
     HASH_EMPTY = 0, HASH_EXACT = 1,
     HASH_ALPHA = 2, HASH_BETA  = 3,
-
-    VALUE_ZERO = 0,
-    VALUE_DRAW = -25,
-    VALUE_MATE = 16000,
-    VALUE_INF  = 16001,
-    VALUE_UNKNOWN = 555666777,
-    VALUE_WINDOW = 4,
 
     MAX_MOVES = 256,
     MAX_PLY = 40,
@@ -58,19 +51,44 @@ enum Value: int
 };
 
 
+
+
+enum Value: int
+{
+    VALUE_ZERO = 0,
+    VALUE_DRAW = -25,
+    VALUE_MATE = 16000,
+    VALUE_INF  = 16001,
+    VALUE_UNKNOWN = 555666777,
+    VALUE_WINDOW = 4,
+
+
+    PawnValueMg   = 112,  PawnValueEg   = 132,
+    BishopValueMg = 312,  BishopValueEg = 336,
+    KnightValueMg = 300,  KnightValueEg = 320,
+    RookValueMg   = 512,  RookValueEg   = 576,
+    QueenValueMg  = 926,  QueenValueEg  = 942,
+
+    GamePhaseLimit = 800,
+};
+
+
+
 enum Board: uint64_t
 {
     Rank1 = 255ULL, Rank2 = Rank1 << 8, Rank3 = Rank1 << 16, Rank4 = Rank1 << 24,
     Rank5 = Rank1 << 32, Rank6 = Rank1 << 40, Rank7 = Rank1 << 48, Rank8 = Rank1 << 56,
     Rank18 = Rank1 | Rank8,
 
-    FileA = 72340172838076673ULL, FileB = FileA << 1, FileC = FileA << 2, FileD = FileA << 3,
+    FileA = 0x101010101010101, FileB = FileA << 1, FileC = FileA << 2, FileD = FileA << 3,
     FileE = FileA << 4, FileF = FileA << 5, FileG = FileA << 6, FileH = FileA << 7,
 
-    dg_row  = 72624976668147840ULL,
-    adg_row = 9241421688590303745ULL, 
+    dg_row  = 0x102040810204080,
+    adg_row = 0x8040201008040201, 
 
-    AllSquares = ~(0ULL), WhiteSquares = 6172840429334713770ULL,
+    NoSquares = 0ULL,
+    AllSquares = ~NoSquares,
+    WhiteSquares = 0x55AA55AA55AA55AA,
     BlackSquares = AllSquares ^ WhiteSquares,
     
     QueenSide = FileA | FileB | FileC | FileD,
@@ -84,7 +102,12 @@ enum Board: uint64_t
     CentralSquare = (Rank4 | Rank5) & (FileD | FileE),
     SemiCentralSquare = (Rank3 | Rank4 | Rank5 | Rank6) & (FileC | FileD | FileE | FileF),
     OuterSquare = AllSquares ^ SemiCentralSquare,
+
+    WhiteColorCorner = 0xF07030180C0E0F0,
+    BlackColorCorner = 0xF0E0C0800103070F,
 };
+
+
 
 
 

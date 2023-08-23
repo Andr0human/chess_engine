@@ -141,7 +141,7 @@ class PlayBoard : public ChessBoard
             if (pawn_move(move) or captures(move))
                 prev_keys.clear();
 
-            MakeMove(move);
+            MakeMove(move, false);
             prev_keys.push_back(Hash_Value);
         }
 

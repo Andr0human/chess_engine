@@ -112,13 +112,11 @@ read_commands(const vector<string>& args, PlayBoard& position)
     {   
         if (arg == "go")
         {
-            // puts("go command found!");
             write_to_file(writer, "go command found!");
             position.ready_search();
         }
         else if (arg == "moves")
         {
-            // puts("pre_moves found for position!");
             write_to_file(writer, "pre_moves found for position!");
             writer << "pre_move -> " << args[index + 1] << endl;
             position.add_premoves(args, index + 1);
@@ -151,21 +149,18 @@ execute_late_commands(PlayBoard& board)
     std::ostream& writer = logger.is_open() ? logger : std::cout;
 
     // If prev moves to be made on board
-    if (board.premoves_exist()) {
-        write_to_file(writer, "Start Playing Premoves");
+    if (board.premoves_exist())
+    {
         board.play_premoves();
-        write_to_file(writer, "End   Playing Premoves");
     }
 
     // Start searching for best move in current position (go)
     if (board.do_search())
     {
-        ChessBoard __pos(board.fen());
-        logger << __pos.visual_board() << endl;
-
-        write_to_file(writer, "Start Add prev board positions");
+        string fen = board.fen();
+        ChessBoard __pos(fen);
+        write_to_file(writer, string("Fen -> ") + fen);
         __pos.add_prev_board_positions(board.get_prev_hashkeys());
-        write_to_file(writer, "End   Add prev board positions");
 
         write_to_file(writer, "Start Search");
         search_iterative(__pos, MAX_DEPTH, board.get_movetime(), logger);
@@ -173,15 +168,16 @@ execute_late_commands(PlayBoard& board)
         board.search_done();
 
         if (logger.is_open())
-            logger << info.get_search_results(__pos) << endl;
+            write_to_file(writer, info.get_search_results(__pos));
 
-        write_to_file(writer, "Start Write Search Result");
         write_search_result();
-        write_to_file(writer, "End   Write Search Result");
 
-        int chosen_move = info.last_iter_result().first;
+        Move chosen_move = info.last_iter_result().first;
         board.add_premoves(chosen_move);
         TT.clear();
+
+        write_to_file(logger, "After MakeMove");
+        write_to_file(logger, board.visual_board());
     }
 }
 
@@ -208,13 +204,9 @@ play(const vector<string>& args)
         const auto commands = base_utils::split(input_string, ' ');
         read_commands(commands, board);
 
-        write_to_file(logger, "Start Emptying Input File");
-
         // Empty the input_string
         write_to_file(inputfile, "");
         input_string.clear();
-
-        write_to_file(logger, "End   Emptying Input File");
 
         execute_late_commands(board);
 
