@@ -1,240 +1,124 @@
 
-
 #include "evaluation.h"
 
-Evaluation ev;
+using std::min, std::max;
 
-
-// Search
-
-// Late Move Pruning
-// https://www.youtube.com/watch?v=R0L3AuJUkk0&ab_channel=TNGTechnologyConsultingGmbH
-
-
-// -------------------------
-
-
-// https://www.chessprogramming.org/Evaluation_of_Pieces
-
-// Game-phase
-// Material Weight
-// Piece Mobility
-// Piece-Square Table
-
-
-// King-Safety (king and queen-side)
-// Tempo-Bonus
-// adjustements of piece value based on the number of own pawns
-// Bonus of bishop-pair, penalty for [knight and rook] pairs
-// Low material correction
-
-  /********************************************************************
-  *  Low material correction - guarding against an illusory material  *
-  *  advantage. Full blown program should have more such rules,  but  *
-  *  the current set ought to be useful enough. Please note that our  *
-  *  code  assumes different material values for bishop and  knight.  *
-  *                                                                   *
-  *  - a single minor piece cannot win                                *
-  *  - two knights cannot checkmate bare king                         *
-  *  - bare rook vs minor piece is drawish                            *
-  *  - rook and minor vs rook is drawish                              *
-  ********************************************************************/
-
-
-// special pawn_evaluation (after no major piece is left)
-
-#ifndef MATERIAL
-
-void
-Evaluation::config_weights()
+static int
+MinDist(Square s, Square t)
 {
-    float offset = (float)position_weight / 8000;
-    // material_weight = abs_mat_weight + (offset / 4);
-    positional_weight = abs_pos_weight + 1.5f * offset;
-    mobility_weight = abs_mobility_weight - (1.5f * offset);
-    pawn_struct_weight = abs_pawnstr_weight + (1 - (offset) / 4);
+    Square s_x = s & 7, s_y = s >> 3;
+    Square t_x = t & 7, t_y = t >> 3;
+
+    return max(0, min(s_x - t_x, s_y - t_y));
 }
 
-void
-Evaluation::set_material_strength()
+static bool
+IsHypotheticalDraw(const EvalData& ed)
 {
-    pawnVal = 100; bishop_val = 330; knight_val = 300;
-    rook_val = 500; queen_val = 900;
+    // No draws if pawns on the board
+    if (ed.w_pawns + ed.b_pawns > 0)
+        return false;
 
-    /***
-     * game_phase = 2 * (number of pieces (W + B)) + (pawns (W + B))
-     * game_phase helps us to determine the state of the game
-     * If game_phase > 32, we are in early middle game          (Values subjected to alter, depends on testing)
-     * 16 <= game_phase <= 32 denotes the game is in middle_game
-     * game_phase < 16 means we are in the end_game.
+    if ((ed.w_pieces > 2) or (ed.b_pieces > 2))
+        return false;
 
-        * EARLY MIDDLE GAME:
-        * Minor piece is stronger than 3 pawns
-        * Knights can potentially strong as bishop, Rooks most likely to be inferior
-        * Development takes first priority
-        * Rooks may not contribute to the position this early on
-
-        * MIDDLE GAME:
-        * Bishops may be slightly stronger than knights, (open files should be taken into account)
-        * Pass pawns contains huge potentials
-        * Attacking Strength and King safety takes priority
-        * Extra Points for Bishop Pair
-
-        * END GAME:
-        * Passed pawns are strong depending the number of pieces (should award extra points if its ahead of king to promotion sq.)
-        * Rooks generally dominates
-        * King Activity takes priority
-        * Three pawns can be stronger than a pieces (should consider if pieces on board gets too low)
-    ***/
-    game_phase = 2 * pieceCount + (w_pawns + b_pawns);
-    if (game_phase > 2 * phase_counter)
-    {
-        pawnVal -= 25;
-        bishop_val -= 20;
-        rook_val -= 25;
+    // If one piece remains and its bishop or knight
+    if (ed.w_pieces + ed.b_pieces == 1) {
+        if ((ed.w_bishops + ed.b_bishops == 1)
+         or (ed.w_knights + ed.b_knights == 1)) return true;
     }
-    else if (game_phase > phase_counter)
-    {
-        pawnVal -= 15;
+
+    //! TODO Test for [WQ_BQ, WR_BR] positions
+
+    // If one piece of both sides left, and its not [WQ_BR, WR_BQ]
+    // Then it is a draw (almost)
+    if ((ed.w_pieces == 1) and (ed.b_pieces == 1)) {
+        if (((ed.w_queens > 0) and (ed.b_queens == 0))
+         or ((ed.b_queens > 0) and (ed.w_queens == 0))) return false;
+
+        return true;
     }
-    else if (game_phase < phase_counter)
+
+    if ((ed.w_pieces + ed.b_pieces == 2) and (ed.w_knights + ed.b_knights == 2))
+        return true;
+
+    return false;
+}
+
+
+#ifndef MIDGAME
+
+static Score
+MaterialDiffereceMidGame(const EvalData& ed)
+{
+    return PawnValueMg   * (ed.w_pawns   - ed.b_pawns  )
+         + BishopValueMg * (ed.w_bishops - ed.b_bishops)
+         + KnightValueMg * (ed.w_knights - ed.b_knights)
+         + RookValueMg   * (ed.w_rooks   - ed.b_rooks  )
+         + QueenValueMg  * (ed.w_queens  - ed.b_queens );
+}
+
+static Score
+PieceTableStrengthMidGame(const ChessBoard& pos)
+{
+    const auto StrScore = [] (Bitboard piece, int* strTable)
     {
-        pawnVal += 10;
-        rook_val += 25;
-    }
-}
-
-void
-Evaluation::MaterialCount(const ChessBoard& _cb)
-{
-    w_pawns   = popcount(_cb.piece(WHITE, PAWN  ));
-    w_bishops = popcount(_cb.piece(WHITE, BISHOP));
-    w_knights = popcount(_cb.piece(WHITE, KNIGHT));
-    w_rooks   = popcount(_cb.piece(WHITE, ROOK  ));
-    w_queens  = popcount(_cb.piece(WHITE, QUEEN ));
-
-    b_pawns   = popcount(_cb.piece(BLACK, PAWN  ));
-    b_bishops = popcount(_cb.piece(BLACK, BISHOP));
-    b_knights = popcount(_cb.piece(BLACK, KNIGHT));
-    b_rooks   = popcount(_cb.piece(BLACK, ROOK  ));
-    b_queens  = popcount(_cb.piece(BLACK, QUEEN ));
-
-    w_pieces = w_bishops + w_knights + w_rooks + w_queens;
-    b_pieces = b_bishops + b_knights + b_rooks + b_queens;
-    pieceCount = w_pieces + b_pieces;
-
-    position_weight =
-        100 * (w_pawns   + b_pawns  ) + 320 * (w_bishops + b_bishops)
-      + 300 * (w_knights + b_knights) + 500 * (w_rooks   + b_rooks  )
-      + 925 * (w_queens  + b_queens );
-}
-
-int
-Evaluation::material_strength()
-{
-    int wqn_val = queen_val + 8 * w_pawns;
-    int bqn_val = queen_val + 8 * b_pawns;
-    return   pawnVal * (  w_pawns -   b_pawns) + bishop_val * (w_bishops - b_bishops)
-        + knight_val * (w_knights - b_knights) +   rook_val * (  w_rooks -   b_rooks)
-        + ((wqn_val * w_queens) - (bqn_val * b_queens));
-}
-
-#endif
-
-#ifndef SQUARE_TABLE
-
-int
-Evaluation::piece_strength(const ChessBoard& _cb) const
-{
-    const auto str_score = [](uint64_t piece, int *str_table)
-    {
-        int score = 0;
-        while (piece != 0)
-            score += str_table[next_idx(piece)];
+        Score score = 0;
+        while (piece > 0)
+            score += strTable[next_idx(piece)];
         return score;
     };
 
+    Score pawns   = StrScore(pos.piece(WHITE, PAWN ), wpBoard) - StrScore(pos.piece(BLACK, PAWN ), bpBoard);
+    Score bishops = StrScore(pos.piece(WHITE, BISHOP), wBoard) - StrScore(pos.piece(BLACK, BISHOP), bBoard);
+    Score knights = StrScore(pos.piece(WHITE, KNIGHT), NBoard) - StrScore(pos.piece(BLACK, KNIGHT), NBoard);
+    Score rooks   = StrScore(pos.piece(WHITE, ROOK ), wRBoard) - StrScore(pos.piece(BLACK, ROOK ), bRBoard);
+    Score king    = StrScore(pos.piece(WHITE, KING), WkMBoard) - StrScore(pos.piece(BLACK, KING), BkMBoard);
 
-    int pawn_white = str_score(_cb.piece(WHITE, PAWN), wpBoard);
-    int pawn_black = str_score(_cb.piece(BLACK, PAWN), bpBoard);
-
-    int bishop_white = str_score(_cb.piece(WHITE, BISHOP), wBoard);
-    int bishop_black = str_score(_cb.piece(BLACK, BISHOP), bBoard);
-
-    int knight_white = str_score(_cb.piece(WHITE, KNIGHT), NBoard);
-    int knight_black = str_score(_cb.piece(BLACK, KNIGHT), NBoard);
-
-    int rook_white = str_score(_cb.piece(WHITE, ROOK), wRBoard);
-    int rook_black = str_score(_cb.piece(BLACK, ROOK), bRBoard);
-
-    int score = (pawn_white - pawn_black)
-              + (bishop_white - bishop_black)
-              + 2 * (knight_white - knight_black)
-              + (rook_white - rook_black);
-
-    return score;
+    return pawns + bishops + knights + rooks + king;
 }
 
-int
-Evaluation::king_strength(const ChessBoard& _cb) const
+static Score
+MobilityStrength(const ChessBoard& pos)
 {
-    Square w_king = idx_no(_cb.piece(WHITE, KING));
-    Square b_king = idx_no(_cb.piece(BLACK, KING));
-
-    if (game_phase >= phase_counter)
-        return WkMBoard[w_king] - BkMBoard[b_king];
-    return WkEBoard[w_king] - BkEBoard[b_king];
-}
-
-#endif
-
-#ifndef MOBILITY
-
-int
-Evaluation::piece_mobility(const ChessBoard &_cb) const
-{
-    const auto mobility_calc = [] (const auto &__f, uint64_t piece, uint64_t _Ap) {
-        uint64_t area = 0;
-        while (piece != 0)
-            area |= __f(next_idx(piece), _Ap);
-
-        return popcount(area);
+    const auto CalculateMobility = [&] (const auto& __f, Bitboard piece)
+    {
+        Bitboard occupied = pos.All();
+        Bitboard squares = 0;
+        while (piece > 0)
+            squares |= __f(next_idx(piece), occupied);
+        return popcount(squares);
     };
 
-    uint64_t _Ap = _cb.piece(WHITE, PAWN) ^ _cb.piece(BLACK, PAWN);
+    Score bishops = CalculateMobility(bishop_atk_sq, pos.piece(WHITE, BISHOP))
+                  - CalculateMobility(bishop_atk_sq, pos.piece(BLACK, BISHOP));
 
-    int bishop_white = mobility_calc(bishop_atk_sq, _cb.piece(WHITE, BISHOP), _Ap);
-    int bishop_black = mobility_calc(bishop_atk_sq, _cb.piece(BLACK, BISHOP), _Ap);
+    Score knights = CalculateMobility(knight_atk_sq, pos.piece(WHITE, KNIGHT))
+                  - CalculateMobility(knight_atk_sq, pos.piece(BLACK, KNIGHT));
 
-    int knight_white = mobility_calc(knight_atk_sq, _cb.piece(WHITE, KNIGHT), _Ap);
-    int knight_black = mobility_calc(knight_atk_sq, _cb.piece(BLACK, KNIGHT), _Ap);
+    Score rooks = CalculateMobility(rook_atk_sq, pos.piece(WHITE, ROOK))
+                - CalculateMobility(rook_atk_sq, pos.piece(BLACK, ROOK));
 
-    int rook_white = mobility_calc(rook_atk_sq, _cb.piece(WHITE, ROOK), _Ap);
-    int rook_black = mobility_calc(rook_atk_sq, _cb.piece(BLACK, ROOK), _Ap);
+    Score queens = CalculateMobility(queen_atk_sq, pos.piece(WHITE, QUEEN))
+                 - CalculateMobility(queen_atk_sq, pos.piece(BLACK, QUEEN));
 
-    int score = (bishop_white - bishop_black)
-              + 2 * (knight_white - knight_black)
-              + (rook_white - rook_black);
-    return score;
+    return bishops + (2 * knights) + rooks + queens;
 }
 
-#endif
-
-#ifndef PAWN_STRUCTURE
-
-int PawnStructure(const ChessBoard& _cb, Color color)
+static Score
+PawnStructure(const ChessBoard& pos, Color color)
 {
     const auto dist_to_king = [] (int x, int y, int kpos)
     {
-        int kx = kpos & 7;
-        int ky = (kpos - kx) >> 3;
+        Square kx = kpos & 7;
+        Square ky = (kpos - kx) >> 3;
         return std::min(abs(x - kx), abs(y - ky));
     };
 
-    int score = 0;
-    uint64_t     pawns = _cb.piece( color, PAWN);
-    uint64_t emy_pawns = _cb.piece(~color, PAWN);
-    uint64_t    column = FileA;
+    Score score = 0;
+    Bitboard     pawns = pos.piece( color, PAWN);
+    Bitboard emy_pawns = pos.piece(~color, PAWN);
+    Bitboard    column = FileA;
 
     // Punish Double Pawns on same column
     for (int i = 0; i < 7; i++)
@@ -247,23 +131,22 @@ int PawnStructure(const ChessBoard& _cb, Color color)
 
     while (pawns != 0)
     {
-        int idx = next_idx(pawns);
+        Square idx = next_idx(pawns);
         if ((plt::PassedPawnMasks[color][idx] & emy_pawns) != 0)
             continue;
 
-        int x = idx & 7;
-        int y = (idx - x) >> 3;
-        int d = (7 * (color ^ 1)) + y * (2 * color - 1);
+        Square x = idx & 7;
+        Square y = (idx - x) >> 3;
+        Score d = (7 * (color ^ 1)) + y * (2 * color - 1);
 
         // Reward for having passed pawn
         score += 3 * d * d;
 
-        int  kpos = idx_no(_cb.piece( color, KING));
-        int ekpos = idx_no(_cb.piece(~color, KING));
+        Square  kpos = idx_no(pos.piece( color, KING));
+        Square ekpos = idx_no(pos.piece(~color, KING));
 
         // Add score for king close to passed pawn and
         // Reduce score if enemy king is close to pawn
-
         int dist = dist_to_king(x, y, kpos) - dist_to_king(x, y, ekpos);
         score += (dist * dist * dist) / 2;
     }
@@ -271,213 +154,215 @@ int PawnStructure(const ChessBoard& _cb, Color color)
     return score;
 }
 
-#endif
-
-#ifndef ATTACK_STRENGTH
-
-int
-Evaluation::White_attk_Strength(const ChessBoard& _cb)
+static Score
+AttackStrength(const ChessBoard& pos, Color side)
 {
-    uint64_t Apiece = _cb.All();
-    int ekpos = idx_no( _cb.piece(BLACK, KING) );
-    uint64_t attk_sq = plt::KingMasks[ekpos]
-                      | (ekpos > 7 ? plt::KingMasks[ekpos - 8] : 0);
+    Bitboard occupied = pos.All();
+    // Square of enemy king
+    Square ek_pos = idx_no( pos.piece(~side, KING) );
+    Bitboard king_mask = plt::KingMasks[ek_pos];
 
-    const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece) {
-        int res = 0;
-        while (piece) {
-            int idx = next_idx(piece);
-            uint64_t area = __f(idx, Apiece);
-            if (area & attk_sq) res++;
+    const auto AddAttackers = [&] (const auto& __f, Bitboard piece, Score value)
+    {
+        Score score = 0;
+        while (piece > 0) {
+            Square ip = next_idx(piece);
+            Bitboard squares = __f(ip, occupied);
+
+            if ((squares & king_mask) != 0)
+                score += value;
         }
-        return res;
+        return score;
     };
 
     int attackers = 0;
 
-    attackers += add_attackers(bishop_atk_sq, _cb.piece(WHITE, BISHOP));
-    attackers += add_attackers(knight_atk_sq, _cb.piece(WHITE, KNIGHT));
-    attackers += add_attackers(rook_atk_sq  , _cb.piece(WHITE, ROOK)  );
-    attackers += add_attackers(queen_atk_sq , _cb.piece(WHITE, QUEEN) );
+    attackers += AddAttackers(bishop_atk_sq, pos.piece(side, BISHOP), 1);
+    attackers += AddAttackers(knight_atk_sq, pos.piece(side, KNIGHT), 1);
+    attackers += AddAttackers(rook_atk_sq  , pos.piece(side, ROOK  ), 1);
+    attackers += AddAttackers(queen_atk_sq , pos.piece(side, QUEEN ), 2);
 
-    attackers = std::min(attackers, 4);
-    return (1 << (attackers * 3));
+    return 6 * attackers * (attackers + 1);
 }
 
-int
-Evaluation::Black_attk_Strength(const ChessBoard& _cb)
+static Score
+KingSafety(const ChessBoard& pos, Color side)
 {
-    uint64_t Apiece = _cb.All();
-    int ekpos = idx_no( _cb.piece(WHITE, KING) );
-    uint64_t attk_sq = plt::KingMasks[ekpos]
-                      | (ekpos < 56 ? plt::KingMasks[ekpos + 8] : 0);
+    Square k_pos = idx_no( pos.piece(side, KING) );
+    Square kx = k_pos & 7;
 
-    const auto add_attackers = [attk_sq, Apiece] (const auto &__f, uint64_t piece)
+    Bitboard* mask = (side == WHITE ? plt::UpMasks : plt::DownMasks);
+    Bitboard pawns = pos.piece(side, PAWN);
+
+    int open_files = 0;
+    int defenders = 0;
+
+    if ((mask[k_pos] & pawns) == 0)
+        open_files++;
+    if ((kx != 0) and ((mask[k_pos + 1] & pawns) == 0))
+        open_files++;
+    if ((kx != 7) and ((mask[k_pos - 1] & pawns) == 0))
+        open_files++;
+
+    defenders += popcount(pawns & mask[k_pos]);
+    defenders += 2 * popcount( mask[k_pos] & (
+        pos.piece(side, BISHOP) | pos.piece(side, KNIGHT) | pos.piece(side, ROOK)
+    ));
+
+    Score score = (9 * defenders * (defenders + 1)) - (30 * open_files * open_files);
+    return score;
+}
+
+static Score
+Threats(const ChessBoard& pos)
+{
+    return (AttackStrength(pos, WHITE) + KingSafety(pos, WHITE))
+         - (AttackStrength(pos, BLACK) + KingSafety(pos, BLACK));
+}
+
+static Score
+MidGameScore(const ChessBoard& pos, const EvalData& ed)
+{
+    Score materialScore   = MaterialDiffereceMidGame(ed);
+    Score pieceTableScore = PieceTableStrengthMidGame(pos);
+    Score mobilityScore   = MobilityStrength(pos);
+    Score pawnStructure   = ed.pawnStructureScore;
+    Score threatsScore    = Threats(pos);
+
+    float eval =
+        ed.materialWeight     * float(materialScore)
+      + ed.pieceTableWeight   * float(pieceTableScore)
+      + ed.mobilityWeight     * float(mobilityScore)
+      + ed.pawnSructureWeight * float(pawnStructure)
+      + ed.threatsWeight      * float(threatsScore);
+
+    return Score(eval);
+}
+
+
+#endif
+
+#ifndef ENDGAME
+
+static Score
+MaterialDiffereceEndGame(const EvalData& ed)
+{
+    return PawnValueEg   * (ed.w_pawns   - ed.b_pawns  )
+         + BishopValueEg * (ed.w_bishops - ed.b_bishops)
+         + KnightValueEg * (ed.w_knights - ed.b_knights)
+         + RookValueEg   * (ed.w_rooks   - ed.b_rooks  )
+         + QueenValueEg  * (ed.w_queens  - ed.b_queens );
+}
+
+static Score
+PieceTableStrengthEndGame(const ChessBoard& pos)
+{
+    const auto StrScore = [] (Bitboard piece, int* strTable)
     {
-        int res = 0;
-        while (piece)
-        {
-            int idx = next_idx(piece);
-            uint64_t area = __f(idx, Apiece);
-            if (area & attk_sq) res++;
-        }
-        return res;
+        Score score = 0;
+        while (piece > 0)
+            score += strTable[next_idx(piece)];
+        return score;
     };
 
-    int attackers = 0;
-
-    attackers += add_attackers(bishop_atk_sq, _cb.piece(BLACK, BISHOP));
-    attackers += add_attackers(knight_atk_sq, _cb.piece(BLACK, KNIGHT));
-    attackers += add_attackers(rook_atk_sq  , _cb.piece(BLACK, ROOK)  );
-    attackers += add_attackers(queen_atk_sq , _cb.piece(BLACK, QUEEN) );
-
-    attackers = std::min(attackers, 4);
-    return (1 << (attackers * 3));
+    Score king = StrScore(pos.piece(WHITE, KING), KingEndGameTable)
+               - StrScore(pos.piece(BLACK, KING), KingEndGameTable);
+    return king;
 }
 
-int
-Evaluation::White_King_Safety(const ChessBoard& _cb)
+
+static Score
+DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
 {
-    uint64_t res;
-    int kpos = idx_no( _cb.piece(WHITE, KING) );
-    int kx = kpos & 7, ky = (kpos - kx) >> 3;
-    int score = 0, open_files = 0, defenders[2];
+    Square wk_sq = idx_no( pos.piece(WHITE, KING) );
+    Square bk_sq = idx_no( pos.piece(BLACK, KING) );
 
-    res = plt::UpMasks[kpos];
-    if (!(res & _cb.piece(WHITE, PAWN))) open_files++;
-    if (kx) {
-        res = plt::UpMasks[kpos - 1];
-        if (!(res & _cb.piece(WHITE, PAWN))) open_files++;
-    }
-    if (kx != 7) {
-        res = plt::UpMasks[kpos + 1];
-        if (!(res & _cb.piece(WHITE, PAWN))) open_files++;
-    }
-    score -= 24 * (open_files * open_files);
-    
-    res = plt::KingMasks[kpos];
-    if (ky != 7) res |= plt::KingMasks[kpos + 8];
-    defenders[0] = popcount((res & (_cb.piece(WHITE, BISHOP) ^ _cb.piece(WHITE, KNIGHT) ^ _cb.piece(WHITE, ROOK) ^ _cb.piece(WHITE, QUEEN))));
-    defenders[1] = popcount((res & _cb.piece(WHITE, PAWN)));
+    int material_diff = (ed.w_pawns - ed.b_pawns)
+        + 3 * (ed.w_bishops - ed.b_bishops) + 3 * (ed.w_knights - ed.b_knights)
+        + 5 * (ed.w_rooks   - ed.b_rooks  ) + 9 * (ed.w_queens  - ed.b_queens );
 
-    score += (1 << (defenders[0] * 3)) + 12 * (defenders[1] * defenders[1]);
+    int side2gain = (material_diff == 0) ? (0) : (material_diff > 0 ? 1 : -1);
+    int distance = 6 - MinDist(wk_sq, bk_sq);
+
+    Score score = (distance + 1) * (distance + 2) * side2gain;
     return score;
 }
 
-int
-Evaluation::Black_King_Safety(const ChessBoard& _cb)
+static Score
+ColorParityScore(const ChessBoard& pos)
 {
-    uint64_t res;
-    int kpos = idx_no( _cb.piece(BLACK, KING) );
-    int kx = kpos & 7, ky = (kpos - kx) >> 3;
-    int score = 0, open_files = 0, defenders[2];
+    Bitboard w_king   = pos.piece(WHITE, KING  );
+    Bitboard b_king   = pos.piece(BLACK, KING  );
+    Bitboard w_bishop = pos.piece(WHITE, BISHOP);
+    Bitboard b_bishop = pos.piece(BLACK, BISHOP);
 
-    res = plt::DownMasks[kpos];
-    if (!(res & _cb.piece(BLACK, PAWN))) open_files++;
-    if (kx)
-    {
-        res = plt::DownMasks[kpos - 1];
-        if (!(res & _cb.piece(BLACK, PAWN))) open_files++;
-    }
-    if (kx != 7)
-    {
-        res = plt::DownMasks[kpos + 1];
-        if (!(res & _cb.piece(BLACK, PAWN))) open_files++;
-    }
-    score -= 24 * (open_files * open_files);
-    
-    res = plt::KingMasks[kpos];
-    if (ky) res |= plt::KingMasks[kpos - 8];
-    defenders[0] = popcount((res & (_cb.piece(BLACK, KNIGHT) ^ _cb.piece(BLACK, BISHOP) ^ _cb.piece(BLACK, ROOK) ^ _cb.piece(BLACK, QUEEN))));
-    defenders[1] = popcount((res & _cb.piece(BLACK, PAWN)));
+    Bitboard endSquaresForWhite =
+        ((w_bishop & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
+      | ((w_bishop & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
 
-    score += (1 << (defenders[0] * 3)) + 12 * (defenders[1] * defenders[1]);
+    Bitboard endSquaresForBlack =
+        ((b_bishop & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
+      | ((b_bishop & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
+
+    Score score = 0;
+    Score incForCorrectSide = 40;
+
+    if ((b_king & endSquaresForWhite) != 0)
+        score += incForCorrectSide;
+
+    if ((w_king & endSquaresForBlack) != 0)
+        score -= incForCorrectSide;
+
     return score;
 }
 
-int
-Evaluation::attack_strength(const ChessBoard& _cb)
+static Score
+EndGameScore(const ChessBoard& pos, const EvalData& ed)
 {
-    if (game_phase < phase_counter + 2) return 0;
+    // Distance between kings
+    // King in corners
+    // BN endgames
+    // Rule of Square (2n1k1r1/p7/3B1Rp1/2P2pKp/8/4P1P1/5P1P/8 w - - 17 45)
 
-    int white_safety = White_King_Safety(_cb), black_safety = Black_King_Safety(_cb);
-    int x =  White_attk_Strength(_cb), y = Black_attk_Strength(_cb);
-    
-    int white_attack = std::max(x - black_safety, 0);
-    int black_attack = std::max(y - white_safety, 0);
+    Score materialScore   = MaterialDiffereceEndGame(ed);
+    Score pieceTableScore = PieceTableStrengthEndGame(pos);
+    Score pawnStructure   = ed.pawnStructureScore;
+    Score distanceScore   = DistanceBetweenKingsScore(pos, ed);
+    Score parityScore     = ColorParityScore(pos);
 
-    return white_attack - black_attack;
+    float eval =
+        ed.materialWeight     * float(materialScore)
+      + ed.pieceTableWeight   * float(pieceTableScore)
+      + ed.pawnSructureWeight * float(pawnStructure)
+      + float(distanceScore)  + float(parityScore);
+
+    return Score(eval);
 }
 
 #endif
 
-bool Evaluation::is_hypothetical_draw()
+
+Score
+Evaluate(const ChessBoard& pos)
 {
-    if (w_pieces >= 3 || b_pieces >= 3) return false;
-    if (w_pawns + b_pawns) return false;
+    EvalData ed = EvalData(pos);
+    int side2move = 2 * int(pos.color) - 1;
 
-    if (w_pieces == 1 && b_pieces == 1)
-    {
-        if ((w_bishops + w_knights) == 1 && b_rooks == 1) return true;
-        if (w_rooks == 1 && (b_bishops + b_knights) == 1) return true;
-    }
+    if ((ed.boardWeight == 0) or IsHypotheticalDraw(ed))
+        return VALUE_DRAW * side2move;
+    
+    ed.pawnStructureScore = PawnStructure(pos, WHITE) - PawnStructure(pos, BLACK);
 
-    if (w_pieces == 1 && !b_pieces) {
-        if (w_bishops == 1 || w_knights == 1) return true;
-    }
-    if (b_pieces == 1 && !w_pieces) {
-        if (b_bishops == 1 || b_knights == 1) return true;
-    }
-    if (w_pieces + b_pieces == 2 && w_pieces == b_pieces)
-    {
-        if (w_queens + b_queens == 2) return true;
-        if (w_rooks  + b_rooks  == 2) return true;
-        if (w_bishops + b_bishops == 2) return true;
-        if (w_knights + b_knights == 2) return true;
-    }
-    if (w_pieces + b_pieces == 2) {
-        if (w_knights == 2 || b_knights == 2) return true;
-    }
+    Score mg_score = MidGameScore(pos, ed);
+    Score eg_score = EndGameScore(pos, ed);
 
-    return false;
+    float phase = float(ed.gamePhase) / float(GamePhaseLimit);
+    Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
+
+    // cout << "Fen : " << pos.fen() << endl;
+    // cout << "Phase : " << phase << endl;
+    // cout << "Scores : " << mg_score << " | " << eg_score << endl;
+    return score * side2move;
 }
 
-void Evaluation::set_parameter (int tmp1, int tmp2, int tmp3, int tmp4, int tmp5)
-{
-    material_weight = (float)tmp1 / 10;
-    positional_weight = (float)tmp2 / 10;
-    attk_str_weight = (float)tmp3 / 10;
-    mobility_weight = (float)tmp4 / 10;
-    pawn_struct_weight = (float)tmp5 / 10;
-}
-
-int Evaluation::Evaluate (const ChessBoard& _cb)
-{
-    MaterialCount(_cb);
-
-    if (!position_weight) return 0;
-
-    set_material_strength();
-    float material_diff = static_cast<float>(material_strength());
-
-    if (game_phase <= 8 && is_hypothetical_draw()) return 0;
-    // config_weights();
-
-    float pos_Str = static_cast<float>(piece_strength(_cb) + king_strength(_cb));
-    float mobility = static_cast<float>(piece_mobility(_cb));
-    float pawn_structure = static_cast<float>(PawnStructure(_cb, Color::WHITE) - PawnStructure(_cb, Color::BLACK));
-    float attack_value = static_cast<float>(attack_strength(_cb));
-
-    float eval = (material_weight * material_diff) + (positional_weight * pos_Str) 
-                + (attk_str_weight * attack_value) + (mobility_weight * mobility) 
-                + (pawn_struct_weight * pawn_structure);
-
-
-    // if (std::abs(eval) > 3200) {
-    //     cout << "Fen : " << _cb.fen() << endl;
-    //     cout << "Attack Value : " << (attk_str_weight * attack_value) << endl;
-    // }
-
-    return static_cast<int>(eval) * (2 * _cb.color - 1);
-}
 

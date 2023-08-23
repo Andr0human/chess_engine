@@ -1,57 +1,67 @@
 
-
 #ifndef EVALUATION_H
 #define EVALUATION_H
+
 
 #include "movegen.h"
 #include "PieceSquareTable.h"
 
 
-class Evaluation
+class EvalData
 {
+    public:
+
     int w_pawns, w_knights, w_bishops, w_rooks, w_queens, w_pieces;
     int b_pawns, b_knights, b_bishops, b_rooks, b_queens, b_pieces;
 
-    int pawnVal = 100, bishop_val = 330, knight_val = 300, rook_val = 500, queen_val = 900;
-    int position_weight = 0;
-    int pieceCount = 0, game_phase = 0, phase_counter = 16;
+    int pieceCount;
+    int boardWeight;
+    int gamePhase;
 
-    float abs_mat_weight = 1.0f, abs_pos_weight = 0.8f, abs_attkstr_weight = 0.5f;
-    float abs_mobility_weight = 2.6f, abs_pawnstr_weight = 0.4f;
-    
-    float material_weight = 1.0f, positional_weight = 1.8f, attk_str_weight = 0.5f;
-    float mobility_weight = 1.2f, pawn_struct_weight = 0.4f;
+    Score pawnStructureScore;
 
-    bool is_hypothetical_draw();
+    constexpr static float materialWeight = 1.0f;
+    constexpr static float pieceTableWeight = 1.8f;
+    constexpr static float threatsWeight = 0.5f;
+    constexpr static float mobilityWeight = 1.2f;
+    constexpr static float pawnSructureWeight = 0.4f;
 
-    void config_weights();
-    void set_material_strength();
-    void MaterialCount(const ChessBoard& _cb);
-    int material_strength();
+    EvalData(const ChessBoard& pos)
+    {
+        w_pawns   = popcount(pos.piece(WHITE, PAWN  ));
+        w_bishops = popcount(pos.piece(WHITE, BISHOP));
+        w_knights = popcount(pos.piece(WHITE, KNIGHT));
+        w_rooks   = popcount(pos.piece(WHITE, ROOK  ));
+        w_queens  = popcount(pos.piece(WHITE, QUEEN ));
 
-    // PIECE_SQUARE_TABLE_STRENGTH
-    int piece_strength(const ChessBoard &_cb) const;
-    int king_strength(const ChessBoard& _cb) const;
+        b_pawns   = popcount(pos.piece(BLACK, PAWN  ));
+        b_bishops = popcount(pos.piece(BLACK, BISHOP));
+        b_knights = popcount(pos.piece(BLACK, KNIGHT));
+        b_rooks   = popcount(pos.piece(BLACK, ROOK  ));
+        b_queens  = popcount(pos.piece(BLACK, QUEEN ));
 
-    // MOBILITY
-    int piece_mobility(const ChessBoard &_cb) const;
+        w_pieces = w_bishops + w_knights + w_rooks + w_queens;
+        b_pieces = b_bishops + b_knights + b_rooks + b_queens;
+        pieceCount = w_pieces + b_pieces;
 
-    // ATTACK_STRENGTH
-    int White_attk_Strength(const ChessBoard& _cb);
-    int Black_attk_Strength(const ChessBoard& _cb);
-    int White_King_Safety(const ChessBoard& _cb);
-    int Black_King_Safety(const ChessBoard& _cb);
-    int attack_strength(const ChessBoard& _cb);
+        gamePhase =
+            10 * (w_pawns   + b_pawns)
+          + 30 * (w_bishops + b_bishops + w_knights + b_knights)
+          + 55 * (w_rooks   + b_rooks)
+          + 90 * (w_queens  + b_queens);
 
-    public:
-    // Set the weights for evaluation
-    void set_parameter(int tmp1, int tmp2, int tmp3, int tmp4, int tmp5);
-
-
-    int Evaluate (const ChessBoard& _cb);
+        boardWeight =
+            PawnValueMg   * (w_pawns   + b_pawns  )
+          + BishopValueMg * (w_bishops + b_bishops)
+          + KnightValueMg * (w_knights + b_knights)
+          + RookValueMg   * (w_rooks   + b_rooks  )
+          + QueenValueMg  * (w_queens  + b_queens );
+    }
 };
 
-extern Evaluation ev;
+
+Score Evaluate(const ChessBoard& pos);
+
 
 #endif
 
