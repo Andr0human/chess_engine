@@ -141,16 +141,16 @@ class ChessBoard
     visual_board() const noexcept;
 
     void
-    MakeMove(Move move) noexcept;
+    MakeMove(Move move, bool in_search = true) noexcept;
 
     void
     UnmakeMove() noexcept;
 
     void
-    auxilary_table_update(Move move);
+    UndoInfoPush(PieceType it, PieceType ft, Move move, bool in_search);
 
-    int
-    auxilary_table_revert();
+    Move
+    UndoInfoPop();
 
     const string
     fen() const;
@@ -216,15 +216,8 @@ class ChessBoard
         return piece_bb[white_all] | piece_bb[black_all];
     }
 
-    // inline PieceType
-    // piecetype_on_square(Square sq) const noexcept
-    // { return type_of(board[sq]); }
-
-    // inline int king_pos() const noexcept
-    // { return idx_no(piece_bb[(color << 3) + 6]); }
-
-    // inline int king_pos_emy() const noexcept
-    // { return idx_no(piece_bb[((color ^ 1) << 3) + 6]); }
+    void
+    dump(std::ostream& writer = std::cout);
 };
 
 

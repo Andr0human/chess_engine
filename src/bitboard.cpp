@@ -174,7 +174,7 @@ ChessBoard::fen() const
 
 
 void
-ChessBoard::MakeMove(Move move) noexcept
+ChessBoard::MakeMove(Move move, bool in_search) noexcept
 {
     // Init and Dest. sq
     Square ip = move & 63;
@@ -194,7 +194,7 @@ ChessBoard::MakeMove(Move move) noexcept
     Piece ipt = board[ip];
     Piece fpt = board[fp];
 
-    auxilary_table_update(move);
+    UndoInfoPush(it, ft, move, in_search);
 
     halfmove = (ft != PieceType::NONE) or (it == PieceType::PAWN) ? 0 : halfmove + 1;
     fullmove++;
@@ -424,7 +424,7 @@ ChessBoard::UnmakeMove() noexcept
     if (moveNum <= 0) return;
 
     color = ~color;
-    Move move = auxilary_table_revert();
+    Move move = UndoInfoPop();
     fullmove--;
 
     Square ip = move & 63;
@@ -478,28 +478,27 @@ ChessBoard::UnmakeMove() noexcept
         return make_move_castling(ip, fp, 0);
 }
 
-void
-ChessBoard::auxilary_table_update(const Move move)
-{
-    // aux_table_move[moveNum] = move;
-    // aux_table_csep[moveNum] = csep;
-    // aux_table_hash[moveNum] = Hash_Value;
-    // aux_table_halfmove[moveNum] = halfmove;
 
-    //! TODO Test another method as well.
+void
+ChessBoard::UndoInfoPush(PieceType it, PieceType ft, Move move, bool in_search)
+{
+    if (!in_search and ((ft != NONE) or (it == PAWN)))
+        moveNum = 0;
+
     undo_info[moveNum++] = UndoInfo(move, csep, Hash_Value, halfmove);
 }
 
+
 Move
-ChessBoard::auxilary_table_revert()
+ChessBoard::UndoInfoPop()
 {
     moveNum--;
     csep = undo_info[moveNum].csep;
     Hash_Value = undo_info[moveNum].hash;
     halfmove = undo_info[moveNum].halfmove;
-
     return undo_info[moveNum].move;
 }
+
 
 void
 ChessBoard::add_prev_board_positions(const vector<Key>& prev_keys) noexcept
@@ -640,3 +639,38 @@ ChessBoard::operator==(const ChessBoard& other)
 bool
 ChessBoard::operator!= (const ChessBoard& other)
 { return !(*this == other); }
+
+void
+ChessBoard::dump(std::ostream& writer)
+{
+    writer << "POSITION_DUMP" << endl;
+
+    writer << "board: ";
+    for (int i = 0; i < 64; i++)
+        writer << board[i] << ' ';
+    writer << endl;
+
+    writer << "piece_bb: ";
+    for (int i = 0; i < 16; i++)
+        writer << piece_bb[i] << ' ';
+    writer << endl;
+
+    writer << "Color: " << int(color) << endl;
+    writer << "csep: " << csep << endl;
+    writer << "halfmove: " << halfmove << endl;
+    writer << "fullmove: " << fullmove << endl;
+    writer << "key: " << Hash_Value << endl;
+    writer << "KA: " << KA << endl;
+    writer << "legaL_square_mask: " << legal_squares_mask << endl;
+    writer << "enemy_attacked_squares: " << enemy_attacked_squares << endl;
+
+    writer << "movenum: " << moveNum << endl;
+    writer << "undo_info: \n";
+
+    for (int i = 0; i < moveNum; i++)
+        writer << undo_info[i].move << ", " << undo_info[i].hash
+               << ", " << undo_info[i].csep << undo_info[i].halfmove << endl;
+
+    writer << endl;
+}
+
