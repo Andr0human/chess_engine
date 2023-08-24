@@ -62,6 +62,8 @@ class EvalData
 
 Score Evaluate(const ChessBoard& pos);
 
+Score EvalDump(const ChessBoard& pos);
+
 
 #endif
 

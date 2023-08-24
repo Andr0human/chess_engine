@@ -1,15 +1,25 @@
 
 #include "evaluation.h"
 
+using std::abs;
 using std::min, std::max;
 
+// static int
+// MinDist(Square s, Square t)
+// {
+//     Square s_x = s & 7, s_y = s >> 3;
+//     Square t_x = t & 7, t_y = t >> 3;
+
+//     return max(0, max(abs(s_x - t_x), abs(s_y - t_y)) - 1);
+// }
+
 static int
-MinDist(Square s, Square t)
+Dist(Square s, Square t)
 {
     Square s_x = s & 7, s_y = s >> 3;
     Square t_x = t & 7, t_y = t >> 3;
-
-    return max(0, min(s_x - t_x, s_y - t_y));
+ 
+    return abs(s_x - t_x) + abs(s_y - t_y);
 }
 
 static bool
@@ -270,7 +280,6 @@ PieceTableStrengthEndGame(const ChessBoard& pos)
     return king;
 }
 
-
 static Score
 DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
 {
@@ -282,9 +291,8 @@ DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
         + 5 * (ed.w_rooks   - ed.b_rooks  ) + 9 * (ed.w_queens  - ed.b_queens );
 
     int side2gain = (material_diff == 0) ? (0) : (material_diff > 0 ? 1 : -1);
-    int distance = 6 - MinDist(wk_sq, bk_sq);
-
-    Score score = (distance + 1) * (distance + 2) * side2gain;
+    int distance = 14 - Dist(wk_sq, bk_sq);
+    Score score = (distance / 2) * (distance + 2) * side2gain * material_diff;
     return score;
 }
 
@@ -358,11 +366,67 @@ Evaluate(const ChessBoard& pos)
 
     float phase = float(ed.gamePhase) / float(GamePhaseLimit);
     Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
-
-    // cout << "Fen : " << pos.fen() << endl;
-    // cout << "Phase : " << phase << endl;
-    // cout << "Scores : " << mg_score << " | " << eg_score << endl;
     return score * side2move;
 }
 
+
+Score EvalDump(const ChessBoard& pos)
+{
+    EvalData ed = EvalData(pos);
+    float phase = float(ed.gamePhase) / float(GamePhaseLimit);
+
+    cout << "----------------------------------------------" << endl;
+    cout << "BoardWeight = " << ed.boardWeight << endl;
+    cout << "Phase = " << phase << endl;
+
+    if (IsHypotheticalDraw(ed))
+    {
+        cout << "Position in Hypothetical Draw!" << endl;
+        return VALUE_DRAW;
+    }
+
+    Score pawnStructrueWhite = PawnStructure(pos, WHITE);
+    Score pawnStructrueBlack = PawnStructure(pos, BLACK);
+    ed.pawnStructureScore = pawnStructrueWhite - pawnStructrueBlack;
+
+    cout << "Score_pawn_structure_white = " << pawnStructrueWhite << endl;
+    cout << "Score_pawn_structure_black = " << pawnStructrueBlack << endl;
+    cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl;
+
+
+    Score mg_score = 0, eg_score = 0;
+
+    // mg_score
+    mg_score = MidGameScore(pos, ed);
+
+    // Endgame
+    Score materialScore   = MaterialDiffereceEndGame(ed);
+    Score pieceTableScore = PieceTableStrengthEndGame(pos);
+    Score pawnStructure   = ed.pawnStructureScore;
+    Score distanceScore   = DistanceBetweenKingsScore(pos, ed);
+    Score parityScore     = ColorParityScore(pos);
+
+    eg_score = Score(
+        ed.materialWeight     * float(materialScore)
+      + ed.pieceTableWeight   * float(pieceTableScore)
+      + ed.pawnSructureWeight * float(pawnStructure)
+      + float(distanceScore)  + float(parityScore) );
+
+    cout << " -- ENDGAME -- " << endl;
+    cout << "materialScore   = " << materialScore   << endl;
+    cout << "pieceTableScore = " << pieceTableScore << endl;
+    cout << "pawnStructure   = " << pawnStructure   << endl;
+    cout << "distanceScore   = " << distanceScore   << endl;
+    cout << "parityScore     = " << parityScore     << endl;
+
+    
+    Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
+
+    cout << "mg_score = " << mg_score << endl;
+    cout << "eg_score = " << eg_score << endl;
+    cout << "score    = " << score << endl;
+    cout << "----------------------------------------------" << endl;
+
+    return score;
+}
 
