@@ -39,13 +39,13 @@ search_iterative(ChessBoard primary, int mDepth = MAX_DEPTH, double search_time 
  * @return int 
  */
 int
-alphabeta(ChessBoard &board, int depth, int alpha, int beta, int ply, int pvIndex);
+alphabeta(ChessBoard &board, int depth, int alpha, int beta, int ply, int pvIndex, int numExtensions);
 
 int
 pv_root_alphabeta(ChessBoard &_cb, int alpha, int beta, int depth);
 
 int
-lmr_search(ChessBoard &_cb, MoveList& myMoves, int depth, int alpha, int beta, int ply, int pvIndex);
+lmr_search(ChessBoard &_cb, MoveList& myMoves, int depth, int alpha, int beta, int ply, int pvIndex, int numExtensions);
 
 
 

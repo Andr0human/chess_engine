@@ -304,7 +304,7 @@ void
 show_update_info()
 {
     cout <<
-        "Version: 2.0\n\n"
+        "Version: 2.1\n\n"
         "Techniques Used:\n"
         "- Mini-Max with AlphaBeta\n"
         "- Quiescence Search\n"
@@ -314,8 +314,15 @@ show_update_info()
         "- Iterative-Deepening (Incremental Update by depth 1)\n"
         "- Search Window (Window grows by 2 in case of falling outside the window)\n"
         "- Transposition Table\n"
-        "- LMR with LMR_LIMIT(4)\n"
-        "- Search Extension\n"
+        "- Late Move Reductions | LMR_LIMIT(4)\n"
+        "- Move to exempt from LMR if :\n"
+        "   - captures a piece\n"
+        "   - en-passan or passed pawn\n"
+        "   - castling move\n"
+        "   - Gives a check\n"
+        // "- Search Extension | EXTENSION_LIMIT(12)\n"
+        // "- Extension Consideration :\n"
+        // "   - If position is in check\n"
         << endl;
 }
 
