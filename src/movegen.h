@@ -12,7 +12,7 @@
 bool is_passad_pawn(Square idx, ChessBoard& _cb);
 bool interesting_move(Move move, ChessBoard& _cb);
 bool f_prune_move(Move move, ChessBoard& _cb);
-int search_extension(const ChessBoard& pos);
+int search_extension(const ChessBoard& pos, int numExtensions);
 
 // Checks if move is valid for given position
 bool legal_move_for_position(Move move, ChessBoard& pos);
