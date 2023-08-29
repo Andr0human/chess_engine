@@ -79,11 +79,16 @@ PieceTableStrengthMidGame(const ChessBoard& pos)
         return score;
     };
 
-    Score pawns   = StrScore(pos.piece(WHITE, PAWN ), wpBoard) - StrScore(pos.piece(BLACK, PAWN ), bpBoard);
-    Score bishops = StrScore(pos.piece(WHITE, BISHOP), wBoard) - StrScore(pos.piece(BLACK, BISHOP), bBoard);
-    Score knights = StrScore(pos.piece(WHITE, KNIGHT), NBoard) - StrScore(pos.piece(BLACK, KNIGHT), NBoard);
-    Score rooks   = StrScore(pos.piece(WHITE, ROOK ), wRBoard) - StrScore(pos.piece(BLACK, ROOK ), bRBoard);
-    Score king    = StrScore(pos.piece(WHITE, KING), WkMBoard) - StrScore(pos.piece(BLACK, KING), BkMBoard);
+    Score pawns   = StrScore(pos.piece(WHITE, PAWN ), wpBoard)
+                  - StrScore(pos.piece(BLACK, PAWN ), bpBoard);
+    Score bishops = StrScore(pos.piece(WHITE, BISHOP), wBoard)
+                  - StrScore(pos.piece(BLACK, BISHOP), bBoard);
+    Score knights = StrScore(pos.piece(WHITE, KNIGHT), NBoard)
+                  - StrScore(pos.piece(BLACK, KNIGHT), NBoard);
+    Score rooks   = StrScore(pos.piece(WHITE, ROOK ), wRBoard)
+                  - StrScore(pos.piece(BLACK, ROOK ), bRBoard);
+    Score king    = StrScore(pos.piece(WHITE, KING), WhiteKingMidGameTable)
+                  - StrScore(pos.piece(BLACK, KING), BlackKingMidGameTable);
 
     return pawns + bishops + knights + rooks + king;
 }
@@ -118,13 +123,6 @@ MobilityStrength(const ChessBoard& pos)
 static Score
 PawnStructure(const ChessBoard& pos, Color color)
 {
-    const auto dist_to_king = [] (int x, int y, int kpos)
-    {
-        Square kx = kpos & 7;
-        Square ky = (kpos - kx) >> 3;
-        return std::min(abs(x - kx), abs(y - ky));
-    };
-
     Score score = 0;
     Bitboard     pawns = pos.piece( color, PAWN);
     Bitboard emy_pawns = pos.piece(~color, PAWN);
@@ -134,20 +132,18 @@ PawnStructure(const ChessBoard& pos, Color color)
     for (int i = 0; i < 7; i++)
     {
         int p = popcount(column & pawns);
-        score -= 32 * p * p;
+        score -= 36 * p * (p - 1);
         column <<= 1;
     }
 
 
     while (pawns != 0)
     {
-        Square idx = next_idx(pawns);
-        if ((plt::PassedPawnMasks[color][idx] & emy_pawns) != 0)
+        Square pawn_sq = next_idx(pawns);
+        if ((plt::PassedPawnMasks[color][pawn_sq] & emy_pawns) != 0)
             continue;
 
-        Square x = idx & 7;
-        Square y = (idx - x) >> 3;
-        Score d = (7 * (color ^ 1)) + y * (2 * color - 1);
+        Score d = (7 * (color ^ 1)) + (pawn_sq >> 3) * (2 * color - 1);
 
         // Reward for having passed pawn
         score += 3 * d * d;
@@ -157,8 +153,8 @@ PawnStructure(const ChessBoard& pos, Color color)
 
         // Add score for king close to passed pawn and
         // Reduce score if enemy king is close to pawn
-        int dist = dist_to_king(x, y, kpos) - dist_to_king(x, y, ekpos);
-        score += (dist * dist * dist) / 2;
+        int dist = (14 - Dist(pawn_sq, kpos)) - (14 - Dist(pawn_sq, ekpos));
+        score += 6 * dist;
     }
 
     return score;
@@ -255,6 +251,69 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed)
 #ifndef ENDGAME
 
 static Score
+DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
+{
+    Square wk_sq = idx_no( pos.piece(WHITE, KING) );
+    Square bk_sq = idx_no( pos.piece(BLACK, KING) );
+
+    int material_diff =
+        + 3 * (ed.w_bishops - ed.b_bishops) + 3 * (ed.w_knights - ed.b_knights)
+        + 5 * (ed.w_rooks   - ed.b_rooks  ) + 9 * (ed.w_queens  - ed.b_queens );
+
+    int distance = 14 - Dist(wk_sq, bk_sq);
+    Score score = (distance / 2) * (distance + 2) * material_diff;
+    return score;
+}
+
+static Score
+BishopColorCornerScore(const ChessBoard& pos, Color winningSide)
+{
+    Bitboard bishops  = pos.piece(winningSide, BISHOP);
+    Bitboard emy_king = pos.piece(~winningSide, KING);
+
+    Bitboard endSquares =
+        ((bishops & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
+      | ((bishops & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
+
+    Score correctSideForCheckmateScore = 60;
+
+    return ((endSquares & emy_king) != 0)
+        ? (correctSideForCheckmateScore * winningSide) : VALUE_ZERO;
+}
+
+static Score
+LoneKingEndGame(const ChessBoard& pos, const EvalData& ed)
+{
+    /**
+     * Evaluates the score for an endgame position where the 
+     * losing side has no major, minor pieces, or pawns left.
+     * 
+     * Intuition:
+     * In this endgame scenario, the primary objective is to 
+     * corner the king of the losing side. Simultaneously, 
+     * bringing the winning side's king closer to the opponent's
+     * king for checkmate setup.
+     * 
+     * If the winning side has a bishop, the strategy for checkmate  
+     * corner differs based on the bishop's color. If white bishop 
+     * bring the losing king to white corners. Conversely,
+     * if the bishop is black, focus on bringing the losing side
+     * king to black corner.
+    **/
+
+    Color winningSide = (ed.w_pawns + ed.w_pieces > 0) ? WHITE : BLACK;
+    Color losingSide  = ~winningSide;
+
+    Square loneKingSq = idx_no( pos.piece(losingSide, KING) );
+
+    Score distanceScore = DistanceBetweenKingsScore(pos, ed);
+    Score parityScore   = BishopColorCornerScore(pos, winningSide);
+    Score centreScore   = losingSide * LoneKingEndGameTable[loneKingSq];
+
+    return distanceScore + parityScore + centreScore;
+}
+
+static Score
 MaterialDiffereceEndGame(const EvalData& ed)
 {
     return PawnValueEg   * (ed.w_pawns   - ed.b_pawns  )
@@ -278,22 +337,6 @@ PieceTableStrengthEndGame(const ChessBoard& pos)
     Score king = StrScore(pos.piece(WHITE, KING), KingEndGameTable)
                - StrScore(pos.piece(BLACK, KING), KingEndGameTable);
     return king;
-}
-
-static Score
-DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
-{
-    Square wk_sq = idx_no( pos.piece(WHITE, KING) );
-    Square bk_sq = idx_no( pos.piece(BLACK, KING) );
-
-    int material_diff = (ed.w_pawns - ed.b_pawns)
-        + 3 * (ed.w_bishops - ed.b_bishops) + 3 * (ed.w_knights - ed.b_knights)
-        + 5 * (ed.w_rooks   - ed.b_rooks  ) + 9 * (ed.w_queens  - ed.b_queens );
-
-    int side2gain = (material_diff == 0) ? (0) : (material_diff > 0 ? 1 : -1);
-    int distance = 14 - Dist(wk_sq, bk_sq);
-    Score score = (distance / 2) * (distance + 2) * side2gain * material_diff;
-    return score;
 }
 
 static Score
@@ -356,15 +399,19 @@ Evaluate(const ChessBoard& pos)
     EvalData ed = EvalData(pos);
     int side2move = 2 * int(pos.color) - 1;
 
+    // Special EndGames
+    // if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard())
+    //     return LoneKingEndGame(pos, ed);
+
     if ((ed.boardWeight == 0) or IsHypotheticalDraw(ed))
-        return VALUE_DRAW * side2move;
+        return VALUE_DRAW;
     
     ed.pawnStructureScore = PawnStructure(pos, WHITE) - PawnStructure(pos, BLACK);
 
     Score mg_score = MidGameScore(pos, ed);
     Score eg_score = EndGameScore(pos, ed);
 
-    float phase = float(ed.gamePhase) / float(GamePhaseLimit);
+    float phase = ed.phase;
     Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
     return score * side2move;
 }
@@ -373,7 +420,7 @@ Evaluate(const ChessBoard& pos)
 Score EvalDump(const ChessBoard& pos)
 {
     EvalData ed = EvalData(pos);
-    float phase = float(ed.gamePhase) / float(GamePhaseLimit);
+    float phase = ed.phase;
 
     cout << "----------------------------------------------" << endl;
     cout << "BoardWeight = " << ed.boardWeight << endl;
@@ -391,13 +438,30 @@ Score EvalDump(const ChessBoard& pos)
 
     cout << "Score_pawn_structure_white = " << pawnStructrueWhite << endl;
     cout << "Score_pawn_structure_black = " << pawnStructrueBlack << endl;
-    cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl;
+    cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl << endl;
 
 
     Score mg_score = 0, eg_score = 0;
 
-    // mg_score
-    mg_score = MidGameScore(pos, ed);
+    // MidGame
+    Score materialScoreMid   = MaterialDiffereceMidGame(ed);
+    Score pieceTableScoreMid = PieceTableStrengthMidGame(pos);
+    Score mobilityScoreMid   = MobilityStrength(pos);
+    Score threatsScoreMid    = Threats(pos);
+
+    cout << " -- MIDGAME -- " << endl;
+    cout << "materialScore   = " << materialScoreMid   << endl;
+    cout << "pieceTableScore = " << pieceTableScoreMid << endl;
+    cout << "mobilityScore   = " << mobilityScoreMid   << endl;
+    cout << "threatsScore    = " << threatsScoreMid    << endl << endl;
+
+
+    mg_score = Score(
+        ed.materialWeight     * float(materialScoreMid)
+      + ed.pieceTableWeight   * float(pieceTableScoreMid)
+      + ed.mobilityWeight     * float(mobilityScoreMid)
+      + ed.pawnSructureWeight * float(ed.pawnStructureScore)
+      + ed.threatsWeight      * float(threatsScoreMid) );
 
     // Endgame
     Score materialScore   = MaterialDiffereceEndGame(ed);
