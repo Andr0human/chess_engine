@@ -218,6 +218,9 @@ class ChessBoard
 
     void
     dump(std::ostream& writer = std::cout);
+
+    bool
+    IntegrityCheck() const noexcept;
 };
 
 

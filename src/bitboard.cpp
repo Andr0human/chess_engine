@@ -132,7 +132,7 @@ ChessBoard::fen() const
 
     string generated_fen;
     int zero = 0;
-    
+
     for(int j = 7; j >= 0; j--)
     {
         for (int i = 0; i < 8; i++)
@@ -669,8 +669,45 @@ ChessBoard::dump(std::ostream& writer)
 
     for (int i = 0; i < moveNum; i++)
         writer << undo_info[i].move << ", " << undo_info[i].hash
-               << ", " << undo_info[i].csep << undo_info[i].halfmove << endl;
+               << ", " << undo_info[i].csep << ", " << undo_info[i].halfmove << endl;
 
     writer << endl;
 }
+
+bool
+ChessBoard::IntegrityCheck() const noexcept
+{
+    if ((piece_bb[0] | piece_bb[8]) != 0)
+        return false;
+
+    for (int sq = 0; sq < 64; sq++)
+    {
+        if (board[sq] == NO_PIECE) continue;
+
+        Piece pt = board[sq];
+
+        if ((piece_bb[pt] & (1ULL << sq)) == 0)
+            return false;
+    }
+
+    for (int side = BLACK; side <= WHITE; side++)
+    {
+        for (int pt = PAWN; pt <= KING; pt++)
+        {
+            int piece = 8 * side + pt;
+            Bitboard p_bb = piece_bb[piece];
+
+            while (p_bb > 0)
+            {
+                Square sq = __builtin_ctzll(p_bb);
+                if (board[sq] != piece) return false;
+                p_bb &= p_bb - 1;
+            }
+        }
+    }
+
+    return true;
+}
+
+
 
