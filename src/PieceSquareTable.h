@@ -14,12 +14,13 @@ extern int NBoard[64];
 extern int wBoard[64];
 extern int bBoard[64];
 
-extern int WkMBoard[64];
-extern int BkMBoard[64];
 extern int wRBoard[64];
 extern int bRBoard[64];
 
-extern Score KingEndGameTable[64];
+extern Score WhiteKingMidGameTable[64];
+extern Score BlackKingMidGameTable[64];
+extern Score      KingEndGameTable[64];
+extern Score  LoneKingEndGameTable[64];
 
 
 #endif
