@@ -177,7 +177,7 @@ execute_late_commands(PlayBoard& board)
         TT.clear();
 
         write_to_file(logger, "After MakeMove");
-        write_to_file(logger, board.visual_board());
+        write_to_file(logger, board.fen());
     }
 }
 
