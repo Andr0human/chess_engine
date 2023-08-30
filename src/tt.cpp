@@ -80,7 +80,7 @@ TranspositionTable::hashkey_update
 
 void
 TranspositionTable::record_position
-    (uint64_t zkey, int depth, int move, int eval, int flag) noexcept
+    (uint64_t zkey, Depth depth, int move, int eval, int flag) noexcept
 {
     const auto add_entry = [&] (ZobristHashKey& __pos)
     {
@@ -103,7 +103,7 @@ TranspositionTable::record_position
 
 int
 TranspositionTable::lookup_position
-    (uint64_t zkey, int depth, int alpha, int beta) const noexcept
+    (uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept
 {
     const auto lookup = [&] (const ZobristHashKey &__pos)
     {

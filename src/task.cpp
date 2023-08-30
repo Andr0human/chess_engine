@@ -236,7 +236,7 @@ node_count(const vector<string> &_args)
 {
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : StartFen;
-    int depth  = __n > 2 ? stoi(_args[2]) : 6;
+    Depth depth  = __n > 2 ? stoi(_args[2]) : 6;
     ChessBoard _cb   = fen;
 
     cout << "Fen = " << fen << '\n';

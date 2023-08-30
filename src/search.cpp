@@ -20,7 +20,7 @@ reset_pv_line()
         pvArray[i] = 0;
 }
 
-int
+Score
 checkmate_score(int ply)
 { return -VALUE_MATE + (20 * ply); }
 
@@ -62,44 +62,53 @@ order_generated_moves(MoveList& myMoves, bool pv_moves)
 }
 
 int
-createMoveOrderList(ChessBoard& _cb)
+createMoveOrderList(ChessBoard& pos)
 {
     /* Stores time used to evaluate each root move.
     Useful in ordering root moves in iterative search. */
 
     // res -> -1(Lost), -2(Draw), -3(Invalid), >1(Zero-depth Move)
 
-    MoveList movelist = generate_moves(_cb);
+    MoveList movelist = generate_moves(pos);
 
     // To ensure, the zero move is best_move.
     order_generated_moves(movelist, false);
     moc.initialise(movelist);
 
     return (movelist.size() > 0) ?
-           (*movelist.begin()) : (_cb.KA > 0 ? -1 : -2);
+           (*movelist.begin()) : (pos.KA > 0 ? -1 : -2);
 }
 
 bool
-is_valid_move(Move move, ChessBoard _cb)
+is_valid_move(Move move, ChessBoard pos)
 {
-    int ip = move & 63, vMove/* , fp = (move >> 6) & 63 */;                      // Get Init. and Dest. Square from encoded move.
+    // Get Init. and Dest. Square from encoded move.
+    Square ip = move & 63, vMove/* , fp = (move >> 6) & 63 */;
 
-    if (_cb.piece_on_square(ip) == NO_PIECE) return false;                               // No piece on initial square
-    // if (_cb.pColor * _cb.Pieces[ip] < 0) return false;              // Piece of same colour to move
-    // if (_cb.pColor * _cb.Pieces[fp] > 0) return false;              // No same colour for Initial and Dest Sq. Piece
+    // No piece on initial square
+    if (pos.piece_on_square(ip) == NO_PIECE) return false;
 
-    MoveList myMoves = generate_moves(_cb);                                      // Generate all legal moves for curr. Position
+    // Piece of same colour to move
+    // if (_cb.pColor * _cb.Pieces[ip] < 0) return false;
+
+    // No same colour for Initial and Dest Sq. Piece
+    // if (_cb.pColor * _cb.Pieces[fp] > 0) return false;
+
+    // Generate all legal moves for curr. Position
+    MoveList myMoves = generate_moves(pos);
 
     // Take only Init. and Dest. Sq. to Compare(Filter everything else.)
     // Match with all generated legal moves, it found return valid, else not-valid.
 
     move &= (1 << 12) - 1;
-    for (const auto vmove : myMoves)
+    for (const Move vmove : myMoves)
     {
         vMove = vmove & ((1 << 12) - 1);
-        if (move == vMove) return true;                             // Valid Move Found.
+        // Valid Move Found.
+        if (move == vMove) return true;
     }
-    return false;                                                   // Move not matched with any generated legal moves, thus invalid.
+    // Move not matched with any generated legal moves, thus invalid.
+    return false;
 }
 
 
@@ -109,7 +118,7 @@ is_valid_move(Move move, ChessBoard _cb)
 
 
 bool
-ok_to_do_LMR(int depth, MoveList& myMoves)
+ok_to_do_LMR(Depth depth, MoveList& myMoves)
 {
     if (depth < 3) return false;
     // if (myMoves.KingAttackers || myMoves.__count < 6) return false;
@@ -117,7 +126,7 @@ ok_to_do_LMR(int depth, MoveList& myMoves)
 }
 
 int
-root_reduction(int depth, int num)
+root_reduction(Depth depth, int num)
 {
     if (depth < 3) return 0;
     if (depth < 6) {
@@ -131,7 +140,7 @@ root_reduction(int depth, int num)
 }
 
 int
-reduction (int depth, int move_no)
+reduction (Depth depth, int move_no)
 {
     if (depth < 2) return 0;
     if (depth < 4 && move_no > 9) return 1; 
@@ -147,15 +156,15 @@ reduction (int depth, int move_no)
 }
 
 int
-MaterialCount(ChessBoard& _cb)
+MaterialCount(ChessBoard& pos)
 {
     int answer = 0;
 
-    answer += 100 * popcount((_cb.piece(WHITE, PAWN  )) | _cb.piece(BLACK, PAWN  ));
-    answer += 300 * popcount((_cb.piece(WHITE, BISHOP)) | _cb.piece(BLACK, BISHOP));
-    answer += 300 * popcount((_cb.piece(WHITE, KNIGHT)) | _cb.piece(BLACK, KNIGHT));
-    answer += 500 * popcount((_cb.piece(WHITE, ROOK  )) | _cb.piece(BLACK, ROOK  ));
-    answer += 900 * popcount((_cb.piece(WHITE, QUEEN )) | _cb.piece(BLACK, QUEEN ));
+    answer += 100 * popcount((pos.piece(WHITE, PAWN  )) | pos.piece(BLACK, PAWN  ));
+    answer += 300 * popcount((pos.piece(WHITE, BISHOP)) | pos.piece(BLACK, BISHOP));
+    answer += 300 * popcount((pos.piece(WHITE, KNIGHT)) | pos.piece(BLACK, KNIGHT));
+    answer += 500 * popcount((pos.piece(WHITE, ROOK  )) | pos.piece(BLACK, ROOK  ));
+    answer += 900 * popcount((pos.piece(WHITE, QUEEN )) | pos.piece(BLACK, QUEEN ));
     return answer;
 }
 
@@ -163,28 +172,32 @@ MaterialCount(ChessBoard& _cb)
 
 #ifndef SEARCH_COMMON
 
-int
-QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
+Score
+QuieSearch(ChessBoard& pos, Score alpha, Score beta, int ply, int __dol)
 {    
     // Check if Time Left for Search
     if (info.time_over())
         return TIMEOUT;
 
 
-    if (has_legal_moves(_cb) == false)
+    if (has_legal_moves(pos) == false)
     {
-        int result = _cb.king_in_check() ? checkmate_score(ply) : 0;
-        _cb.remove_movegen_extra_data();
-        return result;
+        Score score = pos.king_in_check() ? checkmate_score(ply) : VALUE_ZERO;
+        pos.remove_movegen_extra_data();
+        return score;
     }
 
     // if (ka_pieces.attackers) return AlphaBeta_noPV(_cb, 1, alpha, beta, ply);
 
-    int stand_pat = Evaluate(_cb);                       // Get a 'Stand Pat' Score
+    // Get a 'Stand Pat' Score
+    Score stand_pat = Evaluate(pos);
+
+    // Checking for beta-cutoff
     if (stand_pat >= beta)
     {
-        _cb.remove_movegen_extra_data();                 // Usually called at the end of move-generation.
-        return beta;                                     // Checking for beta-cutoff
+        // Usually called at the end of move-generation.
+        pos.remove_movegen_extra_data();
+        return beta;
     }
 
     // int BIG_DELTA = 925;
@@ -192,34 +205,43 @@ QuieSearch(ChessBoard& _cb, int alpha, int beta, int ply, int __dol)
 
     if (stand_pat > alpha) alpha = stand_pat;
 
-    auto myMoves = generate_moves(_cb, true);
+    MoveList myMoves = generate_moves(pos, true);
     order_generated_moves(myMoves, false);
 
     for (const Move move : myMoves)
     {
+        // Check based on priority for captures & checks
         int move_priority = (move >> 21) & 31;
-        if (move_priority > 10)
-        {                                           // Check based on priority for captures & checks
-            _cb.MakeMove(move);                                             // Make current move
-            int score = -QuieSearch(_cb, -beta, -alpha, ply + 1, __dol + 1);
-            _cb.UnmakeMove();                                               // Takeback made move
-            if (std::abs(score) == TIMEOUT)
-                return TIMEOUT;
-            if (score >= beta) return beta;                                 // Check for Beta-cutoff
-            if (score > alpha) alpha = score;                               // Check if a better move is found
-        }
+
+        if (move_priority <= 10)
+            continue;
+
+        pos.MakeMove(move);
+        Score score = -QuieSearch(pos, -beta, -alpha, ply + 1, __dol + 1);
+        pos.UnmakeMove();
+
+        if (std::abs(score) == TIMEOUT)
+            return TIMEOUT;
+
+        // Check for Beta-cutoff
+        if (score >= beta) return beta;
+
+        // better move found!
+        if (score > alpha) alpha = score;
     }
 
     return alpha;
 }
 
-int
-AlphaBeta_noPV(ChessBoard &_cb, int depth, int alpha, int beta, int ply)
+
+Score
+AlphaBeta_noPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply)
 {
     if (has_legal_moves(_cb) == false)
         return _cb.king_in_check() ? checkmate_score(ply) : 0;
 
-    if (depth <= 0) return QuieSearch(_cb, alpha, beta, ply, 0);
+    if (depth <= 0)
+        return QuieSearch(_cb, alpha, beta, ply, 0);
 
     auto myMoves = generate_moves(_cb);
     order_generated_moves(myMoves, false);
@@ -227,11 +249,13 @@ AlphaBeta_noPV(ChessBoard &_cb, int depth, int alpha, int beta, int ply)
     for (const Move move : myMoves)
     {
         _cb.MakeMove(move);
-        int eval = -AlphaBeta_noPV(_cb, depth - 1, -beta, -alpha, ply + 1);
+        Score eval = -AlphaBeta_noPV(_cb, depth - 1, -beta, -alpha, ply + 1);
         _cb.UnmakeMove();
         
-        if (eval > alpha) alpha = eval;
-        if (eval >= beta) return beta;
+        if (eval > alpha)
+            alpha = eval;
+        if (eval >= beta)
+            return beta;
     }
     
     return alpha;

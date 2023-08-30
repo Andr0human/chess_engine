@@ -53,7 +53,7 @@ ChessBoard::set_position_with_fen(const string& fen) noexcept
     {
         // Generating board and Pieces array
 
-        int square = 56;
+        Square square = 56;
         for (const char elem : elements[0])
         {
             if (isdigit(elem))
@@ -244,7 +244,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
             return make_move_castling(ip, fp, 1);
     }
 
-    if (fpt != 0)
+    if (fpt != NO_PIECE)
     {
         piece_bb[fpt] ^= fPos;
         piece_bb[emy + 7] ^= fPos;

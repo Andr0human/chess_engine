@@ -11,6 +11,7 @@
 //! TODO Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
 //! TODO Endgame tests fen
 //! TODO If promotion is possible and no enemy piece can capture it.
+//! TODO if (move_priority <= 10) continue; | Use break instead.
 
 
 int main(int argc, char **argv)

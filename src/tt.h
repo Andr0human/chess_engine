@@ -91,10 +91,10 @@ class TranspositionTable
     hashkey_update(int piece, int __pos) const noexcept;
 
     void
-    record_position(uint64_t zkey, int depth, int move, int eval, int flag) noexcept;
+    record_position(uint64_t zkey, Depth depth, int move, int eval, int flag) noexcept;
     
     int
-    lookup_position(uint64_t zkey, int depth, int alpha, int beta) const noexcept;
+    lookup_position(uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept;
 };
 
 

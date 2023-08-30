@@ -205,7 +205,7 @@ class TestPosition
 {
     public:
     string fen, name;
-    int depth;
+    Depth depth;
     uint64_t nodeCount = 0;
 
     TestPosition() {}
