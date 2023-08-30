@@ -210,8 +210,8 @@ KingSafety(const ChessBoard& pos, Color side)
     if ((kx != 7) and ((mask[k_pos - 1] & pawns) == 0))
         open_files++;
 
-    defenders += popcount(pawns & mask[k_pos]);
-    defenders += 2 * popcount( mask[k_pos] & (
+    defenders += popcount(pawns & plt::KingMasks[k_pos]);
+    defenders += 2 * popcount( plt::KingMasks[k_pos] & (
         pos.piece(side, BISHOP) | pos.piece(side, KNIGHT) | pos.piece(side, ROOK)
     ));
 
@@ -412,7 +412,7 @@ Evaluate(const ChessBoard& pos)
     Score eg_score = EndGameScore(pos, ed);
 
     float phase = ed.phase;
-    Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
+    Score score = Score( (phase * phase) * float(mg_score) + (1 - (phase * phase)) * float(eg_score) );
     return score * side2move;
 }
 
@@ -466,20 +466,18 @@ Score EvalDump(const ChessBoard& pos)
     // Endgame
     Score materialScore   = MaterialDiffereceEndGame(ed);
     Score pieceTableScore = PieceTableStrengthEndGame(pos);
-    Score pawnStructure   = ed.pawnStructureScore;
     Score distanceScore   = DistanceBetweenKingsScore(pos, ed);
     Score parityScore     = ColorParityScore(pos);
 
     eg_score = Score(
         ed.materialWeight     * float(materialScore)
       + ed.pieceTableWeight   * float(pieceTableScore)
-      + ed.pawnSructureWeight * float(pawnStructure)
+      + ed.pawnSructureWeight * float(ed.pawnStructureScore)
       + float(distanceScore)  + float(parityScore) );
 
     cout << " -- ENDGAME -- " << endl;
     cout << "materialScore   = " << materialScore   << endl;
     cout << "pieceTableScore = " << pieceTableScore << endl;
-    cout << "pawnStructure   = " << pawnStructure   << endl;
     cout << "distanceScore   = " << distanceScore   << endl;
     cout << "parityScore     = " << parityScore     << endl;
 
