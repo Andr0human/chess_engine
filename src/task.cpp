@@ -304,7 +304,7 @@ void
 show_update_info()
 {
     cout <<
-        "Version: 2.1\n\n"
+        "Version: 2.2\n\n"
         "Techniques Used:\n"
         "- Mini-Max with AlphaBeta\n"
         "- Quiescence Search\n"
