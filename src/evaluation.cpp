@@ -275,7 +275,7 @@ BishopColorCornerScore(const ChessBoard& pos, Color winningSide)
         ((bishops & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
       | ((bishops & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
 
-    Score correctSideForCheckmateScore = 60;
+    Score correctSideForCheckmateScore = 120;
 
     return ((endSquares & emy_king) != 0)
         ? (correctSideForCheckmateScore * winningSide) : VALUE_ZERO;
@@ -300,6 +300,7 @@ LoneKingEndGame(const ChessBoard& pos, const EvalData& ed)
      * if the bishop is black, focus on bringing the losing side
      * king to black corner.
     **/
+    // Note : Failed so far
 
     Color winningSide = (ed.w_pawns + ed.w_pieces > 0) ? WHITE : BLACK;
     Color losingSide  = ~winningSide;
