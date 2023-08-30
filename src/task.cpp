@@ -2,10 +2,10 @@
 #include "task.h"
 
 void
-init()
+Init()
 {
     perf_clock start = perf::now();
-    plt::init();
+    plt::Init();
 
     #if defined(TRANSPOSITION_TABLE_H)
         TT.resize(0);
@@ -37,12 +37,12 @@ get_test_positions(string filename)
     {
         getline(infile, text);
         if (text == "") break;
-        tmp = base_utils::split(text, '|');
+        tmp = base_utils::Split(text, '|');
         name = "--";
         if (tmp.size() == 3) name = tmp[2].substr(1);
 
         pos = tmp[0];
-        tmp = base_utils::split(tmp[1], ' ');
+        tmp = base_utils::Split(tmp[1], ' ');
         res.emplace_back(TestPosition(pos, std::stoi(tmp[0]), std::stoi(tmp[1]), name));
     }
 
@@ -51,7 +51,7 @@ get_test_positions(string filename)
 }
 
 void
-accuracy_test()
+AccuracyTest()
 {
     const auto get_test_pos = [] ()
     {
@@ -66,9 +66,9 @@ accuracy_test()
             getline(infile, line);
             if (line.empty()) break;
 
-            auto elements = base_utils::split(line, '|');
+            auto elements = base_utils::Split(line, '|');
 
-            const auto nodes_string = base_utils::split(elements[1], ' ');
+            const auto nodes_string = base_utils::Split(elements[1], ' ');
             vector<uint64_t> nodes(nodes_string.size());
 
             std::transform(begin(nodes_string), end(nodes_string), begin(nodes),
@@ -77,8 +77,8 @@ accuracy_test()
                 }
             );
 
-            // const auto nodes = to_nums(base_utils::split(elements[1], ' '));
-            tests.push_back(MovegenTestPosition(base_utils::strip(elements[0]), nodes));
+            // const auto nodes = to_nums(base_utils::Split(elements[1], ' '));
+            tests.push_back(MovegenTestPosition(base_utils::Strip(elements[0]), nodes));
         }
 
         infile.close();
@@ -92,8 +92,8 @@ accuracy_test()
         for (const auto& test : tests)
         {
             const auto depth = test.depth();
-            ChessBoard _cb = test.fen();
-            uint64_t found = bulkcount(_cb, static_cast<int>(depth));
+            ChessBoard _cb = test.Fen();
+            uint64_t found = BulkCount(_cb, static_cast<int>(depth));
 
             if (found != test.expected_nodes(depth))
                 return false;
@@ -112,11 +112,11 @@ accuracy_test()
         for (const auto& test : tests)
         {
             const auto depth = test.depth();
-            ChessBoard _cb = test.fen();
+            ChessBoard _cb = test.Fen();
 
             for (uint64_t dep = 1; dep <= depth; dep++)
             {
-                const auto found = bulkcount(_cb, static_cast<int>(dep));
+                const auto found = BulkCount(_cb, static_cast<int>(dep));
 
                 if (found == test.expected_nodes(dep))
                     continue;
@@ -143,18 +143,18 @@ accuracy_test()
     const auto best_case = failed_tests(tests);
 
     cout << "Best Failed Case : \n";
-    cout << "Fen = " << best_case.fen() << endl;
+    cout << "Fen = " << best_case.Fen() << endl;
 
     auto maxDepth = best_case.depth();
-    ChessBoard _cb = best_case.fen();
+    ChessBoard _cb = best_case.Fen();
 
     for (uint64_t depth = 1; depth <= maxDepth; depth++)
         cout << best_case.expected_nodes(depth)
-             << " | " << bulkcount(_cb, static_cast<int>(depth)) << endl;
+             << " | " << BulkCount(_cb, static_cast<int>(depth)) << endl;
 }
 
 void
-helper() 
+Helper() 
 {
     puts("/****************   Command List   ****************/\n");
 
@@ -178,7 +178,7 @@ helper()
 
 
 void
-speed_test()
+SpeedTest()
 {
     using namespace std::chrono;
 
@@ -198,7 +198,7 @@ speed_test()
 
         const auto start = perf::now();
         for (int i = 0; i < 3; i++)
-            bulkcount(board, pos.depth);
+            BulkCount(board, pos.depth);
         
         const auto end = perf::now();
         const auto duration = duration_cast<microseconds>(end - start);
@@ -216,7 +216,7 @@ speed_test()
 }
 
 void
-direct_search(const vector<string> &_args)
+DirectSearch(const vector<string> &_args)
 {
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : StartFen;
@@ -225,14 +225,14 @@ direct_search(const vector<string> &_args)
         std::stod(_args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
 
     ChessBoard primary = fen;
-    cout << primary.visual_board() << endl;
+    cout << primary.VisualBoard() << endl;
 
-    search_iterative(primary, MAX_DEPTH, search_time);
-    cout << info.get_search_results(primary) << endl;
+    Search(primary, MAX_DEPTH, search_time);
+    cout << info.GetSearchResult(primary) << endl;
 }
 
 void
-node_count(const vector<string> &_args)
+NodeCount(const vector<string> &_args)
 {
     const size_t __n = _args.size();
     const string fen = __n > 1 ? _args[1] : StartFen;
@@ -242,7 +242,7 @@ node_count(const vector<string> &_args)
     cout << "Fen = " << fen << '\n';
     cout << "Depth = " << depth << "\n" << endl;
 
-    const auto &[nodes, t] = perf::run_algo(bulkcount, _cb, depth);
+    const auto &[nodes, t] = perf::run_algo(BulkCount, _cb, depth);
 
     cout << "Nodes(single-thread) = " << nodes << '\n';
     cout << "Time (single-thread) = " << t << " sec.\n";
@@ -258,7 +258,7 @@ node_count(const vector<string> &_args)
 }
 
 void
-debug_movegen(const vector<string> &_args)
+DebugMoveGenerator(const vector<string> &_args)
 {
     // Argument : elsa debug <fen> <depth> <output_file_name>
 
@@ -285,12 +285,12 @@ debug_movegen(const vector<string> &_args)
     
     std::ofstream out(_fn);
     ChessBoard _cb = fen;
-    MoveList myMoves = generate_moves(_cb);
+    MoveList myMoves = GenerateMoves(_cb);
 
     for (const auto move : myMoves)
     {
         _cb.MakeMove(move);
-        const auto current = bulkcount(_cb, dep - 1);
+        const auto current = BulkCount(_cb, dep - 1);
         out << moveName(move) << " : " << current << '\n';
         // out << print(move, _cb) << " : " << current << '\n';
         _cb.UnmakeMove();
@@ -300,8 +300,8 @@ debug_movegen(const vector<string> &_args)
 }
 
 
-void
-show_update_info()
+static void
+ShowUpdateLog()
 {
     cout <<
         "Version: 2.2\n\n"
@@ -328,10 +328,10 @@ show_update_info()
 
 
 
-void task(int argc, char *argv[])
+void Task(int argc, char *argv[])
 {
     const vector<string> argument_list =
-        base_utils::extract_argument_list(argc, argv);
+        base_utils::ExtractArgumentList(argc, argv);
 
     string command = argument_list.empty() ? "" : argument_list[0];
 
@@ -342,46 +342,39 @@ void task(int argc, char *argv[])
     }
     else if (command == "help")
     {
-        helper();
+        Helper();
     }
     else if (command == "accuracy")
     {
         // Argument : elsa accuracy
-        accuracy_test();
+        AccuracyTest();
     }
     else if (command == "speed")
     {
         // Argument : elsa speed
-        speed_test();
+        SpeedTest();
     }
     else if (command == "go")
     {
         // Argument : elsa go "fen" allowed_search_time allowed_extra_time
-        direct_search(argument_list);
+        DirectSearch(argument_list);
     }
     else if (command == "play")
     {
-        play(argument_list);
-    }
-    else if (command == "ponder")
-    {
-        #if defined(PONDER_H)
-            // Argument : elsa ponder "fen"
-            ponderSearch(ChessBoard(argument_list[1]), true);
-        #endif
+        Play(argument_list);
     }
     else if (command == "count")
     {
         // Argument : elsa count {fen} {depth}
-        node_count(argument_list);
+        NodeCount(argument_list);
     }
     else if (command == "debug")
     {
-        debug_movegen(argument_list);
+        DebugMoveGenerator(argument_list);
     }
     else if (command == "info")
     {
-        show_update_info();
+        ShowUpdateLog();
     }
     else
     {

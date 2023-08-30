@@ -16,10 +16,10 @@ class ZobristHashKey
     int32_t eval, flag;
 
     ZobristHashKey() noexcept
-    { clear(); }
+    { Clear(); }
 
     void
-    clear() noexcept
+    Clear() noexcept
     {
         key = 0;
         depth = move = 0;
@@ -61,11 +61,11 @@ class TranspositionTable
 
     uint64_t HashIndex[HASH_INDEXES_SIZE];    
 
-    void get_random_keys() noexcept;
+    void GetRandomKeys() noexcept;
 
-    void allocate_tables();
+    void AllocateTables();
 
-    void free_tables();
+    void FreeTables();
 
     public:
     // Initialize Transposition Table
@@ -81,20 +81,20 @@ class TranspositionTable
     size() const noexcept;
 
     void
-    clear() noexcept;
+    Clear() noexcept;
 
     uint64_t
-    hash_key(int __pos) const noexcept
+    HashKey(int __pos) const noexcept
     { return HashIndex[__pos]; }
 
     uint64_t
-    hashkey_update(int piece, int __pos) const noexcept;
+    HashkeyUpdate(int piece, int __pos) const noexcept;
 
     void
-    record_position(uint64_t zkey, Depth depth, int move, int eval, int flag) noexcept;
+    RecordPosition(uint64_t zkey, Depth depth, Move move, Score eval, int flag) noexcept;
     
     int
-    lookup_position(uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept;
+    LookupPosition(uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept;
 };
 
 

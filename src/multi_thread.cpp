@@ -55,7 +55,7 @@ bulk_MultiCount(ChessBoard &_cb, Depth depth)
 {
     if (depth <= 0) return 1;
 
-    MoveList myMoves = generate_moves(_cb);
+    MoveList myMoves = GenerateMoves(_cb);
 
     if (depth == 1) return myMoves.size();
     
@@ -117,7 +117,7 @@ MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
             depth++;
         }
         if (within_valWindow and (__abs(eval) >= VALUE_INF - 500)) break;   // If found a checkmate
-        moc.sortList(pvArray[0]);
+        moc.SortList(pvArray[0]);
     }
 }
 
@@ -129,10 +129,10 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth 
 
     // info.max_ply = std::max(info.max_ply, ply);
 
-    if (has_legal_moves(_cb) == false)
+    if (LegalMovesPresent(_cb) == false)
     {
-        _cb.remove_movegen_extra_data();
-        return _cb.king_in_check() ? checkmate_score(ply) : 0;
+        _cb.RemoveMovegenMetadata();
+        return _cb.InCheck() ? CheckmateScore(ply) : 0;
     }
 
     int hashf = HASH_ALPHA, tt_val, eval;
@@ -140,18 +140,18 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth 
     #if defined(TRANSPOSITION_TABLE_H)
 
         // if (ply && (tt_val = TT.ProbeSearchHistory(_cb.Hash_Value)) != VALUE_UNKNOWN) return 0;
-        if ((tt_val = TT.lookup_position(_cb.Hash_Value, depth, alpha, beta)) != VALUE_UNKNOWN) return tt_val;
+        if ((tt_val = TT.LookupPosition(_cb.Hash_Value, depth, alpha, beta)) != VALUE_UNKNOWN) return tt_val;
         // TT.RecordSearch(_cb.Hash_Value);
 
     #endif
 
-    auto myMoves = generate_moves(_cb);
-    order_generated_moves(myMoves, true);
+    auto myMoves = GenerateMoves(_cb);
+    ReorderGeneratedMoves(myMoves, true);
 
     loc_arr[pvIndex] = 0; // no pv yet
     int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-    if (ok_to_do_LMR(depth, myMoves))
+    if (OkToDoLMR(depth, myMoves))
         return LMR_threadSearch(_cb, loc_arr, myMoves, depth, alpha, beta, ply, pvIndex);
 
     for (const auto move : myMoves)
@@ -171,7 +171,7 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth 
         if (alpha >= beta)
         {
             #if defined(TRANSPOSITION_TABLE_H)
-                TT.record_position(_cb.Hash_Value, depth, move, beta, HASH_BETA);
+                TT.RecordPosition(_cb.Hash_Value, depth, move, beta, HASH_BETA);
                 // TT.RemSearchHistory(_cb.Hash_Value);
             #endif
 
@@ -181,7 +181,7 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth 
 
     #if defined(TRANSPOSITION_TABLE_H)
         // TT.RemSearchHistory(_cb.Hash_Value);
-        TT.record_position(_cb.Hash_Value, depth, loc_arr[pvIndex], alpha, hashf);
+        TT.RecordPosition(_cb.Hash_Value, depth, loc_arr[pvIndex], alpha, hashf);
     #endif
 
     return alpha;
@@ -194,10 +194,10 @@ pv_multiAlphaBeta(ChessBoard& _cb, int loc_arr[], Score alpha, Score beta, Depth
         return QuieSearch(_cb, alpha, beta, ply, 0);
 
     // info.max_ply = std::max(info.max_ply, ply);
-    if (has_legal_moves(_cb) == false)
+    if (LegalMovesPresent(_cb) == false)
     {
-        _cb.remove_movegen_extra_data();
-        return _cb.king_in_check() ? checkmate_score(ply) : 0;
+        _cb.RemoveMovegenMetadata();
+        return _cb.InCheck() ? CheckmateScore(ply) : 0;
     }
 
     int hashf = HASH_ALPHA, tt_val;
@@ -205,13 +205,13 @@ pv_multiAlphaBeta(ChessBoard& _cb, int loc_arr[], Score alpha, Score beta, Depth
     #if defined(TRANSPOSITION_TABLE_H)
 
         // if (ply && (tt_val = TT.ProbeSearchHistory(_cb.Hash_Value)) != VALUE_UNKNOWN) return 0;
-        if ((tt_val = TT.lookup_position(_cb.Hash_Value, depth, alpha, beta)) != VALUE_UNKNOWN) return tt_val;
+        if ((tt_val = TT.LookupPosition(_cb.Hash_Value, depth, alpha, beta)) != VALUE_UNKNOWN) return tt_val;
         // TT.RecordSearch(_cb.Hash_Value);
 
     #endif
 
-    auto myMoves = generate_moves(_cb);
-    order_generated_moves(myMoves, true);
+    auto myMoves = GenerateMoves(_cb);
+    ReorderGeneratedMoves(myMoves, true);
 
     loc_arr[pvIndex] = 0; // no pv yet
     int pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -268,7 +268,7 @@ pv_multiAlphaBeta(ChessBoard& _cb, int loc_arr[], Score alpha, Score beta, Depth
     // TT.RemSearchHistory(_cb.Hash_Value);
 
     #if defined(TRANSPOSITION_TABLE_H)
-        TT.record_position(_cb.Hash_Value, depth, loc_arr[pvIndex], alpha, hashf);
+        TT.RecordPosition(_cb.Hash_Value, depth, loc_arr[pvIndex], alpha, hashf);
     #endif
     return alpha;
 }
@@ -276,10 +276,10 @@ pv_multiAlphaBeta(ChessBoard& _cb, int loc_arr[], Score alpha, Score beta, Depth
 int
 pv_multiAlphaBetaRoot(ChessBoard &_cb, Score alpha, Score beta, Depth depth)
 {
-    MoveList myMoves = generate_moves(_cb);
-    moc.setMoveOrder(myMoves);
+    MoveList myMoves = GenerateMoves(_cb);
+    moc.OrderMovesOnTime(myMoves);
     // moc.print(_cb);
-    // moc.reset();
+    // moc.Reset();
 
     int ply = 0, pvIndex = 0, eval;
     pvArray[pvIndex] = 0;
@@ -303,7 +303,7 @@ pv_multiAlphaBetaRoot(ChessBoard &_cb, Score alpha, Score beta, Depth depth)
     {
         int move = myMoves.pMoves[i];
         startTime = TIME_NOW;
-        if (i < LMR_LIMIT || interesting_move(move, _cb))
+        if (i < LMR_LIMIT || InterestingMove(move, _cb))
         {
             _cb.MakeMove(move);
             eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
@@ -311,7 +311,7 @@ pv_multiAlphaBetaRoot(ChessBoard &_cb, Score alpha, Score beta, Depth depth)
         }
         else
         {
-            int R = root_reduction(depth, i);
+            int R = RootReduction(depth, i);
             _cb.MakeMove(move);
             eval = -pv_multiAlphaBeta(_cb, pvArray, -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
@@ -326,7 +326,7 @@ pv_multiAlphaBetaRoot(ChessBoard &_cb, Score alpha, Score beta, Depth depth)
 
         endTime = TIME_NOW;
         duration = TIME_BTW(startTime, endTime);
-        moc.insert(i, duration.count());
+        moc.Insert(i, duration.count());
 
         if (__abs(eval) == VALUE_UNKNOWN) return VALUE_UNKNOWN;
         if (eval > alpha)
@@ -349,7 +349,7 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, Depth depth,
 
     for (int i = 0; i < __n; i++)
     {
-        if (i < LMR_LIMIT || interesting_move(myMoves.pMoves[i], _cb))
+        if (i < LMR_LIMIT || InterestingMove(myMoves.pMoves[i], _cb))
         {
             _cb.MakeMove(myMoves.pMoves[i]);
             eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
@@ -357,7 +357,7 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, Depth depth,
         }
         else
         {
-            int R = reduction(depth, i);
+            int R = Reduction(depth, i);
             _cb.MakeMove(myMoves.pMoves[i]);
             eval = -thread_AlphaBeta(_cb, loc_arr, -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
@@ -388,7 +388,7 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, Depth depth,
     // TT.RemSearchHistory(_cb.Hash_Value);
 
     #if defined(TRANSPOSITION_TABLE_H)
-        TT.record_position(_cb.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
+        TT.RecordPosition(_cb.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
     #endif
     return alpha;
 }
@@ -396,7 +396,7 @@ LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, Depth depth,
 bool
 fm_Search(ChessBoard &_cb, int loc_arr[], Depth depth, int move, int &alpha, int &beta, int ply, int pvIndex)
 {
-    // No need to pick reduction as this is first move
+    // No need to pick Reduction as this is first move
     int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     _cb.MakeMove(move);
@@ -430,7 +430,7 @@ first_rm_search(ChessBoard &_cb, int move, Depth depth, int &alpha, int &beta)
     _cb.UnmakeMove();
 
     duration = perf::now() - startTime;
-    moc.insert(0, duration.count() * 10000);
+    moc.Insert(0, duration.count() * 10000);
 
     pvArray[pvIndex] = move;
     movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
@@ -583,7 +583,7 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
         move = thread_data.legal_moves[index];
 
         startTime = perf::now();
-        if (index < LMR_LIMIT || interesting_move(move, _cb))
+        if (index < LMR_LIMIT || InterestingMove(move, _cb))
         {
             _cb.MakeMove(move);
             eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1, ply + 1, pvNextIndex);
@@ -591,7 +591,7 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
         }
         else
         {
-            int R = root_reduction(depth, index);
+            int R = RootReduction(depth, index);
             _cb.MakeMove(move);
             eval = -thread_AlphaBeta(_cb, thread_array[thread_num], -beta, -alpha, depth - 1 - R, ply + 1, pvNextIndex);
             _cb.UnmakeMove();
@@ -613,7 +613,7 @@ worker_root_alphabeta(int thread_num, int sourceArr[])
         mute.lock();
 
         duration = perf::now() - startTime;
-        moc.insert(index, duration.count() * 10000);
+        moc.Insert(index, duration.count() * 10000);
 
         if (eval > thread_data.alpha)
         {

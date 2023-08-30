@@ -17,7 +17,7 @@ xorshift64star(void)
 }
 
 void
-TranspositionTable::get_random_keys() noexcept
+TranspositionTable::GetRandomKeys() noexcept
 {
     std::mt19937_64 rng(1557);
     for (int i = 0; i < HASH_INDEXES_SIZE; i++) 
@@ -25,7 +25,7 @@ TranspositionTable::get_random_keys() noexcept
 }
 
 void
-TranspositionTable::free_tables()
+TranspositionTable::FreeTables()
 {
     if (TT_SIZE == 0)
         return;
@@ -35,7 +35,7 @@ TranspositionTable::free_tables()
 }
 
 void
-TranspositionTable::allocate_tables()
+TranspositionTable::AllocateTables()
 {
     primary_tt_table = new ZobristHashKey[TT_SIZE]();
     secondary_tt_table = new ZobristHashKey[TT_SIZE]();
@@ -44,10 +44,10 @@ TranspositionTable::allocate_tables()
 void
 TranspositionTable::resize(int preset)
 {
-    get_random_keys();
-    free_tables();
+    GetRandomKeys();
+    FreeTables();
     TT_SIZE = tt_sizes[preset];
-    allocate_tables();
+    AllocateTables();
 }
 
 std::string
@@ -67,7 +67,7 @@ TranspositionTable::size() const noexcept
 }
 
 uint64_t
-TranspositionTable::hashkey_update
+TranspositionTable::HashkeyUpdate
     (int piece, int __pos) const noexcept
 {
     int offset = 85;
@@ -79,8 +79,8 @@ TranspositionTable::hashkey_update
 }
 
 void
-TranspositionTable::record_position
-    (uint64_t zkey, Depth depth, int move, int eval, int flag) noexcept
+TranspositionTable::RecordPosition
+    (uint64_t zkey, Depth depth, Move move, Score eval, int flag) noexcept
 {
     const auto add_entry = [&] (ZobristHashKey& __pos)
     {
@@ -102,7 +102,7 @@ TranspositionTable::record_position
 
 
 int
-TranspositionTable::lookup_position
+TranspositionTable::LookupPosition
     (uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept
 {
     const auto lookup = [&] (const ZobristHashKey &__pos)
@@ -126,12 +126,12 @@ TranspositionTable::lookup_position
 
 
 void
-TranspositionTable::clear() noexcept
+TranspositionTable::Clear() noexcept
 {
     for (size_t i = 0; i < TT_SIZE; i++)
     {
-        primary_tt_table[i].clear();
-        secondary_tt_table[i].clear();
+        primary_tt_table[i].Clear();
+        secondary_tt_table[i].Clear();
     }
 }
 

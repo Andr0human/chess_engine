@@ -1,42 +1,39 @@
 
-
 #include "lookup_table.h"
-
-#include <iostream>
 
 namespace plt
 {
 
-uint64_t    UpMasks[64];
-uint64_t  DownMasks[64];
-uint64_t  LeftMasks[64];
-uint64_t RightMasks[64];
+Bitboard    UpMasks[SQUARE_NB];
+Bitboard  DownMasks[SQUARE_NB];
+Bitboard  LeftMasks[SQUARE_NB];
+Bitboard RightMasks[SQUARE_NB];
 
-uint64_t   UpRightMasks[64];
-uint64_t    UpLeftMasks[64];
-uint64_t DownRightMasks[64];
-uint64_t  DownLeftMasks[64];
+Bitboard   UpRightMasks[SQUARE_NB];
+Bitboard    UpLeftMasks[SQUARE_NB];
+Bitboard DownRightMasks[SQUARE_NB];
+Bitboard  DownLeftMasks[SQUARE_NB];
 
-uint64_t     LineMasks[64];
-uint64_t DiagonalMasks[64];
+Bitboard     LineMasks[SQUARE_NB];
+Bitboard DiagonalMasks[SQUARE_NB];
 
-uint64_t   RookMasks[64];
-uint64_t BishopMasks[64];
-uint64_t KnightMasks[64];
-uint64_t   KingMasks[64];
+Bitboard   RookMasks[SQUARE_NB];
+Bitboard BishopMasks[SQUARE_NB];
+Bitboard KnightMasks[SQUARE_NB];
+Bitboard   KingMasks[SQUARE_NB];
 
-uint64_t        PawnMasks[2][64];
-uint64_t PawnCaptureMasks[2][64];
-uint64_t  PassedPawnMasks[2][64];
+Bitboard        PawnMasks[COLOR_NB][SQUARE_NB];
+Bitboard PawnCaptureMasks[COLOR_NB][SQUARE_NB];
+Bitboard  PassedPawnMasks[COLOR_NB][SQUARE_NB];
 
-uint64_t   RookStartIndex[64];
-uint64_t BishopStartIndex[64];
+Bitboard   RookStartIndex[SQUARE_NB];
+Bitboard BishopStartIndex[SQUARE_NB];
 
-uint64_t   RookMovesLookUp[106495];
-uint64_t BishopMovesLookUp[5248];
+Bitboard   RookMovesLookUp[106495];
+Bitboard BishopMovesLookUp[5248];
 
 
-uint64_t RookMagics[64] = {
+Bitboard RookMagics[SQUARE_NB] = {
      0x68000814008B4A0, 0x8600114481020020, 0x1F000AC0F1002001, 0x1600020063144099, 0xCE1E254B3BA3A1E2, 0x61000C00A1002812, 0x1E00080200331AA4, 0x5E000102004BA584, 
     0x5DF88002400A8927, 0x1D2700210186C007,  0x27A0025F20081C1, 0x1676002040A8B200, 0xA7AE00044A002150, 0x24AE002912006410, 0x552A000528243200, 0xD7A1002346009500, 
     0x18B189800BE14003, 0x35D5C1C000E01001,   0x79B20042006082, 0x402E420010E02A01, 0x14B501000800910C, 0x9F1B0100189A0400, 0x72AEC40012087330, 0xA0A46A000A91410C, 
@@ -47,7 +44,7 @@ uint64_t RookMagics[64] = {
     0x93D60083630254C2, 0x5218204001910381, 0xD13C6832008260C2, 0xE59E00C238522012, 0x701200AC50982006, 0xE6B600348308101E, 0x3E9D78060690091C, 0xFA315A8C0F38A902
 };
 
-int RookShifts[64] = {
+int RookShifts[SQUARE_NB] = {
     52, 53, 53, 52, 52, 53, 53, 52, 
     53, 54, 54, 54, 54, 54, 54, 53, 
     53, 54, 54, 54, 54, 54, 54, 53, 
@@ -58,7 +55,7 @@ int RookShifts[64] = {
     52, 53, 53, 53, 53, 53, 53, 52
 };
 
-uint64_t BishopMagics[64] = {
+Bitboard BishopMagics[SQUARE_NB] = {
     0xC17820058E05C10A, 0xD64E4C58028F0605, 0x2884780208C84BD4, 0x17DC4C0980A3E81E, 0x807C04209FE149EC, 0x9CF4F3E16786090D, 0xED0A5A0620A03652, 0xC124818808051430, 
     0xB51458CE5C081A17, 0xC9A4780AD80366ED, 0x488578184B04A6F3, 0xD36D882081ABFD8B, 0xA3EA63F35E48A68C, 0xD5A8920190A81095, 0x7C731BEBD6EBAF4A, 0x7E7F28340CC8A7C3, 
     0xF816947223301C03, 0xC89456D02C180DDD, 0xF59C13E80A4C0008, 0xC248033C2041F1AA, 0xFD6087D400A012D5, 0x6CC6802348200804, 0xA50C9F012B4EF288, 0x1520457F07480C1E, 
@@ -69,7 +66,7 @@ uint64_t BishopMagics[64] = {
     0x165AF40B080A103E, 0x2DD4D902839058AD, 0xFE4FCD7B12231075, 0xB265FF1781840C0B, 0x50E49B7311A6020E, 0x1F1AF5200A161606, 0x7A0F700C07542C00, 0x839CB842080E0010
 };
 
-int BishopShifts[64] = {
+int BishopShifts[SQUARE_NB] = {
     58, 59, 59, 59, 59, 59, 59, 58, 
     59, 59, 59, 59, 59, 59, 59, 59, 
     59, 59, 57, 57, 57, 57, 59, 59, 
@@ -82,15 +79,15 @@ int BishopShifts[64] = {
 
 
 static bool
-in_range(int __x, int __y)
+InRange(int __x, int __y)
 { return (__x >= 0) & (__x < 8) & (__y >= 0) & (__y < 8); }
 
 
-static uint64_t
-rook_mask_gen(int sq)
+static Bitboard
+RookMaskGen(Square sq)
 {
 	int col = sq & 7, row = (sq - col) >> 3;
-	uint64_t res = 0;
+	Bitboard res = 0;
 
     for (int i = row + 1, j = col; i < 7; i++)
         res |= 1ULL << (8 * i + j);
@@ -107,11 +104,11 @@ rook_mask_gen(int sq)
     return res;
 }
 
-static uint64_t
-bishop_mask_gen(int sq)
+static Bitboard
+BishopMaskGen(Square sq)
 {
 	int col = sq & 7, row = (sq - col) >> 3;
-    uint64_t res = 0;
+    Bitboard res = 0;
 
     for (int i = row + 1, j = col + 1; i < 7 and j < 7; i++, j++)
         res |= 1ULL << (8 * i + j);
@@ -129,10 +126,10 @@ bishop_mask_gen(int sq)
 }
 
 static int
-generate_blockers(uint64_t mask, uint64_t* blockers)
+GenerateBlockers(Bitboard mask, Bitboard* blockers)
 {
     // Any sq can have a max of 12 sq available for a rook piece
-    uint64_t list[12]{};
+    Bitboard list[12]{};
     int __n = 0;
 
     while (mask != 0)
@@ -145,7 +142,7 @@ generate_blockers(uint64_t mask, uint64_t* blockers)
 
     for (int i = 0; i < (1 << __n); i++)
     {
-    	uint64_t res = 0;
+    	Bitboard res = 0;
 
     	for (int j = 0; j < __n; j++)
     		if ((1 << j) & i) res |= list[j];
@@ -157,23 +154,23 @@ generate_blockers(uint64_t mask, uint64_t* blockers)
 }
 
 static void
-build_rook_bishop_masks()
+BuildRookBishopMasks()
 {
-    for (int sq = 0; sq < 64; sq++) {
-        RookMasks[sq] = rook_mask_gen(sq);
-        BishopMasks[sq] = bishop_mask_gen(sq);
+    for (Square sq = SQUARE_ZERO; sq < SQUARE_NB; ++sq) {
+        RookMasks[sq] = RookMaskGen(sq);
+        BishopMasks[sq] = BishopMaskGen(sq);
     }
 }
 
-static uint64_t
-loop_result(int sq, int ix, int iy, uint64_t blocker)
+static Bitboard
+LoopResult(Square sq, int ix, int iy, Bitboard blocker)
 {
-	uint64_t res = 0;
+	Bitboard res = 0;
 	int col = (sq & 7), row = (sq - col) >> 3;
 
-	for (int i = row + ix, j = col + iy; in_range(i, j); i += ix, j += iy)
+	for (int i = row + ix, j = col + iy; InRange(i, j); i += ix, j += iy)
 	{
-		uint64_t __x = 1ULL << (8 * i + j);
+		Bitboard __x = 1ULL << (8 * i + j);
 		res |= 1ULL << (8 * i + j);
 		if (__x & blocker) break;
 	}
@@ -181,42 +178,44 @@ loop_result(int sq, int ix, int iy, uint64_t blocker)
 	return res;
 }
 
-static uint64_t
-rook_squares_basic(int sq, uint64_t blocker)
+static Bitboard
+RookSquaresBasic(Square sq, Bitboard blocker)
 {
-	return loop_result(sq, 1, 0, blocker) | loop_result(sq, -1, 0, blocker)
-		 | loop_result(sq, 0, 1, blocker) | loop_result(sq, 0, -1, blocker);
+	return LoopResult(sq, 1, 0, blocker) | LoopResult(sq, -1, 0, blocker)
+		 | LoopResult(sq, 0, 1, blocker) | LoopResult(sq, 0, -1, blocker);
 }
 
-static uint64_t
-bishop_squares_basic(int sq, uint64_t blocker)
+static Bitboard
+BishopSquaresBasic(Square sq, Bitboard blocker)
 {
-	return loop_result(sq, 1, 1, blocker) | loop_result(sq, -1, -1, blocker)
-		 | loop_result(sq, 1, -1, blocker) | loop_result(sq, -1, 1, blocker);
+	return LoopResult(sq, 1, 1, blocker) | LoopResult(sq, -1, -1, blocker)
+		 | LoopResult(sq, 1, -1, blocker) | LoopResult(sq, -1, 1, blocker);
 }
 
 static void
-build_lookup_table(uint64_t* masks, uint64_t* magic_table, int* shift_table, uint64_t* start_index,
-                   uint64_t* lookup_table, uint64_t (*atk_square_gen)(int, uint64_t))
+BuildLookUpTable(Bitboard* masks, Bitboard* magic_table, int* shift_table, Bitboard* start_index,
+                   Bitboard* lookup_table, Bitboard (*atk_square_gen)(Square, Bitboard))
 {
-	uint64_t blockers[4096];
+	Bitboard blockers[4096];
 
     start_index[0] = 0;
 
-    for (int sq = 0; sq < 64; ++sq)
+    for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
 	{
-		int __n = generate_blockers(masks[sq], blockers);
+		int __n = GenerateBlockers(masks[sq], blockers);
 
 		int bits = shift_table[sq];
-		uint64_t magic = magic_table[sq];
+		Bitboard magic = magic_table[sq];
 		uint64_t m_index = 0;
 
 		for (int i = 0; i < __n; i++)
 		{
-			uint64_t occupancy = start_index[sq] + ((blockers[i] * magic) >> bits);
-			m_index = std::max(m_index, occupancy);
+			Bitboard occupancy = start_index[sq] + ((blockers[i] * magic) >> bits);
 
-            uint64_t result = atk_square_gen(sq, blockers[i]);
+            if (occupancy > m_index)
+                m_index = occupancy;
+
+            Bitboard result = atk_square_gen(sq, blockers[i]);
 			lookup_table[occupancy] = result;
 		}
 
@@ -227,14 +226,14 @@ build_lookup_table(uint64_t* masks, uint64_t* magic_table, int* shift_table, uin
 
 
 static void
-build_sliding_table(uint64_t* _arr, int index, int index_inc, int inc_x, int inc_y)
+BuildSlidingTable(Bitboard* _arr, int index, int index_inc, int inc_x, int inc_y)
 {
     for (int idx = index;; idx += index_inc)
     {
         if (idx < 0 || idx >= 64) break;
         int x = (idx & 7), y = (idx - x) >> 3;
-        uint64_t val = 0;
-        for (int i = x, j = y; in_range(i, j); i += inc_x, j += inc_y)
+        Bitboard val = 0;
+        for (int i = x, j = y; InRange(i, j); i += inc_x, j += inc_y)
         {
             _arr[8 * j + i] = val;
             val |= 1ULL << (8 * j + i);
@@ -244,25 +243,25 @@ build_sliding_table(uint64_t* _arr, int index, int index_inc, int inc_x, int inc
 
 
 static void
-build_knight_table(uint64_t* _arr)
+BuildKnightTable(Bitboard* _arr)
 {
     const int inc_x[2] = {2, -2};
     const int inc_y[2] = {1, -1};
 
-    for (int square = 0; square < 64; square++)
+    for (Square square = SQ_A1; square < SQUARE_NB; ++square)
     {
         int col = square & 7;
         int row = (square - col) >> 3;
-        uint64_t value = 0;
+        Bitboard value = 0;
 
         for (int i = 0; i < 2; i++)
         {
             for (int j = 0; j < 2; j++)
             {
-                if (in_range(row + inc_x[i], col + inc_y[j]))
+                if (InRange(row + inc_x[i], col + inc_y[j]))
                     value |= 1ULL << (8 * (row + inc_x[i]) + (col + inc_y[j]));
 
-                if (in_range(row + inc_y[j], col + inc_x[i]))
+                if (InRange(row + inc_y[j], col + inc_x[i]))
                     value |= 1ULL << (8 * (row + inc_y[j]) + (col + inc_x[i]));
             }
         }
@@ -273,28 +272,28 @@ build_knight_table(uint64_t* _arr)
 
 
 static void
-build_king_table(uint64_t* _arr)
+BuildKingTable(Bitboard* _arr)
 {
-    const int inc[2] = {1, -1};
+    const int inc[SQUARE_NB] = {1, -1};
 
-    for (int square = 0; square < 64; square++)
+    for (Square square = SQ_A1; square < SQUARE_NB; ++square)
     {
         int col = square & 7;
         int row = (square - col) >> 3;
-        uint64_t value = 0;
+        Bitboard value = 0;
 
         for (int i = 0; i < 2; i++)
         {
             for (int j = 0; j < 2; j++)
             {
-                if (in_range(row + inc[i], col + inc[j]))
+                if (InRange(row + inc[i], col + inc[j]))
                     value |= 1ULL << (8 * (row + inc[i]) + (col + inc[j]));
             }
 
-            if (in_range(row + inc[i], col))
+            if (InRange(row + inc[i], col))
                 value |= 1ULL << (8 * (row + inc[i]) + (col));
 
-            if (in_range(row, col + inc[i]))
+            if (InRange(row, col + inc[i]))
                 value |= 1ULL << (8 * (row) + (col + inc[i]));
         }
 
@@ -304,12 +303,12 @@ build_king_table(uint64_t* _arr)
 
 
 static void
-build_pawn_table(uint64_t* _arr, int dir, bool captures)
+BuildPawnTable(Bitboard* _arr, int dir, bool captures)
 {    
     for (int i = 0; i < 64; i++)
     {
         int x = i & 7, y = (i - x) >> 3, up = i + 8 * dir;
-        uint64_t val = 0;
+        Bitboard val = 0;
         if (captures)
         {
             if (x - 1 >= 0) val |= 1ULL << (x - 1 + 8 * (y + dir));
@@ -325,11 +324,11 @@ build_pawn_table(uint64_t* _arr, int dir, bool captures)
 
 
 static void
-build_passed_pawn_table(uint64_t* _arr, uint64_t* gen_table)
+BuildPassedPawnTable(Bitboard* _arr, Bitboard* gen_table)
 {
-    for (int sq = 0; sq < 64; sq++)
+    for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
     {
-        uint64_t val = gen_table[sq];
+        Bitboard val = gen_table[sq];
         
         if ((sq & 7) < 7) val |= gen_table[sq + 1];
         if ((sq & 7) > 0) val |= gen_table[sq - 1];
@@ -339,7 +338,7 @@ build_passed_pawn_table(uint64_t* _arr, uint64_t* gen_table)
 
 
 static void
-merge_table(uint64_t* to_table, uint64_t* from_table1, uint64_t* from_table2)
+MergeTable(Bitboard* to_table, Bitboard* from_table1, Bitboard* from_table2)
 {
     for (int i = 0; i < 64; i++)
         to_table[i] |= from_table1[i] | from_table2[i];
@@ -347,7 +346,7 @@ merge_table(uint64_t* to_table, uint64_t* from_table1, uint64_t* from_table2)
 
 
 static void
-set_zero(uint64_t* table)
+SetZero(Bitboard* table)
 {
     for (int i = 0; i < 64; i++)
         table[i] = 0;
@@ -355,45 +354,45 @@ set_zero(uint64_t* table)
 
 
 void
-init()
+Init()
 {    
-    build_sliding_table(   UpMasks, 56,  1,  0, -1);
-    build_sliding_table( DownMasks,  7, -1,  0,  1);
-    build_sliding_table(RightMasks,  7,  8, -1,  0);
-    build_sliding_table( LeftMasks,  0,  8,  1,  0);
+    BuildSlidingTable(   UpMasks, 56,  1,  0, -1);
+    BuildSlidingTable( DownMasks,  7, -1,  0,  1);
+    BuildSlidingTable(RightMasks,  7,  8, -1,  0);
+    BuildSlidingTable( LeftMasks,  0,  8,  1,  0);
 
-    build_sliding_table(  UpRightMasks, 63, -8, -1, -1);
-    build_sliding_table(  UpRightMasks, 56,  1, -1, -1);
-    build_sliding_table( DownLeftMasks,  0,  8,  1,  1);
-    build_sliding_table( DownLeftMasks,  7, -1,  1,  1);
-    build_sliding_table(   UpLeftMasks, 56,  1,  1, -1);
-    build_sliding_table(   UpLeftMasks, 56, -8,  1, -1);
-    build_sliding_table(DownRightMasks,  7,  8, -1,  1);
-    build_sliding_table(DownRightMasks,  7, -1, -1,  1);
+    BuildSlidingTable(  UpRightMasks, 63, -8, -1, -1);
+    BuildSlidingTable(  UpRightMasks, 56,  1, -1, -1);
+    BuildSlidingTable( DownLeftMasks,  0,  8,  1,  1);
+    BuildSlidingTable( DownLeftMasks,  7, -1,  1,  1);
+    BuildSlidingTable(   UpLeftMasks, 56,  1,  1, -1);
+    BuildSlidingTable(   UpLeftMasks, 56, -8,  1, -1);
+    BuildSlidingTable(DownRightMasks,  7,  8, -1,  1);
+    BuildSlidingTable(DownRightMasks,  7, -1, -1,  1);
 
-    build_knight_table(KnightMasks);
-    build_king_table(KingMasks);
+    BuildKnightTable(KnightMasks);
+    BuildKingTable(KingMasks);
 
-    build_pawn_table( PawnMasks[1],  1, false);
-    build_pawn_table( PawnMasks[0], -1, false);
-    build_pawn_table(PawnCaptureMasks[1],  1,  true);
-    build_pawn_table(PawnCaptureMasks[0], -1,  true);
+    BuildPawnTable( PawnMasks[1],  1, false);
+    BuildPawnTable( PawnMasks[0], -1, false);
+    BuildPawnTable(PawnCaptureMasks[1],  1,  true);
+    BuildPawnTable(PawnCaptureMasks[0], -1,  true);
 
-    build_passed_pawn_table(PassedPawnMasks[1],   UpMasks);
-    build_passed_pawn_table(PassedPawnMasks[0], DownMasks);
+    BuildPassedPawnTable(PassedPawnMasks[1],   UpMasks);
+    BuildPassedPawnTable(PassedPawnMasks[0], DownMasks);
 
-    set_zero(DiagonalMasks);
-    set_zero(LineMasks);
+    SetZero(DiagonalMasks);
+    SetZero(LineMasks);
 
-    merge_table(DiagonalMasks,   UpRightMasks,   UpLeftMasks);
-    merge_table(DiagonalMasks, DownRightMasks, DownLeftMasks);
+    MergeTable(DiagonalMasks,   UpRightMasks,   UpLeftMasks);
+    MergeTable(DiagonalMasks, DownRightMasks, DownLeftMasks);
 
-    merge_table(LineMasks,   UpMasks,  DownMasks);
-    merge_table(LineMasks, LeftMasks, RightMasks);
+    MergeTable(LineMasks,   UpMasks,  DownMasks);
+    MergeTable(LineMasks, LeftMasks, RightMasks);
 
-    build_rook_bishop_masks();
-    build_lookup_table(  RookMasks,   RookMagics,   RookShifts,   RookStartIndex,   RookMovesLookUp,   rook_squares_basic);
-    build_lookup_table(BishopMasks, BishopMagics, BishopShifts, BishopStartIndex, BishopMovesLookUp, bishop_squares_basic);
+    BuildRookBishopMasks();
+    BuildLookUpTable(  RookMasks,   RookMagics,   RookShifts,   RookStartIndex,   RookMovesLookUp,   RookSquaresBasic);
+    BuildLookUpTable(BishopMasks, BishopMagics, BishopShifts, BishopStartIndex, BishopMovesLookUp, BishopSquaresBasic);
 }
 
 }

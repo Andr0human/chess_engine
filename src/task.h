@@ -11,15 +11,15 @@
 #include <fstream>
 #include <iomanip>  // for setprecision
 
-void init();
-void helper();
-void speed_test();
-void accuracy_test();
-void direct_search(const vector<string> &arg_list);
-void node_count(const vector<string> &arg_list);
-void debug_movegen(const vector<string> &_args);
+void Init();
+void Helper();
+void SpeedTest();
+void AccuracyTest();
+void DirectSearch(const vector<string> &arg_list);
+void NodeCount(const vector<string> &arg_list);
+void DebugMoveGenerator(const vector<string> &_args);
 
-void task(int argc, char *argv[]);
+void Task(int argc, char *argv[]);
 
 
 #endif

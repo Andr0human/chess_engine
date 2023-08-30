@@ -6,7 +6,7 @@ static string outputfile;
 static std::ofstream logger;
 
 static void
-write_to_file(const string filename, const string message)
+WriteToFile(const string filename, const string message)
 {
     std::ofstream out(filename);
 
@@ -16,13 +16,13 @@ write_to_file(const string filename, const string message)
 }
 
 static void
-write_to_file(std::ostream& writer, const string& data)
+WriteToFile(std::ostream& writer, const string& data)
 {
     writer << data << endl;
 }
 
 static void
-get_input(string& __s)
+GetInput(string& __s)
 {
     const auto valid_args_found = [&__s] ()
     {
@@ -46,20 +46,20 @@ get_input(string& __s)
 
 
 static void
-write_search_result()
+WriteSearchResult()
 {
     const Move MOVE_FILTER = 2097151;
-    const auto& [move, eval] = info.last_iter_result();
+    const auto& [move, eval] = info.LastIterationResult();
     const double in_decimal = static_cast<double>(eval) / 100;
 
     string result = std::to_string(move & MOVE_FILTER) + string(" ")
                   + std::to_string(in_decimal);
 
-    write_to_file(outputfile, result);
+    WriteToFile(outputfile, result);
 }
 
 static void
-read_init_commands(const vector<string>& init_args, PlayBoard& __pos)
+ReadInitCommands(const vector<string>& init_args, PlayBoard& __pos)
 {
     size_t index = 0;
 
@@ -82,16 +82,16 @@ read_init_commands(const vector<string>& init_args, PlayBoard& __pos)
         }
         else if (arg == "position")
         {
-            const string fen = base_utils::strip(init_args[index + 1], '"');
-            __pos.set_new_position(fen);
+            const string fen = base_utils::Strip(init_args[index + 1], '"');
+            __pos.SetNewPosition(fen);
 
             puts("New position found!");
-            cout << __pos.visual_board() << endl;
+            cout << __pos.VisualBoard() << endl;
         }
         else if (arg == "threads")
         {
             puts("threads command found!");
-            __pos.set_thread(std::stoi(init_args[index + 1]));
+            __pos.SetThreads(std::stoi(init_args[index + 1]));
         }
 
         ++index;
@@ -100,7 +100,7 @@ read_init_commands(const vector<string>& init_args, PlayBoard& __pos)
 
 
 static void
-read_commands(const vector<string>& args, PlayBoard& position)
+ReadCommands(const vector<string>& args, PlayBoard& position)
 {
     using std::stoi;
     using std::stod;
@@ -112,30 +112,30 @@ read_commands(const vector<string>& args, PlayBoard& position)
     {   
         if (arg == "go")
         {
-            write_to_file(writer, "go command found!");
-            position.ready_search();
+            WriteToFile(writer, "go command found!");
+            position.ReadySearch();
         }
         else if (arg == "moves")
         {
-            write_to_file(writer, "pre_moves found for position!");
+            WriteToFile(writer, "pre_moves found for position!");
             writer << "pre_move -> " << args[index + 1] << endl;
-            position.add_premoves(args, index + 1);
+            position.AddPremoves(args, index + 1);
         }
         else if (arg == "time")
         {
-            write_to_file(writer, "time command found!");
+            WriteToFile(writer, "time command found!");
             writer << "Time for search : " << args[index + 1] << " sec." << endl;
-            position.set_movetime(stod(args[index + 1]));
+            position.SetMoveTime(stod(args[index + 1]));
         }
         else if (arg == "depth")
         {
-            write_to_file(writer, "depth command found!");
-            position.set_depth(stoi(args[index + 1]));
+            WriteToFile(writer, "depth command found!");
+            position.SetDepth(stoi(args[index + 1]));
         }
         else if (arg == "quit")
         {
-            write_to_file(writer, "quit command found!");
-            position.ready_quit();
+            WriteToFile(writer, "quit command found!");
+            position.ReadyQuit();
         }
 
         index++;
@@ -144,73 +144,73 @@ read_commands(const vector<string>& args, PlayBoard& position)
 
 
 static void
-execute_late_commands(PlayBoard& board)
+ExecuteLateCommands(PlayBoard& board)
 {
     std::ostream& writer = logger.is_open() ? logger : std::cout;
 
     // If prev moves to be made on board
-    if (board.premoves_exist())
+    if (board.PremovesExist())
     {
-        board.play_premoves();
+        board.PlayPreMoves();
     }
 
     // Start searching for best move in current position (go)
-    if (board.do_search())
+    if (board.DoSearch())
     {
-        string fen = board.fen();
+        string fen = board.Fen();
         ChessBoard __pos(fen);
-        write_to_file(writer, string("Fen -> ") + fen);
-        __pos.add_prev_board_positions(board.get_prev_hashkeys());
+        WriteToFile(writer, string("Fen -> ") + fen);
+        __pos.AddPreviousBoardPositions(board.GetPreviousHashkeys());
 
-        write_to_file(writer, "Start Search");
-        search_iterative(__pos, MAX_DEPTH, board.get_movetime(), logger);
-        write_to_file(writer, "End   Search");
-        board.search_done();
+        WriteToFile(writer, "Start Search");
+        Search(__pos, MAX_DEPTH, board.GetMoveTime(), logger);
+        WriteToFile(writer, "End   Search");
+        board.SearchDone();
 
         if (logger.is_open())
-            write_to_file(writer, info.get_search_results(__pos));
+            WriteToFile(writer, info.GetSearchResult(__pos));
 
-        write_search_result();
+        WriteSearchResult();
 
-        Move chosen_move = info.last_iter_result().first;
-        board.add_premoves(chosen_move);
-        TT.clear();
+        Move chosen_move = info.LastIterationResult().first;
+        board.AddPremoves(chosen_move);
+        TT.Clear();
 
-        write_to_file(logger, "After MakeMove");
-        write_to_file(logger, board.fen());
+        WriteToFile(logger, "After MakeMove");
+        WriteToFile(logger, board.Fen());
     }
 }
 
 
 void
-play(const vector<string>& args)
+Play(const vector<string>& args)
 {
     puts("PLAY mode started!");
 
     std::thread input_thread;
     PlayBoard board;
 
-    read_init_commands(args, board);
+    ReadInitCommands(args, board);
 
     // Used to store the commands by user
     string input_string;
 
     while (true)
     {
-        input_thread = std::thread(get_input, std::ref(input_string));
+        input_thread = std::thread(GetInput, std::ref(input_string));
         input_thread.join();
 
         logger << "Input recieve -> " << input_string << endl;
-        const auto commands = base_utils::split(input_string, ' ');
-        read_commands(commands, board);
+        const auto commands = base_utils::Split(input_string, ' ');
+        ReadCommands(commands, board);
 
         // Empty the input_string
-        write_to_file(inputfile, "");
+        WriteToFile(inputfile, "");
         input_string.clear();
 
-        execute_late_commands(board);
+        ExecuteLateCommands(board);
 
-        if (board.do_quit())
+        if (board.DoQuit())
             break;
     }
 

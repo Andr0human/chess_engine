@@ -9,7 +9,7 @@ namespace base_utils
 
 // Splits the string using separator.
 vector<string>
-split(const string &__s, char sep)
+Split(const string &__s, char sep)
 {
     vector<string> res;
     size_t prev = 0, __n = __s.length();
@@ -37,7 +37,7 @@ split(const string &__s, char sep)
 
 // String the string from start and end.
 string
-strip(string __s, char sep)
+Strip(string __s, char sep)
 {
     using std::swap;
     if (__s.empty()) return __s;
@@ -59,7 +59,7 @@ strip(string __s, char sep)
 
 
 vector<string>
-extract_argument_list(int argc, char *argv[])
+ExtractArgumentList(int argc, char *argv[])
 {
     vector<string> result(argc - 1);
     
@@ -71,7 +71,7 @@ extract_argument_list(int argc, char *argv[])
 
 
 void
-bits_on_board(uint64_t value)
+BitsOnBoard(uint64_t value)
 {
     string res;
     for (int row = 7; row >= 0; row--)
