@@ -210,8 +210,8 @@ KingSafety(const ChessBoard& pos, Color side)
     if ((kx != 7) and ((mask[k_pos - 1] & pawns) == 0))
         open_files++;
 
-    defenders += popcount(pawns & plt::KingMasks[k_pos]);
-    defenders += 2 * popcount( plt::KingMasks[k_pos] & (
+    defenders += popcount(pawns & mask[k_pos]);
+    defenders += 2 * popcount( mask[k_pos] & (
         pos.piece(side, BISHOP) | pos.piece(side, KNIGHT) | pos.piece(side, ROOK)
     ));
 
@@ -412,7 +412,7 @@ Evaluate(const ChessBoard& pos)
     Score eg_score = EndGameScore(pos, ed);
 
     float phase = ed.phase;
-    Score score = Score( (phase * phase) * float(mg_score) + (1 - (phase * phase)) * float(eg_score) );
+    Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
     return score * side2move;
 }
 
