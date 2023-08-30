@@ -18,7 +18,7 @@ struct thread_search_info
 
     uint64_t moveCount;
     int index;
-    int depth;
+    Depth depth;
     int ply, pvIndex, best_move, hashf;
     int legal_moves[156], alpha, beta;
     uint64_t NodeCount;
@@ -53,28 +53,28 @@ worker_root_alphabeta(int thread_num, int sourceArr[]);
 
 
 uint64_t
-bulk_MultiCount(ChessBoard &_cb, int depth);
+bulk_MultiCount(ChessBoard &_cb, Depth depth);
 
 void
 MakeMove_MultiIterative(ChessBoard &primary, int mDepth = MAX_DEPTH, double search_time = DEFAULT_SEARCH_TIME);
 
 int
-thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
+thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth depth, int ply, int pvIndex);
+
+Score
+pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth depth, int ply, int pvIndex);
 
 int
-pv_multiAlphaBeta(ChessBoard &_cb, int loc_arr[], int alpha, int beta, int depth, int ply, int pvIndex);
+pv_multiAlphaBetaRoot(ChessBoard &_cb, Score alpha, Score beta, Depth depth);
 
 int
-pv_multiAlphaBetaRoot(ChessBoard &_cb, int alpha, int beta, int depth);
-
-int
-LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, int depth, int alpha, int beta, int ply, int pvIndex);
+LMR_threadSearch(ChessBoard &_cb, int loc_arr[], MoveList &myMoves, Depth depth, Score alpha, Score beta, int ply, int pvIndex);
 
 bool
-fm_Search(ChessBoard &_cb, int loc_arr[], int depth, int move, int &alpha, int &beta, int ply, int pvIndex);
+fm_Search(ChessBoard &_cb, int loc_arr[], Depth depth, int move, int &alpha, int &beta, int ply, int pvIndex);
 
 bool
-first_rm_search(ChessBoard &_cb, int __move, int depth, int &alpha, int &beta);
+first_rm_search(ChessBoard &_cb, int __move, Depth depth, int &alpha, int &beta);
 
 extern std::thread td[MAX_THREADS];
 extern thread_search_info thread_data;

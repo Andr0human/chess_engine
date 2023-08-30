@@ -10,7 +10,7 @@ MoveOrderClass moc;
 #ifndef MOVE_ORDER_CLASS
 
 void
-MoveOrderClass::initialise(MoveList& myMoves)
+MoveOrderClass::Initialise(MoveList& myMoves)
 {
     mCount = myMoves.size();
     for (uint64_t i = 0; i < mCount; i++)
@@ -18,11 +18,11 @@ MoveOrderClass::initialise(MoveList& myMoves)
 }
 
 void
-MoveOrderClass::insert(uint64_t idx, double time_taken)
+MoveOrderClass::Insert(uint64_t idx, double time_taken)
 { moves[idx].second = time_taken; }
 
 void
-MoveOrderClass::sortList(int best_move)
+MoveOrderClass::SortList(int best_move)
 {
     for (uint64_t i = 0; i < mCount; i++)
     {
@@ -43,7 +43,7 @@ MoveOrderClass::sortList(int best_move)
 }
 
 void
-MoveOrderClass::setMoveOrder(MoveList& myMoves)
+MoveOrderClass::OrderMovesOnTime(MoveList& myMoves)
 {
     for (uint64_t i = 0; i < mCount; i++) {
         int curr = moves[i].first;
@@ -54,23 +54,23 @@ MoveOrderClass::setMoveOrder(MoveList& myMoves)
 }
 
 void
-MoveOrderClass::mprint(ChessBoard& cb)
+MoveOrderClass::PrintAllMoves(ChessBoard& cb)
 {
     for (uint64_t i = 0; i < mCount; i++)
-        cout << i + 1 << ") " << print(moves[i].first, cb)
+        cout << i + 1 << ") " << PrintMove(moves[i].first, cb)
              << " | Time : " << moves[i].second << endl;
 }
 
 int
-MoveOrderClass::get_move(uint64_t index)
+MoveOrderClass::GetMove(uint64_t index)
 { return moves[index].first; }
 
 uint64_t
-MoveOrderClass::moveCount()
+MoveOrderClass::MoveCount()
 { return mCount; }
 
 void
-MoveOrderClass::reset()
+MoveOrderClass::Reset()
 {
     for (uint64_t i = 0; i < mCount; i++)
         moves[i].second = 0;
@@ -85,7 +85,7 @@ TestPosition::TestPosition(string f, int d, uint64_t nc, int index)
     fen = f;
     depth = d;
     nodeCount = nc;
-    generate_name(index);
+    GenerateName(index);
 }
 
 TestPosition::TestPosition(string f, int d, uint64_t nc, string n)
@@ -97,7 +97,7 @@ TestPosition::TestPosition(string f, int d, uint64_t nc, string n)
 }
 
 void
-TestPosition::generate_name(int index)
+TestPosition::GenerateName(int index)
 {
     if (index == 1) name = "pawn";
     else if (index == 2) name = "bishop";
@@ -108,7 +108,7 @@ TestPosition::generate_name(int index)
 }
 
 void
-TestPosition::print()
+TestPosition::Print()
 {
     cout << name << " : " << fen << "\n" << "|   Depth : " \
     << depth << "\t|   Nodes : " << nodeCount << "\t|\n" << endl;

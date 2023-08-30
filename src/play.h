@@ -52,7 +52,7 @@ class PlayBoard : public ChessBoard
     vector<Move> pre_moves;
     vector<uint64_t> prev_keys;
 
-    bool is_numeric(const std::string& s)
+    bool IsNumeric(const std::string& s)
     {
         std::string::const_iterator it = s.begin();
         while (it != s.end() && std::isdigit(*it)) ++it;
@@ -66,50 +66,50 @@ class PlayBoard : public ChessBoard
     go_receive(false), to_quit(false) {}
 
     void
-    set_thread(size_t __tc) noexcept
+    SetThreads(size_t __tc) noexcept
     { threads = __tc; }
 
     void
-    set_depth(size_t __dep) noexcept
+    SetDepth(size_t __dep) noexcept
     { mDepth = __dep; }
 
     void
-    set_movetime(double __mt) noexcept
+    SetMoveTime(double __mt) noexcept
     { movetime = __mt; }
 
     double
-    get_movetime() const noexcept
+    GetMoveTime() const noexcept
     { return movetime; }
 
     void
-    ready_search() noexcept
+    ReadySearch() noexcept
     { go_receive = true; }
 
     void
-    search_done() noexcept
+    SearchDone() noexcept
     { go_receive = false; }
 
-    bool do_search() const noexcept
+    bool DoSearch() const noexcept
     { return go_receive; }
 
     void
-    ready_quit() noexcept
+    ReadyQuit() noexcept
     { to_quit = true; }
 
-    bool do_quit() const noexcept
+    bool DoQuit() const noexcept
     { return to_quit; }
 
     void
-    set_new_position(const string& fen) noexcept
+    SetNewPosition(const string& fen) noexcept
     {
         prev_keys.clear();
-        set_position_with_fen(fen);
+        SetPositionWithFen(fen);
     }
 
     void
-    add_premoves(const vector<string>& list, size_t index) noexcept
+    AddPremoves(const vector<string>& list, size_t index) noexcept
     {
-        while (index < list.size() and is_numeric(list[index]))
+        while (index < list.size() and IsNumeric(list[index]))
         {
             int move = std::stoi( list[index++] );
             pre_moves.push_back(move);
@@ -117,18 +117,18 @@ class PlayBoard : public ChessBoard
     }
 
     void
-    add_premoves(const Move move)
+    AddPremoves(const Move move)
     {
         pre_moves.push_back(move);
-        play_premoves();
+        PlayPreMoves();
     }
 
     bool
-    premoves_exist() const noexcept
+    PremovesExist() const noexcept
     { return !pre_moves.empty(); }
 
     void
-    play_premoves() noexcept
+    PlayPreMoves() noexcept
     {
         const auto pawn_move = [] (Move move)
         { return ((move >> 12) & 7) == 1; };
@@ -149,23 +149,23 @@ class PlayBoard : public ChessBoard
     }
 
     vector<uint64_t>
-    get_prev_hashkeys() const noexcept
+    GetPreviousHashkeys() const noexcept
     { return prev_keys; }
 
     bool
-    integrity_check() const noexcept
+    IntegrityCheck() const noexcept
     {
         if (prev_keys.empty())
             return true;
         
         uint64_t last_key = prev_keys.back();
-        return generate_hashKey() == last_key;
+        return GenerateHashkey() == last_key;
     }
 };
 
 
 void
-play(const vector<string>& args);
+Play(const vector<string>& args);
 
 
 #endif

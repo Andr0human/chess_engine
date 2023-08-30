@@ -18,26 +18,25 @@ extern const string StartFen;
 // Utility
 
 void movcpy (Move* pTarget, const Move* pSource, int n);
-void reset_pv_line();
-int checkmate_score(int ply);
+void ResetPvLine();
+Score CheckmateScore(int ply);
 
 // Move_Generator
-void order_generated_moves(MoveList& myMoves, bool pv_moves);
-int createMoveOrderList(ChessBoard &_cb);
-bool is_valid_move(Move move, ChessBoard _cb);
+void ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves);
+int createMoveOrderList(ChessBoard& pos);
+bool IsValidMove(Move move, ChessBoard pos);
 
 // Search_Checks
 // bool ok_to_do_nullmove(ChessBoard& _cb);
-// bool ok_to_fprune(int depth, ChessBoard& _cb, MoveList& myMoves, int beta);
-// int apply_search_extensions(MoveList& myMoves);
-bool ok_to_do_LMR(int depth, MoveList& myMoves);
-int root_reduction(int depth, int num);
-int reduction (int depth, int num);
-int MaterialCount(ChessBoard& _cb);
+// bool ok_to_fprune(Depth depth, ChessBoard& _cb, MoveList& myMoves, Score beta);
+bool OkToDoLMR(Depth depth, MoveList& myMoves);
+int RootReduction(Depth depth, int num);
+int Reduction (Depth depth, int num);
+int MaterialCount(ChessBoard& pos);
 
 // Search
-int QuieSearch(ChessBoard &_cb, int alpha, int beta, int ply, int __dol);
-int AlphaBeta_noPV(ChessBoard &_cb, int depth, int alpha, int beta, int ply);
+Score QuieSearch(ChessBoard& _cb, Score alpha, Score beta, int ply, int __dol);
+Score AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply);
 
 
 #endif

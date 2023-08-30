@@ -2,23 +2,24 @@
 
 //! TODO Alpha-Beta lmr code.
 //! TODO Consistent function naming scheme.
-//! TODO Check depth += 2 in search_iterative
+//! TODO Check depth += 2 in Search
 //! TODO Match-Test Elsa_version without displaying any console output (No search results in console).
 //! TODO Test LMR condition is_passed_pawn(), castling
-//! TODO instead move_gives_check in LMR, use it as in search_extension.
+//! TODO instead move_gives_check in LMR, use it as in SearchExtension.
 //! TODO More insufficient material positions in Evaluation.
 //! TODO Delta Pruning
 //! TODO Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
 //! TODO Endgame tests fen
+//! TODO If promotion is possible and no enemy piece can capture it.
+//! TODO if (move_priority <= 10) continue; | Use break instead.
 //! TODO Search Extension - If promotion is possible and no enemy piece can capture it.
 //! TODO Add insufficient material draw(Two minor piece vs one minor piece is a draw)
-
 
 int main(int argc, char **argv)
 {
     FAST_IO();
-    init();
-    task(argc, argv);
+    Init();
+    Task(argc, argv);
 }
 
 

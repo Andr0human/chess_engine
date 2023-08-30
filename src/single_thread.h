@@ -9,13 +9,13 @@
 
 
 uint64_t
-bulkcount(ChessBoard &_cb, int depth);
+BulkCount(ChessBoard& pos, Depth depth);
 
-int
-negaMax(ChessBoard &_cb, int depth);
+Score
+NegaMax(ChessBoard& pos, Depth depth);
 
-std::pair<Move, int>
-negaMax_root(ChessBoard &_cb, int depth);
+std::pair<Move, Score>
+RootNegaMax(ChessBoard& pos, Depth depth);
 
 /**
  * @brief Iterative Search to search a board postion.
@@ -25,7 +25,7 @@ negaMax_root(ChessBoard &_cb, int depth);
  * @param use_timer Run a time-based search.
  */
 void
-search_iterative(ChessBoard primary, int mDepth = MAX_DEPTH, double search_time = DEFAULT_SEARCH_TIME, std::ostream& ostream = std::cout);
+Search(ChessBoard primary, Depth mDepth = MAX_DEPTH, double search_time = DEFAULT_SEARCH_TIME, std::ostream& ostream = std::cout);
 
 /**
  * @brief Returns the evaluation of a board at a given depth
@@ -38,14 +38,14 @@ search_iterative(ChessBoard primary, int mDepth = MAX_DEPTH, double search_time 
  * @param pvIndex 
  * @return int 
  */
-int
-alphabeta(ChessBoard &board, int depth, int alpha, int beta, int ply, int pvIndex, int numExtensions);
+Score
+AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, int ply, int pvIndex, int numExtensions);
 
-int
-pv_root_alphabeta(ChessBoard &_cb, int alpha, int beta, int depth);
+Score
+RootAlphabeta(ChessBoard& pos, Score alpha, Score beta, Depth depth);
 
-int
-lmr_search(ChessBoard &_cb, MoveList& myMoves, int depth, int alpha, int beta, int ply, int pvIndex, int numExtensions);
+Score
+LmrSearch(ChessBoard& pos, MoveList& myMoves, Depth depth, Score alpha, Score beta, int ply, int pvIndex, int numExtensions);
 
 
 

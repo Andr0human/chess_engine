@@ -28,17 +28,17 @@ class EvalData
 
   EvalData(const ChessBoard& pos)
   {
-    w_pawns   = popcount(pos.piece(WHITE, PAWN  ));
-    w_bishops = popcount(pos.piece(WHITE, BISHOP));
-    w_knights = popcount(pos.piece(WHITE, KNIGHT));
-    w_rooks   = popcount(pos.piece(WHITE, ROOK  ));
-    w_queens  = popcount(pos.piece(WHITE, QUEEN ));
+    w_pawns   = PopCount(pos.piece(WHITE, PAWN  ));
+    w_bishops = PopCount(pos.piece(WHITE, BISHOP));
+    w_knights = PopCount(pos.piece(WHITE, KNIGHT));
+    w_rooks   = PopCount(pos.piece(WHITE, ROOK  ));
+    w_queens  = PopCount(pos.piece(WHITE, QUEEN ));
 
-    b_pawns   = popcount(pos.piece(BLACK, PAWN  ));
-    b_bishops = popcount(pos.piece(BLACK, BISHOP));
-    b_knights = popcount(pos.piece(BLACK, KNIGHT));
-    b_rooks   = popcount(pos.piece(BLACK, ROOK  ));
-    b_queens  = popcount(pos.piece(BLACK, QUEEN ));
+    b_pawns   = PopCount(pos.piece(BLACK, PAWN  ));
+    b_bishops = PopCount(pos.piece(BLACK, BISHOP));
+    b_knights = PopCount(pos.piece(BLACK, KNIGHT));
+    b_rooks   = PopCount(pos.piece(BLACK, ROOK  ));
+    b_queens  = PopCount(pos.piece(BLACK, QUEEN ));
 
     w_pieces = w_bishops + w_knights + w_rooks + w_queens;
     b_pieces = b_bishops + b_knights + b_rooks + b_queens;

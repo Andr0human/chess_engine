@@ -94,18 +94,18 @@ class CheckData
 
 
 
-// Returns and removes the lsb_idx
+// Returns and removes the LsbIndex
 inline Square
-next_idx(uint64_t& __x)
+NextSquare(uint64_t& __x)
 {
-    Square res = __builtin_ctzll(__x);
+    Square res = Square(__builtin_ctzll(__x));
     __x &= __x - 1;
     return res;
 }
 
 // Prints all the info on the encoded-move
 void
-decode_move(Move encoded_move);
+DecodeMove(Move encoded_move);
 
 
 
@@ -113,20 +113,20 @@ decode_move(Move encoded_move);
 
 
 inline Move
-gen_base_move(const ChessBoard& _cb, Square ip);
+GenerateBaseMove(const ChessBoard& _cb, Square ip);
 
 inline
-void add_cap_moves(Square ip, Bitboard endSquares, Move base,
+void AddCaptureMoves(Square ip, Bitboard endSquares, Move base,
     const ChessBoard& _cb, MoveList& myMoves);
 
 inline void
-add_quiet_moves(Bitboard endSquares, Move base, MoveList& myMoves);
+AddQuietMoves(Bitboard endSquares, Move base, MoveList& myMoves);
 
 void
-add_quiet_pawn_moves(Bitboard endSquares, int shift, const ChessBoard& _cb, MoveList& myMoves);
+AddQuietPawnMoves(Bitboard endSquares, int shift, const ChessBoard& _cb, MoveList& myMoves);
 
 void
-add_move_to_list(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves);
+AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves);
 
 
 
@@ -139,23 +139,23 @@ add_move_to_list(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList
 
 // Returns all squares attacked by all pawns from side to move
 Bitboard
-pawn_atk_sq(const ChessBoard& _cb, Color color);
+PawnAttackSquares(const ChessBoard& _cb, Color color);
 
 // Returns all squares attacked by bishop on index __pos
 Bitboard
-bishop_atk_sq(Square __pos, Bitboard _Ap);
+BishopAttackSquares(Square __pos, Bitboard _Ap);
 
 // Returns all squares attacked by knight on index __pos
 Bitboard
-knight_atk_sq(Square __pos, Bitboard _Ap);
+KnightAttackSquares(Square __pos, Bitboard _Ap);
 
 // Returns all squares attacked by rook on index __pos
 Bitboard
-rook_atk_sq(Square __pos, Bitboard _Ap);
+RookAttackSquares(Square __pos, Bitboard _Ap);
 
 // Returns all squares attacked by queen on index __pos
 Bitboard
-queen_atk_sq(Square __pos, Bitboard _Ap);
+QueenAttackSquares(Square __pos, Bitboard _Ap);
 
 
 
@@ -177,7 +177,7 @@ queen_atk_sq(Square __pos, Bitboard _Ap);
  * @return false 
  */
 bool
-in_check(const ChessBoard& _cb);
+InCheck(const ChessBoard& _cb);
 
 
 /**
@@ -189,7 +189,7 @@ in_check(const ChessBoard& _cb);
  * @return string 
  */
 string
-print(Move move, ChessBoard _cb);
+PrintMove(Move move, ChessBoard _cb);
 
 
 /**
@@ -199,7 +199,7 @@ print(Move move, ChessBoard _cb);
  * @param myMoves Movelist for board positions.
  */
 void
-print(const MoveList& myMoves, const ChessBoard& _cb);
+PrintMovelist(const MoveList& myMoves, const ChessBoard& _cb);
 
 
 

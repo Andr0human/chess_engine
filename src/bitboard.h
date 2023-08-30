@@ -46,7 +46,7 @@ class ChessBoard
     int moveNum = 0;
 
     // Stores the piece at each index
-    Piece board[64];
+    Piece board[SQUARE_NB];
 
     // Stores bitboard location of a piece
     Bitboard piece_bb[16];
@@ -54,38 +54,38 @@ class ChessBoard
     // MakeMove-Subparts
 
     bool
-    is_en_passant(Square fp, Square ep) const noexcept
+    IsEnpassant(Square fp, Square ep) const noexcept
     { return fp == ep; }
 
     bool
-    is_double_pawn_push(Square ip, Square fp) const noexcept
+    IsDoublePawnPush(Square ip, Square fp) const noexcept
     { return std::abs(ip - fp) == 16; }
 
     bool
-    is_pawn_promotion(Square fp) const noexcept
-    { return (1ULL << fp) & 0xFF000000000000FF; }
+    IsPawnPromotion(Square fp) const noexcept
+    { return (1ULL << fp) & Rank18; }
 
     bool
-    is_castling(Square ip, Square fp) const noexcept
+    IsCastling(Square ip, Square fp) const noexcept
     { return (ip - fp == 2) | (fp - ip == 2);}
 
     void
-    make_move_castle_check(PieceType p, Square sq) noexcept;
+    MakeMoveCastleCheck(PieceType p, Square sq) noexcept;
 
     void
-    make_move_enpassant(Square ip, Square fp) noexcept;
+    MakeMoveEnpassant(Square ip, Square fp) noexcept;
 
     void
-    make_move_double_pawn_push(Square ip, Square fp) noexcept;
+    MakeMoveDoublePawnPush(Square ip, Square fp) noexcept;
 
     void
-    make_move_pawn_promotion(Move move) noexcept;
+    MakeMovePawnPromotion(Move move) noexcept;
 
     void
-    make_move_castling(Square ip, Square fp, int call_from_makemove) noexcept;
+    MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexcept;
 
     void
-    update_csep(int old_csep, int new_csep) noexcept;
+    UpdateCsep(int old_csep, int new_csep) noexcept;
 
     public:
 
@@ -135,10 +135,10 @@ class ChessBoard
     ChessBoard(const std::string& fen);
 
     void
-    set_position_with_fen(const string& fen) noexcept;
+    SetPositionWithFen(const string& fen) noexcept;
 
     string
-    visual_board() const noexcept;
+    VisualBoard() const noexcept;
 
     void
     MakeMove(Move move, bool in_search = true) noexcept;
@@ -153,19 +153,19 @@ class ChessBoard
     UndoInfoPop();
 
     const string
-    fen() const;
+    Fen() const;
 
     bool
-    three_move_repetition() const noexcept;
+    ThreeMoveRepetition() const noexcept;
 
     bool
-    fifty_move_rule_draw() const noexcept;
+    FiftyMoveDraw() const noexcept;
 
     void
-    add_prev_board_positions(const vector<uint64_t>& prev_keys) noexcept;
+    AddPreviousBoardPositions(const vector<uint64_t>& prev_keys) noexcept;
 
     uint64_t
-    generate_hashKey() const;
+    GenerateHashkey() const;
 
     void
     MakeNullMove();
@@ -181,15 +181,15 @@ class ChessBoard
     bool operator!= (const ChessBoard& other);
 
     inline bool
-    enemy_attacked_sq_generated() const noexcept
-    { return /* piece_bb[8] != 0; */ enemy_attacked_squares != 0; }
+    EnemyAttackedSquaresGenerated() const noexcept
+    { return enemy_attacked_squares != 0; }
 
     inline bool
-    attackers_found() const noexcept
+    AttackersFound() const noexcept
     { return KA != -1;  }
 
     inline void
-    remove_movegen_extra_data() noexcept
+    RemoveMovegenMetadata() noexcept
     {
         KA = -1;
         legal_squares_mask = 0;
@@ -197,11 +197,11 @@ class ChessBoard
     }
 
     inline bool
-    king_in_check() const noexcept
+    InCheck() const noexcept
     { return KA > 0; }
 
     inline Piece
-    piece_on_square(Square sq) const noexcept
+    PieceOnSquare(Square sq) const noexcept
     { return board[sq]; }
 
     inline Bitboard
@@ -217,7 +217,7 @@ class ChessBoard
     }
 
     void
-    dump(std::ostream& writer = std::cout);
+    Dump(std::ostream& writer = std::cout);
 
     bool
     IntegrityCheck() const noexcept;

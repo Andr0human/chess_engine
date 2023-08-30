@@ -18,28 +18,28 @@ class MoveOrderClass
 
     public:
     void
-    initialise(MoveList& myMoves);
+    Initialise(MoveList& myMoves);
 
     void
-    sortList(int best_move);
+    SortList(int best_move);
 
     void
-    setMoveOrder(MoveList& myMoves);
+    OrderMovesOnTime(MoveList& myMoves);
 
     void
-    insert(uint64_t idx, double time_taken);
+    Insert(uint64_t idx, double time_taken);
 
     void
-    mprint(ChessBoard &cb);
+    PrintAllMoves(ChessBoard &cb);
 
     int
-    get_move(uint64_t index);
+    GetMove(uint64_t index);
 
     uint64_t
-    moveCount();
+    MoveCount();
 
     void
-    reset();
+    Reset();
 };
 
 
@@ -72,9 +72,9 @@ class SearchData
         string res;
         for (const Move move : pv)
         {
-            if (legal_move_for_position(move, board) == false)
+            if (IsLegalMoveForPosition(move, board) == false)
                 break;
-            res += print(move, board) + string(" ");
+            res += PrintMove(move, board) + string(" ");
             board.MakeMove(move);
         }
         return res;
@@ -95,28 +95,16 @@ class SearchData
 
         // A Zero depth Move is produced in case we
         // don't have time to do a search of depth 1
-        Move zeroMove = generate_moves(pos).pMoves[0];
+        Move zeroMove = GenerateMoves(pos).pMoves[0];
         move_eval = {std::make_pair(zeroMove, 0)};
     }
     
 
-    std::pair<Move, int> last_iter_result() const noexcept
+    std::pair<Move, Score> LastIterationResult() const noexcept
     { return move_eval.back(); }
 
-    Move
-    last_move() const noexcept
-    { return move_eval.back().first; }
-
-    size_t
-    last_depth() const noexcept
-    { return move_eval.size() - 1; }
-
-    vector<Move>
-    last_pv_line() const noexcept
-    { return last_pv; }
-
     bool
-    is_part_of_pv(Move move) const noexcept
+    IsPartOfPV(Move move) const noexcept
     {
         for (Move pv_move : last_pv)
             if (move == pv_move) return true;
@@ -124,14 +112,14 @@ class SearchData
     }
 
     bool
-    time_over() noexcept
+    TimeOver() noexcept
     {
         std::chrono::nanoseconds duration = perf::now() - StartTime;
         return duration >= time_alloted;
     }
 
     void
-    add_current_depth_result(size_t depth, int eval, int __pv[]) noexcept
+    AddResult(size_t depth, int eval, int __pv[]) noexcept
     {
         //! TODO Use Valid Move Check
         last_pv.clear();
@@ -142,35 +130,28 @@ class SearchData
     }
 
     void
-    search_completed() noexcept
+    SearchCompleted() noexcept
     {
         perf_time duration = perf::now() - StartTime;
         time_on_search = duration.count();
     }
 
     double
-    search_time() const noexcept
+    SearchTime() const noexcept
     { return time_on_search; }
 
-    void
-    set_discard_result(Move zero_move) noexcept
-    {
-        int eval = (zero_move == -1) ? (-VALUE_INF) :(0);
-        move_eval.emplace_back(std::make_pair(zero_move, eval));
-    }
-
-    // Prints the result of search_iterative
+    // Prints the result of Search
     string
-    get_search_results(ChessBoard board)
+    GetSearchResult(ChessBoard board)
     {
-        const auto&[move, eval] = last_iter_result();
+        const auto&[move, eval] = LastIterationResult();
         const double eval_conv = static_cast<double>(eval) / 100.0;
 
         string result = "------ SEARCH-INFO ------";
 
         result +=
           + "\nDepth Searched = " + std::to_string(move_eval.size() - 1)
-          + "\nBest Move = " + print(move, board)
+          + "\nBest Move = " + PrintMove(move, board)
           + "\nEval = " + std::to_string(eval_conv)
           + "\nLine = " + readable_pv_line(board, last_pv)
           + "\nTime_Spend = " + std::to_string(time_on_search) + " sec."
@@ -181,7 +162,7 @@ class SearchData
 
     // Prints the results of last searched depth
     string
-    show_last_depth_result(ChessBoard board) const noexcept
+    ShowLastDepthResult(ChessBoard board) const noexcept
     {
         // cout << std::setprecision(2);
     
@@ -205,7 +186,7 @@ class TestPosition
 {
     public:
     string fen, name;
-    int depth;
+    Depth depth;
     uint64_t nodeCount = 0;
 
     TestPosition() {}
@@ -215,10 +196,10 @@ class TestPosition
     TestPosition(string f, int d, uint64_t nc, int index);
 
     void
-    generate_name(int index);
+    GenerateName(int index);
 
     void
-    print();
+    Print();
 };
 
 
@@ -251,11 +232,11 @@ class MovegenTestPosition
     { return std::make_pair(nodes.size(), nodes.back()); }
 
     string
-    fen() const
+    Fen() const
     { return pos_fen; }
 
     void
-    print() const
+    Print() const
     {
         cout << "Fen = " << pos_fen << '\n';
         for (size_t i = 0; i < nodes.size(); i++)

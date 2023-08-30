@@ -3,13 +3,15 @@
 
 
 void
-decode_move(Move move)
+DecodeMove(Move move)
 {
-    Square ip  = move & 63;
-    Square fp  = (move >> 6) & 63;
+    Square ip  = Square(move & 63);
+    Square fp  = Square((move >> 6) & 63);
+
     PieceType pt  = PieceType((move >> 12) & 7);
     PieceType cpt = PieceType((move >> 15) & 7);
     Color cl  = Color((move >> 20) & 1);
+
     int ppt = (move >> 18) & 3;
     int pr  = (move >> 21) & 31;
 
@@ -35,9 +37,9 @@ decode_move(Move move)
 
 
 inline Move
-gen_base_move(const ChessBoard& _cb, Square ip)
+GenerateBaseMove(const ChessBoard& _cb, Square ip)
 {
-    PieceType pt = type_of(_cb.piece_on_square(ip));
+    PieceType pt = type_of(_cb.PieceOnSquare(ip));
     int color_bit = _cb.color << 20;
 
     const Move base_move = color_bit + (pt << 12) + ip;
@@ -45,7 +47,7 @@ gen_base_move(const ChessBoard& _cb, Square ip)
 }
 
 inline void
-add_cap_moves(Square ip, Bitboard endSquares,
+AddCaptureMoves(Square ip, Bitboard endSquares,
     Move base_move, const ChessBoard& _cb, MoveList& myMoves)
 {
     const auto cap_priority = [] (PieceType pt, PieceType cpt)
@@ -58,12 +60,12 @@ add_cap_moves(Square ip, Bitboard endSquares,
         return e_move;
     };
 
-    PieceType pt = type_of(_cb.piece_on_square(ip));
+    PieceType pt = type_of(_cb.PieceOnSquare(ip));
 
     while (endSquares != 0)
     {
-        Square fp = next_idx(endSquares);
-        PieceType fpt = type_of(_cb.piece_on_square(fp));
+        Square fp = NextSquare(endSquares);
+        PieceType fpt = type_of(_cb.PieceOnSquare(fp));
         int move_priority = cap_priority(pt, fpt);
 
         const Move enc_move = encode_full_move(base_move, fp, fpt, move_priority);
@@ -72,7 +74,7 @@ add_cap_moves(Square ip, Bitboard endSquares,
 }
 
 inline void
-add_quiet_moves(Bitboard endSquares, Move base_move, MoveList& myMoves)
+AddQuietMoves(Bitboard endSquares, Move base_move, MoveList& myMoves)
 {
     const auto encode_full_move = [] (Move base, Square fp, int pr)
     {
@@ -82,7 +84,7 @@ add_quiet_moves(Bitboard endSquares, Move base_move, MoveList& myMoves)
 
     while (endSquares != 0)
     {
-        int fp = next_idx(endSquares);
+        Square fp = NextSquare(endSquares);
         int move_priority = 0;
         const Move enc_move = encode_full_move(base_move, fp, move_priority);
         myMoves.Add(enc_move);
@@ -90,7 +92,7 @@ add_quiet_moves(Bitboard endSquares, Move base_move, MoveList& myMoves)
 }
 
 void
-add_move_to_list(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves)
+AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves)
 {
     Bitboard emy_pieces = _cb.piece(~_cb.color, PieceType::ALL);
     if (myMoves.cpt_only)
@@ -98,16 +100,16 @@ add_move_to_list(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList
 
     Bitboard cap_Squares = endSquares & emy_pieces;
     Bitboard quiet_Squares = endSquares ^ cap_Squares;
-    const Move base_move = gen_base_move(_cb, ip);
+    const Move base_move = GenerateBaseMove(_cb, ip);
 
-    add_cap_moves(ip, cap_Squares, base_move, _cb, myMoves);
-    add_quiet_moves(quiet_Squares, base_move, myMoves);
+    AddCaptureMoves(ip, cap_Squares, base_move, _cb, myMoves);
+    AddQuietMoves(quiet_Squares, base_move, myMoves);
 }
 
 
 
 void
-add_quiet_pawn_moves(Bitboard endSquares,
+AddQuietPawnMoves(Bitboard endSquares,
     int shift, const ChessBoard& _cb, MoveList& myMoves)
 {
     if (myMoves.cpt_only)
@@ -120,7 +122,7 @@ add_quiet_pawn_moves(Bitboard endSquares,
 
     while (endSquares != 0)
     {
-        Square fp = next_idx(endSquares);
+        Square fp = NextSquare(endSquares);
         Square ip = fp + shift;
         const Move enc_move = base_move + (fp << 6) + ip;
         myMoves.Add(enc_move);
@@ -129,18 +131,18 @@ add_quiet_pawn_moves(Bitboard endSquares,
 
 
 Bitboard
-pawn_atk_sq(const ChessBoard& _cb, Color color)
+PawnAttackSquares(const ChessBoard& _cb, Color color)
 {
     int inc  = 2 * int(color) - 1;
     Bitboard pawns = _cb.piece(color, PAWN);
-    const auto shifter = (color == Color::WHITE) ? l_shift : r_shift;
+    const auto shifter = (color == Color::WHITE) ? LeftShift : RightShift;
 
     return shifter(pawns & RightAttkingPawns, 8 + inc) |
            shifter(pawns & LeftAttkingPawns , 8 - inc);
 }
 
 Bitboard
-bishop_atk_sq(Square __pos, Bitboard _Ap)
+BishopAttackSquares(Square __pos, Bitboard _Ap)
 {    
     uint64_t magic = plt::BishopMagics[__pos];
     int      bits  = plt::BishopShifts[__pos];
@@ -152,11 +154,11 @@ bishop_atk_sq(Square __pos, Bitboard _Ap)
 }
 
 Bitboard
-knight_atk_sq(Square __pos, Bitboard _Ap)
+KnightAttackSquares(Square __pos, Bitboard _Ap)
 { return plt::KnightMasks[__pos] + (_Ap - _Ap); }
 
 Bitboard
-rook_atk_sq(Square __pos, Bitboard _Ap)
+RookAttackSquares(Square __pos, Bitboard _Ap)
 {
     uint64_t magic = plt::RookMagics[__pos];
     int      bits  = plt::RookShifts[__pos];
@@ -168,23 +170,23 @@ rook_atk_sq(Square __pos, Bitboard _Ap)
 }
 
 Bitboard
-queen_atk_sq(Square __pos, Bitboard _Ap)
-{ return bishop_atk_sq(__pos, _Ap) ^ rook_atk_sq(__pos, _Ap); }
+QueenAttackSquares(Square __pos, Bitboard _Ap)
+{ return BishopAttackSquares(__pos, _Ap) ^ RookAttackSquares(__pos, _Ap); }
 
 
 
 
 
 CheckData
-find_check_squares(const ChessBoard& _cb)
+FindCheckSquares(const ChessBoard& _cb)
 {
     Color c_my = _cb.color;
-    Square kpos = idx_no(_cb.piece(c_my, KING));
+    Square kpos = SquareNo(_cb.piece(c_my, KING));
     Bitboard Apieces = _cb.All();
 
-    Bitboard res1 = rook_atk_sq(kpos, Apieces);
-    Bitboard res2 = bishop_atk_sq(kpos, Apieces);
-    Bitboard res3 = knight_atk_sq(kpos, Apieces);
+    Bitboard res1 = RookAttackSquares(kpos, Apieces);
+    Bitboard res2 = BishopAttackSquares(kpos, Apieces);
+    Bitboard res3 = KnightAttackSquares(kpos, Apieces);
     Bitboard res4 = plt::PawnCaptureMasks[c_my][kpos];
 
     return CheckData(res1, res2, res3, res4);
@@ -193,10 +195,10 @@ find_check_squares(const ChessBoard& _cb)
 
 //  Checks if the king of the active side is in check.
 bool
-in_check(const ChessBoard& _cb)
+InCheck(const ChessBoard& _cb)
 {
     Color c_emy = ~_cb.color;
-    CheckData check = find_check_squares(_cb);
+    CheckData check = FindCheckSquares(_cb);
 
     return (check.LineSquares     & (_cb.piece(c_emy, ROOK  ) | _cb.piece(c_emy, QUEEN)))
         or (check.DiagonalSquares & (_cb.piece(c_emy, BISHOP) | _cb.piece(c_emy, QUEEN)))
@@ -206,7 +208,7 @@ in_check(const ChessBoard& _cb)
 
 
 string
-print(Move move, ChessBoard _cb)
+PrintMove(Move move, ChessBoard _cb)
 {
     if (move == NULL_MOVE)
         return string("null");
@@ -222,8 +224,8 @@ print(Move move, ChessBoard _cb)
 
     const char piece_names[4] = {'B', 'N', 'R', 'Q'};
 
-    Square ip =  move       & 63;
-    Square fp = (move >> 6) & 63;
+    Square ip = Square(move & 63);
+    Square fp = Square((move >> 6) & 63);
 
     int ip_col = ip & 7;
     int fp_col = fp & 7;
@@ -237,7 +239,7 @@ print(Move move, ChessBoard _cb)
     Bitboard Apieces = _cb.All();
 
     _cb.MakeMove(move);
-    string gives_check = in_check(_cb) ? "+" : "";
+    string gives_check = InCheck(_cb) ? "+" : "";
     _cb.UnmakeMove();
 
     string captures = (cpt != 0) ? "x" : "";
@@ -272,10 +274,10 @@ print(Move move, ChessBoard _cb)
 
     // If piece is [BISHOP, KNIGHT, ROOK, QUEEN]
     Bitboard pieces =
-        (pt == BISHOP ? bishop_atk_sq(fp, Apieces) :
-        (pt == KNIGHT ? knight_atk_sq(fp, Apieces) :
-        (pt == ROOK   ?   rook_atk_sq(fp, Apieces) :
-        queen_atk_sq(fp, Apieces))));
+        (pt == BISHOP ? BishopAttackSquares(fp, Apieces) :
+        (pt == KNIGHT ? KnightAttackSquares(fp, Apieces) :
+        (pt == ROOK   ?   RookAttackSquares(fp, Apieces) :
+        QueenAttackSquares(fp, Apieces))));
 
     pieces = (pieces & _cb.piece(_cb.color, pt)) ^ (1ULL << ip);
 
@@ -289,7 +291,7 @@ print(Move move, ChessBoard _cb)
 
     while (pieces > 0)
     {
-        Square __pos = next_idx(pieces);
+        Square __pos = NextSquare(pieces);
 
         int __pos_col = __pos & 7;
         int __pos_row = (__pos - __pos_col) >> 3;
@@ -306,14 +308,14 @@ print(Move move, ChessBoard _cb)
 
 
 void
-print(const MoveList& myMoves, const ChessBoard& _cb)
+PrintMovelist(const MoveList& myMoves, const ChessBoard& _cb)
 {
     cout << "MoveCount : " << myMoves.size() << '\n';
     
     int move_no = 0;
     for (const Move move : myMoves)
     {
-        string result = print(move, _cb);
+        string result = PrintMove(move, _cb);
         cout << (++move_no) << " \t| "  << result
              << string(8 - result.size(), ' ') << "| " << move << '\n';
     }

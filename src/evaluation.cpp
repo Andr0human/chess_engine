@@ -16,8 +16,8 @@ using std::min, std::max;
 static int
 Dist(Square s, Square t)
 {
-    Square s_x = s & 7, s_y = s >> 3;
-    Square t_x = t & 7, t_y = t >> 3;
+    int s_x = s & 7, s_y = s >> 3;
+    int t_x = t & 7, t_y = t >> 3;
  
     return abs(s_x - t_x) + abs(s_y - t_y);
 }
@@ -75,7 +75,7 @@ PieceTableStrengthMidGame(const ChessBoard& pos)
     {
         Score score = 0;
         while (piece > 0)
-            score += strTable[next_idx(piece)];
+            score += strTable[NextSquare(piece)];
         return score;
     };
 
@@ -101,21 +101,21 @@ MobilityStrength(const ChessBoard& pos)
         Bitboard occupied = pos.All();
         Bitboard squares = 0;
         while (piece > 0)
-            squares |= __f(next_idx(piece), occupied);
-        return popcount(squares);
+            squares |= __f(NextSquare(piece), occupied);
+        return PopCount(squares);
     };
 
-    Score bishops = CalculateMobility(bishop_atk_sq, pos.piece(WHITE, BISHOP))
-                  - CalculateMobility(bishop_atk_sq, pos.piece(BLACK, BISHOP));
+    Score bishops = CalculateMobility(BishopAttackSquares, pos.piece(WHITE, BISHOP))
+                  - CalculateMobility(BishopAttackSquares, pos.piece(BLACK, BISHOP));
 
-    Score knights = CalculateMobility(knight_atk_sq, pos.piece(WHITE, KNIGHT))
-                  - CalculateMobility(knight_atk_sq, pos.piece(BLACK, KNIGHT));
+    Score knights = CalculateMobility(KnightAttackSquares, pos.piece(WHITE, KNIGHT))
+                  - CalculateMobility(KnightAttackSquares, pos.piece(BLACK, KNIGHT));
 
-    Score rooks = CalculateMobility(rook_atk_sq, pos.piece(WHITE, ROOK))
-                - CalculateMobility(rook_atk_sq, pos.piece(BLACK, ROOK));
+    Score rooks = CalculateMobility(RookAttackSquares, pos.piece(WHITE, ROOK))
+                - CalculateMobility(RookAttackSquares, pos.piece(BLACK, ROOK));
 
-    Score queens = CalculateMobility(queen_atk_sq, pos.piece(WHITE, QUEEN))
-                 - CalculateMobility(queen_atk_sq, pos.piece(BLACK, QUEEN));
+    Score queens = CalculateMobility(QueenAttackSquares, pos.piece(WHITE, QUEEN))
+                 - CalculateMobility(QueenAttackSquares, pos.piece(BLACK, QUEEN));
 
     return bishops + (2 * knights) + rooks + queens;
 }
@@ -131,7 +131,7 @@ PawnStructure(const ChessBoard& pos, Color color)
     // Punish Double Pawns on same column
     for (int i = 0; i < 7; i++)
     {
-        int p = popcount(column & pawns);
+        int p = PopCount(column & pawns);
         score -= 36 * p * (p - 1);
         column <<= 1;
     }
@@ -139,7 +139,7 @@ PawnStructure(const ChessBoard& pos, Color color)
 
     while (pawns != 0)
     {
-        Square pawn_sq = next_idx(pawns);
+        Square pawn_sq = NextSquare(pawns);
         if ((plt::PassedPawnMasks[color][pawn_sq] & emy_pawns) != 0)
             continue;
 
@@ -148,8 +148,8 @@ PawnStructure(const ChessBoard& pos, Color color)
         // Reward for having passed pawn
         score += 3 * d * d;
 
-        Square  kpos = idx_no(pos.piece( color, KING));
-        Square ekpos = idx_no(pos.piece(~color, KING));
+        Square  kpos = SquareNo(pos.piece( color, KING));
+        Square ekpos = SquareNo(pos.piece(~color, KING));
 
         // Add score for king close to passed pawn and
         // Reduce score if enemy king is close to pawn
@@ -165,14 +165,14 @@ AttackStrength(const ChessBoard& pos, Color side)
 {
     Bitboard occupied = pos.All();
     // Square of enemy king
-    Square ek_pos = idx_no( pos.piece(~side, KING) );
+    Square ek_pos = SquareNo( pos.piece(~side, KING) );
     Bitboard king_mask = plt::KingMasks[ek_pos];
 
     const auto AddAttackers = [&] (const auto& __f, Bitboard piece, Score value)
     {
         Score score = 0;
         while (piece > 0) {
-            Square ip = next_idx(piece);
+            Square ip = NextSquare(piece);
             Bitboard squares = __f(ip, occupied);
 
             if ((squares & king_mask) != 0)
@@ -183,10 +183,10 @@ AttackStrength(const ChessBoard& pos, Color side)
 
     int attackers = 0;
 
-    attackers += AddAttackers(bishop_atk_sq, pos.piece(side, BISHOP), 1);
-    attackers += AddAttackers(knight_atk_sq, pos.piece(side, KNIGHT), 1);
-    attackers += AddAttackers(rook_atk_sq  , pos.piece(side, ROOK  ), 1);
-    attackers += AddAttackers(queen_atk_sq , pos.piece(side, QUEEN ), 2);
+    attackers += AddAttackers(BishopAttackSquares, pos.piece(side, BISHOP), 1);
+    attackers += AddAttackers(KnightAttackSquares, pos.piece(side, KNIGHT), 1);
+    attackers += AddAttackers(RookAttackSquares  , pos.piece(side, ROOK  ), 1);
+    attackers += AddAttackers(QueenAttackSquares , pos.piece(side, QUEEN ), 2);
 
     return 6 * attackers * (attackers + 1);
 }
@@ -194,8 +194,8 @@ AttackStrength(const ChessBoard& pos, Color side)
 static Score
 KingSafety(const ChessBoard& pos, Color side)
 {
-    Square k_pos = idx_no( pos.piece(side, KING) );
-    Square kx = k_pos & 7;
+    Square k_pos = SquareNo( pos.piece(side, KING) );
+    int kx = k_pos & 7;
 
     Bitboard* mask = (side == WHITE ? plt::UpMasks : plt::DownMasks);
     Bitboard pawns = pos.piece(side, PAWN);
@@ -210,8 +210,8 @@ KingSafety(const ChessBoard& pos, Color side)
     if ((kx != 7) and ((mask[k_pos - 1] & pawns) == 0))
         open_files++;
 
-    defenders += popcount(pawns & mask[k_pos]);
-    defenders += 2 * popcount( mask[k_pos] & (
+    defenders += PopCount(pawns & mask[k_pos]);
+    defenders += 2 * PopCount( mask[k_pos] & (
         pos.piece(side, BISHOP) | pos.piece(side, KNIGHT) | pos.piece(side, ROOK)
     ));
 
@@ -253,8 +253,8 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed)
 static Score
 DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
 {
-    Square wk_sq = idx_no( pos.piece(WHITE, KING) );
-    Square bk_sq = idx_no( pos.piece(BLACK, KING) );
+    Square wk_sq = SquareNo( pos.piece(WHITE, KING) );
+    Square bk_sq = SquareNo( pos.piece(BLACK, KING) );
 
     int material_diff =
         + 3 * (ed.w_bishops - ed.b_bishops) + 3 * (ed.w_knights - ed.b_knights)
@@ -305,7 +305,7 @@ LoneKingEndGame(const ChessBoard& pos, const EvalData& ed)
     Color winningSide = (ed.w_pawns + ed.w_pieces > 0) ? WHITE : BLACK;
     Color losingSide  = ~winningSide;
 
-    Square loneKingSq = idx_no( pos.piece(losingSide, KING) );
+    Square loneKingSq = SquareNo( pos.piece(losingSide, KING) );
 
     Score distanceScore = DistanceBetweenKingsScore(pos, ed);
     Score parityScore   = BishopColorCornerScore(pos, winningSide);
@@ -331,7 +331,7 @@ PieceTableStrengthEndGame(const ChessBoard& pos)
     {
         Score score = 0;
         while (piece > 0)
-            score += strTable[next_idx(piece)];
+            score += strTable[NextSquare(piece)];
         return score;
     };
 
