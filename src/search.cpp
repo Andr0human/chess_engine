@@ -76,7 +76,7 @@ createMoveOrderList(ChessBoard& pos)
     moc.Initialise(movelist);
 
     return (movelist.size() > 0) ?
-           (*movelist.begin()) : (pos.KA > 0 ? -1 : -2);
+           (*movelist.begin()) : (pos.checkers > 0 ? -1 : -2);
 }
 
 bool
