@@ -23,7 +23,6 @@ class UndoInfo
     // Last Position Hash
     Key hash;
 
-    //! TODO Remove this.
     // Last HalfMove
     int halfmove;
 
@@ -39,17 +38,19 @@ class UndoInfo
 class ChessBoard
 {
     private:
-    static const int undoInfoSize = 300;
 
-    UndoInfo undo_info[undoInfoSize];
+    UndoInfo undo_info[256];
 
-    int moveNum = 0;
+    int undoInfoStackCounter;
 
     // Stores the piece at each index
     Piece board[SQUARE_NB];
 
     // Stores bitboard location of a piece
     Bitboard piece_bb[16];
+
+    // Halfmove and Fullmove
+    int halfmove, fullmove;
 
     // MakeMove-Subparts
 
@@ -84,50 +85,23 @@ class ChessBoard
     void
     MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexcept;
 
-    void
-    UpdateCsep(int old_csep, int new_csep) noexcept;
-
     public:
 
     // White -> 1, Black -> 0
     Color color;
 
-    int csep, halfmove, fullmove;
+    int csep;
     Key Hash_Value;
 
-    //  Number of opponent pieces threatening the king for the side to move
-    int KA;
+    // No. of opponent pieces checking the active king
+    int checkers;
 
-    // Bitboard representing the squares that the pieces of the current
+    // Bitboard representing squares that the pieces of active
     // side can legally move to when the king is under check
-    uint64_t legal_squares_mask;
+    Bitboard legalSquaresMaskInCheck;
 
     // Bitboard representing squares under enemy attack
-    uint64_t enemy_attacked_squares;
-
-    /**
-     * 1 -> Pawn
-     * 2 -> Bishop
-     * 3 -> Knight
-     * 4 -> Rook
-     * 5 -> Queen
-     * 6 -> King
-     * 7 -> All pieces
-     * 
-     * Black -> 0
-     * White -> 8
-     * Black King -> Black + King = 0 + 6 =  6
-     * White Rook -> White + Rook = 8 + 4 = 12
-     * 
-     * Own -> color << 3
-     * Enemy -> (color ^ 1) << 3
-     * 
-     * Own Knight -> Own + Knight = color << 3 + Knight
-     * Emy Bishop -> Emy + Bishop = (color ^ 1) << 3 + Bishop
-     * 
-     * Pieces[0] and Pieces[8] are unused.
-     * 
-     **/
+    Bitboard enemyAttackedSquares;
 
 
     ChessBoard();
@@ -182,23 +156,23 @@ class ChessBoard
 
     inline bool
     EnemyAttackedSquaresGenerated() const noexcept
-    { return enemy_attacked_squares != 0; }
+    { return enemyAttackedSquares != 0; }
 
     inline bool
     AttackersFound() const noexcept
-    { return KA != -1;  }
+    { return checkers != -1;  }
 
     inline void
     RemoveMovegenMetadata() noexcept
     {
-        KA = -1;
-        legal_squares_mask = 0;
-        enemy_attacked_squares = 0;
+        checkers = -1;
+        legalSquaresMaskInCheck = 0;
+        enemyAttackedSquares = 0;
     }
 
     inline bool
     InCheck() const noexcept
-    { return KA > 0; }
+    { return checkers > 0; }
 
     inline Piece
     PieceOnSquare(Square sq) const noexcept
