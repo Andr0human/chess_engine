@@ -70,23 +70,26 @@ ExtractArgumentList(int argc, char *argv[])
 }
 
 
-void
-BitsOnBoard(uint64_t value)
+string
+BitsOnBoard(Bitboard value)
 {
-    string res;
-    for (int row = 7; row >= 0; row--)
-    {
-        for (int col = 0; col < 8; col++)
-        {
-            if (value & (1ULL << (8 * row + col)))
-                res.push_back('*');
-            else
-                res.push_back('.');
-        }
-        res.push_back('\n');
-    }
+    const string s = " +---+---+---+---+---+---+---+---+\n";
 
-    cout << res << endl;
+    string gap = " | ";
+    string res = s;
+
+    for (int sq = 56; sq >= 0; ++sq)
+    {
+        string val = (1ULL << sq) & value ? "*" : ".";
+        res += gap + val;
+        if ((sq & 7) == 7)
+        {
+            sq -= 16;
+            res += " |\n" + s;
+        }
+    }
+    
+    return res;
 }
 
 
