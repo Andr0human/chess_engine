@@ -24,9 +24,9 @@ bool LegalMovesPresent(ChessBoard &_cb);
  * @brief Returns a list of all the legal moves in current position.
  * 
  * @param _cb ChessBoard
- * @param qs_only 
+ * @param qSearch 
  * @return MoveList 
  */
-MoveList GenerateMoves(ChessBoard& _cb, bool qs_only = false);
+MoveList GenerateMoves(ChessBoard& pos, bool qsSearch = false);
 
 #endif

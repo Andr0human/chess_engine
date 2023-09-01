@@ -95,7 +95,7 @@ void
 AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves)
 {
     Bitboard emy_pieces = _cb.piece(~_cb.color, PieceType::ALL);
-    if (myMoves.cpt_only)
+    if (myMoves.qsSearch)
         endSquares = endSquares & emy_pieces;
 
     Bitboard cap_Squares = endSquares & emy_pieces;
@@ -107,12 +107,40 @@ AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& 
 }
 
 
+void
+AddMoves(Square ip, Bitboard endSquares, ChessBoard& pos, MoveList& myMoves)
+{
+    Bitboard emy_pieces = pos.piece(~pos.color, PieceType::ALL);
+    if (myMoves.qsSearch)
+        endSquares = endSquares & emy_pieces;
+
+    PieceType ipt = type_of(pos.PieceOnSquare(ip));
+    Move base_move = (pos.color << 20) | (ipt << 12) | ip;
+
+    while (endSquares > 0)
+    {
+        Square fp = NextSquare(endSquares);
+        PieceType fpt = type_of(pos.PieceOnSquare(fp));
+        int priority = 0;
+
+        if (fpt != NONE)
+            priority += fpt - ipt + 16;
+        
+        Move move = base_move | (fpt << 15) | (fp << 6);
+        
+        if (MoveGivesCheck(move, pos, myMoves))
+            priority += 10;
+
+        move |= priority << 21;
+        myMoves.Add(move);
+    }
+}
+
 
 void
-AddQuietPawnMoves(Bitboard endSquares,
-    int shift, const ChessBoard& _cb, MoveList& myMoves)
+AddQuietPawnMoves(Bitboard endSquares, int shift, const ChessBoard& _cb, MoveList& myMoves)
 {
-    if (myMoves.cpt_only)
+    if (myMoves.qsSearch)
         return;
 
     PieceType pt = PAWN;
@@ -175,35 +203,19 @@ QueenAttackSquares(Square __pos, Bitboard _Ap)
 
 
 
-
-
-CheckData
-FindCheckSquares(const ChessBoard& _cb)
-{
-    Color c_my = _cb.color;
-    Square kpos = SquareNo(_cb.piece(c_my, KING));
-    Bitboard Apieces = _cb.All();
-
-    Bitboard res1 = RookAttackSquares(kpos, Apieces);
-    Bitboard res2 = BishopAttackSquares(kpos, Apieces);
-    Bitboard res3 = KnightAttackSquares(kpos, Apieces);
-    Bitboard res4 = plt::PawnCaptureMasks[c_my][kpos];
-
-    return CheckData(res1, res2, res3, res4);
-}
-
-
-//  Checks if the king of the active side is in check.
 bool
 InCheck(const ChessBoard& _cb)
 {
+    Color c_my  =  _cb.color;
     Color c_emy = ~_cb.color;
-    CheckData check = FindCheckSquares(_cb);
 
-    return (check.LineSquares     & (_cb.piece(c_emy, ROOK  ) | _cb.piece(c_emy, QUEEN)))
-        or (check.DiagonalSquares & (_cb.piece(c_emy, BISHOP) | _cb.piece(c_emy, QUEEN)))
-        or (check.KnightSquares   &  _cb.piece(c_emy, KNIGHT))
-        or (check.PawnSquares     &  _cb.piece(c_emy, PAWN  ));
+    Square k_sq = SquareNo( _cb.piece(c_my, KING) );
+    Bitboard occupied = _cb.All();
+
+    return (RookAttackSquares(k_sq, occupied) & (_cb.piece(c_emy, ROOK  ) | _cb.piece(c_emy, QUEEN)))
+      or (BishopAttackSquares(k_sq, occupied) & (_cb.piece(c_emy, BISHOP) | _cb.piece(c_emy, QUEEN)))
+      or (KnightAttackSquares(k_sq, occupied) &  _cb.piece(c_emy, KNIGHT))
+      or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece(c_emy, PAWN  ));
 }
 
 
@@ -323,3 +335,26 @@ PrintMovelist(const MoveList& myMoves, const ChessBoard& _cb)
     cout << endl;
 }
 
+
+bool
+MoveGivesCheck(Move move, ChessBoard& pos, MoveList& myMoves)
+{
+    Square ip = Square(move & 63);
+    Square fp = Square((move >> 6) & 63);
+
+    PieceType pt = PieceType((move >> 12) & 7);
+
+    // Direct Checks
+    if ((pt != KING) and (((1ULL << fp) & myMoves.squaresThatCheckEnemyKing[pt - 1]) != 0))
+        return true;
+
+    // Discover Checks
+    if (((1ULL << ip) & myMoves.discoverCheckSquares) == 0)
+        return false;
+
+    // Last Resort
+    pos.MakeMove(move);
+    bool gives_check = InCheck(pos);
+    pos.UnmakeMove();
+    return gives_check;
+}

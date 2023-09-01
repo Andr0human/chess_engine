@@ -14,36 +14,52 @@ class MoveList
     Move* __end;
 
     public:
-    Move pMoves[120];
-    Color pColor;
-    
-    bool cpt_only, canPromote;
+    // Stores all moves for current position
+    Move pMoves[218];
+
+    // Active side color
+    Color color;
+
+    // Generate moves for Quisense Search
+    bool qsSearch;
+
+    // Array to store squares that give check to the enemy king
+    // {Pawn, Bishop, Knight, Rook, Queen}
+    // Index 1: Squares where a bishop can give check to the enemy king
+    Bitboard squaresThatCheckEnemyKing[5];
+
+    // Bitboard of initial squares from which a moving piece
+    // could potentially give a discovered check to the opponent's king.
+    Bitboard discoverCheckSquares;
+
+    // Bitboard of squares that have pinned pieces on them
+    Bitboard pinnedPiecesSquares;
+
 
     MoveList()
-    : __begin(pMoves), __end(pMoves), pColor(Color::WHITE), cpt_only(false) {}
+    : __begin(pMoves), __end(pMoves), color(WHITE), qsSearch(false) {}
+
+    MoveList(Color c, bool qs = false)
+    : __begin(pMoves), __end(pMoves), color(c), qsSearch(qs) {}
 
     inline void
-    set(Color t_cl, bool qs_only) noexcept
-    {
-        pColor = t_cl;
-        cpt_only = qs_only;
-        canPromote = false;
-        __begin = __end = pMoves;
-    }
-
-    inline void Add(Move move) noexcept
+    Add(Move move) noexcept
     { *__end++ = move; }
 
-    inline bool empty() const noexcept
+    inline bool
+    empty() const noexcept
     { return __begin == __end; }
 
-    inline Move* begin() const noexcept
+    inline Move*
+    begin() const noexcept
     { return __begin; }
 
-    inline Move* end() const noexcept
+    inline Move*
+    end() const noexcept
     { return __end; }
 
-    inline uint64_t size() const noexcept
+    inline uint64_t
+    size() const noexcept
     { return __end - __begin; }
 };
 
@@ -129,7 +145,8 @@ void
 AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves);
 
 
-
+void
+AddMoves(Square ip, Bitboard endSquares, ChessBoard& pos, MoveList& myMoves);
 
 
 
@@ -159,23 +176,11 @@ QueenAttackSquares(Square __pos, Bitboard _Ap);
 
 
 
-
 /**
- * @brief Checks if player to move is in check
+ * @brief Checks if the king of the active side is in check.
  * 
- * @param _cb board position
- * @return true 
- * @return false 
- */
-
-/**
- * @brief Checks if side to move is in check
- * 
- * @param _cb 
- * @param own_king To check for king for side-to-move or opposite.
- * @return true 
- * @return false 
- */
+ * @param ChessBoard position
+**/
 bool
 InCheck(const ChessBoard& _cb);
 
@@ -202,7 +207,8 @@ void
 PrintMovelist(const MoveList& myMoves, const ChessBoard& _cb);
 
 
-
+bool
+MoveGivesCheck(Move move, ChessBoard& pos, MoveList& myMoves);
 
 #endif
 
