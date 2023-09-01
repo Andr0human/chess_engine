@@ -8,10 +8,10 @@ uint64_t tmp_this_counter = 0;
 ChessBoard::ChessBoard()
 {
     color = Color::WHITE;
-    csep = moveNum = 0;
+    csep = undoInfoStackCounter = 0;
     Hash_Value = 0;
     halfmove = fullmove = 0;
-    KA = -1;
+    checkers = -1;
     for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq) board[sq] = NO_PIECE;
     for (int i = 0; i < 16; i++) piece_bb[i] = 0; 
 }
@@ -238,7 +238,10 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
         int filter = 2047 ^ (384 << (color * 2));
         csep &= filter;
 
-        UpdateCsep(old_csep, csep);
+        #if defined(TRANSPOSITION_TABLE_H)
+            Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
+            Hash_Value ^= TT.HashKey((csep >> 7) + 66);
+        #endif
 
         if (IsCastling(ip, fp))
             return MakeMoveCastling(ip, fp, 1);
@@ -267,14 +270,6 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     #endif
 }
 
-void
-ChessBoard::UpdateCsep(int old_csep, int new_csep) noexcept
-{
-    #if defined(TRANSPOSITION_TABLE_H)
-        Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
-        Hash_Value ^= TT.HashKey((new_csep >> 7) + 66);
-    #endif
-}
 
 void
 ChessBoard::MakeMoveCastleCheck(PieceType piece, Square sq) noexcept
@@ -291,7 +286,10 @@ ChessBoard::MakeMoveCastleCheck(PieceType piece, Square sq) noexcept
         int z  = y + (y < 7 ? 9 : 0);
         csep &= 2047 ^ (1 << z);
 
-        UpdateCsep(old_csep, csep);
+        #if defined(TRANSPOSITION_TABLE_H)
+            Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
+            Hash_Value ^= TT.HashKey((csep >> 7) + 66);
+        #endif
     }
 }
 
@@ -421,7 +419,7 @@ ChessBoard::MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexc
 void
 ChessBoard::UnmakeMove() noexcept
 {
-    if (moveNum <= 0) return;
+    if (undoInfoStackCounter <= 0) return;
 
     color = ~color;
     Move move = UndoInfoPop();
@@ -483,20 +481,20 @@ void
 ChessBoard::UndoInfoPush(PieceType it, PieceType ft, Move move, bool in_search)
 {
     if (!in_search and ((ft != NONE) or (it == PAWN)))
-        moveNum = 0;
+        undoInfoStackCounter = 0;
 
-    undo_info[moveNum++] = UndoInfo(move, csep, Hash_Value, halfmove);
+    undo_info[undoInfoStackCounter++] = UndoInfo(move, csep, Hash_Value, halfmove);
 }
 
 
 Move
 ChessBoard::UndoInfoPop()
 {
-    moveNum--;
-    csep = undo_info[moveNum].csep;
-    Hash_Value = undo_info[moveNum].hash;
-    halfmove = undo_info[moveNum].halfmove;
-    return undo_info[moveNum].move;
+    undoInfoStackCounter--;
+    csep = undo_info[undoInfoStackCounter].csep;
+    Hash_Value = undo_info[undoInfoStackCounter].hash;
+    halfmove = undo_info[undoInfoStackCounter].halfmove;
+    return undo_info[undoInfoStackCounter].move;
 }
 
 
@@ -504,16 +502,16 @@ void
 ChessBoard::AddPreviousBoardPositions(const vector<Key>& prev_keys) noexcept
 {
     for (Key key : prev_keys)
-        undo_info[moveNum++] = UndoInfo(0, 0, key, 0);
+        undo_info[undoInfoStackCounter++] = UndoInfo(0, 0, key, 0);
 }
 
 bool
 ChessBoard::ThreeMoveRepetition() const noexcept
 {
     int pos_count = 0;
-    int last = std::max(0, moveNum - halfmove);
+    int last = std::max(0, undoInfoStackCounter - halfmove);
 
-    for (int i = moveNum - 1; i >= last; i--)
+    for (int i = undoInfoStackCounter - 1; i >= last; i--)
         if (Hash_Value == undo_info[i].hash)
             ++pos_count;
     
@@ -584,11 +582,11 @@ ChessBoard::Reset()
     for (int i = 0; i < 16; i++) piece_bb[i] = 0;
     csep = 0;
     Hash_Value = 0;
-    moveNum = 0;
-    KA = -1;
-    legal_squares_mask = 0;
-    enemy_attacked_squares = 0;
-    color = Color::WHITE;
+    undoInfoStackCounter = 0;
+    checkers = -1;
+    legalSquaresMaskInCheck = 0;
+    enemyAttackedSquares = 0;
+    color = WHITE;
 
     halfmove = 0;
     fullmove = 1;
@@ -655,19 +653,19 @@ ChessBoard::Dump(std::ostream& writer)
         writer << piece_bb[i] << ' ';
     writer << endl;
 
-    writer << "Color: " << int(color) << endl;
-    writer << "csep: " << csep << endl;
-    writer << "halfmove: " << halfmove << endl;
-    writer << "fullmove: " << fullmove << endl;
-    writer << "key: " << Hash_Value << endl;
-    writer << "KA: " << KA << endl;
-    writer << "legaL_square_mask: " << legal_squares_mask << endl;
-    writer << "enemy_attacked_squares: " << enemy_attacked_squares << endl;
+    writer << "Color: " << int(color) << '\n'
+        << "csep: " << csep << '\n'
+        << "halfmove: " << halfmove << '\n'
+        << "fullmove: " << fullmove << '\n'
+        << "key: " << Hash_Value << '\n'
+        << "KA: " << checkers << '\n'
+        << "legaL_square_mask: " << legalSquaresMaskInCheck << '\n'
+        << "enemy_attacked_squares: " << enemyAttackedSquares << '\n';
 
-    writer << "movenum: " << moveNum << endl;
-    writer << "undo_info: \n";
+    writer << "movenum: " << undoInfoStackCounter << '\n'
+           << "undo_info: \n";
 
-    for (int i = 0; i < moveNum; i++)
+    for (int i = 0; i < undoInfoStackCounter; i++)
         writer << undo_info[i].move << ", " << undo_info[i].hash
                << ", " << undo_info[i].csep << ", " << undo_info[i].halfmove << endl;
 
