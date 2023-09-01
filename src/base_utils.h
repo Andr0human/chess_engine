@@ -70,8 +70,8 @@ ExtractArgumentList(int argc, char *argv[]);
 
 
 
-string
-BitsOnBoard(Bitboard value);
+void
+BitsOnBoard(uint64_t value);
 
 
 }
