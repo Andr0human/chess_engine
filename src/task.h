@@ -6,8 +6,6 @@
 #include "perf.h"
 #include "single_thread.h"
 #include "play.h"
-// #include "multi_thread.h"
-// #include "ponder.h"
 #include <fstream>
 #include <iomanip>  // for setprecision
 

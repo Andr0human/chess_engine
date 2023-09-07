@@ -51,13 +51,13 @@ class SearchData
     perf_clock StartTime;
 
     // Store which side to play for search_position
-    int side;
+    Color side;
 
-    // Time provided to find move for current position (in secs.)
+    // Time provided to find move for current position
     std::chrono::nanoseconds time_alloted;
 
     // Time spend on searching for move in position (in secs.)
-    double time_on_search;
+    double time_on_search = 0;
 
     // Stores the pv of the lastest searched depth
     vector<Move> last_pv;
@@ -155,7 +155,7 @@ class SearchData
           + "\nEval = " + std::to_string(eval_conv)
           + "\nLine = " + readable_pv_line(board, last_pv)
           + "\nTime_Spend = " + std::to_string(time_on_search) + " sec."
-          + "\n-------------------------";
+          + "\n-------------------------\n";
         
         return result;
     }

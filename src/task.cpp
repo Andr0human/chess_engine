@@ -304,7 +304,7 @@ static void
 ShowUpdateLog()
 {
     cout <<
-        "Version: 2.2\n\n"
+        "Version: 2.3\n\n"
         "Techniques Used:\n"
         "- Mini-Max with AlphaBeta\n"
         "- Quiescence Search\n"
@@ -323,6 +323,12 @@ ShowUpdateLog()
         // "- Search Extension | EXTENSION_LIMIT(12)\n"
         // "- Extension Consideration :\n"
         // "   - If position is in check\n"
+        "- Evaluation Considerations:\n"
+        "   - Phase-Based Evaluation\n"
+        "       - MidGame Score\n"
+        "       - EndGame Score\n"
+        "       - Final Score = phase * MidgameScore + (1 - phase) * EndgameScore\n"
+        "   - LoneKing Endgames\n"
         << endl;
 }
 
