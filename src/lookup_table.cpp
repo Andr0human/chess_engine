@@ -29,8 +29,8 @@ Bitboard  PassedPawnMasks[COLOR_NB][SQUARE_NB];
 Bitboard   RookStartIndex[SQUARE_NB];
 Bitboard BishopStartIndex[SQUARE_NB];
 
-Bitboard   RookMovesLookUp[106495];
-Bitboard BishopMovesLookUp[5248];
+Bitboard*   RookMovesLookUp = new Bitboard[106495];
+Bitboard* BishopMovesLookUp = new Bitboard[5248];
 
 
 Bitboard RookMagics[SQUARE_NB] = {

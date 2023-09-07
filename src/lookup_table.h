@@ -12,38 +12,38 @@
 namespace plt
 {
 
-extern Bitboard    UpMasks[64];
-extern Bitboard  DownMasks[64];
-extern Bitboard  LeftMasks[64];
-extern Bitboard RightMasks[64];
+extern Bitboard    UpMasks[SQUARE_NB];
+extern Bitboard  DownMasks[SQUARE_NB];
+extern Bitboard  LeftMasks[SQUARE_NB];
+extern Bitboard RightMasks[SQUARE_NB];
 
-extern Bitboard   UpRightMasks[64];
-extern Bitboard    UpLeftMasks[64];
-extern Bitboard DownRightMasks[64];
-extern Bitboard  DownLeftMasks[64];
+extern Bitboard   UpRightMasks[SQUARE_NB];
+extern Bitboard    UpLeftMasks[SQUARE_NB];
+extern Bitboard DownRightMasks[SQUARE_NB];
+extern Bitboard  DownLeftMasks[SQUARE_NB];
 
-extern Bitboard     LineMasks[64];	// (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
-extern Bitboard DiagonalMasks[64];	// (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
+extern Bitboard     LineMasks[SQUARE_NB];	// (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
+extern Bitboard DiagonalMasks[SQUARE_NB];	// (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
 
-extern Bitboard   RookMasks[64];
-extern Bitboard BishopMasks[64];
-extern Bitboard KnightMasks[64];
-extern Bitboard   KingMasks[64];
+extern Bitboard   RookMasks[SQUARE_NB];
+extern Bitboard BishopMasks[SQUARE_NB];
+extern Bitboard KnightMasks[SQUARE_NB];
+extern Bitboard   KingMasks[SQUARE_NB];
 
-extern Bitboard        PawnMasks[2][64];
-extern Bitboard PawnCaptureMasks[2][64];
-extern Bitboard  PassedPawnMasks[2][64];
+extern Bitboard        PawnMasks[COLOR_NB][SQUARE_NB];
+extern Bitboard PawnCaptureMasks[COLOR_NB][SQUARE_NB];
+extern Bitboard  PassedPawnMasks[COLOR_NB][SQUARE_NB];
 
-extern Bitboard   RookStartIndex[64];
-extern Bitboard BishopStartIndex[64];
+extern Bitboard   RookStartIndex[SQUARE_NB];
+extern Bitboard BishopStartIndex[SQUARE_NB];
 
-extern Bitboard   RookMovesLookUp[106495];
-extern Bitboard BishopMovesLookUp[5248];
+extern Bitboard*   RookMovesLookUp;
+extern Bitboard* BishopMovesLookUp;
 
-extern Bitboard   RookMagics[64];
-extern 		int   RookShifts[64];
-extern Bitboard BishopMagics[64];
-extern 		int BishopShifts[64];
+extern Bitboard   RookMagics[SQUARE_NB];
+extern 		int   RookShifts[SQUARE_NB];
+extern Bitboard BishopMagics[SQUARE_NB];
+extern 		int BishopShifts[SQUARE_NB];
 
 void
 Init();
