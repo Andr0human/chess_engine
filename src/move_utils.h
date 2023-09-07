@@ -3,19 +3,22 @@
 #ifndef MOVE_UTILS_H
 #define MOVE_UTILS_H
 
+#include <iomanip>
 #include "bitboard.h"
 #include "lookup_table.h"
 
 
 class MoveList
 {
+    // Note : Need to create a copy constructor before copying this class.
+    // __begin, __end address pointer needs to fix for copying.
     private:
     Move* __begin;
     Move* __end;
 
     public:
     // Stores all moves for current position
-    Move pMoves[218];
+    Move pMoves[MAX_MOVES];
 
     // Active side color
     Color color;
@@ -204,7 +207,7 @@ PrintMove(Move move, ChessBoard _cb);
  * @param myMoves Movelist for board positions.
  */
 void
-PrintMovelist(const MoveList& myMoves, const ChessBoard& _cb);
+PrintMovelist(MoveList myMoves, ChessBoard _cb);
 
 
 bool
