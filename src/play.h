@@ -5,9 +5,11 @@
 
 #include "perf.h"
 #include "single_thread.h"
-// #include "multi_thread.h"
 #include <fstream>
 #include <thread>
+
+using std::ifstream;
+using std::ofstream;
 
 
 /*** CommandList
