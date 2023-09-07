@@ -923,12 +923,13 @@ GenerateMoves(ChessBoard& pos, bool qsSearch)
     if (!pos.AttackersFound())
         KingAttackers(pos);
 
-    myMoves.pinnedPiecesSquares  = PinnedPiecesList(pos, myMoves, pos.checkers);
-    myMoves.discoverCheckSquares = SquaresForDiscoveredCheck(pos);
-    GenerateSquaresThatCheckEnemyKing(pos, myMoves);
+    // myMoves.discoverCheckSquares = SquaresForDiscoveredCheck(pos);
+    // GenerateSquaresThatCheckEnemyKing(pos, myMoves);
 
-    if (pos.checkers < 2)
+    if (pos.checkers < 2) {
+        myMoves.pinnedPiecesSquares  = PinnedPiecesList(pos, myMoves, pos.checkers);
         PieceMovement(pos, myMoves, pos.checkers);
+    }
 
     KingMoves(pos, myMoves, pos.enemyAttackedSquares);
 
