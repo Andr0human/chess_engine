@@ -11,8 +11,10 @@
 
 // Variables
 
-extern Move pvArray[(MAX_PLY * MAX_PLY + MAX_PLY) / 2];
-extern Move thread_array[MAX_THREADS][(MAX_PLY * MAX_PLY) / 2];
+constexpr size_t pvArraySize = (MAX_PLY * (MAX_PLY + 1)) / 2;
+
+extern Move pvArray[pvArraySize];
+extern Move thread_array[MAX_THREADS][pvArraySize];
 extern const string StartFen;
 
 // Utility

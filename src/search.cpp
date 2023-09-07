@@ -1,8 +1,8 @@
 
 #include "search.h"
 
-Move pvArray[(MAX_PLY * MAX_PLY + MAX_PLY) / 2];
-Move thread_array[MAX_THREADS][(MAX_PLY * MAX_PLY) / 2];
+Move pvArray[pvArraySize];
+Move thread_array[MAX_THREADS][pvArraySize];
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 #ifndef TOOLS
@@ -16,8 +16,8 @@ movcpy(Move* pTarget, const Move* pSource, int n)
 void
 ResetPvLine()
 {
-    for (int i = 0; i < 800; i++)
-        pvArray[i] = 0;
+    for (size_t i = 0; i < pvArraySize; i++)
+        pvArray[i] = NULL_MOVE;
 }
 
 Score
@@ -178,7 +178,6 @@ QuieSearch(ChessBoard& pos, Score alpha, Score beta, int ply, int __dol)
     // Check if Time Left for Search
     if (info.TimeOver())
         return TIMEOUT;
-
 
     if (LegalMovesPresent(pos) == false)
     {
