@@ -516,7 +516,7 @@ ChessBoard::ThreeMoveRepetition() const noexcept
 
 bool
 ChessBoard::FiftyMoveDraw() const noexcept
-{ return halfmove > 100; }
+{ return halfmove >= 100; }
 
 Key
 ChessBoard::GenerateHashkey() const
