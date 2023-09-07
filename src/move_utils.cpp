@@ -13,7 +13,7 @@ DecodeMove(Move move)
     Color cl  = Color((move >> 20) & 1);
 
     int ppt = (move >> 18) & 3;
-    int pr  = (move >> 21) & 31;
+    int pr  = move >> 21;
 
     cout << "Start_Square : " << ip << '\n';
     cout << "End_Square : " << fp << '\n';
@@ -128,8 +128,8 @@ AddMoves(Square ip, Bitboard endSquares, ChessBoard& pos, MoveList& myMoves)
         
         Move move = base_move | (fpt << 15) | (fp << 6);
         
-        if (MoveGivesCheck(move, pos, myMoves))
-            priority += 10;
+        // if (MoveGivesCheck(move, pos, myMoves))
+        //     priority += 10;
 
         move |= priority << 21;
         myMoves.Add(move);
@@ -320,16 +320,33 @@ PrintMove(Move move, ChessBoard _cb)
 
 
 void
-PrintMovelist(const MoveList& myMoves, const ChessBoard& _cb)
+PrintMovelist(MoveList myMoves, ChessBoard _cb)
 {
-    cout << "MoveCount : " << myMoves.size() << '\n';
-    
-    int move_no = 0;
-    for (const Move move : myMoves)
+    using std::setw;
+
+    // Sort the moves based on their priority
+    for (size_t i = 0; i < myMoves.size(); i++) {
+        for (size_t j = i + 1; j < myMoves.size(); j++) {
+            if ((myMoves.pMoves[i] >> 21) < (myMoves.pMoves[j] >> 21))
+                std::swap(myMoves.pMoves[i], myMoves.pMoves[j]);
+        }
+    }
+
+
+    cout << "MoveCount : " << myMoves.size() << '\n'
+        << " | No. |   Move   | Encode-Move | Priority |" << endl;
+
+    for (size_t i = 0; i < myMoves.size(); i++)
     {
-        string result = PrintMove(move, _cb);
-        cout << (++move_no) << " \t| "  << result
-             << string(8 - result.size(), ' ') << "| " << move << '\n';
+        Move move = myMoves.pMoves[i];
+        string moveString = PrintMove(move, _cb);
+        int priority = move >> 21;
+
+        cout << " | " << setw(3)  << (i + 1)
+             << " | " << setw(8)  << moveString
+             << " | " << setw(11) << move
+             << " | " << setw(8)  << priority
+             << " |"  << endl;
     }
 
     cout << endl;
