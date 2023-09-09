@@ -50,6 +50,8 @@ class PlayBoard : public ChessBoard
     bool go_receive;
     bool to_quit;
 
+    int queryNumber;
+
     // Moves to be played on PlayBoard before starting Search
     vector<Move> pre_moves;
     vector<uint64_t> prev_keys;
@@ -63,9 +65,9 @@ class PlayBoard : public ChessBoard
 
     public:
     // Init
-    PlayBoard()
-    : threads(1), mDepth(MAX_DEPTH), movetime(DEFAULT_SEARCH_TIME),
-    go_receive(false), to_quit(false) {}
+    PlayBoard() :
+    threads(1), mDepth(MAX_DEPTH), movetime(DEFAULT_SEARCH_TIME),
+    go_receive(false), to_quit(false), queryNumber(1) {}
 
     void
     SetThreads(size_t __tc) noexcept
@@ -91,14 +93,16 @@ class PlayBoard : public ChessBoard
     SearchDone() noexcept
     { go_receive = false; }
 
-    bool DoSearch() const noexcept
+    bool
+    DoSearch() const noexcept
     { return go_receive; }
 
     void
     ReadyQuit() noexcept
     { to_quit = true; }
 
-    bool DoQuit() const noexcept
+    bool
+    DoQuit() const noexcept
     { return to_quit; }
 
     void
@@ -159,10 +163,18 @@ class PlayBoard : public ChessBoard
     {
         if (prev_keys.empty())
             return true;
-        
+
         uint64_t last_key = prev_keys.back();
         return GenerateHashkey() == last_key;
     }
+
+    inline int
+    Query() const noexcept
+    { return queryNumber; }
+
+    inline void
+    UpdateQuery() noexcept
+    { queryNumber++; }
 };
 
 

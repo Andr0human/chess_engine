@@ -15,21 +15,9 @@ WriteLog(string message)
 
 
 static void
-ClearInputFile()
+GetInput(string& __s, int validQuery)
 {
-    std::ofstream clearFile(inputFile, std::ios::out | std::ios::trunc);
-    if (clearFile.is_open()) {
-        clearFile.close();
-        WriteLog("File content cleared!");
-    } else {
-        WriteLog("Error: Could not clear the file!");
-    }
-}
-
-
-static void
-GetInput(string& __s)
-{
+    constexpr size_t INPUT_SIZE = 50;
     ifstream inputReader(inputFile);
 
     if (!inputReader.is_open())
@@ -39,9 +27,21 @@ GetInput(string& __s)
         exit(EXIT_FAILURE);
     }
 
-    const auto validArgsFound = [&] () {
+    const auto validArgsFound = [&] ()
+    {
+        inputReader.clear();
         inputReader.seekg(0, std::ios::beg);
-        return inputReader.peek() != EOF;
+
+        getline(inputReader, __s);
+
+        if (__s.length() != INPUT_SIZE)
+            return false;
+
+        int query = 0;
+        for (int i = 0; ('0' <= __s[i]) and (__s[i] <= '9'); i++)
+            query = 10 * query + (__s[i] - '0');
+
+        return query == validQuery;
     };
 
     // Break between each read
@@ -50,27 +50,22 @@ GetInput(string& __s)
     // Searching for a valid commandline
     while (!validArgsFound())
         std::this_thread::sleep_for(WAIT_TIME_PER_CYCLE);
-
-    getline(inputReader, __s);
 }
 
 
 static void
-WriteSearchResult()
+WriteSearchResult(PlayBoard& pb)
 {
-    const Move MOVE_FILTER = 2097151;
+    using std::to_string;
+    constexpr size_t OUTPUT_SIZE = 30;
+
     const auto& [move, eval] = info.LastIterationResult();
-    const double in_decimal = static_cast<double>(eval) / 100;
+    const double in_decimal  = double(eval) / 100;
 
-    string result = std::to_string(move & MOVE_FILTER) + string(" ")
-                  + std::to_string(in_decimal) + string(" ")
-                  + std::to_string(info.SearchTime());
+    string result =
+        to_string(filter(move)) + " " + to_string(in_decimal) + " " + to_string(pb.Query());
 
-    /* // Rewind to the beginning of the file before writing
-    outputWriter.seekp(0);
-    outputWriter << result;
-    outputWriter.flush(); // Flush the output */
-
+    result.append(OUTPUT_SIZE - result.size(), ' ');
     ofstream outputWriter(outputFile);
     outputWriter << result;
     outputWriter.close();
@@ -78,7 +73,7 @@ WriteSearchResult()
 
 
 static void
-ReadInitCommands(const vector<string>& init_args, PlayBoard& __pos)
+ReadInitCommands(const vector<string>& init_args, PlayBoard& position)
 {
     size_t index = 0;
 
@@ -86,33 +81,32 @@ ReadInitCommands(const vector<string>& init_args, PlayBoard& __pos)
     {
         if (arg == "input")
         {
-            puts("Input  path found!");
             inputFile = init_args[index + 1];
+            WriteLog("Input  path found!");
         }
         else if (arg == "output")
         {
-            puts("Output path found!");
             outputFile = init_args[index + 1];
+            WriteLog("Output path found!");
         }
         else if (arg == "log")
         {
-            puts("Logger Found!");
             logger = new ofstream(init_args[index + 1]);
+            WriteLog("Logger path found!");
         }
         else if (arg == "position")
         {
             const string fen = base_utils::Strip(init_args[index + 1], '"');
-            __pos.SetNewPosition(fen);
+            position.SetNewPosition(fen);
 
-            puts("New position found!");
-            cout << __pos.VisualBoard() << endl;
+            WriteLog("New position found!");
+            WriteLog(position.VisualBoard());
         }
         else if (arg == "threads")
         {
-            puts("threads command found!");
-            __pos.SetThreads(std::stoi(init_args[index + 1]));
+            WriteLog("threads command found!");
+            position.SetThreads(std::stoi(init_args[index + 1]));
         }
-
         ++index;
     }
 }
@@ -182,10 +176,11 @@ ExecuteLateCommands(PlayBoard& board)
 
         board.SearchDone();
 
-        WriteLog("Start Log Search Result!");
         WriteLog(info.GetSearchResult(__pos));
-        WriteLog("End   Log Search Result!");
-        WriteSearchResult();
+
+        WriteSearchResult(board);
+
+        board.UpdateQuery();
 
         Move chosen_move = info.LastIterationResult().first;
         board.AddPremoves(chosen_move);
@@ -212,7 +207,7 @@ Play(const vector<string>& args)
 
     while (true)
     {
-        input_thread = std::thread(GetInput, std::ref(input_string));
+        input_thread = std::thread(GetInput, std::ref(input_string), board.Query());
         input_thread.join();
 
         WriteLog(string("Input recieve -> ") + input_string);
@@ -221,7 +216,6 @@ Play(const vector<string>& args)
 
         // Empty the Input file and string
         input_string.clear();
-        ClearInputFile();
 
         ExecuteLateCommands(board);
 
