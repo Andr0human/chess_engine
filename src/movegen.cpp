@@ -158,7 +158,7 @@ IsLegalMoveForPosition(Move move, ChessBoard& pos)
     MoveList myMoves = GenerateMoves(pos, false);
 
     for (Move legal_move : myMoves.pMoves)
-        if (move == legal_move) return true;
+        if (filter(move) == filter(legal_move)) return true;
     
     return false;
 }

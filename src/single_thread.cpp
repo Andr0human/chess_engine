@@ -80,9 +80,82 @@ RootNegaMax(ChessBoard &_cb, Depth depth)
 
 #ifndef SINGLE_THREAD_SEARCH
 
+static Score
+QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
+{
+    // Check if Time Left for Search
+    if (info.TimeOver())
+        return TIMEOUT;
+
+    if (!LegalMovesPresent(pos))
+    {
+        Score score = pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO;
+        pos.RemoveMovegenMetadata();
+        return score;
+    }
+
+    // if (ka_pieces.attackers) return AlphaBetaNonPV(_cb, 1, alpha, beta, ply);
+
+    // Get a 'Stand Pat' Score
+    Score stand_pat = Evaluate(pos);
+
+    // Checking for beta-cutoff
+    if (stand_pat >= beta)
+    {
+        // Usually called at the end of move-generation.
+        pos.RemoveMovegenMetadata();
+        return beta;
+    }
+
+    // int BIG_DELTA = 925;
+    // if (stand_pat < alpha - BIG_DELTA) return alpha;
+
+    if (stand_pat > alpha) alpha = stand_pat;
+
+    MoveList myMoves = GenerateMoves(pos, true);
+    ReorderGeneratedMoves(myMoves, false);
+
+
+    pvArray[pvIndex] = 0; // no pv yet
+    int pvNextIndex = pvIndex + MAX_PLY - ply;
+
+    for (const Move move : myMoves)
+    {
+        // Check based on priority for captures & checks
+        int move_priority = (move >> 21) & 31;
+
+        if (move_priority <= 10)
+            continue;
+
+        pos.MakeMove(move);
+        Score score = -QuiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
+        pos.UnmakeMove();
+
+        if (info.TimeOver())
+            return TIMEOUT;
+
+        // Check for Beta-cutoff
+        if (score >= beta) return beta;
+
+        if (score > alpha)
+        {
+            alpha = score;
+
+            if (ply < MAX_PLY)
+            {
+                pvArray[pvIndex] = filter(move) | QUIESCENCE_FLAG;
+                movcpy (pvArray + pvIndex + 1,
+                        pvArray + pvNextIndex, MAX_PLY - ply - 1);
+            }
+        }
+    }
+
+    return alpha;
+}
+
 
 Score
-AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, int ply, int pvIndex, int numExtensions) 
+AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions) 
 {
     if (info.TimeOver())
         return TIMEOUT;
@@ -107,7 +180,7 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, int ply, int 
     if (depth <= 0)
     {
         // Depth 0, starting Quiensense Search
-        return QuieSearch(__pos, alpha, beta, ply, 0);
+        return QuiescenceSearch(__pos, alpha, beta, ply, pvIndex);
     }
 
     {
@@ -181,7 +254,7 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, int ply, int 
             // Better move found, update the result
             hashf = HASH_EXACT;
             alpha = eval;
-            pvArray[pvIndex] = move;
+            pvArray[pvIndex] = filter(move);
             movcpy (pvArray + pvIndex + 1,
                     pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
@@ -207,7 +280,7 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     moc.OrderMovesOnTime(myMoves);
 
 
-    pvArray[pvIndex] = 0; // no pv yet
+    pvArray[pvIndex] = NULL_MOVE; // no pv yet
     pvNextIndex = pvIndex + MAX_PLY - ply;
 
     for (const Move move : myMoves)
@@ -247,7 +320,7 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
         if (eval > alpha)
         {
             alpha = eval;
-            pvArray[pvIndex] = myMoves.pMoves[i];
+            pvArray[pvIndex] = filter(myMoves.pMoves[i]);
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
         // if (alpha >= beta) return beta;
@@ -259,10 +332,12 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
 Score
 LmrSearch(ChessBoard &_cb, MoveList& myMoves,
-    Depth depth, Score alpha, Score beta, int ply, int pvIndex, int numExtensions)
+    Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
 {
     Score eval;
     int hashf = HASH_ALPHA, R, i = 0;
+
+    pvArray[pvIndex] = NULL_MOVE; // no pv yet
     int pvNextIndex = pvIndex + MAX_PLY - ply;
 
     for (const Move move : myMoves)
@@ -324,7 +399,7 @@ LmrSearch(ChessBoard &_cb, MoveList& myMoves,
 
 
 Score play_move(ChessBoard &_cb, Move move, int moveNo,
-    Depth depth, Score alpha, Score beta, int ply, int pvNextIndex, int numExtensions)
+    Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
 {
     Score eval;
 
@@ -370,7 +445,6 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
         return;
     }
 
-
     info = SearchData(board, search_time);
 
     bool within_valWindow = true;
@@ -379,9 +453,7 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
 
     for (Depth depth = 1; depth <= mDepth;)
     {
-        // writer << "Start root_Alphabeta for depth " << depth << endl;
         Score eval = RootAlphabeta(board, alpha, beta, depth);
-        // writer << "End   root_Alphabeta for depth " << depth << endl;
 
         if (info.TimeOver())
             break;
@@ -402,7 +474,7 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
             within_valWindow = true;
             valWindowCnt = 0;
 
-            info.AddResult(depth, eval, pvArray);
+            info.AddResult(board, eval, pvArray);
             writer << info.ShowLastDepthResult(board) << endl;
 
             depth++;

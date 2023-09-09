@@ -13,7 +13,8 @@
 //! TODO If promotion is possible and no enemy piece can capture it.
 //! TODO if (move_priority <= 10) continue; | Use break instead.
 //! TODO Search Extension - If promotion is possible and no enemy piece can capture it.
-//! TODO Add insufficient material draw(Two minor piece vs one minor piece is a draw)
+//! TODO Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
+
 
 int main(int argc, char **argv)
 {
@@ -23,7 +24,7 @@ int main(int argc, char **argv)
 }
 
 
-/*  
+/*
     r1bq1rk1/p4ppp/2Bb1n2/3p2B1/8/2N5/PPP2PPP/R2Q1RK1 b - - 0 12             // Bxh2+
     r2q3r/1b1k1pbp/p4np1/2BP1pN1/p1B5/P1Q5/1PP3PP/R3K2R w KQ - 0 19          // O-O O-O-O Qb4
     2k1r3/p1p2p1p/2p3p1/2bb1qB1/2P5/PP3P2/4N1PP/R2QK2R w KQ - 1 18           // Qd2 cxd5 Bh4
@@ -60,14 +61,16 @@ int main(int argc, char **argv)
     8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
     2kr3r/pppq4/3b4/3bn3/2N1p1p1/PP2P1N1/1B3PPP/2RQ1RK1 b - - 1 18           // B.M Nf3+
 
-    Search Explosion :
-    qqqqkqqq/qqqqqqqq/8/8/8/8/QQQQQQQQ/QQQQKQQQ w - - 0 1
-    rrrrkrrr/rrrrrrrr/8/8/8/8/RRRRRRRR/RRRRKRRR w - - 0 1
-
     To check for depth 1 quiescense:
     
     5r2/pp1k4/3p2p1/4b2p/4P2Q/P5PP/1P1q1n2/4RRK1 b - - 4 38
     r2q1rk1/pp1bppbp/3p2p1/6B1/P1BQP1n1/1PN5/2P2PPP/R4RK1 w - - 1 12
     8/5ppp/4k3/p2pP3/Pr3PP1/R3K3/7P/8 b - - 0 33
+
+    Quiescence Explosion:
+    q2k2q1/2nqn2b/1n1P1n1b/2rnr2Q/1NQ1QN1Q/3Q3B/2RQR2B/Q2K2Q1 w - - 0 1
+    r4rk1/1p1n1pp1/1bq1bn1p/2pp4/p1P1N1P1/1N1PB2B/PPQ2P1P/R4RK1 w - - 3 19
+    2Q2n2/2R4p/1p1qpp1k/8/3P3P/3B2P1/5PK1/r7 w - - 0 1
+    rnbqkbnr/rrrrrrrr/8/8/8/8/RRRRRRRR/RNBQKBNR w KQkq - 0 1
 
 */

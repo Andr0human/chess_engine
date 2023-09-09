@@ -124,10 +124,8 @@ MakeMove_MultiIterative(ChessBoard &primary, int mDepth, double search_time)
 int
 thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth depth, int ply, int pvIndex)
 {
-    if (depth <= 0)
-        return QuieSearch(_cb, alpha, beta, ply, 0);
-
-    // info.max_ply = std::max(info.max_ply, ply);
+    // if (depth <= 0)
+    //     return QuieSearch(_cb, alpha, beta, ply, 0);
 
     if (LegalMovesPresent(_cb) == false)
     {
@@ -190,10 +188,8 @@ thread_AlphaBeta(ChessBoard &_cb, int loc_arr[], Score alpha, Score beta, Depth 
 Score
 pv_multiAlphaBeta(ChessBoard& _cb, int loc_arr[], Score alpha, Score beta, Depth depth, int ply, int pvIndex)
 {
-    if (depth <= 0)
-        return QuieSearch(_cb, alpha, beta, ply, 0);
-
-    // info.max_ply = std::max(info.max_ply, ply);
+    // if (depth <= 0)
+    //     return QuiescenceSearch(_cb, alpha, beta, ply, 0, pvIndex);
     if (LegalMovesPresent(_cb) == false)
     {
         _cb.RemoveMovegenMetadata();

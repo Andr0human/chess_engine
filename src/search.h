@@ -11,10 +11,8 @@
 
 // Variables
 
-constexpr size_t pvArraySize = (MAX_PLY * (MAX_PLY + 1)) / 2;
-
-extern Move pvArray[pvArraySize];
-extern Move thread_array[MAX_THREADS][pvArraySize];
+extern Move pvArray[MAX_PV_ARRAY_SIZE];
+extern Move thread_array[MAX_THREADS][MAX_PV_ARRAY_SIZE];
 extern const string StartFen;
 
 // Utility
@@ -26,7 +24,6 @@ Score CheckmateScore(int ply);
 // Move_Generator
 void ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves);
 int createMoveOrderList(ChessBoard& pos);
-bool IsValidMove(Move move, ChessBoard pos);
 
 // Search_Checks
 // bool ok_to_do_nullmove(ChessBoard& _cb);
@@ -37,7 +34,6 @@ int Reduction (Depth depth, int num);
 int MaterialCount(ChessBoard& pos);
 
 // Search
-Score QuieSearch(ChessBoard& _cb, Score alpha, Score beta, int ply, int __dol);
 Score AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply);
 
 

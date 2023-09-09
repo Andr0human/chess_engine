@@ -1,8 +1,8 @@
 
 #include "search.h"
 
-Move pvArray[pvArraySize];
-Move thread_array[MAX_THREADS][pvArraySize];
+Move pvArray[MAX_PV_ARRAY_SIZE];
+Move thread_array[MAX_THREADS][MAX_PV_ARRAY_SIZE];
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 #ifndef TOOLS
@@ -16,7 +16,7 @@ movcpy(Move* pTarget, const Move* pSource, int n)
 void
 ResetPvLine()
 {
-    for (size_t i = 0; i < pvArraySize; i++)
+    for (size_t i = 0; i < MAX_PV_ARRAY_SIZE; i++)
         pvArray[i] = NULL_MOVE;
 }
 
@@ -77,38 +77,6 @@ createMoveOrderList(ChessBoard& pos)
 
     return (movelist.size() > 0) ?
            (*movelist.begin()) : (pos.checkers > 0 ? -1 : -2);
-}
-
-bool
-IsValidMove(Move move, ChessBoard pos)
-{
-    // Get Init. and Dest. Square from encoded move.
-    Square ip = Square(move & 63);/* , fp = (move >> 6) & 63 */;
-
-    // No piece on initial square
-    if (pos.PieceOnSquare(ip) == NO_PIECE) return false;
-
-    // Piece of same colour to move
-    // if (_cb.pColor * _cb.Pieces[ip] < 0) return false;
-
-    // No same colour for Initial and Dest Sq. Piece
-    // if (_cb.pColor * _cb.Pieces[fp] > 0) return false;
-
-    // Generate all legal moves for curr. Position
-    MoveList myMoves = GenerateMoves(pos);
-
-    // Take only Init. and Dest. Sq. to Compare(Filter everything else.)
-    // Match with all generated legal moves, it found return valid, else not-valid.
-
-    move &= (1 << 12) - 1;
-    for (const Move vmove : myMoves)
-    {
-        Move vMove = vmove & ((1 << 12) - 1);
-        // Valid Move Found.
-        if (move == vMove) return true;
-    }
-    // Move not matched with any generated legal moves, thus invalid.
-    return false;
 }
 
 
@@ -172,66 +140,6 @@ MaterialCount(ChessBoard& pos)
 
 #ifndef SEARCH_COMMON
 
-Score
-QuieSearch(ChessBoard& pos, Score alpha, Score beta, int ply, int __dol)
-{    
-    // Check if Time Left for Search
-    if (info.TimeOver())
-        return TIMEOUT;
-
-    if (LegalMovesPresent(pos) == false)
-    {
-        Score score = pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO;
-        pos.RemoveMovegenMetadata();
-        return score;
-    }
-
-    // if (ka_pieces.attackers) return AlphaBetaNonPV(_cb, 1, alpha, beta, ply);
-
-    // Get a 'Stand Pat' Score
-    Score stand_pat = Evaluate(pos);
-
-    // Checking for beta-cutoff
-    if (stand_pat >= beta)
-    {
-        // Usually called at the end of move-generation.
-        pos.RemoveMovegenMetadata();
-        return beta;
-    }
-
-    // int BIG_DELTA = 925;
-    // if (stand_pat < alpha - BIG_DELTA) return alpha;
-
-    if (stand_pat > alpha) alpha = stand_pat;
-
-    MoveList myMoves = GenerateMoves(pos, true);
-    ReorderGeneratedMoves(myMoves, false);
-
-    for (const Move move : myMoves)
-    {
-        // Check based on priority for captures & checks
-        int move_priority = (move >> 21) & 31;
-
-        if (move_priority <= 10)
-            continue;
-
-        pos.MakeMove(move);
-        Score score = -QuieSearch(pos, -beta, -alpha, ply + 1, __dol + 1);
-        pos.UnmakeMove();
-
-        if (std::abs(score) == TIMEOUT)
-            return TIMEOUT;
-
-        // Check for Beta-cutoff
-        if (score >= beta) return beta;
-
-        // better move found!
-        if (score > alpha) alpha = score;
-    }
-
-    return alpha;
-}
-
 
 Score
 AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply)
@@ -239,8 +147,8 @@ AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply)
     if (LegalMovesPresent(_cb) == false)
         return _cb.InCheck() ? CheckmateScore(ply) : 0;
 
-    if (depth <= 0)
-        return QuieSearch(_cb, alpha, beta, ply, 0);
+    // if (depth <= 0)
+    //     return QuieSearch(_cb, alpha, beta, ply, 0);
 
     auto myMoves = GenerateMoves(_cb);
     ReorderGeneratedMoves(myMoves, false);

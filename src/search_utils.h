@@ -67,16 +67,26 @@ class SearchData
 
 
     static string
-    readable_pv_line(ChessBoard board, const vector<Move>& pv) noexcept
+    ReadablePvLine(ChessBoard board, const vector<Move>& pv) noexcept
     {
         string res;
+        bool qmoves_found = false;
+
         for (const Move move : pv)
         {
-            if (IsLegalMoveForPosition(move, board) == false)
-                break;
+            if (((move & QUIESCENCE_FLAG) != 0) and !qmoves_found)
+            {
+                res += "(";
+                qmoves_found = true;
+            }
+
             res += PrintMove(move, board) + string(" ");
             board.MakeMove(move);
         }
+
+        if (qmoves_found)
+            res[res.size() - 1] = ')';
+
         return res;
     }
 
@@ -98,7 +108,6 @@ class SearchData
         Move zeroMove = GenerateMoves(pos).pMoves[0];
         move_eval = {std::make_pair(zeroMove, 0)};
     }
-    
 
     std::pair<Move, Score> LastIterationResult() const noexcept
     { return move_eval.back(); }
@@ -107,7 +116,7 @@ class SearchData
     IsPartOfPV(Move move) const noexcept
     {
         for (Move pv_move : last_pv)
-            if (move == pv_move) return true;
+            if (filter(move) == (pv_move)) return true;
         return false;
     }
 
@@ -119,14 +128,18 @@ class SearchData
     }
 
     void
-    AddResult(size_t depth, int eval, int __pv[]) noexcept
+    AddResult(ChessBoard pos, Score eval, Move pv[])
     {
-        //! TODO Use Valid Move Check
         last_pv.clear();
-        for (size_t i = 0; i < depth; i++)
-            last_pv.emplace_back(__pv[i]);
 
-        move_eval.emplace_back(std::make_pair(__pv[0], eval * (2 * side - 1)));
+        for (int i = 0; i < MAX_PV_ARRAY_SIZE; i++)
+        {
+            if (!IsLegalMoveForPosition(pv[i], pos))
+                break;
+            last_pv.emplace_back(pv[i]);
+            pos.MakeMove(pv[i]);
+        }
+        move_eval.emplace_back(std::make_pair(pv[0], eval * (2 * side - 1)));
     }
 
     void
@@ -153,9 +166,9 @@ class SearchData
           + "\nDepth Searched = " + std::to_string(move_eval.size() - 1)
           + "\nBest Move = " + PrintMove(move, board)
           + "\nEval = " + std::to_string(eval_conv)
-          + "\nLine = " + readable_pv_line(board, last_pv)
+          + "\nLine = " + ReadablePvLine(board, last_pv)
           + "\nTime_Spend = " + std::to_string(time_on_search) + " sec."
-          + "\n-------------------------\n";
+          + "\n-------------------------";
         
         return result;
     }
@@ -175,7 +188,7 @@ class SearchData
 
         result +=
             "Eval = " + std::to_string(eval_conv) + "\t| "
-          + "Pv = " + readable_pv_line(board, last_pv);
+          + "Pv = " + ReadablePvLine(board, last_pv);
         return result;
     }
 };

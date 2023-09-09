@@ -14,7 +14,7 @@ MoveOrderClass::Initialise(MoveList& myMoves)
 {
     mCount = myMoves.size();
     for (uint64_t i = 0; i < mCount; i++)
-        moves[i] = std::make_pair(myMoves.pMoves[i], 0);
+        moves[i] = std::make_pair(filter(myMoves.pMoves[i]), 0);
 }
 
 void
@@ -26,7 +26,7 @@ MoveOrderClass::SortList(int best_move)
 {
     for (uint64_t i = 0; i < mCount; i++)
     {
-        if (best_move == moves[i].first)
+        if (filter(best_move) == filter(moves[i].first))
         {
             std::swap(moves[i], moves[0]);
             break;

@@ -7,8 +7,12 @@
 using     Move =      int;
 using    Score =      int;
 using    Depth =      int;
+using      Ply =      int;
 using      Key = uint64_t;
 using Bitboard = uint64_t;
+
+
+constexpr Move QUIESCENCE_FLAG = 1 << 28;
 
 
 enum Color: int
@@ -46,6 +50,7 @@ enum Search
     TIMEOUT = 1112223334,
     DEFAULT_SEARCH_TIME = 1,
     MAX_THREADS = 12,
+    MAX_PV_ARRAY_SIZE = (MAX_PLY * (MAX_PLY + 1)) / 2,
 
     NULL_MOVE = 0,
 };
@@ -79,9 +84,6 @@ enum Board: uint64_t
 
     FileA = 0x101010101010101, FileB = FileA << 1, FileC = FileA << 2, FileD = FileA << 3,
     FileE = FileA << 4, FileF = FileA << 5, FileG = FileA << 6, FileH = FileA << 7,
-
-    dg_row  = 0x102040810204080,
-    adg_row = 0x8040201008040201, 
 
     NoSquares = 0ULL,
     AllSquares = ~NoSquares,
@@ -143,6 +145,17 @@ type_of(Piece pc)
 constexpr Color
 color_of(Piece pc)
 { return Color(pc >> 3); }
+
+
+constexpr Square from_sq(Move m)
+{ return Square(m & 0x3f); }
+
+constexpr Square to_sq(Move m)
+{ return Square((m >> 6) & 0x3f); }
+
+constexpr Move filter(Move m)
+{ return m & 0x1fffff;}
+
 
 
 constexpr Square operator+ (Square s, int d)
