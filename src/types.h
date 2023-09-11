@@ -12,7 +12,6 @@ using      Key = uint64_t;
 using Bitboard = uint64_t;
 
 
-constexpr Move QUIESCENCE_FLAG = 1 << 28;
 
 
 enum Color: int
@@ -124,6 +123,16 @@ enum Square : int
 };
 
 
+enum MoveType
+{
+    NORMAL,
+    CASTLING,
+    CAPTURES,
+    PROMOTION,
+    CHECK,
+
+    QUIESCENCE_FLAG = 1 << 28,
+};
 
 
 // Toggle color

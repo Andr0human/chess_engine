@@ -36,128 +36,6 @@ DecodeMove(Move move)
 
 
 
-inline Move
-GenerateBaseMove(const ChessBoard& _cb, Square ip)
-{
-    PieceType pt = type_of(_cb.PieceOnSquare(ip));
-    int color_bit = _cb.color << 20;
-
-    const Move base_move = color_bit + (pt << 12) + ip;
-    return base_move;
-}
-
-inline void
-AddCaptureMoves(Square ip, Bitboard endSquares,
-    Move base_move, const ChessBoard& _cb, MoveList& myMoves)
-{
-    const auto cap_priority = [] (PieceType pt, PieceType cpt)
-    { return (cpt - pt + 16); };
-
-    const auto encode_full_move = [] (Move base,
-        Square fp, PieceType cpt, int move_pr)
-    {
-        const Move e_move = base + (move_pr << 21) + (cpt << 15) + (fp << 6);
-        return e_move;
-    };
-
-    PieceType pt = type_of(_cb.PieceOnSquare(ip));
-
-    while (endSquares != 0)
-    {
-        Square fp = NextSquare(endSquares);
-        PieceType fpt = type_of(_cb.PieceOnSquare(fp));
-        int move_priority = cap_priority(pt, fpt);
-
-        const Move enc_move = encode_full_move(base_move, fp, fpt, move_priority);
-        myMoves.Add(enc_move);
-    }
-}
-
-inline void
-AddQuietMoves(Bitboard endSquares, Move base_move, MoveList& myMoves)
-{
-    const auto encode_full_move = [] (Move base, Square fp, int pr)
-    {
-        const Move e_move = base + (pr << 21) + (fp << 6);
-        return e_move;
-    };
-
-    while (endSquares != 0)
-    {
-        Square fp = NextSquare(endSquares);
-        int move_priority = 0;
-        const Move enc_move = encode_full_move(base_move, fp, move_priority);
-        myMoves.Add(enc_move);
-    }
-}
-
-void
-AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves)
-{
-    Bitboard emy_pieces = _cb.piece(~_cb.color, PieceType::ALL);
-    if (myMoves.qsSearch)
-        endSquares = endSquares & emy_pieces;
-
-    Bitboard cap_Squares = endSquares & emy_pieces;
-    Bitboard quiet_Squares = endSquares ^ cap_Squares;
-    const Move base_move = GenerateBaseMove(_cb, ip);
-
-    AddCaptureMoves(ip, cap_Squares, base_move, _cb, myMoves);
-    AddQuietMoves(quiet_Squares, base_move, myMoves);
-}
-
-
-void
-AddMoves(Square ip, Bitboard endSquares, ChessBoard& pos, MoveList& myMoves)
-{
-    Bitboard emy_pieces = pos.piece(~pos.color, PieceType::ALL);
-    if (myMoves.qsSearch)
-        endSquares = endSquares & emy_pieces;
-
-    PieceType ipt = type_of(pos.PieceOnSquare(ip));
-    Move base_move = (pos.color << 20) | (ipt << 12) | ip;
-
-    while (endSquares > 0)
-    {
-        Square fp = NextSquare(endSquares);
-        PieceType fpt = type_of(pos.PieceOnSquare(fp));
-        int priority = 0;
-
-        if (fpt != NONE)
-            priority += fpt - ipt + 16;
-        
-        Move move = base_move | (fpt << 15) | (fp << 6);
-        
-        // if (MoveGivesCheck(move, pos, myMoves))
-        //     priority += 10;
-
-        move |= priority << 21;
-        myMoves.Add(move);
-    }
-}
-
-
-void
-AddQuietPawnMoves(Bitboard endSquares, int shift, const ChessBoard& _cb, MoveList& myMoves)
-{
-    if (myMoves.qsSearch)
-        return;
-
-    PieceType pt = PAWN;
-    int color_bit = _cb.color << 20;
-
-    const Move base_move = color_bit + (pt << 12);
-
-    while (endSquares != 0)
-    {
-        Square fp = NextSquare(endSquares);
-        Square ip = fp + shift;
-        const Move enc_move = base_move + (fp << 6) + ip;
-        myMoves.Add(enc_move);
-    }
-}
-
-
 Bitboard
 PawnAttackSquares(const ChessBoard& _cb, Color color)
 {
@@ -340,7 +218,7 @@ PrintMovelist(MoveList myMoves, ChessBoard _cb)
     {
         Move move = myMoves.pMoves[i];
         string moveString = PrintMove(move, _cb);
-        int priority = move >> 21;
+        int priority = move >> 24;
 
         cout << " | " << setw(3)  << (i + 1)
              << " | " << setw(8)  << moveString
@@ -354,7 +232,7 @@ PrintMovelist(MoveList myMoves, ChessBoard _cb)
 
 
 bool
-MoveGivesCheck(Move move, ChessBoard& pos, MoveList& myMoves)
+MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
 {
     Square ip = Square(move & 63);
     Square fp = Square((move >> 6) & 63);

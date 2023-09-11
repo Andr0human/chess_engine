@@ -131,30 +131,6 @@ DecodeMove(Move encoded_move);
 
 
 
-inline Move
-GenerateBaseMove(const ChessBoard& _cb, Square ip);
-
-inline
-void AddCaptureMoves(Square ip, Bitboard endSquares, Move base,
-    const ChessBoard& _cb, MoveList& myMoves);
-
-inline void
-AddQuietMoves(Bitboard endSquares, Move base, MoveList& myMoves);
-
-void
-AddQuietPawnMoves(Bitboard endSquares, int shift, const ChessBoard& _cb, MoveList& myMoves);
-
-void
-AddMovesToList(Square ip, Bitboard endSquares, const ChessBoard& _cb, MoveList& myMoves);
-
-
-void
-AddMoves(Square ip, Bitboard endSquares, ChessBoard& pos, MoveList& myMoves);
-
-
-
-
-
 
 
 // Returns all squares attacked by all pawns from side to move
@@ -211,7 +187,7 @@ PrintMovelist(MoveList myMoves, ChessBoard _cb);
 
 
 bool
-MoveGivesCheck(Move move, ChessBoard& pos, MoveList& myMoves);
+MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves);
 
 #endif
 

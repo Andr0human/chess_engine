@@ -170,23 +170,23 @@ class ChessBoard
         enemyAttackedSquares = 0;
     }
 
-    inline bool
+    constexpr bool
     InCheck() const noexcept
     { return checkers > 0; }
 
-    inline Piece
+    constexpr Piece
     PieceOnSquare(Square sq) const noexcept
     { return board[sq]; }
 
-    inline Bitboard
+    constexpr Bitboard
     piece(Color c, PieceType pt) const noexcept
     { return piece_bb[make_piece(c, pt)]; }
 
-    inline Bitboard
+    constexpr Bitboard
     All() const noexcept
     {
-        Piece white_all = make_piece(WHITE, ALL);
-        Piece black_all = make_piece(BLACK, ALL);
+        constexpr Piece white_all = make_piece(WHITE, ALL);
+        constexpr Piece black_all = make_piece(BLACK, ALL);
         return piece_bb[white_all] | piece_bb[black_all];
     }
 
