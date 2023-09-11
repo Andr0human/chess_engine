@@ -105,7 +105,7 @@ AddPawnMoves(Square ip, Square fp, const ChessBoard& pos,
 
 static void
 AddShiftPawnMoves(Bitboard endSquares, int shift, const ChessBoard& pos,
-    MoveList& myMoves, int flag = NORMAL, int start_priority = 10)
+    MoveList& myMoves, int flag, int start_priority = 10)
 {
     if (endSquares == 0)
         return;
@@ -127,11 +127,8 @@ AddShiftPawnMoves(Bitboard endSquares, int shift, const ChessBoard& pos,
 
         int priority = start_priority;
 
-        if (fpt != NONE)
-        {
-            flag = CAPTURES;
-            priority += fpt - ipt + 16;
-        }
+        if (flag == CAPTURES)
+            priority += fpt - ipt + 15;
 
         Move move = base_move | (priority << 24) | (flag << 21)
                   | (fpt << 15) | (fp << 6) | ip;
@@ -163,14 +160,14 @@ AddMoves(Square ip, Bitboard endSquares, const ChessBoard& pos,
         if (fpt != NONE)
         {
             flag = CAPTURES;
-            priority += fpt - ipt + 16;
+            priority += fpt - ipt + 15;
         }
 
         if (((1ULL << ip) & pos.enemyAttackedSquares) != 0)
             priority += 2;
 
         if (((1ULL << fp) & pos.enemyAttackedSquares) != 0)
-            priority -= 5;
+            priority -= 4;
 
         Move move = base_move | (priority << 24) | (flag << 21) | (fpt << 15) | (fp << 6);
         myMoves.Add(move);
@@ -202,10 +199,10 @@ EnpassantPawns(const ChessBoard &_cb, MoveList &myMoves,
     const auto shift = c_my == Color::WHITE ? LeftShift : RightShift;
 
     if ((shift(l_pawns, 7 + (own >> 2)) & _ep) and EnpassantRecheck(eps + (2 * emy - 9), _cb))
-        AddPawnMoves(eps + (2 * emy - 9), eps, _cb, myMoves, CAPTURES, 18);
+        AddPawnMoves(eps + (2 * emy - 9), eps, _cb, myMoves, CAPTURES, 32);
 
     if ((shift(r_pawns, 7 + (emy >> 2)) & _ep) and EnpassantRecheck(eps + (2 * emy - 7), _cb))
-        AddPawnMoves(eps + (2 * emy - 7), eps, _cb, myMoves, CAPTURES, 18);
+        AddPawnMoves(eps + (2 * emy - 7), eps, _cb, myMoves, CAPTURES, 32);
 }
 
 static inline void
@@ -224,7 +221,7 @@ PromotionPawns(const ChessBoard& pos, MoveList &myMoves,
         {
             Square fp = NextSquare(endSquares);
             PieceType fpt = type_of(pos.PieceOnSquare(fp));
-            AddPawnMoves(ip, fp, pos, myMoves, PROMOTION, 2 * fpt + 30);
+            AddPawnMoves(ip, fp, pos, myMoves, PROMOTION, 2 * fpt + 36);
         }
     }
 }
@@ -822,7 +819,7 @@ PinnedPiecesList(const ChessBoard& _cb, MoveList &myMoves, int KA)
             int flag = (dest_sq & Rank18) != 0 ? PROMOTION : CAPTURES;
 
             if (dest_sq != 0)
-                AddPawnMoves(index_f, SquareNo(dest_sq), _cb, myMoves, flag, 30);
+                AddPawnMoves(index_f, SquareNo(dest_sq), _cb, myMoves, flag, 28);
         }
     };
 
