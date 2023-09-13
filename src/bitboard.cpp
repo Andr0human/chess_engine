@@ -28,7 +28,7 @@ ChessBoard::SetPositionWithFen(const string& fen) noexcept
     {
         const int piece_no[8] = {6, 2, 0, 3, 0, 1, 5, 4};
 
-        const char piece = ch < 'a' ? ch : ch - 32;
+        const char piece = ch < 'a' ? ch : char(int(ch) - 32);
         int v = static_cast<int>(piece);
 
         int index = ((v - 3) % 10) - 2;
@@ -42,7 +42,7 @@ ChessBoard::SetPositionWithFen(const string& fen) noexcept
             return;
 
         int v = static_cast<int>(ch);
-        csep |= 1ULL << (10 - (v % 5));
+        csep |= 1 << (10 - (v % 5));
     };
 
     Reset();
@@ -162,7 +162,7 @@ ChessBoard::Fen() const
         generated_fen += "- ";
     else
     {
-        generated_fen.push_back((csep & 7) + 'a');
+        generated_fen.push_back(char((csep & 7) + 97));
         generated_fen += (color == 1 ? "6 " : "3 ");
     }
 

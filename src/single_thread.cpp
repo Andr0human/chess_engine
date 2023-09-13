@@ -375,7 +375,7 @@ LmrSearch(ChessBoard &_cb, MoveList& myMoves,
         {
             hashf = HASH_EXACT;
             alpha = eval;
-            pvArray[pvIndex] = move;
+            pvArray[pvIndex] = filter(move);
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
         if (eval >= beta)
