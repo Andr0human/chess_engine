@@ -138,42 +138,6 @@ AddShiftPawnMoves(Bitboard endSquares, int shift, const ChessBoard& pos,
 }
 
 
-static void
-AddMoves(Square ip, Bitboard endSquares, const ChessBoard& pos,
-    MoveList& myMoves, int flag = NORMAL, int start_priority = 10)
-{
-    Bitboard emy_pieces = pos.piece(~pos.color, ALL);
-    PieceType ipt = type_of(pos.PieceOnSquare(ip));
-
-    if (myMoves.qsSearch)
-        endSquares &= emy_pieces;
-
-    Move base_move = (pos.color << 20) | (ipt << 12) | ip;
-
-    while (endSquares != 0)
-    {
-        Square fp = NextSquare(endSquares);
-        PieceType fpt = type_of(pos.PieceOnSquare(fp));
-        int priority = start_priority;
-
-        // Generate Move Priority
-        if (fpt != NONE)
-        {
-            flag = CAPTURES;
-            priority += fpt - ipt + 15;
-        }
-
-        // if (((1ULL << ip) & pos.enemyAttackedSquares) != 0)
-        //     priority += 2;
-
-        // if (((1ULL << fp) & pos.enemyAttackedSquares) != 0)
-        //     priority -= 4;
-
-        Move move = base_move | (priority << 24) | (flag << 21) | (fpt << 15) | (fp << 6);
-        myMoves.Add(move);
-    }
-}
-
 
 static void
 AddCaptureMoves(Square ip, Bitboard endSquares, const ChessBoard& pos, MoveList& myMoves, int start_priority)
