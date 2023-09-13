@@ -163,13 +163,71 @@ AddMoves(Square ip, Bitboard endSquares, const ChessBoard& pos,
             priority += fpt - ipt + 15;
         }
 
-        if (((1ULL << ip) & pos.enemyAttackedSquares) != 0)
-            priority += 2;
+        // if (((1ULL << ip) & pos.enemyAttackedSquares) != 0)
+        //     priority += 2;
 
-        if (((1ULL << fp) & pos.enemyAttackedSquares) != 0)
-            priority -= 4;
+        // if (((1ULL << fp) & pos.enemyAttackedSquares) != 0)
+        //     priority -= 4;
 
         Move move = base_move | (priority << 24) | (flag << 21) | (fpt << 15) | (fp << 6);
+        myMoves.Add(move);
+    }
+}
+
+
+static void
+AddCaptureMoves(Square ip, Bitboard endSquares, const ChessBoard& pos, MoveList& myMoves, int start_priority)
+{
+    constexpr int flag_bit  = CAPTURES  << 21;
+    const     int color_bit = pos.color << 20;
+
+    Bitboard emy_pieces = pos.piece(~pos.color, ALL);
+    PieceType ipt = type_of(pos.PieceOnSquare(ip));
+
+    if (myMoves.qsSearch)
+        endSquares &= emy_pieces;
+
+    Move base_move = color_bit | (ipt << 12) | ip;
+
+    while (endSquares != 0)
+    {
+        Square fp = NextSquare(endSquares);
+        PieceType fpt = type_of(pos.PieceOnSquare(fp));
+        int priority = start_priority;
+
+        priority += 2 * (fpt - ipt) + 15;
+
+        // Generate Move Priority
+
+        // if (((1ULL << ip) & pos.enemyAttackedSquares) != 0)
+        //     priority += 2;
+
+        // if (((1ULL << fp) & pos.enemyAttackedSquares) != 0)
+        //     priority -= 4;
+
+        Move move = base_move | (priority << 24) | flag_bit | (fpt << 15) | (fp << 6);
+        myMoves.Add(move);
+    }
+}
+
+
+static void
+AddQuietMoves(Square ip, Bitboard endSquares, const ChessBoard& pos, MoveList& myMoves, int flag, int priority)
+{
+    const int color_bit    = pos.color  << 20;
+    const int flag_bit     = flag       << 21;
+    const int priority_bit = priority   << 24;
+
+    if (myMoves.qsSearch)
+        return;
+    
+    PieceType ipt  = type_of(pos.PieceOnSquare(ip));
+    Move base_move = color_bit | (ipt << 12) | ip;
+
+    while (endSquares != 0)
+    {
+        Square fp = NextSquare(endSquares);
+        Move move = base_move | priority_bit | flag_bit | (fp << 6);
         myMoves.Add(move);
     }
 }
@@ -293,26 +351,32 @@ PieceMovement(ChessBoard& _cb, MoveList& myMoves, int KA)
     Bitboard valid_squares = KA * _cb.legalSquaresMaskInCheck + (1 - KA) * AllSquares;
 
     Color c_my = _cb.color;
-    Bitboard own_pieces = _cb.piece(c_my, ALL);
+    Bitboard own_pieces = _cb.piece( c_my, ALL);
+    Bitboard emy_pieces = _cb.piece(~c_my, ALL);
     Bitboard occupied = _cb.All();
 
-    const auto AddLegalSquares = [&] (const auto& GenSquares, Bitboard piece)
+    const auto AddLegalSquares = [&] (const auto& GenSquares, PieceType pt)
     {
-        piece &= ~pinned_pieces;
+        Bitboard piece = _cb.piece(c_my, pt) & ~pinned_pieces;
         while (piece != 0)
         {
             Square ip = NextSquare(piece);
-            Bitboard dest_squares = GenSquares(ip, own_pieces, occupied) & valid_squares;
-            AddMoves(ip, dest_squares, _cb, myMoves);
+            Bitboard dest_squares  = GenSquares(ip, own_pieces, occupied) & valid_squares;
+            Bitboard capt_squares  = dest_squares & emy_pieces;
+            Bitboard quiet_squares = dest_squares ^ capt_squares;
+            // AddMoves(ip, dest_squares, _cb, myMoves);
+
+            AddCaptureMoves(ip, capt_squares, _cb, myMoves, 10);
+            AddQuietMoves(ip, quiet_squares, _cb, myMoves, NORMAL, 4);
         }
     };
 
     PawnMovement(_cb, myMoves, pinned_pieces, KA, _cb.legalSquaresMaskInCheck);
 
-    AddLegalSquares(BishopLegalSquares, _cb.piece(c_my, BISHOP));
-    AddLegalSquares(KnightLegalSquares, _cb.piece(c_my, KNIGHT));
-    AddLegalSquares(RookLegalSquares  , _cb.piece(c_my, ROOK  ));
-    AddLegalSquares(QueenLegalSquares , _cb.piece(c_my, QUEEN ));
+    AddLegalSquares(BishopLegalSquares, BISHOP);
+    AddLegalSquares(KnightLegalSquares, KNIGHT);
+    AddLegalSquares(RookLegalSquares  , ROOK  );
+    AddLegalSquares(QueenLegalSquares , QUEEN );
 }
 
 #endif
@@ -402,9 +466,15 @@ KingMoves(const ChessBoard& _cb, MoveList& myMoves, Bitboard attackedSq)
 
     Square kpos = SquareNo(_cb.piece(c_my, KING));
     Bitboard king_mask = plt::KingMasks[kpos];
+    Bitboard emy_pieces = _cb.piece(~c_my, ALL);
 
-    Bitboard dest_sq = king_mask & (~(_cb.piece(c_my, ALL) | attackedSq));
-    AddMoves(kpos, dest_sq, _cb, myMoves);
+    Bitboard dest_sq  = king_mask & (~(_cb.piece(c_my, ALL) | attackedSq));
+    Bitboard capt_sq  = dest_sq & emy_pieces;
+    Bitboard quiet_sq = dest_sq ^ capt_sq;
+
+    // AddMoves(kpos, dest_sq, _cb, myMoves);
+    AddCaptureMoves(kpos, capt_sq, _cb, myMoves, 10);
+    AddQuietMoves(kpos, quiet_sq, _cb, myMoves, NORMAL, 4);
 
     if (!(_cb.csep & 1920) or ((1ULL << kpos) & attackedSq)) return;
 
@@ -421,11 +491,11 @@ KingMoves(const ChessBoard& _cb, MoveList& myMoves, Bitboard attackedSq)
 
     // Can castle king_side  and no pieces are in-between
     if ((_cb.csep & king_side) and !(r_sq & covered_squares)) 
-        AddMoves(kpos, 1ULL << (shift + 6), _cb, myMoves, CASTLING, 12);
+        AddQuietMoves(kpos, 1ULL << (shift + 6), _cb, myMoves, CASTLING, 12);
 
     // Can castle queen_side and no pieces are in-between
     if ((_cb.csep & queen_side) and !(Apieces & l_mid_sq) and !(l_sq & covered_squares))
-        AddMoves(kpos, 1ULL << (shift + 2), _cb, myMoves, CASTLING, 12);
+        AddQuietMoves(kpos, 1ULL << (shift + 2), _cb, myMoves, CASTLING, 12);
 }
 
 
@@ -785,8 +855,16 @@ PinnedPiecesList(const ChessBoard& _cb, MoveList &myMoves, int KA)
 
         if ((first_piece & sliding_piece) != 0)
         {
+            Bitboard emy_pieces = _cb.piece(c_emy, ALL);
             Bitboard dest_sq = table[kpos] ^ table[index_s] ^ first_piece;
-            return AddMoves(index_f, dest_sq, _cb, myMoves);
+            Bitboard capt_sq  = dest_sq & emy_pieces;
+            Bitboard quiet_sq = dest_sq ^ capt_sq;
+
+            // return AddMoves(index_f, dest_sq, _cb, myMoves);
+            AddCaptureMoves(index_f, capt_sq, _cb, myMoves, 10);
+            AddQuietMoves(index_f, quiet_sq, _cb, myMoves, NORMAL, 4);
+
+            return;
         }
 
         constexpr Bitboard Rank63[2] = {Rank6, Rank3};
