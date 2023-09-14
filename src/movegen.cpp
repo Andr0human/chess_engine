@@ -110,7 +110,7 @@ AddShiftPawnMoves(Bitboard endSquares, int shift, const ChessBoard& pos,
     if (endSquares == 0)
         return;
 
-    Bitboard emy_pieces = pos.piece(pos.color, ALL);
+    Bitboard emy_pieces = pos.piece(~pos.color, ALL);
 
     if (myMoves.qsSearch)
         endSquares &= emy_pieces;
