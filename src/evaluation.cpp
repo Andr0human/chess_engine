@@ -221,6 +221,14 @@ KingSafety(const ChessBoard& pos, Color side)
 static Score
 Threats(const ChessBoard& pos)
 {
+    /* Score attackWhite = AttackStrength(pos, WHITE);
+    Score attackBlack = AttackStrength(pos, BLACK);
+
+    Score safetyWhite = KingSafety(pos, WHITE);
+    Score safetyBlack = KingSafety(pos, BLACK);
+
+    return max(0, attackWhite - safetyBlack) - (max(0, attackBlack - safetyWhite)); */
+
     return (AttackStrength(pos, WHITE) + KingSafety(pos, WHITE))
          - (AttackStrength(pos, BLACK) + KingSafety(pos, BLACK));
 }
@@ -506,13 +514,24 @@ Score EvalDump(const ChessBoard& pos)
     Score materialScoreMid   = MaterialDiffereceMidGame(ed);
     Score pieceTableScoreMid = PieceTableStrengthMidGame(pos);
     Score mobilityScoreMid   = MobilityStrength(pos);
-    Score threatsScoreMid    = Threats(pos);
+
+    Score attackWhite = AttackStrength(pos, WHITE);
+    Score safetyWhite = KingSafety(pos, WHITE);
+    Score attackBlack = -AttackStrength(pos, BLACK);
+    Score safetyBlack = -KingSafety(pos, BLACK);
+
+    Score threatsScoreMid = (attackWhite + safetyWhite) - (attackBlack + safetyBlack);
 
     cout << " -- MIDGAME -- " << endl;
     cout << "materialScore   = " << materialScoreMid   << endl;
     cout << "pieceTableScore = " << pieceTableScoreMid << endl;
-    cout << "mobilityScore   = " << mobilityScoreMid   << endl;
-    cout << "threatsScore    = " << threatsScoreMid    << endl << endl;
+    cout << "mobilityScore   = " << mobilityScoreMid   << endl << endl;
+
+    cout << "attackWhite  = " << attackWhite << endl;
+    cout << "safetyWhite  = " << safetyWhite << endl;
+    cout << "attackBlack  = " << attackBlack << endl;
+    cout << "safetyBlack  = " << safetyBlack << endl;
+    cout << "threatsScore = " << threatsScoreMid << endl << endl;
 
 
     mg_score = Score(
