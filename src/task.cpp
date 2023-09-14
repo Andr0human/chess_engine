@@ -333,6 +333,24 @@ ShowUpdateLog()
 }
 
 
+static void
+Level1(const vector<string>& args)
+{
+    if (args.size() == 1)
+    {
+        puts("No fen provided!");
+        return;
+    }
+
+    ChessBoard pos(args[1]);
+    bool qs = (args.size() >= 3 and args[2] == "q");
+
+    MoveList myMoves = GenerateMoves(pos, qs);
+    PrintMovelist(myMoves, pos);
+
+    EvalDump(pos);
+}
+
 
 void Task(int argc, char *argv[])
 {
@@ -381,6 +399,10 @@ void Task(int argc, char *argv[])
     else if (command == "info")
     {
         ShowUpdateLog();
+    }
+    else if (command == "level1")
+    {
+        Level1(argument_list);
     }
     else
     {
