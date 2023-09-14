@@ -80,7 +80,7 @@ RootNegaMax(ChessBoard &_cb, Depth depth)
 
 #ifndef SINGLE_THREAD_SEARCH
 
-static Score
+Score
 QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
     // Check if Time Left for Search
@@ -119,15 +119,9 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     pvArray[pvIndex] = 0; // no pv yet
     int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-    for (const Move move : myMoves)
+    for (const Move capture_move : myMoves)
     {
-        // Check based on priority for captures & checks
-        int move_priority = (move >> 21) & 31;
-
-        if (move_priority <= 10)
-            continue;
-
-        pos.MakeMove(move);
+        pos.MakeMove(capture_move);
         Score score = -QuiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
         pos.UnmakeMove();
 
@@ -143,7 +137,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
             if (ply < MAX_PLY)
             {
-                pvArray[pvIndex] = filter(move) | QUIESCENCE_FLAG;
+                pvArray[pvIndex] = filter(capture_move) | QUIESCENCE_FLAG;
                 movcpy (pvArray + pvIndex + 1,
                         pvArray + pvNextIndex, MAX_PLY - ply - 1);
             }
