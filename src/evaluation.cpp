@@ -516,9 +516,9 @@ Score EvalDump(const ChessBoard& pos)
     Score mobilityScoreMid   = MobilityStrength(pos);
 
     Score attackWhite = AttackStrength(pos, WHITE);
+    Score attackBlack = AttackStrength(pos, BLACK);
     Score safetyWhite = KingSafety(pos, WHITE);
-    Score attackBlack = -AttackStrength(pos, BLACK);
-    Score safetyBlack = -KingSafety(pos, BLACK);
+    Score safetyBlack = KingSafety(pos, BLACK);
 
     Score threatsScoreMid = (attackWhite + safetyWhite) - (attackBlack + safetyBlack);
 
@@ -527,11 +527,10 @@ Score EvalDump(const ChessBoard& pos)
     cout << "pieceTableScore = " << pieceTableScoreMid << endl;
     cout << "mobilityScore   = " << mobilityScoreMid   << endl << endl;
 
-    cout << "attackWhite  = " << attackWhite << endl;
-    cout << "safetyWhite  = " << safetyWhite << endl;
-    cout << "attackBlack  = " << attackBlack << endl;
-    cout << "safetyBlack  = " << safetyBlack << endl;
-    cout << "threatsScore = " << threatsScoreMid << endl << endl;
+    cout << "threatsScore = " << threatsScoreMid
+         << " | attackWhite  = " << attackWhite << " | safetyWhite  = " << safetyWhite
+         << " | attackBlack  = " << attackBlack << " | safetyBlack  = " << safetyBlack
+         << endl << endl;
 
 
     mg_score = Score(

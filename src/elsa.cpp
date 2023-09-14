@@ -1,20 +1,26 @@
 #include "task.h"
 
-//! TODO Alpha-Beta lmr code.
-//! TODO Consistent function naming scheme.
-//! TODO Check depth += 2 in Search
-//! TODO Match-Test Elsa_version without displaying any console output (No search results in console).
-//! TODO Test LMR condition is_passed_pawn(), castling
-//! TODO instead move_gives_check in LMR, use it as in SearchExtension.
-//! TODO More insufficient material positions in Evaluation.
-//! TODO Delta Pruning
-//! TODO Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
-//! TODO If promotion is possible and no enemy piece can capture it.
-//! TODO if (move_priority <= 10) continue; | Use break instead.
-//! TODO Search Extension - If promotion is possible and no enemy piece can capture it.
-//! TODO Endgame tests fen
-//! TODO Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
-//! TODO TODO : (Bishop | Knight vs Pawn) if the piece can capture the pawn
+
+//! TODO Search
+// Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
+// Delta Pruning
+// Check depth += 2 in Search
+// Alpha-Beta lmr code.
+// Test LMR condition is_passed_pawn(), castling
+
+//! TODO EndGame
+// Endgame tests fen
+// Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
+// (Bishop | Knight vs Pawn) if the piece can capture the pawn
+
+//! TODO Evaluation
+// Fix QueenValueEg, and QueenValueMg
+// Fix AttackStrength (Should depend on opponent king safety) (rr3k2/ppq3pQ/2nb4/3p1RP1/P2P4/1N5P/1P4K1/R1B5 b - - 0 24)
+
+//! TODO Search Extension
+// If promotion is possible and no enemy piece can capture it.
+// instead move_gives_check in LMR, use it as in SearchExtension.
+// Add depth 1, if opponent pawn attacks own piece
 
 
 int main(int argc, char **argv)
@@ -49,6 +55,7 @@ int main(int argc, char **argv)
     2rq4/p6k/1p1p2pp/2pP1p2/1bP2R2/1R4QP/P1B2PPK/4r3 w - - 0 1               // Rxf5
     r1bqr1k1/pp1nbppp/2pp1n2/4p3/2B1P3/2PP1N2/PP1N1PPP/R1BQR1K1 w - - 1 9    // Bxf7+
     r2r2k1/pp1bbp1p/2n3pB/q2p2N1/8/P1PB4/5PPP/2QRR1K1 w - - 0 1              // Rxe7
+    r4rk1/ppqb2p1/2nbp3/3p2PQ/P2P1P2/1N1B2pP/1P6/R1B2RK1 b - - 2 19          // B.M Rf5
 
     -----------------------------------------------------------------------
     
