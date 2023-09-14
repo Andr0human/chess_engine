@@ -27,6 +27,9 @@ RootNegaMax(ChessBoard& pos, Depth depth);
 void
 Search(ChessBoard primary, Depth mDepth = MAX_DEPTH, double search_time = DEFAULT_SEARCH_TIME, std::ostream& ostream = std::cout);
 
+Score
+QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex);
+
 /**
  * @brief Returns the evaluation of a board at a given depth
  * 
