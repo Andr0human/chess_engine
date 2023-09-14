@@ -116,7 +116,7 @@ class SearchData
     IsPartOfPV(Move move) const noexcept
     {
         for (Move pv_move : last_pv)
-            if (filter(move) == (pv_move)) return true;
+            if (filter(move) == filter(pv_move)) return true;
         return false;
     }
 
