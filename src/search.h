@@ -23,6 +23,7 @@ Score CheckmateScore(int ply);
 
 // Move_Generator
 void ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves);
+void OrderMoves(MoveList& myMoves, ChessBoard& pos, bool pv_moves);
 int createMoveOrderList(ChessBoard& pos);
 
 // Search_Checks

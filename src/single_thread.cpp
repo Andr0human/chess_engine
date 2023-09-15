@@ -113,7 +113,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     if (stand_pat > alpha) alpha = stand_pat;
 
     MoveList myMoves = GenerateMoves(pos, true);
-    ReorderGeneratedMoves(myMoves, false);
+    OrderMoves(myMoves, pos, false);
 
 
     pvArray[pvIndex] = 0; // no pv yet
@@ -196,10 +196,10 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int 
     }
 
     // Generate moves for current board
-    MoveList myMoves = GenerateMoves(__pos);
+    MoveList myMoves  = GenerateMoves(__pos);
 
     // Order moves according to heuristics for faster alpha-beta search
-    ReorderGeneratedMoves(myMoves, true);
+    OrderMoves(myMoves, __pos, true);
 
 
     // Search Extensions
@@ -272,6 +272,9 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
     MoveList myMoves = GenerateMoves(_cb);
     moc.OrderMovesOnTime(myMoves);
+
+    // if (depth == 1)
+    //     ReorderGeneratedMoves(myMoves, false);
 
 
     pvArray[pvIndex] = NULL_MOVE; // no pv yet
