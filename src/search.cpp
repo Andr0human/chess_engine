@@ -33,6 +33,8 @@ ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves)
 {
     /* We order all legal moves in current position based on their type.
     e.g - Cap. Moves, PV Moves */
+    const auto IsCaptureMove = [] (Move m)
+    { return (m & (CAPTURES << 21)) != 0; };
 
     uint64_t start = 0, __n = myMoves.size(), l2;
 
@@ -40,7 +42,7 @@ ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves)
     if (pv_moves)
     {
         for (uint64_t i = 0; i < __n; i++)
-            if (info.IsPartOfPV(myMoves.pMoves[i])) 
+            if (info.IsPartOfPV(myMoves.pMoves[i]))
                 std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
     }
 
@@ -61,22 +63,47 @@ ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves)
     }
 }
 
-int
-createMoveOrderList(ChessBoard& pos)
+
+void
+OrderMoves(MoveList& myMoves, ChessBoard& pos, bool pv_moves)
 {
-    /* Stores time used to evaluate each root move.
-    Useful in ordering root moves in iterative search. */
+    const auto IsCaptureMove = [] (Move m)
+    { return (m & (CAPTURES << 21)) != 0; };
 
-    // res -> -1(Lost), -2(Draw), -3(Invalid), >1(Zero-depth Move)
+    // Add to pv in Search Data (AddResults)
+    const auto IsPvMove = [&] (Move m)
+    { return info.IsPartOfPV(m); };
 
-    MoveList movelist = GenerateMoves(pos);
+    const auto PrioritizeMoves = [&] (const auto& __f, size_t start)
+    {
+        for (size_t i = start; i < myMoves.size(); i++)
+        {
+            if (__f(myMoves.pMoves[i]))
+                std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
+        }
+        return start;
+    };
 
-    // To ensure, the zero move is best_move.
-    ReorderGeneratedMoves(movelist, false);
-    moc.Initialise(movelist);
+    const auto SortMoves = [&] (int start, int end)
+    {
+        for (int i = start + 1; i < end; i++)
+        {
+            Move key = myMoves.pMoves[i];
+            int j = i - 1;
 
-    return (movelist.size() > 0) ?
-           (*movelist.begin()) : (pos.checkers > 0 ? -1 : -2);
+            while ((j >= start) and ((myMoves.pMoves[j] >> 24) < (key >> 24))) {
+                myMoves.pMoves[j + 1] = myMoves.pMoves[j];
+                --j;
+            }
+            myMoves.pMoves[j + 1] = key;
+        }
+    };
+
+    const size_t capture_end = PrioritizeMoves(IsCaptureMove, 0);
+    const size_t pv_end = pv_moves ? PrioritizeMoves(IsPvMove, capture_end) : capture_end;
+
+    SortMoves(0, int(capture_end));
+    SortMoves(int(pv_end), int(myMoves.size()));
 }
 
 

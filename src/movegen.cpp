@@ -78,9 +78,9 @@ IsLegalMoveForPosition(Move move, ChessBoard& pos)
 
 static void
 AddPawnMoves(Square ip, Square fp, const ChessBoard& pos,
-    MoveList& myMoves, int flag = NORMAL, int priority = 10)
+    MoveList& myMoves, int flag, int priority)
 {
-    if ((myMoves.qsSearch) and (flag != CAPTURES))
+    if ((myMoves.qsSearch) and !(flag == CAPTURES or flag == PROMOTION))
         return;
     
     PieceType ipt = type_of(pos.PieceOnSquare(ip));
@@ -105,7 +105,7 @@ AddPawnMoves(Square ip, Square fp, const ChessBoard& pos,
 
 static void
 AddShiftPawnMoves(Bitboard endSquares, int shift, const ChessBoard& pos,
-    MoveList& myMoves, int flag, int start_priority = 10)
+    MoveList& myMoves, int flag, int start_priority)
 {
     if (endSquares == 0)
         return;
@@ -128,7 +128,7 @@ AddShiftPawnMoves(Bitboard endSquares, int shift, const ChessBoard& pos,
         int priority = start_priority;
 
         if (flag == CAPTURES)
-            priority += fpt - ipt + 15;
+            priority += 2 * (fpt - ipt) + 15;
 
         Move move = base_move | (priority << 24) | (flag << 21)
                   | (fpt << 15) | (fp << 6) | ip;
@@ -243,7 +243,7 @@ PromotionPawns(const ChessBoard& pos, MoveList &myMoves,
         {
             Square fp = NextSquare(endSquares);
             PieceType fpt = type_of(pos.PieceOnSquare(fp));
-            AddPawnMoves(ip, fp, pos, myMoves, PROMOTION, 2 * fpt + 36);
+            AddPawnMoves(ip, fp, pos, myMoves, PROMOTION, 2 * fpt + 30);
         }
     }
 }
@@ -281,11 +281,11 @@ PawnMovement(const ChessBoard &_cb, MoveList &myMoves,
     EnpassantPawns(_cb, myMoves, l_pawns, r_pawns, KA);
     PromotionPawns(_cb, myMoves, move_sq, capt_sq, e_pawns);
 
-    AddShiftPawnMoves(l_captures, 2 * emy - 9, _cb, myMoves, CAPTURES);
-    AddShiftPawnMoves(r_captures, 2 * emy - 7, _cb, myMoves, CAPTURES);
+    AddShiftPawnMoves(l_captures, 2 * emy - 9, _cb, myMoves, CAPTURES, 10);
+    AddShiftPawnMoves(r_captures, 2 * emy - 7, _cb, myMoves, CAPTURES, 10);
 
-    AddShiftPawnMoves(shift(s_pawns, 8) & move_sq, 4 * emy - 16, _cb, myMoves, NORMAL, 12);
-    AddShiftPawnMoves(shift(n_pawns, 8) & move_sq, 2 * emy -  8, _cb, myMoves, NORMAL, 10);
+    AddShiftPawnMoves(shift(s_pawns, 8) & move_sq, 4 * emy - 16, _cb, myMoves, NORMAL, 6);
+    AddShiftPawnMoves(shift(n_pawns, 8) & move_sq, 2 * emy -  8, _cb, myMoves, NORMAL, 6);
 }
 
 #endif
@@ -331,7 +331,7 @@ PieceMovement(ChessBoard& _cb, MoveList& myMoves, int KA)
             // AddMoves(ip, dest_squares, _cb, myMoves);
 
             AddCaptureMoves(ip, capt_squares, _cb, myMoves, 10);
-            AddQuietMoves(ip, quiet_squares, _cb, myMoves, NORMAL, 4);
+            AddQuietMoves(ip, quiet_squares, _cb, myMoves, NORMAL, 6);
         }
     };
 
@@ -438,7 +438,7 @@ KingMoves(const ChessBoard& _cb, MoveList& myMoves, Bitboard attackedSq)
 
     // AddMoves(kpos, dest_sq, _cb, myMoves);
     AddCaptureMoves(kpos, capt_sq, _cb, myMoves, 10);
-    AddQuietMoves(kpos, quiet_sq, _cb, myMoves, NORMAL, 4);
+    AddQuietMoves(kpos, quiet_sq, _cb, myMoves, NORMAL, 6);
 
     if (!(_cb.csep & 1920) or ((1ULL << kpos) & attackedSq)) return;
 
@@ -826,7 +826,7 @@ PinnedPiecesList(const ChessBoard& _cb, MoveList &myMoves, int KA)
 
             // return AddMoves(index_f, dest_sq, _cb, myMoves);
             AddCaptureMoves(index_f, capt_sq, _cb, myMoves, 10);
-            AddQuietMoves(index_f, quiet_sq, _cb, myMoves, NORMAL, 4);
+            AddQuietMoves(index_f, quiet_sq, _cb, myMoves, NORMAL, 6);
 
             return;
         }
@@ -844,10 +844,10 @@ PinnedPiecesList(const ChessBoard& _cb, MoveList &myMoves, int KA)
         if ((pawn == 's') and (first_piece & _cb.piece(c_my, PAWN)))
         {
             if (s_pawn != 0)
-                AddPawnMoves(index_f, SquareNo(s_pawn),  _cb, myMoves, NORMAL);
+                AddPawnMoves(index_f, SquareNo(s_pawn),  _cb, myMoves, NORMAL, 6);
             
             if (ss_pawn != 0)
-                AddPawnMoves(index_f, SquareNo(ss_pawn), _cb, myMoves, NORMAL);
+                AddPawnMoves(index_f, SquareNo(ss_pawn), _cb, myMoves, NORMAL, 6);
         }
 
         if ((pawn == 'c') and (first_piece & _cb.piece(c_my, PAWN)))
