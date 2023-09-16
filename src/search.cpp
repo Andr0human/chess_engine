@@ -28,44 +28,9 @@ CheckmateScore(int ply)
 
 #ifndef MOVE_GENERATION
 
-void
-ReorderGeneratedMoves(MoveList& myMoves, bool pv_moves)
-{
-    /* We order all legal moves in current position based on their type.
-    e.g - Cap. Moves, PV Moves */
-    const auto IsCaptureMove = [] (Move m)
-    { return (m & (CAPTURES << 21)) != 0; };
-
-    uint64_t start = 0, __n = myMoves.size(), l2;
-
-    // Put all PV moves before rest of the legal moves
-    if (pv_moves)
-    {
-        for (uint64_t i = 0; i < __n; i++)
-            if (info.IsPartOfPV(myMoves.pMoves[i]))
-                std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
-    }
-
-    // Put all Capture moves before rest of the legal moves
-    for (uint64_t i = start; i < __n; i++)
-        if ((myMoves.pMoves[i] >> 21) > 10)
-            std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
-
-    // Order all pv and capture moves based on their move priority
-    l2 = start;
-    for (uint64_t i = 0; i < l2; i++)
-    {
-        for (uint64_t j = i + 1; j < l2; j++)
-        {
-            if (myMoves.pMoves[j] > myMoves.pMoves[i])
-                std::swap(myMoves.pMoves[i], myMoves.pMoves[j]);
-        }
-    }
-}
-
 
 void
-OrderMoves(MoveList& myMoves, ChessBoard& pos, bool pv_moves)
+OrderMoves(MoveList& myMoves, bool pv_moves)
 {
     const auto IsCaptureMove = [] (Move m)
     { return (m & (CAPTURES << 21)) != 0; };
@@ -178,7 +143,7 @@ AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply)
     //     return QuieSearch(_cb, alpha, beta, ply, 0);
 
     auto myMoves = GenerateMoves(_cb);
-    ReorderGeneratedMoves(myMoves, false);
+    OrderMoves(myMoves, false);
 
     for (const Move move : myMoves)
     {
