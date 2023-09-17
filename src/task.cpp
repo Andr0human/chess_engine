@@ -345,7 +345,8 @@ Level1(const vector<string>& args)
     ChessBoard pos(args[1]);
     bool qs = (args.size() >= 3 and args[2] == "q");
 
-    MoveList myMoves = GenerateMoves(pos, qs);
+    MoveList myMoves = GenerateMoves(pos, qs, true);
+    OrderMoves(myMoves, qs, true);
     PrintMovelist(myMoves, pos);
 
     EvalDump(pos);

@@ -22,7 +22,7 @@ void ResetPvLine();
 Score CheckmateScore(int ply);
 
 // Move_Generator
-void OrderMoves(MoveList& myMoves, bool pv_moves);
+void OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves);
 
 // Search_Checks
 // bool ok_to_do_nullmove(ChessBoard& _cb);

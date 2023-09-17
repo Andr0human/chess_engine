@@ -67,7 +67,7 @@ IsLegalMoveForPosition(Move move, ChessBoard& pos)
     if ((fpt != 0) and ((fpt >> 3) & 1) == side)
         return false;
 
-    MoveList myMoves = GenerateMoves(pos, false);
+    MoveList myMoves = GenerateMoves(pos);
 
     for (Move legal_move : myMoves.pMoves)
         if (filter(move) == filter(legal_move)) return true;
@@ -731,12 +731,7 @@ InterestingMove(Move move, ChessBoard& _cb)
     if ((it == KING) && std::abs(fp - ip) == 2) return true;
 
     // If the move gives a check.
-    _cb.MakeMove(move);
-    bool res = InCheck(_cb);
-    _cb.UnmakeMove();
-    return res;
-
-    // return false;
+    return ((move & (CHECK << 21)) != 0);
 }
 
 bool
@@ -965,12 +960,11 @@ LegalMovesPresent(ChessBoard& _cb)
 
 
 MoveList
-GenerateMoves(ChessBoard& pos, bool qsSearch)
+GenerateMoves(ChessBoard& pos, bool qsSearch, bool findChecks)
 {
     //TODO: Add functionality to generate captures only
 
     MoveList myMoves(pos.color, qsSearch);
-
 
     if (!pos.EnemyAttackedSquaresGenerated())
         pos.enemyAttackedSquares = GenerateAttackedSquares(pos);
@@ -978,15 +972,22 @@ GenerateMoves(ChessBoard& pos, bool qsSearch)
     if (!pos.AttackersFound())
         KingAttackers(pos);
 
-    // myMoves.discoverCheckSquares = SquaresForDiscoveredCheck(pos);
-    // GenerateSquaresThatCheckEnemyKing(pos, myMoves);
-
-    if (pos.checkers < 2) {
+    if (pos.checkers < 2)
+    {
         myMoves.pinnedPiecesSquares  = PinnedPiecesList(pos, myMoves, pos.checkers);
         PieceMovement(pos, myMoves, pos.checkers);
     }
 
     KingMoves(pos, myMoves, pos.enemyAttackedSquares);
+
+    if (findChecks)
+    {
+        myMoves.discoverCheckSquares = SquaresForDiscoveredCheck(pos);
+        GenerateSquaresThatCheckEnemyKing(pos, myMoves);
+
+        for (Move& move : myMoves)
+            if (MoveGivesCheck(move, pos, myMoves)) move |= CHECK << 21;
+    }
 
     pos.RemoveMovegenMetadata();
     return myMoves;

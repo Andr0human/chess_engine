@@ -27,6 +27,6 @@ bool LegalMovesPresent(ChessBoard &_cb);
  * @param qSearch 
  * @return MoveList 
  */
-MoveList GenerateMoves(ChessBoard& pos, bool qsSearch = false);
+MoveList GenerateMoves(ChessBoard& pos, bool qsSearch = false, bool findChecks = false);
 
 #endif

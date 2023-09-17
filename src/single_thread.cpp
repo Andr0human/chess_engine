@@ -54,7 +54,7 @@ RootNegaMax(ChessBoard &_cb, Depth depth)
         _cb.RemoveMovegenMetadata();
         return std::make_pair(NULL_MOVE, score);
     }
-    
+
     const MoveList myMoves = GenerateMoves(_cb);
 
     Score best_eval = -VALUE_INF;
@@ -113,7 +113,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     if (stand_pat > alpha) alpha = stand_pat;
 
     MoveList myMoves = GenerateMoves(pos, true);
-    OrderMoves(myMoves, false);
+    OrderMoves(myMoves, false, false);
 
 
     pvArray[pvIndex] = 0; // no pv yet
@@ -196,10 +196,10 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int 
     }
 
     // Generate moves for current board
-    MoveList myMoves  = GenerateMoves(__pos);
+    MoveList myMoves  = GenerateMoves(__pos, false, true);
 
     // Order moves according to heuristics for faster alpha-beta search
-    OrderMoves(myMoves, true);
+    OrderMoves(myMoves, true, true);
 
 
     // Search Extensions
@@ -270,7 +270,7 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     int ply{0}, pvIndex{0}, pvNextIndex, R, i = 0;
     Score eval;
 
-    MoveList myMoves = GenerateMoves(_cb);
+    MoveList myMoves = GenerateMoves(_cb, false, true);
     moc.OrderMovesOnTime(myMoves);
 
 

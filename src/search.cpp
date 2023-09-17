@@ -30,14 +30,16 @@ CheckmateScore(int ply)
 
 
 void
-OrderMoves(MoveList& myMoves, bool pv_moves)
+OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves)
 {
     const auto IsCaptureMove = [] (Move m)
     { return (m & (CAPTURES << 21)) != 0; };
 
-    // Add to pv in Search Data (AddResults)
     const auto IsPvMove = [&] (Move m)
     { return info.IsPartOfPV(m); };
+
+    const auto IsCheckMove = [] (Move m)
+    { return (m & (CHECK << 21)) != 0; };
 
     const auto PrioritizeMoves = [&] (const auto& __f, size_t start)
     {
@@ -65,7 +67,8 @@ OrderMoves(MoveList& myMoves, bool pv_moves)
     };
 
     const size_t capture_end = PrioritizeMoves(IsCaptureMove, 0);
-    const size_t pv_end = pv_moves ? PrioritizeMoves(IsPvMove, capture_end) : capture_end;
+    const size_t check_end   = check_moves ? PrioritizeMoves(IsCheckMove, capture_end) : capture_end;
+    const size_t pv_end      = pv_moves    ? PrioritizeMoves(IsPvMove, check_end) : check_end;
 
     SortMoves(0, int(capture_end));
     SortMoves(int(pv_end), int(myMoves.size()));
@@ -143,7 +146,7 @@ AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply)
     //     return QuieSearch(_cb, alpha, beta, ply, 0);
 
     auto myMoves = GenerateMoves(_cb);
-    OrderMoves(myMoves, false);
+    OrderMoves(myMoves, false, false);
 
     for (const Move move : myMoves)
     {
