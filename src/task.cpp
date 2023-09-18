@@ -304,13 +304,16 @@ static void
 ShowUpdateLog()
 {
     cout <<
-        "Version: 2.3\n\n"
+        "Version: 2.4\n\n"
         "Techniques Used:\n"
         "- Mini-Max with AlphaBeta\n"
         "- Quiescence Search\n"
-        "- Move Reordering (Time Based Move-Reordering at Root)\n"
-        "   - MVV-LVA\n"
-        "   - PV-move\n"
+        "- Move Ordering (Time Based Move-Reordering at Root)\n"
+        "   - Capture Moves(MVV-LVA)\n"
+        "   - Check Moves\n"
+        "   - Pv-Moves\n"
+        "   - Castle move\n"
+        "   - Quiet-Moves\n"
         "- Iterative-Deepening (Incremental Update by depth 1)\n"
         "- Search Window (Window grows by 2 in case of falling outside the window)\n"
         "- Transposition Table\n"
@@ -328,7 +331,12 @@ ShowUpdateLog()
         "       - MidGame Score\n"
         "       - EndGame Score\n"
         "       - Final Score = phase * MidgameScore + (1 - phase) * EndgameScore\n"
-        "   - LoneKing Endgames\n"
+        "   - LoneKing Endgames\n\n\n"
+        "- Version 2.4:\n"
+        "   - Move priority Update\n"
+        "   - Check moves included in move ordering\n"
+        "- Version 2.3:\n"
+        "   - LoneKing Endgames"
         << endl;
 }
 
