@@ -178,8 +178,9 @@ class ChessBoard
     PieceOnSquare(Square sq) const noexcept
     { return board[sq]; }
 
-    constexpr Bitboard
-    piece(Color c, PieceType pt) const noexcept
+    template <Color c, PieceType pt>
+    Bitboard
+    piece() const noexcept
     { return piece_bb[make_piece(c, pt)]; }
 
     constexpr Bitboard

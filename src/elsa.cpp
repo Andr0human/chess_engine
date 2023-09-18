@@ -1,23 +1,23 @@
 #include "task.h"
 
 
-//! TODO Search
+//* TODO Search
 // Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
 // Delta Pruning
 // Check depth += 2 in Search
 // Alpha-Beta lmr code.
 // Test LMR condition is_passed_pawn(), castling
 
-//! TODO EndGame
+//* TODO EndGame
 // Endgame tests fen
 // Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
 // (Bishop | Knight vs Pawn) if the piece can capture the pawn
 
-//! TODO Evaluation
+//* TODO Evaluation
 // Fix QueenValueEg, and QueenValueMg
 // Fix AttackStrength (Should depend on opponent king safety) (rr3k2/ppq3pQ/2nb4/3p1RP1/P2P4/1N5P/1P4K1/R1B5 b - - 0 24)
 
-//! TODO Search Extension
+//* TODO Search Extension
 // If promotion is possible and no enemy piece can capture it.
 // instead move_gives_check in LMR, use it as in SearchExtension.
 // Add depth 1, if opponent pawn attacks own piece

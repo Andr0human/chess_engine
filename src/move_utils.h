@@ -134,8 +134,17 @@ DecodeMove(Move encoded_move);
 
 
 // Returns all squares attacked by all pawns from side to move
-Bitboard
-PawnAttackSquares(const ChessBoard& _cb, Color color);
+// template <Color c_my>
+// Bitboard
+// PawnAttackSquares(const ChessBoard& _cb)
+// {
+//     constexpr int inc  = 2 * int(c_my) - 1;
+//     Bitboard pawns = _cb.piece<c_my, PAWN>();
+//     const auto shifter = (c_my == WHITE) ? LeftShift : RightShift;
+
+//     return shifter(pawns & RightAttkingPawns, 8 + inc) |
+//            shifter(pawns & LeftAttkingPawns , 8 - inc);
+// }
 
 // Returns all squares attacked by bishop on index __pos
 Bitboard
@@ -160,6 +169,7 @@ QueenAttackSquares(Square __pos, Bitboard _Ap);
  * 
  * @param ChessBoard position
 **/
+template <Color c_my>
 bool
 InCheck(const ChessBoard& _cb);
 
@@ -186,8 +196,6 @@ void
 PrintMovelist(MoveList myMoves, ChessBoard _cb);
 
 
-bool
-MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves);
 
 #endif
 

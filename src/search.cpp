@@ -123,11 +123,11 @@ MaterialCount(ChessBoard& pos)
 {
     int answer = 0;
 
-    answer += 100 * PopCount((pos.piece(WHITE, PAWN  )) | pos.piece(BLACK, PAWN  ));
-    answer += 300 * PopCount((pos.piece(WHITE, BISHOP)) | pos.piece(BLACK, BISHOP));
-    answer += 300 * PopCount((pos.piece(WHITE, KNIGHT)) | pos.piece(BLACK, KNIGHT));
-    answer += 500 * PopCount((pos.piece(WHITE, ROOK  )) | pos.piece(BLACK, ROOK  ));
-    answer += 900 * PopCount((pos.piece(WHITE, QUEEN )) | pos.piece(BLACK, QUEEN ));
+    answer += 100 * PopCount(pos.piece<WHITE, PAWN  >() | pos.piece<WHITE, PAWN  >());
+    answer += 300 * PopCount(pos.piece<WHITE, BISHOP>() | pos.piece<BLACK, BISHOP>());
+    answer += 300 * PopCount(pos.piece<WHITE, KNIGHT>() | pos.piece<BLACK, KNIGHT>());
+    answer += 500 * PopCount(pos.piece<WHITE, ROOK  >() | pos.piece<BLACK, ROOK  >());
+    answer += 900 * PopCount(pos.piece<WHITE, QUEEN >() | pos.piece<BLACK, QUEEN >());
     return answer;
 }
 

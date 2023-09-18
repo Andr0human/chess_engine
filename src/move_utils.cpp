@@ -35,18 +35,6 @@ DecodeMove(Move move)
 }
 
 
-
-Bitboard
-PawnAttackSquares(const ChessBoard& _cb, Color color)
-{
-    int inc  = 2 * int(color) - 1;
-    Bitboard pawns = _cb.piece(color, PAWN);
-    const auto shifter = (color == Color::WHITE) ? LeftShift : RightShift;
-
-    return shifter(pawns & RightAttkingPawns, 8 + inc) |
-           shifter(pawns & LeftAttkingPawns , 8 - inc);
-}
-
 Bitboard
 BishopAttackSquares(Square __pos, Bitboard _Ap)
 {    
@@ -80,20 +68,19 @@ QueenAttackSquares(Square __pos, Bitboard _Ap)
 { return BishopAttackSquares(__pos, _Ap) ^ RookAttackSquares(__pos, _Ap); }
 
 
-
+template <Color c_my>
 bool
 InCheck(const ChessBoard& _cb)
 {
-    Color c_my  =  _cb.color;
-    Color c_emy = ~_cb.color;
+    constexpr Color c_emy = ~c_my;
 
-    Square k_sq = SquareNo( _cb.piece(c_my, KING) );
+    Square k_sq = SquareNo( _cb.piece<c_my, KING>() );
     Bitboard occupied = _cb.All();
 
-    return (RookAttackSquares(k_sq, occupied) & (_cb.piece(c_emy, ROOK  ) | _cb.piece(c_emy, QUEEN)))
-      or (BishopAttackSquares(k_sq, occupied) & (_cb.piece(c_emy, BISHOP) | _cb.piece(c_emy, QUEEN)))
-      or (KnightAttackSquares(k_sq, occupied) &  _cb.piece(c_emy, KNIGHT))
-      or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece(c_emy, PAWN  ));
+    return (RookAttackSquares(k_sq, occupied) & (_cb.piece<c_emy, ROOK  >() | _cb.piece<c_emy, QUEEN>()))
+      or (BishopAttackSquares(k_sq, occupied) & (_cb.piece<c_emy, BISHOP>() | _cb.piece<c_emy, QUEEN>()))
+      or (KnightAttackSquares(k_sq, occupied) &  _cb.piece<c_emy, KNIGHT>())
+      or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece<c_emy, PAWN  >());
 }
 
 
@@ -129,7 +116,9 @@ PrintMove(Move move, ChessBoard _cb)
     Bitboard Apieces = _cb.All();
 
     _cb.MakeMove(move);
-    string gives_check = InCheck(_cb) ? "+" : "";
+    bool check = (((move >> 20) & 1) == WHITE)
+        ? InCheck<BLACK>(_cb) : InCheck<WHITE>(_cb);
+    string gives_check = check ? "+" : "";
     _cb.UnmakeMove();
 
     string captures = (cpt != 0) ? "x" : "";
@@ -169,7 +158,9 @@ PrintMove(Move move, ChessBoard _cb)
         (pt == ROOK   ?   RookAttackSquares(fp, Apieces) :
         QueenAttackSquares(fp, Apieces))));
 
-    pieces = (pieces & _cb.piece(_cb.color, pt)) ^ (1ULL << ip);
+    //! TODO Fix this
+    // pieces = (pieces & _cb.piece(_cb.color, pt)) ^ (1ULL << ip);
+    pieces = 0;
 
     string piece_name = string(1, piece_names[pt - 2]);
     string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;
@@ -230,7 +221,7 @@ PrintMovelist(MoveList myMoves, ChessBoard _cb)
     cout << endl;
 }
 
-
+/* template <Color c_my>
 bool
 MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
 {
@@ -249,7 +240,8 @@ MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
 
     // Last Resort
     pos.MakeMove(move);
-    bool gives_check = InCheck(pos);
+    bool gives_check = InCheck< ~c_my>(pos);
     pos.UnmakeMove();
     return gives_check;
 }
+ */
