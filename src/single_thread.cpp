@@ -152,7 +152,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 static bool
 LmrOk(ChessBoard& pos, Depth depth, Move move, size_t moveNo)
 {
-    if ((depth < 3) or (moveNo < LMR_LIMIT) or InterestingMove(move, pos))
+    if ((depth < 2) or (moveNo < LMR_LIMIT) or InterestingMove(move, pos))
         return false;
 
     return true;
@@ -256,10 +256,6 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int 
     // depth = depth + extensions;
     // numExtensions = numExtensions + extensions;
 
-    // Try LMR_search,
-    // if (OkToDoLMR(depth, myMoves))
-    //     return LmrSearch(__pos, myMoves, depth, alpha, beta, ply, pvIndex, numExtensions);
-
 
     // Set pvArray, for storing the search_tree
     pvArray[pvIndex] = NULL_MOVE;
@@ -271,9 +267,6 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int 
     {
         Move move = myMoves.pMoves[moveNo];
         Score eval = PlayMove<Reduction>(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
-        // __pos.MakeMove(move);
-        // eval = -AlphaBeta(__pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-        // __pos.UnmakeMove();
 
         // No time left!
         if (info.TimeOver())
@@ -366,79 +359,10 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
             pvArray[pvIndex] = filter(move);
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
-        // if (alpha >= beta) return beta;
-        // ++i;
     }
 
     return alpha;
 }
-
-/* Score
-LmrSearch(ChessBoard &_cb, MoveList& myMoves,
-    Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
-{
-    Score eval;
-    int hashf = HASH_ALPHA, R, i = 0;
-
-    pvArray[pvIndex] = NULL_MOVE; // no pv yet
-    int pvNextIndex = pvIndex + MAX_PLY - ply;
-
-    for (const Move move : myMoves)
-    {
-        if ((i < LMR_LIMIT) or InterestingMove(move, _cb))
-        {
-            _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-            _cb.UnmakeMove();
-        }
-        else
-        {
-            R = Reduction(depth, i);
-            
-            _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-            _cb.UnmakeMove();
-
-
-            if (info.TimeOver())
-                return TIMEOUT;
-
-            if (eval > alpha)
-            {
-                _cb.MakeMove(move);
-                eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-                _cb.UnmakeMove();
-            }
-        }
-
-        if (info.TimeOver())
-            return TIMEOUT;
-
-        if (eval > alpha)
-        {
-            hashf = HASH_EXACT;
-            alpha = eval;
-            pvArray[pvIndex] = filter(move);
-            movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
-        }
-        if (eval >= beta)
-        {
-            #if defined(TRANSPOSITION_TABLE_H)
-                TT.RecordPosition(_cb.Hash_Value, depth, move, beta, HASH_BETA);
-            #endif
-
-            return beta;
-        }
-        ++i;
-    }
-
-    #if defined(TRANSPOSITION_TABLE_H)
-        TT.RecordPosition(_cb.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
-    #endif
-
-    return alpha;
-}
- */
 
 
 void

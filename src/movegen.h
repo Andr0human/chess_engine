@@ -9,8 +9,8 @@
 #include "move_utils.h"
 
 
-bool IsPassedPawn(Square idx, ChessBoard& _cb);
-bool InterestingMove(Move move, ChessBoard& _cb);
+bool IsPassedPawn(Square idx, const ChessBoard& _cb);
+bool InterestingMove(Move move, const ChessBoard& _cb);
 bool FutilityPruneMove(Move move, ChessBoard& _cb);
 int SearchExtension(const ChessBoard& pos, int numExtensions);
 

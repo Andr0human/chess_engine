@@ -821,7 +821,7 @@ LegalKingMoves(const ChessBoard& _cb, Bitboard attacked_squares)
 #ifndef SEARCH_HELPER
 
 bool
-IsPassedPawn(Square idx, ChessBoard& _cb)
+IsPassedPawn(Square idx, const ChessBoard& _cb)
 {
     if (_cb.color == Color::WHITE)
     {
@@ -840,7 +840,7 @@ IsPassedPawn(Square idx, ChessBoard& _cb)
 }
 
 bool
-InterestingMove(Move move, ChessBoard& _cb)
+InterestingMove(Move move, const ChessBoard& _cb)
 {
     Square ip = Square(move & 63);
     Square fp = Square((move >> 6) & 63);
