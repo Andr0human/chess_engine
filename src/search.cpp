@@ -89,7 +89,7 @@ OkToDoLMR(Depth depth, MoveList& myMoves)
 }
 
 int
-RootReduction(Depth depth, int num)
+RootReduction(Depth depth, size_t num)
 {
     if (depth < 3) return 0;
     if (depth < 6) {
@@ -103,7 +103,7 @@ RootReduction(Depth depth, int num)
 }
 
 int
-Reduction (Depth depth, int move_no)
+Reduction (Depth depth, size_t move_no)
 {
     if (depth < 2) return 0;
     if (depth < 4 && move_no > 9) return 1; 

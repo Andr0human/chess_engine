@@ -4,6 +4,8 @@
 
 #ifndef SINGLE_THREAD_NEGAMAX
 
+typedef int (*ReductionFunc)(Depth depth, size_t move_no);
+
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
 {
@@ -147,6 +149,53 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     return alpha;
 }
 
+static bool
+LmrOk(ChessBoard& pos, Depth depth, Move move, size_t moveNo)
+{
+    if ((depth < 3) or (moveNo < LMR_LIMIT) or InterestingMove(move, pos))
+        return false;
+
+    return true;
+}
+
+
+template <ReductionFunc reductionFunction>
+static Score
+PlayMove(ChessBoard& pos, Move move, size_t moveNo,
+    Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
+{
+    Score eval = VALUE_ZERO;
+
+    if (LmrOk(pos, depth, move, moveNo))
+    {
+        int R = reductionFunction(depth, moveNo);
+
+        pos.MakeMove(move);
+        eval = -AlphaBeta(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+        pos.UnmakeMove();
+
+        //! TODO Test after removing this condition (looks unnecessary)
+        if (info.TimeOver())
+            return TIMEOUT;
+
+        if (eval > alpha)
+        {
+            pos.MakeMove(move);
+            eval = -AlphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+            pos.UnmakeMove();
+        }
+    }
+    else
+    {
+        // No Reduction
+        pos.MakeMove(move);
+        eval = -AlphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+        pos.UnmakeMove();
+    }
+
+    return eval;
+}
+
 
 Score
 AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions) 
@@ -208,25 +257,23 @@ AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int 
     // numExtensions = numExtensions + extensions;
 
     // Try LMR_search,
-    if (OkToDoLMR(depth, myMoves))
-        return LmrSearch(__pos, myMoves, depth, alpha, beta, ply, pvIndex, numExtensions);
+    // if (OkToDoLMR(depth, myMoves))
+    //     return LmrSearch(__pos, myMoves, depth, alpha, beta, ply, pvIndex, numExtensions);
 
 
     // Set pvArray, for storing the search_tree
-    pvArray[pvIndex] = 0; // no pv yet
+    pvArray[pvIndex] = NULL_MOVE;
     int pvNextIndex = pvIndex + MAX_PLY - ply;
+
     int hashf = HASH_ALPHA;
-    Score eval;
 
-    for (const Move move : myMoves)
+    for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
     {
-        __pos.MakeMove(move);
-        eval = -AlphaBeta(__pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-        __pos.UnmakeMove();
-
-        // int moveNo = 1;
-        // eval = play_move(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex);
-
+        Move move = myMoves.pMoves[moveNo];
+        Score eval = PlayMove<Reduction>(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
+        // __pos.MakeMove(move);
+        // eval = -AlphaBeta(__pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+        // __pos.UnmakeMove();
 
         // No time left!
         if (info.TimeOver())
@@ -267,7 +314,7 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     perf_clock startTime;
     perf_ns_time duration;
 
-    int ply{0}, pvIndex{0}, pvNextIndex, R, i = 0;
+    int ply{0}, pvIndex{0}, pvNextIndex/* , R, i = 0 */;
     Score eval;
 
     MoveList myMoves = GenerateMoves(_cb, false, true);
@@ -277,10 +324,11 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     pvArray[pvIndex] = NULL_MOVE; // no pv yet
     pvNextIndex = pvIndex + MAX_PLY - ply;
 
-    for (const Move move : myMoves)
+    for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
     {
+        Move move = myMoves.pMoves[moveNo];
         startTime = perf::now();
-        if ((i < LMR_LIMIT) or InterestingMove(move, _cb) or depth < 2)
+        /* if ((i < LMR_LIMIT) or InterestingMove(move, _cb) or depth < 2)
         {
             _cb.MakeMove(move);
             eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, 0);
@@ -303,10 +351,11 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
                 eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, 0);
                 _cb.UnmakeMove();
             }
-        }
-
+        } */
+        
+        eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
         duration = perf::now() - startTime;
-        moc.Insert(i, duration.count());
+        moc.Insert(moveNo, duration.count());
 
         if (info.TimeOver())
             return TIMEOUT;
@@ -314,17 +363,17 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
         if (eval > alpha)
         {
             alpha = eval;
-            pvArray[pvIndex] = filter(myMoves.pMoves[i]);
+            pvArray[pvIndex] = filter(move);
             movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
         // if (alpha >= beta) return beta;
-        ++i;
+        // ++i;
     }
 
     return alpha;
 }
 
-Score
+/* Score
 LmrSearch(ChessBoard &_cb, MoveList& myMoves,
     Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
 {
@@ -389,43 +438,7 @@ LmrSearch(ChessBoard &_cb, MoveList& myMoves,
 
     return alpha;
 }
-
-
-
-Score play_move(ChessBoard &_cb, Move move, int moveNo,
-    Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
-{
-    Score eval;
-
-    if ((depth < 3) or (moveNo < LMR_LIMIT) or InterestingMove(move, _cb))
-    {
-        // No Reduction
-        _cb.MakeMove(move);
-        eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-        _cb.UnmakeMove();
-    }
-    else
-    {
-        int R = Reduction(depth, moveNo);
-
-        _cb.MakeMove(move);
-        eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-        _cb.UnmakeMove();
-
-        //! TODO Test after removing this condition (looks unnecessary)
-        if (info.TimeOver())
-            return TIMEOUT;
-
-        if (eval > alpha)
-        {
-            _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-            _cb.UnmakeMove();
-        }
-    }
-
-    return eval;
-}
+ */
 
 
 void

@@ -28,8 +28,8 @@ void OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves);
 // bool ok_to_do_nullmove(ChessBoard& _cb);
 // bool ok_to_fprune(Depth depth, ChessBoard& _cb, MoveList& myMoves, Score beta);
 bool OkToDoLMR(Depth depth, MoveList& myMoves);
-int RootReduction(Depth depth, int num);
-int Reduction (Depth depth, int num);
+int RootReduction(Depth depth, size_t num);
+int Reduction (Depth depth, size_t num);
 int MaterialCount(ChessBoard& pos);
 
 // Search
