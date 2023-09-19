@@ -37,7 +37,7 @@ IsHypotheticalDraw(const EvalData& ed)
          or (ed.w_knights + ed.b_knights == 1)) return true;
     }
 
-    //! TODO Test for [WQ_BQ, WR_BR] positions
+    //* TODO Test for [WQ_BQ, WR_BR] positions
 
     // If one piece of both sides left, and its not [WQ_BR, WR_BQ]
     // Then it is a draw (almost)
@@ -502,7 +502,7 @@ Score EvalDump(const ChessBoard& pos)
 
 
     Score pawnStructrueWhite = PawnStructure<WHITE>(pos);
-    Score pawnStructrueBlack = PawnStructure<WHITE>(pos);
+    Score pawnStructrueBlack = PawnStructure<BLACK>(pos);
     ed.pawnStructureScore = pawnStructrueWhite - pawnStructrueBlack;
 
     cout << "Score_pawn_structure_white = " << pawnStructrueWhite << endl;

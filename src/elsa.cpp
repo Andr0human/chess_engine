@@ -82,3 +82,43 @@ int main(int argc, char **argv)
     rnbqkbnr/rrrrrrrr/8/8/8/8/RRRRRRRR/RNBQKBNR w KQkq - 0 1
 
 */
+
+
+/*
+
+    8/5P2/1p6/5k1p/1n1KN3/6P1/8/4r3 b - - 0 55              B.M Rd1+
+    Extend Search if a pawn can promote and can't be captured.
+
+    rr4k1/1p3p2/p3pB1Q/3pP3/b1pP2PK/5P2/2P1n2P/4R3 b - - 0 27
+    r3k2r/1B3p2/p3p3/8/Pp1q4/1P6/R1QN1P1b/5R1K b kq - 2 23
+    4rrk1/3R1p2/p2Q2p1/q7/5B2/5b1P/1P3P1P/5RK1 b - - 3 26
+    King Safety Understanding | King Mobility | Distance of pieces from the king
+
+    3q3k/Pp3p1b/2p1p3/2PpP3/P7/2P3r1/3B4/R4QK1 w - - 0 26
+    Fix Pawn Structure
+
+    8/8/8/6k1/1B2Kp2/8/2b1p3/8 w - - 2 84
+    No clue whats fucking things up?
+
+    4kb1r/2Qnnppp/4p3/1B1pP3/P7/8/3N1PPP/q1B2RK1 b k - 1 19
+    Generate all attacks from both side, If active side has
+    more pieces attacking a square, extend Search
+    (Might have more cost than benefits, maybe just do the
+     check on squares of non-active pieces)
+
+    B7/7k/8/6KP/8/8/8/8 w - - 1 156
+    Attention in regards to LoneKing function.
+
+
+    8/8/8/8/4B2k/5K2/4B3/8 w - - 45 207
+    2 same-color bishops is a theoretical draw.
+
+    1r1q1rk1/3bppbp/p4np1/2pPp3/2P1P3/2N1QP2/P3N1PP/2KR1B1R b - - 0 15
+    Excellent position to illustrate open_files and KingSafety in long term prospect.
+
+
+    8/8/6kP/8/5P2/8/4K3/8 w - - 1 62
+    Avoid the use of LoneKing in these cases.
+
+
+*/
