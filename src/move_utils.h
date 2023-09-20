@@ -26,6 +26,8 @@ class MoveList
     // Generate moves for Quisense Search
     bool qsSearch;
 
+    int checkers;
+
     // Array to store squares that give check to the enemy king
     // {Pawn, Bishop, Knight, Rook, Queen}
     // Index 1: Squares where a bishop can give check to the enemy king
@@ -39,11 +41,8 @@ class MoveList
     Bitboard pinnedPiecesSquares;
 
 
-    MoveList()
-    : __begin(pMoves), __end(pMoves), color(WHITE), qsSearch(false) {}
-
     MoveList(Color c, bool qs = false)
-    : __begin(pMoves), __end(pMoves), color(c), qsSearch(qs) {}
+    : __begin(pMoves), __end(pMoves), color(c), qsSearch(qs), checkers(0) {}
 
     inline void
     Add(Move move) noexcept
@@ -67,52 +66,6 @@ class MoveList
 };
 
 
-
-/**
- * @brief CheckData stores squares for which if pieces lands
- *        results in a check for the enemy king.
- */
-class CheckData
-{
-    public:
-    // (Queen + Rook) landing results in a check
-    Bitboard LineSquares;
-
-    // (Queen + Bishop) landing results in a check
-    Bitboard DiagonalSquares;
-
-    // Knight landing results in a check
-    Bitboard KnightSquares;
-
-    // Pawns landing results in a check
-    Bitboard PawnSquares;
-
-
-    //TODO: Add Code for this.
-    Bitboard KingSquares;
-
-    inline CheckData() {}
-
-    inline CheckData(Bitboard __r, Bitboard __b, Bitboard __k, Bitboard __p)
-    : LineSquares(__r), DiagonalSquares(__b), KnightSquares(__k), PawnSquares(__p) {}
-
-    inline Bitboard
-    squares_for_piece(const PieceType piece)
-    {
-        if (piece == PAWN)
-            return PawnSquares;
-        if (piece == BISHOP)
-            return DiagonalSquares;
-        if (piece == KNIGHT)
-            return KnightSquares;
-        if (piece == ROOK)
-            return LineSquares;
-        return (LineSquares | DiagonalSquares);
-    }
-};
-
-
-
 // Returns and removes the LsbIndex
 inline Square
 NextSquare(uint64_t& __x)
@@ -128,23 +81,6 @@ DecodeMove(Move encoded_move);
 
 
 
-
-
-
-
-
-// Returns all squares attacked by all pawns from side to move
-// template <Color c_my>
-// Bitboard
-// PawnAttackSquares(const ChessBoard& _cb)
-// {
-//     constexpr int inc  = 2 * int(c_my) - 1;
-//     Bitboard pawns = _cb.piece<c_my, PAWN>();
-//     const auto shifter = (c_my == WHITE) ? LeftShift : RightShift;
-
-//     return shifter(pawns & RightAttkingPawns, 8 + inc) |
-//            shifter(pawns & LeftAttkingPawns , 8 - inc);
-// }
 
 // Returns all squares attacked by bishop on index __pos
 Bitboard

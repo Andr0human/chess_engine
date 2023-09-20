@@ -158,9 +158,7 @@ PrintMove(Move move, ChessBoard _cb)
         (pt == ROOK   ?   RookAttackSquares(fp, Apieces) :
         QueenAttackSquares(fp, Apieces))));
 
-    //! TODO Fix this
-    // pieces = (pieces & _cb.piece(_cb.color, pt)) ^ (1ULL << ip);
-    pieces = 0;
+    pieces = (pieces & _cb.get_piece(make_piece(_cb.color, pt))) ^ (1ULL << ip);
 
     string piece_name = string(1, piece_names[pt - 2]);
     string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;
@@ -220,28 +218,3 @@ PrintMovelist(MoveList myMoves, ChessBoard _cb)
 
     cout << endl;
 }
-
-/* template <Color c_my>
-bool
-MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
-{
-    Square ip = Square(move & 63);
-    Square fp = Square((move >> 6) & 63);
-
-    PieceType pt = PieceType((move >> 12) & 7);
-
-    // Direct Checks
-    if ((pt != KING) and (((1ULL << fp) & myMoves.squaresThatCheckEnemyKing[pt - 1]) != 0))
-        return true;
-
-    // Discover Checks
-    if (((1ULL << ip) & myMoves.discoverCheckSquares) == 0)
-        return false;
-
-    // Last Resort
-    pos.MakeMove(move);
-    bool gives_check = InCheck< ~c_my>(pos);
-    pos.UnmakeMove();
-    return gives_check;
-}
- */

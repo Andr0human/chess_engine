@@ -183,9 +183,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     Bitboard iPos = 1ULL << ip;
     Bitboard fPos = 1ULL << fp;
 
-    Square ep = Square(csep & 127);
-    int own = color << 3;
-    int emy = (color ^ 1) << 3;
+    Square ep = EnPassantSquare();
 
     PieceType it = PieceType((move >> 12) & 7);
     PieceType ft = PieceType((move >> 15) & 7);
@@ -196,7 +194,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
 
     UndoInfoPush(it, ft, move, in_search);
 
-    halfmove = (ft != PieceType::NONE) or (it == PieceType::PAWN) ? 0 : halfmove + 1;
+    halfmove = (ft != NONE) or (it == PAWN) ? 0 : halfmove + 1;
     fullmove++;
 
     board[ip] = NO_PIECE;
@@ -204,13 +202,13 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
 
     #if defined(TRANSPOSITION_TABLE_H)
 
-        if (ep != 64)
+        if (ep != SQUARE_NB)
             Hash_Value ^= TT.HashKey(ep + 1);
 
     #endif
 
     // Reset the en-passant state
-    csep = (csep & 1920) ^ 64;
+    csep = (csep & 1920) ^ SQUARE_NB;
 
     // Check if a rook is on dest. sq.
     MakeMoveCastleCheck(ft, fp);
@@ -219,7 +217,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     MakeMoveCastleCheck(it, ip);
 
     // Check for pawn special moves.
-    if (it == PieceType::PAWN)
+    if (it == PAWN)
     {
         if (IsDoublePawnPush(ip, fp))
             return MakeMoveDoublePawnPush(ip, fp);
@@ -232,7 +230,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     }
 
     // Check for king moves.
-    if (it == PieceType::KING)
+    if (it == KING)
     {
         int old_csep = csep;
         int filter = 2047 ^ (384 << (color * 2));
@@ -248,7 +246,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     if (fpt != NO_PIECE)
     {
         piece_bb[fpt] ^= fPos;
-        piece_bb[emy + 7] ^= fPos;
+        piece_bb[((color ^ 1) << 3) + 7] ^= fPos;
 
         #if defined(TRANSPOSITION_TABLE_H)
             Hash_Value ^= TT.HashkeyUpdate(fpt, fp);
@@ -256,7 +254,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     }
 
     piece_bb[ipt] ^= iPos ^ fPos;
-    piece_bb[own + 7] ^= iPos ^ fPos;
+    piece_bb[(color << 3) + 7] ^= iPos ^ fPos;
 
     // Flip the sides.
     color = ~color;
@@ -274,10 +272,10 @@ ChessBoard::MakeMoveCastleCheck(PieceType piece, Square sq) noexcept
 {
     // piece - at (init) or (dest) square.
 
-    Bitboard CORNER_SQUARES = 0x8100000000000081;
+    constexpr Bitboard CORNER_SQUARES = 0x8100000000000081;
     Bitboard bit_pos = 1ULL << sq;
 
-    if ((bit_pos & CORNER_SQUARES) and (piece == PieceType::ROOK))
+    if ((bit_pos & CORNER_SQUARES) and (piece == ROOK))
     {
         int old_csep = csep;
         int y = (sq + 1) >> 3;
@@ -300,7 +298,7 @@ ChessBoard::MakeMoveDoublePawnPush(Square ip, Square fp) noexcept
 
     #if defined(TRANSPOSITION_TABLE_H)
         // Add current enpassant-state to hash_value
-        Hash_Value ^= TT.HashKey(1 + (csep & 127));
+        Hash_Value ^= TT.HashKey(1 + EnPassantSquare());
         Hash_Value ^= TT.HashkeyUpdate(own + 1, ip)
                     ^ TT.HashkeyUpdate(own + 1, fp)
                     ^ TT.HashKey(0);
@@ -423,7 +421,7 @@ ChessBoard::UnmakeMove() noexcept
 
     Square ip = Square(move & 63);
     Square fp = Square((move >> 6) & 63);
-    Square ep = Square(csep & 127);
+    Square ep = EnPassantSquare();
     
     Bitboard iPos = 1ULL << ip;
     Bitboard fPos = 1ULL << fp;
@@ -529,8 +527,8 @@ ChessBoard::GenerateHashkey() const
         if (color == 0)
             key ^= TT.HashKey(0);
 
-        if ((csep & 127) != 64)
-            key ^= TT.HashKey((csep & 127) + 1);
+        if (EnPassantSquare() != SQUARE_NB)
+            key ^= TT.HashKey(EnPassantSquare() + 1);
 
         key ^= TT.HashKey((csep >> 7) + castle_offset);
 

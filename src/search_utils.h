@@ -74,7 +74,7 @@ class SearchData
 
         for (const Move move : pv)
         {
-            if (((move & QUIESCENCE_FLAG) != 0) and !qmoves_found)
+            if (((move & QS_MOVE) != 0) and !qmoves_found)
             {
                 res += "(";
                 qmoves_found = true;

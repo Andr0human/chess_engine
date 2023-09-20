@@ -131,7 +131,9 @@ enum MoveType
     PROMOTION,
     CHECK,
 
-    QUIESCENCE_FLAG = 1 << 28,
+    PV_MOVE = 1 << 29,
+    // Quiescence Move
+    QS_MOVE = 1 << 28,
 };
 
 

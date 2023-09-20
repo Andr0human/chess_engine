@@ -8,6 +8,9 @@
 #include "search.h"
 
 
+typedef int (*ReductionFunc)(Depth depth, size_t move_no);
+
+
 uint64_t
 BulkCount(ChessBoard& pos, Depth depth);
 
@@ -39,17 +42,14 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
  * @param beta 
  * @param ply distance from the root
  * @param pvIndex 
- * @return int 
+ * @return Score 
  */
 Score
-AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, int ply, int pvIndex, int numExtensions);
+AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions);
+
 
 Score
 RootAlphabeta(ChessBoard& pos, Score alpha, Score beta, Depth depth);
-
-Score
-LmrSearch(ChessBoard& pos, MoveList& myMoves, Depth depth, Score alpha, Score beta, int ply, int pvIndex, int numExtensions);
-
 
 
 #endif

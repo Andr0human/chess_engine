@@ -19,21 +19,22 @@ extern const string StartFen;
 
 void movcpy (Move* pTarget, const Move* pSource, int n);
 void ResetPvLine();
-Score CheckmateScore(int ply);
+Score CheckmateScore(Ply ply);
 
-// Move_Generator
-void OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves);
+
 
 // Search_Checks
 // bool ok_to_do_nullmove(ChessBoard& _cb);
 // bool ok_to_fprune(Depth depth, ChessBoard& _cb, MoveList& myMoves, Score beta);
-bool OkToDoLMR(Depth depth, MoveList& myMoves);
-int RootReduction(Depth depth, size_t num);
-int Reduction (Depth depth, size_t num);
-int MaterialCount(ChessBoard& pos);
+bool LmrOk(Move move, Depth depth, size_t move_no);
+bool InterestingMove(Move move);
 
-// Search
-Score AlphaBetaNonPV(ChessBoard& _cb, Depth depth, Score alpha, Score beta, int ply);
+int Reduction(Depth depth, size_t move_no);
+int RootReduction(Depth depth, size_t move_no);
+int SearchExtension(const MoveList& myMoves, int numExtensions);
+
+
+void OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves);
 
 
 #endif

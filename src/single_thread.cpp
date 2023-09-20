@@ -4,8 +4,6 @@
 
 #ifndef SINGLE_THREAD_NEGAMAX
 
-typedef int (*ReductionFunc)(Depth depth, size_t move_no);
-
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
 {
@@ -139,7 +137,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
             if (ply < MAX_PLY)
             {
-                pvArray[pvIndex] = filter(capture_move) | QUIESCENCE_FLAG;
+                pvArray[pvIndex] = filter(capture_move) | QS_MOVE;
                 movcpy (pvArray + pvIndex + 1,
                         pvArray + pvNextIndex, MAX_PLY - ply - 1);
             }
@@ -147,15 +145,6 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     }
 
     return alpha;
-}
-
-static bool
-LmrOk(ChessBoard& pos, Depth depth, Move move, size_t moveNo)
-{
-    if ((depth < 2) or (moveNo < LMR_LIMIT) or InterestingMove(move, pos))
-        return false;
-
-    return true;
 }
 
 
@@ -166,7 +155,7 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
 {
     Score eval = VALUE_ZERO;
 
-    if (LmrOk(pos, depth, move, moveNo))
+    if (LmrOk(move, depth, moveNo))
     {
         int R = reductionFunction(depth, moveNo);
 

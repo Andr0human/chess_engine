@@ -154,6 +154,10 @@ class ChessBoard
 
     bool operator!= (const ChessBoard& other);
 
+    inline Square
+    EnPassantSquare() const
+    { return Square(csep & 0x7f); }
+
     inline bool
     EnemyAttackedSquaresGenerated() const noexcept
     { return enemyAttackedSquares != 0; }
@@ -182,6 +186,10 @@ class ChessBoard
     Bitboard
     piece() const noexcept
     { return piece_bb[make_piece(c, pt)]; }
+
+    Bitboard
+    get_piece(Piece piece) const noexcept
+    { return piece_bb[int(piece)]; }
 
     constexpr Bitboard
     All() const noexcept

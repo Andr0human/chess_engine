@@ -4,7 +4,7 @@
 
 TranspositionTable TT;
 
-//! TODO xorshift for Random HashKey Generation
+//* TODO xorshift for Random HashKey Generation
 uint64_t
 xorshift64star(void)
 {
