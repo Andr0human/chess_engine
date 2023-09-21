@@ -18,6 +18,9 @@ using std::endl;
 
 #ifndef BIT_MANIPULATION
 
+// Define the type for the Lsb and Msb function pointers
+typedef uint64_t (*BitboardFunc)(uint64_t);
+
 inline int
 PopCount(Bitboard __x) 
 { return __builtin_popcountll(__x); }

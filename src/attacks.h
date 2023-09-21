@@ -5,6 +5,7 @@
 
 #include "types.h"
 #include "lookup_table.h"
+#include "bitboard.h"
 
 
 // Returns and removes the LsbIndex
@@ -67,6 +68,17 @@ AttackSquares<QUEEN>(Square sq, Bitboard occupied)
          | AttackSquares< ROOK >(sq, occupied);
 }
 
+template <Color c_my>
+Bitboard
+PawnAttackSquares(const ChessBoard& _cb)
+{
+    constexpr int inc  = 2 * int(c_my) - 1;
+    Bitboard pawns = _cb.piece<c_my, PAWN>();
+    const auto shifter = (c_my == WHITE) ? LeftShift : RightShift;
+
+    return shifter(pawns & RightAttkingPawns, 8 + inc) |
+           shifter(pawns & LeftAttkingPawns , 8 - inc);
+}
 
 
 #endif

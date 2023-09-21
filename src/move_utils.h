@@ -65,20 +65,9 @@ class MoveList
 };
 
 
-// // Returns and removes the LsbIndex
-// inline Square
-// NextSquare(uint64_t& __x)
-// {
-//     Square res = Square(__builtin_ctzll(__x));
-//     __x &= __x - 1;
-//     return res;
-// }
-
 // // Prints all the info on the encoded-move
-// void
-// DecodeMove(Move encoded_move);
-
-
+void
+DecodeMove(Move encoded_move);
 
 
 /**
@@ -86,9 +75,9 @@ class MoveList
  * 
  * @param ChessBoard position
 **/
-// template <Color c_my>
-// bool
-// InCheck(const ChessBoard& _cb);
+template <Color c_my>
+bool
+InCheck(const ChessBoard& _cb);
 
 
 /**
@@ -99,8 +88,8 @@ class MoveList
  * @param _cb board position
  * @return string 
  */
-// string
-// PrintMove(Move move, ChessBoard _cb);
+string
+PrintMove(Move move, ChessBoard _cb);
 
 
 /**
@@ -109,8 +98,8 @@ class MoveList
  * @param _cb board position
  * @param myMoves Movelist for board positions.
  */
-// void
-// PrintMovelist(MoveList myMoves, ChessBoard _cb);
+void
+PrintMovelist(MoveList myMoves, ChessBoard _cb);
 
 
 #endif
