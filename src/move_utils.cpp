@@ -1,220 +1,187 @@
 
 #include "move_utils.h"
+// #include "attacks.h"
+
+// void
+// DecodeMove(Move move)
+// {
+//     Square ip  = Square(move & 63);
+//     Square fp  = Square((move >> 6) & 63);
+
+//     PieceType pt  = PieceType((move >> 12) & 7);
+//     PieceType cpt = PieceType((move >> 15) & 7);
+//     Color cl  = Color((move >> 20) & 1);
+
+//     int ppt = (move >> 18) & 3;
+//     int pr  = move >> 21;
+
+//     cout << "Start_Square : " << ip << '\n';
+//     cout << "End_Square : " << fp << '\n';
+//     cout << "Piece_type : " << pt << '\n';
+//     cout << "Cap_Piece_type : " << cpt << '\n';
+//     cout << "Piece_color : " << (cl == 1 ? "White\n" : "Black\n");
+//     cout << "Move_Strength : " << pr << '\n';
+
+//     if (pt == PAWN && ((1ULL << fp) & Rank18))
+//     {
+//         cout << "Promoted_to : ";
+//         if (ppt == 0) cout << "Bishop\n";
+//         else if (ppt == 1) cout << "Knight\n";
+//         else if (ppt == 2) cout << "Rook\n";
+//         else if (ppt == 3) cout << "Queen\n";
+//     }
+
+//     cout << endl;
+// }
 
 
-void
-DecodeMove(Move move)
-{
-    Square ip  = Square(move & 63);
-    Square fp  = Square((move >> 6) & 63);
+// template <Color c_my>
+// bool
+// InCheck(const ChessBoard& _cb)
+// {
+//     constexpr Color c_emy = ~c_my;
 
-    PieceType pt  = PieceType((move >> 12) & 7);
-    PieceType cpt = PieceType((move >> 15) & 7);
-    Color cl  = Color((move >> 20) & 1);
+//     Square k_sq = SquareNo( _cb.piece<c_my, KING>() );
+//     Bitboard occupied = _cb.All();
 
-    int ppt = (move >> 18) & 3;
-    int pr  = move >> 21;
-
-    cout << "Start_Square : " << ip << '\n';
-    cout << "End_Square : " << fp << '\n';
-    cout << "Piece_type : " << pt << '\n';
-    cout << "Cap_Piece_type : " << cpt << '\n';
-    cout << "Piece_color : " << (cl == 1 ? "White\n" : "Black\n");
-    cout << "Move_Strength : " << pr << '\n';
-
-    if (pt == PAWN && ((1ULL << fp) & Rank18))
-    {
-        cout << "Promoted_to : ";
-        if (ppt == 0) cout << "Bishop\n";
-        else if (ppt == 1) cout << "Knight\n";
-        else if (ppt == 2) cout << "Rook\n";
-        else if (ppt == 3) cout << "Queen\n";
-    }
-
-    cout << endl;
-}
+//     return (AttackSquares<ROOK>(k_sq, occupied) & (_cb.piece<c_emy, ROOK  >() | _cb.piece<c_emy, QUEEN>()))
+//       or (AttackSquares<BISHOP>(k_sq, occupied) & (_cb.piece<c_emy, BISHOP>() | _cb.piece<c_emy, QUEEN>()))
+//       or (AttackSquares<KNIGHT>(k_sq, occupied) &  _cb.piece<c_emy, KNIGHT>())
+//       or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece<c_emy, PAWN  >());
+// }
 
 
-Bitboard
-BishopAttackSquares(Square __pos, Bitboard _Ap)
-{    
-    uint64_t magic = plt::BishopMagics[__pos];
-    int      bits  = plt::BishopShifts[__pos];
-    Bitboard mask  = plt::BishopMasks[__pos];
-    uint64_t start = plt::BishopStartIndex[__pos];
+// string
+// PrintMove(Move move, ChessBoard _cb)
+// {
+//     if (move == NULL_MOVE)
+//         return string("null");
 
-    uint64_t occupancy = (magic * (_Ap & mask)) >> bits;
-    return plt::BishopMovesLookUp[start + occupancy];
-}
+//     const auto IndexToRow = [] (int row)
+//     { return string(1, char(row + 49)); };
 
-Bitboard
-KnightAttackSquares(Square __pos, Bitboard _Ap)
-{ return plt::KnightMasks[__pos] + (_Ap - _Ap); }
+//     const auto IndexToCol = [] (int col)
+//     { return string(1, char(col + 97)); };
 
-Bitboard
-RookAttackSquares(Square __pos, Bitboard _Ap)
-{
-    uint64_t magic = plt::RookMagics[__pos];
-    int      bits  = plt::RookShifts[__pos];
-    Bitboard mask  = plt::RookMasks[__pos];
-    uint64_t start = plt::RookStartIndex[__pos];
+//     const auto IndexToSquare = [&] (int row, int col)
+//     { return IndexToCol(col) + IndexToRow(row); };
 
-    uint64_t occupancy = (magic * (_Ap & mask)) >> bits;
-    return plt::RookMovesLookUp[start + occupancy];
-}
+//     const char piece_names[4] = {'B', 'N', 'R', 'Q'};
 
-Bitboard
-QueenAttackSquares(Square __pos, Bitboard _Ap)
-{ return BishopAttackSquares(__pos, _Ap) ^ RookAttackSquares(__pos, _Ap); }
+//     Square ip = Square(move & 63);
+//     Square fp = Square((move >> 6) & 63);
 
+//     int ip_col = ip & 7;
+//     int fp_col = fp & 7;
 
-template <Color c_my>
-bool
-InCheck(const ChessBoard& _cb)
-{
-    constexpr Color c_emy = ~c_my;
+//     int ip_row = (ip - ip_col) >> 3;
+//     int fp_row = (fp - fp_col) >> 3;
 
-    Square k_sq = SquareNo( _cb.piece<c_my, KING>() );
-    Bitboard occupied = _cb.All();
+//     PieceType  pt = PieceType((move >> 12) & 7);
+//     PieceType cpt = PieceType((move >> 15) & 7);
 
-    return (RookAttackSquares(k_sq, occupied) & (_cb.piece<c_emy, ROOK  >() | _cb.piece<c_emy, QUEEN>()))
-      or (BishopAttackSquares(k_sq, occupied) & (_cb.piece<c_emy, BISHOP>() | _cb.piece<c_emy, QUEEN>()))
-      or (KnightAttackSquares(k_sq, occupied) &  _cb.piece<c_emy, KNIGHT>())
-      or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece<c_emy, PAWN  >());
-}
+//     Bitboard Apieces = _cb.All();
 
+//     _cb.MakeMove(move);
+//     bool check = (((move >> 20) & 1) == WHITE)
+//         ? InCheck<BLACK>(_cb) : InCheck<WHITE>(_cb);
+//     string gives_check = check ? "+" : "";
+//     _cb.UnmakeMove();
 
-string
-PrintMove(Move move, ChessBoard _cb)
-{
-    if (move == NULL_MOVE)
-        return string("null");
+//     string captures = (cpt != 0) ? "x" : "";
 
-    const auto IndexToRow = [] (int row)
-    { return string(1, char(row + 49)); };
+//     if (pt == PAWN)
+//     {
+//         string pawn_captures
+//             = (std::abs(ip_col - fp_col) == 1)
+//             ? (IndexToCol(ip_col) + "x") : "";
 
-    const auto IndexToCol = [] (int col)
-    { return string(1, char(col + 97)); };
+//         string dest_square = IndexToSquare(fp_row, fp_col);
 
-    const auto IndexToSquare = [&] (int row, int col)
-    { return IndexToCol(col) + IndexToRow(row); };
+//         // No promotion
+//         if (((1ULL << fp) & Rank18) == 0)
+//             return pawn_captures + dest_square + gives_check;
 
-    const char piece_names[4] = {'B', 'N', 'R', 'Q'};
+//         int ppt = (move >> 18) & 3;
+//         string promoted_piece = string("=") + string(1, piece_names[ppt]);
 
-    Square ip = Square(move & 63);
-    Square fp = Square((move >> 6) & 63);
+//         return pawn_captures + dest_square + promoted_piece + gives_check;
+//     }
 
-    int ip_col = ip & 7;
-    int fp_col = fp & 7;
+//     if (pt == KING)
+//     {
+//         Bitboard fpos = 1ULL << fp;
+//         // Castling
+//         if (std::abs(ip_col - fp_col) == 2)
+//             return string((fpos & FileG) ? "O-O" : "O-O-O") + gives_check;
 
-    int ip_row = (ip - ip_col) >> 3;
-    int fp_row = (fp - fp_col) >> 3;
+//         return string("K") + captures + IndexToSquare(fp_row, fp_col) + gives_check;
+//     }
 
-    PieceType  pt = PieceType((move >> 12) & 7);
-    PieceType cpt = PieceType((move >> 15) & 7);
+//     // If piece is [BISHOP, KNIGHT, ROOK, QUEEN]
+//     Bitboard pieces =
+//         (pt == BISHOP ? AttackSquares<BISHOP>(fp, Apieces) :
+//         (pt == KNIGHT ? AttackSquares<KNIGHT>(fp, Apieces) :
+//         (pt == ROOK   ? AttackSquares< ROOK >(fp, Apieces) :
+//         AttackSquares<QUEEN>(fp, Apieces))));
 
-    Bitboard Apieces = _cb.All();
+//     pieces = (pieces & _cb.get_piece(make_piece(_cb.color, pt))) ^ (1ULL << ip);
 
-    _cb.MakeMove(move);
-    bool check = (((move >> 20) & 1) == WHITE)
-        ? InCheck<BLACK>(_cb) : InCheck<WHITE>(_cb);
-    string gives_check = check ? "+" : "";
-    _cb.UnmakeMove();
+//     string piece_name = string(1, piece_names[pt - 2]);
+//     string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;
 
-    string captures = (cpt != 0) ? "x" : "";
-
-    if (pt == PAWN)
-    {
-        string pawn_captures
-            = (std::abs(ip_col - fp_col) == 1)
-            ? (IndexToCol(ip_col) + "x") : "";
-
-        string dest_square = IndexToSquare(fp_row, fp_col);
-
-        // No promotion
-        if (((1ULL << fp) & Rank18) == 0)
-            return pawn_captures + dest_square + gives_check;
-
-        int ppt = (move >> 18) & 3;
-        string promoted_piece = string("=") + string(1, piece_names[ppt]);
-
-        return pawn_captures + dest_square + promoted_piece + gives_check;
-    }
-
-    if (pt == KING)
-    {
-        Bitboard fpos = 1ULL << fp;
-        // Castling
-        if (std::abs(ip_col - fp_col) == 2)
-            return string((fpos & FileG) ? "O-O" : "O-O-O") + gives_check;
-
-        return string("K") + captures + IndexToSquare(fp_row, fp_col) + gives_check;
-    }
-
-    // If piece is [BISHOP, KNIGHT, ROOK, QUEEN]
-    Bitboard pieces =
-        (pt == BISHOP ? BishopAttackSquares(fp, Apieces) :
-        (pt == KNIGHT ? KnightAttackSquares(fp, Apieces) :
-        (pt == ROOK   ?   RookAttackSquares(fp, Apieces) :
-        QueenAttackSquares(fp, Apieces))));
-
-    pieces = (pieces & _cb.get_piece(make_piece(_cb.color, pt))) ^ (1ULL << ip);
-
-    string piece_name = string(1, piece_names[pt - 2]);
-    string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;
-
-    if (pieces == 0)
-        return piece_name + end_part;
+//     if (pieces == 0)
+//         return piece_name + end_part;
     
-    bool row = true, col = true;
+//     bool row = true, col = true;
 
-    while (pieces > 0)
-    {
-        Square __pos = NextSquare(pieces);
+//     while (pieces > 0)
+//     {
+//         Square __pos = NextSquare(pieces);
 
-        int __pos_col = __pos & 7;
-        int __pos_row = (__pos - __pos_col) >> 3;
+//         int __pos_col = __pos & 7;
+//         int __pos_row = (__pos - __pos_col) >> 3;
 
-        if (__pos_col == ip_col) col = false;
-        if (__pos_row == ip_row) row = false;
-    }
+//         if (__pos_col == ip_col) col = false;
+//         if (__pos_row == ip_row) row = false;
+//     }
 
-    if (col) return piece_name + IndexToCol(ip_col) + end_part;
-    if (row) return piece_name + IndexToRow(ip_row) + end_part;
+//     if (col) return piece_name + IndexToCol(ip_col) + end_part;
+//     if (row) return piece_name + IndexToRow(ip_row) + end_part;
 
-    return piece_name + IndexToSquare(ip_row, ip_col) + end_part;
-}
-
-
-void
-PrintMovelist(MoveList myMoves, ChessBoard _cb)
-{
-    using std::setw;
-
-    // Sort the moves based on their priority
-    for (size_t i = 0; i < myMoves.size(); i++) {
-        for (size_t j = i + 1; j < myMoves.size(); j++) {
-            if ((myMoves.pMoves[i] >> 21) < (myMoves.pMoves[j] >> 21))
-                std::swap(myMoves.pMoves[i], myMoves.pMoves[j]);
-        }
-    }
+//     return piece_name + IndexToSquare(ip_row, ip_col) + end_part;
+// }
 
 
-    cout << "MoveCount : " << myMoves.size() << '\n'
-        << " | No. |   Move   | Encode-Move | Priority |" << endl;
+// void
+// PrintMovelist(MoveList myMoves, ChessBoard _cb)
+// {
+//     using std::setw;
 
-    for (size_t i = 0; i < myMoves.size(); i++)
-    {
-        Move move = myMoves.pMoves[i];
-        string moveString = PrintMove(move, _cb);
-        int priority = move >> 24;
+//     // Sort the moves based on their priority
+//     for (size_t i = 0; i < myMoves.size(); i++) {
+//         for (size_t j = i + 1; j < myMoves.size(); j++) {
+//             if ((myMoves.pMoves[i] >> 21) < (myMoves.pMoves[j] >> 21))
+//                 std::swap(myMoves.pMoves[i], myMoves.pMoves[j]);
+//         }
+//     }
 
-        cout << " | " << setw(3)  << (i + 1)
-             << " | " << setw(8)  << moveString
-             << " | " << setw(11) << move
-             << " | " << setw(8)  << priority
-             << " |"  << endl;
-    }
 
-    cout << endl;
-}
+//     cout << "MoveCount : " << myMoves.size() << '\n'
+//         << " | No. |   Move   | Encode-Move | Priority |" << endl;
+
+//     for (size_t i = 0; i < myMoves.size(); i++)
+//     {
+//         Move move = myMoves.pMoves[i];
+//         string moveString = PrintMove(move, _cb);
+//         int priority = move >> 24;
+
+//         cout << " | " << setw(3)  << (i + 1)
+//              << " | " << setw(8)  << moveString
+//              << " | " << setw(11) << move
+//              << " | " << setw(8)  << priority
+//              << " |"  << endl;
+//     }
+
+//     cout << endl;
+// }

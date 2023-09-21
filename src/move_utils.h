@@ -1,5 +1,4 @@
 
-
 #ifndef MOVE_UTILS_H
 #define MOVE_UTILS_H
 
@@ -66,37 +65,19 @@ class MoveList
 };
 
 
-// Returns and removes the LsbIndex
-inline Square
-NextSquare(uint64_t& __x)
-{
-    Square res = Square(__builtin_ctzll(__x));
-    __x &= __x - 1;
-    return res;
-}
+// // Returns and removes the LsbIndex
+// inline Square
+// NextSquare(uint64_t& __x)
+// {
+//     Square res = Square(__builtin_ctzll(__x));
+//     __x &= __x - 1;
+//     return res;
+// }
 
-// Prints all the info on the encoded-move
-void
-DecodeMove(Move encoded_move);
+// // Prints all the info on the encoded-move
+// void
+// DecodeMove(Move encoded_move);
 
-
-
-
-// Returns all squares attacked by bishop on index __pos
-Bitboard
-BishopAttackSquares(Square __pos, Bitboard _Ap);
-
-// Returns all squares attacked by knight on index __pos
-Bitboard
-KnightAttackSquares(Square __pos, Bitboard _Ap);
-
-// Returns all squares attacked by rook on index __pos
-Bitboard
-RookAttackSquares(Square __pos, Bitboard _Ap);
-
-// Returns all squares attacked by queen on index __pos
-Bitboard
-QueenAttackSquares(Square __pos, Bitboard _Ap);
 
 
 
@@ -105,9 +86,9 @@ QueenAttackSquares(Square __pos, Bitboard _Ap);
  * 
  * @param ChessBoard position
 **/
-template <Color c_my>
-bool
-InCheck(const ChessBoard& _cb);
+// template <Color c_my>
+// bool
+// InCheck(const ChessBoard& _cb);
 
 
 /**
@@ -118,8 +99,8 @@ InCheck(const ChessBoard& _cb);
  * @param _cb board position
  * @return string 
  */
-string
-PrintMove(Move move, ChessBoard _cb);
+// string
+// PrintMove(Move move, ChessBoard _cb);
 
 
 /**
@@ -128,9 +109,8 @@ PrintMove(Move move, ChessBoard _cb);
  * @param _cb board position
  * @param myMoves Movelist for board positions.
  */
-void
-PrintMovelist(MoveList myMoves, ChessBoard _cb);
-
+// void
+// PrintMovelist(MoveList myMoves, ChessBoard _cb);
 
 
 #endif

@@ -1,5 +1,6 @@
 
 #include "evaluation.h"
+#include "attacks.h"
 
 using std::abs;
 using std::min, std::max;
@@ -104,17 +105,17 @@ MobilityStrength(const ChessBoard& pos)
         return PopCount(squares);
     };
 
-    Score bishops = CalculateMobility(BishopAttackSquares, pos.piece<WHITE, BISHOP>())
-                  - CalculateMobility(BishopAttackSquares, pos.piece<BLACK, BISHOP>());
+    Score bishops = CalculateMobility(AttackSquares<BISHOP>, pos.piece<WHITE, BISHOP>())
+                  - CalculateMobility(AttackSquares<BISHOP>, pos.piece<BLACK, BISHOP>());
 
-    Score knights = CalculateMobility(KnightAttackSquares, pos.piece<WHITE, KNIGHT>())
-                  - CalculateMobility(KnightAttackSquares, pos.piece<BLACK, KNIGHT>());
+    Score knights = CalculateMobility(AttackSquares<KNIGHT>, pos.piece<WHITE, KNIGHT>())
+                  - CalculateMobility(AttackSquares<KNIGHT>, pos.piece<BLACK, KNIGHT>());
 
-    Score rooks = CalculateMobility(RookAttackSquares, pos.piece<WHITE, ROOK>())
-                - CalculateMobility(RookAttackSquares, pos.piece<BLACK, ROOK>());
+    Score rooks = CalculateMobility(AttackSquares<ROOK>, pos.piece<WHITE, ROOK>())
+                - CalculateMobility(AttackSquares<ROOK>, pos.piece<BLACK, ROOK>());
 
-    Score queens = CalculateMobility(QueenAttackSquares, pos.piece<WHITE, QUEEN>())
-                 - CalculateMobility(QueenAttackSquares, pos.piece<BLACK, QUEEN>());
+    Score queens = CalculateMobility(AttackSquares<QUEEN>, pos.piece<WHITE, QUEEN>())
+                 - CalculateMobility(AttackSquares<QUEEN>, pos.piece<BLACK, QUEEN>());
 
     return bishops + (2 * knights) + rooks + queens;
 }
@@ -185,10 +186,10 @@ AttackStrength(const ChessBoard& pos)
 
     int attackers = 0;
 
-    attackers += AddAttackers(BishopAttackSquares, pos.piece<side, BISHOP>(), 1);
-    attackers += AddAttackers(KnightAttackSquares, pos.piece<side, KNIGHT>(), 1);
-    attackers += AddAttackers(RookAttackSquares  , pos.piece<side, ROOK  >(), 1);
-    attackers += AddAttackers(QueenAttackSquares , pos.piece<side, QUEEN >(), 2);
+    attackers += AddAttackers(AttackSquares<BISHOP>, pos.piece<side, BISHOP>(), 1);
+    attackers += AddAttackers(AttackSquares<KNIGHT>, pos.piece<side, KNIGHT>(), 1);
+    attackers += AddAttackers(AttackSquares<ROOK>  , pos.piece<side, ROOK  >(), 1);
+    attackers += AddAttackers(AttackSquares<QUEEN> , pos.piece<side, QUEEN >(), 2);
 
     return 6 * attackers * (attackers + 1);
 }
@@ -428,6 +429,46 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
 }
 
 #endif
+
+/* 
+template <Color c_my>
+static Score
+AttackValue(const ChessBoard& pos)
+{
+    constexpr Color c_emy = ~c_my;
+    Square kingSq = SquareNo(pos.piece<c_emy, KING>());
+
+    int value = 0;
+
+    return Score{};
+}
+
+static Score
+KingSafety(const ChessBoard& pos)
+{
+
+}
+
+
+static Score
+Threat(const ChessBoard& pos, const EvalData& ed)
+{
+    // Attack Value Currently
+    //    - Distance of pieces from king
+    //    - Whether pieces attack the king
+    // King Safety
+    //    - King Mobility
+    //    - Open files
+    // Long-term prospect
+    //    - No. of attackers left
+    //    - Open files
+
+
+    // Increase Attack Value if lack of KIngSafety
+    // Threat = Attack_Value * Lack_Of_Safety + Long_Term_Prospects
+
+
+} */
 
 
 Score
