@@ -7,7 +7,6 @@
 
 
 #define __abs(x) ((x >= 0) ? (x) : -(x))
-#define dist_btw(x1, y1, x2, y2) (__abs((x1 - x2)) + __abs((y1 - y2)))
 
 namespace plt
 {
@@ -25,10 +24,11 @@ extern Bitboard  DownLeftMasks[SQUARE_NB];
 extern Bitboard     LineMasks[SQUARE_NB];	// (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
 extern Bitboard DiagonalMasks[SQUARE_NB];	// (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
 
-extern Bitboard   RookMasks[SQUARE_NB];
-extern Bitboard BishopMasks[SQUARE_NB];
-extern Bitboard KnightMasks[SQUARE_NB];
-extern Bitboard   KingMasks[SQUARE_NB];
+extern Bitboard      RookMasks[SQUARE_NB];
+extern Bitboard    BishopMasks[SQUARE_NB];
+extern Bitboard    KnightMasks[SQUARE_NB];
+extern Bitboard      KingMasks[SQUARE_NB];
+extern Bitboard KingOuterMasks[SQUARE_NB];
 
 extern Bitboard        PawnMasks[COLOR_NB][SQUARE_NB];
 extern Bitboard PawnCaptureMasks[COLOR_NB][SQUARE_NB];

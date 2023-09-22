@@ -5,13 +5,13 @@
 using std::abs;
 using std::min, std::max;
 
-// static int
-// MinDist(Square s, Square t)
-// {
-//     Square s_x = s & 7, s_y = s >> 3;
-//     Square t_x = t & 7, t_y = t >> 3;
-//     return max(0, max(abs(s_x - t_x), abs(s_y - t_y)) - 1);
-// }
+static int
+MinManhattanDistance(Square s, Square t)
+{
+    int s_x = s & 7, s_y = s >> 3;
+    int t_x = t & 7, t_y = t >> 3;
+    return min(abs(s_x - t_x), abs(s_y - t_y));
+}
 
 static int
 Dist(Square s, Square t)
@@ -430,17 +430,99 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
 
 #endif
 
-/* 
+#ifndef THREATS
+
+template <Color c_my, PieceType pt, Bitboard* mask, Score increment>
+static Score
+AttacksKing(const ChessBoard& pos)
+{
+    Score score = VALUE_ZERO;
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Bitboard occupied = pos.All();
+    Square king_sq_emy = SquareNo(pos.piece< ~c_my, KING>());
+
+    while (piece_bb != 0)
+    {
+        Square sq = NextSquare(piece);
+        if ((AttackSquares<pt>(sq, occupied) & mask[king_sq_emy]) != 0)
+            score += increment;
+    }
+
+    return score;
+}
+
 template <Color c_my>
 static Score
 AttackValue(const ChessBoard& pos)
 {
+    using plt::KingMasks;
+    using plt::KingOuterMasks;
+
     constexpr Color c_emy = ~c_my;
     Square kingSq = SquareNo(pos.piece<c_emy, KING>());
 
-    int value = 0;
+    Score attack_value = VALUE_ZERO;
 
-    return Score{};
+    attack_value += AttacksKing<c_my, KNIGHT, KingMasks, 2>(pos);
+    attack_value += AttacksKing<c_my, BISHOP, KingMasks, 3>(pos);
+    attack_value += AttacksKing<c_my, ROOK  , KingMasks, 4>(pos);
+    attack_value += AttacksKing<c_my, QUEEN , KingMasks, 6>(pos);
+
+    attack_value += AttacksKing<c_my, KNIGHT, KingOuterMasks, 1>(pos);
+    attack_value += AttacksKing<c_my, BISHOP, KingOuterMasks, 2>(pos);
+    attack_value += AttacksKing<c_my, ROOK  , KingOuterMasks, 3>(pos);
+    attack_value += AttacksKing<c_my, QUEEN , KingOuterMasks, 4>(pos);
+
+    return attack_value;
+}
+
+
+template <Color c_my, PieceType pt, int pieceVal>
+static Score
+CalcDistanceScore(const ChessBoard& pos)
+{
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Bitboard emyKingSq = pos.piece< ~c_my, KING>();
+
+    Score score = VALUE_ZERO;
+
+    while (piece_bb != 0)
+        score += pieceVal * (10 - MinManhattanDistance(NextSquare(piece_bb), emyKingSq));
+    
+    return score;
+}
+
+
+template <Color c_my>
+static Score
+AttackDistanceScore(const ChessBoard& pos)
+{
+    Score distance_score = VALUE_ZERO;
+
+    distance_score += CalcDistanceScore<c_my, PAWN  , 1>(pos);
+    distance_score += CalcDistanceScore<c_my, KNIGHT, 2>(pos);
+    distance_score += CalcDistanceScore<c_my, BISHOP, 3>(pos);
+    distance_score += CalcDistanceScore<c_my, ROOK  , 5>(pos);
+    distance_score += CalcDistanceScore<c_my, QUEEN , 9>(pos);
+
+    return distance_score;
+}
+
+
+template <Color c_my>
+static Score
+OpenFilesScore(const ChessBoard& pos)
+{
+    Score score = VALUE_ZERO;
+    Bitboard column = FIleA;
+
+    int king_col = pos.piece<c_my, KING>() & 7;
+
+    for (int i = 0; i < 7; i++)
+    {
+        
+    }
+
 }
 
 static Score
@@ -467,9 +549,13 @@ Threat(const ChessBoard& pos, const EvalData& ed)
     // Increase Attack Value if lack of KIngSafety
     // Threat = Attack_Value * Lack_Of_Safety + Long_Term_Prospects
 
+    Score attack_score = AttackValue<WHITE>(pos);
+    Score distance_score = 0;
 
-} */
+}
 
+
+#endif
 
 Score
 Evaluate(const ChessBoard& pos)

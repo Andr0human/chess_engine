@@ -17,10 +17,11 @@ Bitboard  DownLeftMasks[SQUARE_NB];
 Bitboard     LineMasks[SQUARE_NB];
 Bitboard DiagonalMasks[SQUARE_NB];
 
-Bitboard   RookMasks[SQUARE_NB];
-Bitboard BishopMasks[SQUARE_NB];
-Bitboard KnightMasks[SQUARE_NB];
-Bitboard   KingMasks[SQUARE_NB];
+Bitboard      RookMasks[SQUARE_NB];
+Bitboard    BishopMasks[SQUARE_NB];
+Bitboard    KnightMasks[SQUARE_NB];
+Bitboard      KingMasks[SQUARE_NB];
+Bitboard KingOuterMasks[SQUARE_NB];
 
 Bitboard        PawnMasks[COLOR_NB][SQUARE_NB];
 Bitboard PawnCaptureMasks[COLOR_NB][SQUARE_NB];
@@ -298,6 +299,26 @@ BuildKingTable(Bitboard* _arr)
         }
 
         _arr[square] = value;
+    }
+}
+
+
+static void
+BuildKingOuterTable(Bitboard* table)
+{
+    for (Square square = SQ_A1; square < SQUARE_NB; ++square)
+    {
+        int col = square & 7;
+        int row = (square - col) >> 3;
+        
+        Bitboard value = VALUE_ZERO;
+
+        if (InRange(row + 1, col + 1)) value |= KingMasks[square + 9];
+        if (InRange(row + 1, col - 1)) value |= KingMasks[square + 7];
+        if (InRange(row - 1, col + 1)) value |= KingMasks[square - 7];
+        if (InRange(row - 1, col - 1)) value |= KingMasks[square - 9];
+
+        table[square] = value & (KingMasks[square] | (1ULL << square));
     }
 }
 

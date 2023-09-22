@@ -959,10 +959,3 @@ GenerateMoves(ChessBoard& pos, bool qsSearch, bool findChecks)
 
 #endif
 
-
-
-#ifndef TOOLS
-
-
-
-#endif
