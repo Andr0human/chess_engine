@@ -393,6 +393,7 @@ Init()
 
     BuildKnightTable(KnightMasks);
     BuildKingTable(KingMasks);
+    BuildKingOuterTable(KingOuterMasks);
 
     BuildPawnTable( PawnMasks[1],  1, false);
     BuildPawnTable( PawnMasks[0], -1, false);

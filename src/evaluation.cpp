@@ -26,30 +26,30 @@ static bool
 IsHypotheticalDraw(const EvalData& ed)
 {
     // No draws if pawns on the board
-    if (ed.w_pawns + ed.b_pawns > 0)
+    if (ed.pawns[WHITE] + ed.pawns[BLACK] > 0)
         return false;
 
-    if ((ed.w_pieces > 2) or (ed.b_pieces > 2))
+    if ((ed.pieces[WHITE] > 2) or (ed.pieces[BLACK] > 2))
         return false;
 
     // If one piece remains and its bishop or knight
-    if (ed.w_pieces + ed.b_pieces == 1) {
-        if ((ed.w_bishops + ed.b_bishops == 1)
-         or (ed.w_knights + ed.b_knights == 1)) return true;
+    if (ed.pieces[WHITE] + ed.pieces[BLACK] == 1) {
+        if ((ed.bishops[WHITE] + ed.bishops[BLACK] == 1)
+         or (ed.knights[WHITE] + ed.knights[BLACK] == 1)) return true;
     }
 
     //* TODO Test for [WQ_BQ, WR_BR] positions
 
     // If one piece of both sides left, and its not [WQ_BR, WR_BQ]
     // Then it is a draw (almost)
-    if ((ed.w_pieces == 1) and (ed.b_pieces == 1)) {
-        if (((ed.w_queens > 0) and (ed.b_queens == 0))
-         or ((ed.b_queens > 0) and (ed.w_queens == 0))) return false;
+    if ((ed.pieces[WHITE] == 1) and (ed.pieces[BLACK] == 1)) {
+        if (((ed.queens[WHITE] > 0) and (ed.queens[BLACK] == 0))
+         or ((ed.queens[BLACK] > 0) and (ed.queens[WHITE] == 0))) return false;
 
         return true;
     }
 
-    if ((ed.w_pieces + ed.b_pieces == 2) and (ed.w_knights + ed.b_knights == 2))
+    if ((ed.pieces[WHITE] + ed.pieces[BLACK] == 2) and (ed.knights[WHITE] + ed.knights[BLACK] == 2))
         return true;
 
     return false;
@@ -61,61 +61,63 @@ IsHypotheticalDraw(const EvalData& ed)
 static Score
 MaterialDiffereceMidGame(const EvalData& ed)
 {
-    return PawnValueMg   * (ed.w_pawns   - ed.b_pawns  )
-         + BishopValueMg * (ed.w_bishops - ed.b_bishops)
-         + KnightValueMg * (ed.w_knights - ed.b_knights)
-         + RookValueMg   * (ed.w_rooks   - ed.b_rooks  )
-         + QueenValueMg  * (ed.w_queens  - ed.b_queens );
+    return PawnValueMg   * (ed.pawns[WHITE]   - ed.pawns[BLACK]  )
+         + BishopValueMg * (ed.bishops[WHITE] - ed.bishops[BLACK])
+         + KnightValueMg * (ed.knights[WHITE] - ed.knights[BLACK])
+         + RookValueMg   * (ed.rooks[WHITE]   - ed.rooks[BLACK]  )
+         + QueenValueMg  * (ed.queens[WHITE]  - ed.queens[BLACK] );
+}
+
+template<Color c_my, PieceType pt, Score* strTable>
+static Score
+AddStrScore(const ChessBoard& pos)
+{
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Score score = 0;
+    
+    while (piece_bb > 0)
+        score += strTable[NextSquare(piece_bb)];
+    return score;
 }
 
 static Score
 PieceTableStrengthMidGame(const ChessBoard& pos)
 {
-    const auto StrScore = [] (Bitboard piece, int* strTable)
-    {
-        Score score = 0;
-        while (piece > 0)
-            score += strTable[NextSquare(piece)];
-        return score;
-    };
-
-    Score pawns   = StrScore(pos.piece<WHITE, PAWN  >(), wpBoard)
-                  - StrScore(pos.piece<BLACK, PAWN  >(), bpBoard);
-    Score bishops = StrScore(pos.piece<WHITE, BISHOP>(), wBoard)
-                  - StrScore(pos.piece<BLACK, BISHOP>(), bBoard);
-    Score knights = StrScore(pos.piece<WHITE, KNIGHT>(), NBoard)
-                  - StrScore(pos.piece<BLACK, KNIGHT>(), NBoard);
-    Score rooks   = StrScore(pos.piece<WHITE, ROOK  >(), wRBoard)
-                  - StrScore(pos.piece<BLACK, ROOK  >(), bRBoard);
-    Score king    = StrScore(pos.piece<WHITE, KING  >(), WhiteKingMidGameTable)
-                  - StrScore(pos.piece<BLACK, KING  >(), BlackKingMidGameTable);
+    Score pawns   = AddStrScore<WHITE, PAWN, wpBoard>(pos)
+                  - AddStrScore<BLACK, PAWN, bpBoard>(pos);
+    Score bishops = AddStrScore<WHITE, BISHOP, wBoard>(pos)
+                  - AddStrScore<BLACK, BISHOP, bBoard>(pos);
+    Score knights = AddStrScore<WHITE, KNIGHT, NBoard>(pos)
+                  - AddStrScore<BLACK, KNIGHT, NBoard>(pos);
+    Score rooks   = AddStrScore<WHITE, ROOK, wRBoard>(pos)
+                  - AddStrScore<BLACK, ROOK, bRBoard>(pos);
+    Score king    = AddStrScore<WHITE, KING, WhiteKingMidGameTable>(pos)
+                  - AddStrScore<BLACK, KING, BlackKingMidGameTable>(pos);
 
     return pawns + bishops + knights + rooks + king;
 }
 
+template <Color c_my, PieceType pt>
+static Score
+AddMobilityScore(const ChessBoard& pos)
+{
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Bitboard occupied = pos.All();
+    Bitboard squares  = 0;
+
+    while (piece_bb > 0)
+        squares |= AttackSquares<pt>(NextSquare(piece_bb), occupied);
+    
+    return PopCount(squares);
+}
+
 static Score
 MobilityStrength(const ChessBoard& pos)
-{
-    const auto CalculateMobility = [&] (const auto& __f, Bitboard piece)
-    {
-        Bitboard occupied = pos.All();
-        Bitboard squares = 0;
-        while (piece > 0)
-            squares |= __f(NextSquare(piece), occupied);
-        return PopCount(squares);
-    };
-
-    Score bishops = CalculateMobility(AttackSquares<BISHOP>, pos.piece<WHITE, BISHOP>())
-                  - CalculateMobility(AttackSquares<BISHOP>, pos.piece<BLACK, BISHOP>());
-
-    Score knights = CalculateMobility(AttackSquares<KNIGHT>, pos.piece<WHITE, KNIGHT>())
-                  - CalculateMobility(AttackSquares<KNIGHT>, pos.piece<BLACK, KNIGHT>());
-
-    Score rooks = CalculateMobility(AttackSquares<ROOK>, pos.piece<WHITE, ROOK>())
-                - CalculateMobility(AttackSquares<ROOK>, pos.piece<BLACK, ROOK>());
-
-    Score queens = CalculateMobility(AttackSquares<QUEEN>, pos.piece<WHITE, QUEEN>())
-                 - CalculateMobility(AttackSquares<QUEEN>, pos.piece<BLACK, QUEEN>());
+{   
+    Score bishops = AddMobilityScore<WHITE, BISHOP>(pos) - AddMobilityScore<BLACK, BISHOP>(pos);
+    Score knights = AddMobilityScore<WHITE, KNIGHT>(pos) - AddMobilityScore<BLACK, KNIGHT>(pos);
+    Score rooks   = AddMobilityScore<WHITE, ROOK  >(pos) - AddMobilityScore<BLACK, ROOK  >(pos);
+    Score queens  = AddMobilityScore<WHITE, QUEEN >(pos) - AddMobilityScore<BLACK, QUEEN >(pos);
 
     return bishops + (2 * knights) + rooks + queens;
 }
@@ -261,11 +263,11 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed)
 static Score
 MaterialDiffereceEndGame(const EvalData& ed)
 {
-    return PawnValueEg   * (ed.w_pawns   - ed.b_pawns  )
-         + BishopValueEg * (ed.w_bishops - ed.b_bishops)
-         + KnightValueEg * (ed.w_knights - ed.b_knights)
-         + RookValueEg   * (ed.w_rooks   - ed.b_rooks  )
-         + QueenValueEg  * (ed.w_queens  - ed.b_queens );
+    return PawnValueEg   * (ed.pawns[WHITE]   - ed.pawns[BLACK]  )
+         + BishopValueEg * (ed.bishops[WHITE] - ed.bishops[BLACK])
+         + KnightValueEg * (ed.knights[WHITE] - ed.knights[BLACK])
+         + RookValueEg   * (ed.rooks[WHITE]   - ed.rooks[BLACK]  )
+         + QueenValueEg  * (ed.queens[WHITE]  - ed.queens[BLACK] );
 }
 
 static Score
@@ -275,8 +277,8 @@ DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
     Square bk_sq = SquareNo( pos.piece<BLACK, KING>() );
 
     int material_diff =
-        + 3 * (ed.w_bishops - ed.b_bishops) + 3 * (ed.w_knights - ed.b_knights)
-        + 5 * (ed.w_rooks   - ed.b_rooks  ) + 9 * (ed.w_queens  - ed.b_queens );
+        + 3 * (ed.bishops[WHITE] - ed.bishops[BLACK]) + 3 * (ed.knights[WHITE] - ed.knights[BLACK])
+        + 5 * (ed.rooks[WHITE]   - ed.rooks[BLACK]  ) + 9 * (ed.queens[WHITE]  - ed.queens[BLACK] );
 
     int distance = 14 - Dist(wk_sq, bk_sq);
     Score score = (distance / 4) * (distance + 2) * material_diff;
@@ -340,7 +342,7 @@ LoneKingEndGame(const ChessBoard& pos, const EvalData& ed)
     **/
     // Note : Failed so far
 
-    // Color winningSide = (ed.w_pawns + ed.w_pieces > 0) ? WHITE : BLACK;
+    // Color winningSide = (ed.pawns[WHITE] + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
     constexpr Color losingSide  = ~winningSide;
 
     Square  wonKingSq = SquareNo( pos.piece<winningSide, KING>() );
@@ -443,7 +445,7 @@ AttacksKing(const ChessBoard& pos)
 
     while (piece_bb != 0)
     {
-        Square sq = NextSquare(piece);
+        Square sq = NextSquare(piece_bb);
         if ((AttackSquares<pt>(sq, occupied) & mask[king_sq_emy]) != 0)
             score += increment;
     }
@@ -457,9 +459,6 @@ AttackValue(const ChessBoard& pos)
 {
     using plt::KingMasks;
     using plt::KingOuterMasks;
-
-    constexpr Color c_emy = ~c_my;
-    Square kingSq = SquareNo(pos.piece<c_emy, KING>());
 
     Score attack_value = VALUE_ZERO;
 
@@ -482,7 +481,7 @@ static Score
 CalcDistanceScore(const ChessBoard& pos)
 {
     Bitboard piece_bb = pos.piece<c_my, pt>();
-    Bitboard emyKingSq = pos.piece< ~c_my, KING>();
+    Square emyKingSq = SquareNo(pos.piece<~c_my, KING>());
 
     Score score = VALUE_ZERO;
 
@@ -491,7 +490,6 @@ CalcDistanceScore(const ChessBoard& pos)
     
     return score;
 }
-
 
 template <Color c_my>
 static Score
@@ -508,29 +506,65 @@ AttackDistanceScore(const ChessBoard& pos)
     return distance_score;
 }
 
-
 template <Color c_my>
 static Score
 OpenFilesScore(const ChessBoard& pos)
 {
     Score score = VALUE_ZERO;
-    Bitboard column = FIleA;
+    Bitboard column_bb = FileA;
 
     int king_col = pos.piece<c_my, KING>() & 7;
+    Bitboard pawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
 
-    for (int i = 0; i < 7; i++)
+    for (int col = 0; col < 7; col++)
     {
-        
+        if ((column_bb & pawns) != 0)
+            score += 1 << abs(col - king_col);
+
+        column_bb <<= 1;
     }
-
+    return score;
 }
 
-static Score
-KingSafety(const ChessBoard& pos)
+template <Color c_my, PieceType pt>
+static Bitboard
+GenAttackedSquares(const ChessBoard& pos)
 {
+    Bitboard squares = 0;
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Bitboard occupied = pos.All();
 
+    while (piece_bb != 0)
+        squares |= AttackSquares<pt>(NextSquare(piece_bb), occupied);
+    return squares;
 }
 
+template <Color c_my>
+static Score
+KingMobilityScore(const ChessBoard& pos)
+{
+    Square k_sq = SquareNo(pos.piece<c_my, KING>());
+    Bitboard pieces_my = pos.piece<c_my, ALL>();
+    Bitboard attacked_squares = 0;
+
+    attacked_squares |= PawnAttackSquares<~c_my>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, BISHOP>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, KNIGHT>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, ROOK>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, QUEEN>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, KING>(pos);
+
+    return PopCount(AttackSquares<KING>(k_sq, 0) & ~(pieces_my & attacked_squares));
+}
+
+template <Color c_my>
+static Score
+AttackersLeft(const EvalData& ed)
+{
+    return Score(
+        ed.knights[c_my] + 2 * ed.bishops[c_my]
+      + 3 * ed.rooks[c_my] + 5 * ed.queens[c_my] );
+}
 
 static Score
 Threat(const ChessBoard& pos, const EvalData& ed)
@@ -545,13 +579,26 @@ Threat(const ChessBoard& pos, const EvalData& ed)
     //    - No. of attackers left
     //    - Open files
 
-
     // Increase Attack Value if lack of KIngSafety
     // Threat = Attack_Value * Lack_Of_Safety + Long_Term_Prospects
 
-    Score attack_score = AttackValue<WHITE>(pos);
-    Score distance_score = 0;
+    Score attackValueWhite = AttackValue<WHITE>(pos);
+    Score attackValueBlack = AttackValue<BLACK>(pos);
 
+    Score distanceScoreWhite = AttackDistanceScore<WHITE>(pos);
+    Score distanceScoreBlack = AttackDistanceScore<BLACK>(pos);
+
+    Score kingMobilityWhite = KingMobilityScore<WHITE>(pos);
+    Score kingMobilityBlack = KingMobilityScore<BLACK>(pos);
+
+    Score openFileWhite = OpenFilesScore<WHITE>(pos);
+    Score openFileBlack = OpenFilesScore<BLACK>(pos);
+
+    Score attackersLeftWhite = AttackersLeft<WHITE>(ed);
+    Score attackersLeftBlack = AttackersLeft<BLACK>(ed);
+
+    return attackValueWhite + distanceScoreWhite + kingMobilityWhite + openFileWhite + attackersLeftWhite
+        - (attackValueBlack + distanceScoreBlack + kingMobilityBlack + openFileBlack + attackersLeftBlack);
 }
 
 
@@ -568,7 +615,7 @@ Evaluate(const ChessBoard& pos)
 
     // Special EndGames
     if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard())
-        return (ed.w_pawns + ed.w_pieces > 0)
+        return (ed.pawns[WHITE] + ed.pieces[WHITE] > 0)
         ? LoneKingEndGame<WHITE>(pos, ed) : LoneKingEndGame<BLACK>(pos, ed);
     
     ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
@@ -593,14 +640,14 @@ Score EvalDump(const ChessBoard& pos)
 
     if (IsHypotheticalDraw(ed))
     {
-        cout << "Position in Hypothetical Draw!" << endl;
+        cout << "Position in Theoretical Draw!" << endl;
         return VALUE_DRAW;
     }
 
 
     if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard()) {
         // cout << "In LoneKingEndgame!" << endl;
-        // Color winningSide = (ed.w_pawns + ed.w_pieces > 0) ? WHITE : BLACK;
+        // Color winningSide = (ed.pawns[WHITE] + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
         // Color losingSide  = ~winningSide;
 
         // Square  wonKingSq = SquareNo( pos.piece(winningSide, KING) );

@@ -68,6 +68,13 @@ AttackSquares<QUEEN>(Square sq, Bitboard occupied)
          | AttackSquares< ROOK >(sq, occupied);
 }
 
+template <>
+inline Bitboard
+AttackSquares<KING>(Square sq, Bitboard occupied)
+{
+    return plt::KingMasks[sq] + (occupied - occupied);
+}
+
 template <Color c_my>
 Bitboard
 PawnAttackSquares(const ChessBoard& _cb)

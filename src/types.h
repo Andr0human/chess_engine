@@ -71,7 +71,8 @@ enum Value: int
     RookValueMg   = 512,  RookValueEg   = 576,
     QueenValueMg  = 926,  QueenValueEg  = 942,
 
-    GamePhaseLimit = 800,
+    // GamePhaseLimit = 800,
+    GamePhaseLimit = 4070,
 };
 
 

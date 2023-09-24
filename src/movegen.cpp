@@ -497,16 +497,37 @@ GenerateAttackedSquares(const ChessBoard& pos)
     Bitboard occupied = pos.All() ^ pos.piece<c_my, KING>();
 
     ans |= PawnAttackSquares<c_emy>(pos);
-
     ans |= AttackedSquaresGen<c_emy, BISHOP>(pos, occupied);
     ans |= AttackedSquaresGen<c_emy, KNIGHT>(pos, occupied);
-    ans |= AttackedSquaresGen<c_emy,  ROOK >(pos, occupied);
+    ans |= AttackedSquaresGen<c_emy, ROOK  >(pos, occupied);
     ans |= AttackedSquaresGen<c_emy, QUEEN >(pos, occupied);
-
-    ans |= plt::KingMasks[SquareNo(pos.piece<c_emy, KING>())];
+    ans |= AttackedSquaresGen<c_emy, KING  >(pos, occupied);
 
     return ans;
 }
+
+
+template <Color c_my, PieceType pt, PieceType emy>
+static void
+AddAttacker(const ChessBoard& pos, int& attackerCount, Bitboard& attackedMask)
+{
+    Square k_sq = SquareNo(pos.piece<c_my, KING>());
+    Bitboard occupied = pos.All();
+    Bitboard enemy_bb = pos.piece<~c_my, pt>() | pos.piece<~c_my, emy>();
+
+    Bitboard king_mask  = AttackSquares<pt>(k_sq, occupied);
+    Bitboard piece_mask = king_mask & enemy_bb;
+
+    if (piece_mask == 0)
+        return;
+    
+    if ((piece_mask & (piece_mask - 1)) != 0)
+        ++attackerCount;
+    
+    ++attackerCount;
+    attackedMask |= (king_mask & AttackSquares<pt>(SquareNo(piece_mask), occupied)) | piece_mask;
+}
+
 
 template <Color c_my>
 static void
@@ -522,37 +543,23 @@ KingAttackers(ChessBoard& _cb)
     }
 
     Square kpos = SquareNo(_cb.piece<c_my, KING>());
-    Bitboard _Ap = _cb.All();
-    int attk_count = 0;
-    Bitboard attk_area = 0;
 
-    const auto add_piece = [&] (const auto& __f, Bitboard enemy)
-    {
-        Bitboard area  = __f(kpos, _Ap);
-        Bitboard piece = area & enemy;
+    int attackerCount = 0;
+    Bitboard attackedMask = 0;
 
-        if (piece == 0) return;
-
-        if ((piece & (piece - 1)) != 0)
-            ++attk_count;
-
-        ++attk_count;
-        attk_area |= (area & __f(SquareNo(piece), _Ap)) | piece;
-    };
-
-    add_piece(AttackSquares< ROOK > , _cb.piece<c_emy, QUEEN>() | _cb.piece<c_emy,  ROOK >());
-    add_piece(AttackSquares<BISHOP> , _cb.piece<c_emy, QUEEN>() | _cb.piece<c_emy, BISHOP>());
-    add_piece(AttackSquares<KNIGHT> , _cb.piece<c_emy, KNIGHT>());
+    AddAttacker<c_my, ROOK  , QUEEN>(_cb, attackerCount, attackedMask);
+    AddAttacker<c_my, BISHOP, QUEEN>(_cb, attackerCount, attackedMask);
+    AddAttacker<c_my, KNIGHT, NONE >(_cb, attackerCount, attackedMask);
 
     Bitboard pawn_sq = plt::PawnCaptureMasks[c_my][kpos] & _cb.piece<c_emy, PAWN>();
     if (pawn_sq != 0)
     {
-        ++attk_count;
-        attk_area |= pawn_sq;
+        ++attackerCount;
+        attackedMask |= pawn_sq;
     }
 
-    _cb.checkers = attk_count;
-    _cb.legalSquaresMaskInCheck = attk_area;
+    _cb.checkers = attackerCount;
+    _cb.legalSquaresMaskInCheck = attackedMask;
 }
 
 template <Color c_my>
