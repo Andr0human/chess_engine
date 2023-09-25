@@ -5,16 +5,9 @@
 using std::abs;
 using std::min, std::max;
 
-static int
-MinManhattanDistance(Square s, Square t)
-{
-    int s_x = s & 7, s_y = s >> 3;
-    int t_x = t & 7, t_y = t >> 3;
-    return min(abs(s_x - t_x), abs(s_y - t_y));
-}
 
 static int
-Dist(Square s, Square t)
+Distance(Square s, Square t)
 {
     int s_x = s & 7, s_y = s >> 3;
     int t_x = t & 7, t_y = t >> 3;
@@ -133,7 +126,7 @@ PawnStructure(const ChessBoard& pos)
     Bitboard    column = FileA;
 
     // Punish Double Pawns on same column
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < 8; i++)
     {
         int p = PopCount(column & pawns);
         score -= 36 * p * (p - 1);
@@ -157,7 +150,7 @@ PawnStructure(const ChessBoard& pos)
 
         // Add score for king close to passed pawn and
         // Reduce score if enemy king is close to pawn
-        int dist = (14 - Dist(pawn_sq, kpos)) - (14 - Dist(pawn_sq, ekpos));
+        int dist = (14 - Distance(pawn_sq, kpos)) - (14 - Distance(pawn_sq, ekpos));
         score += 6 * dist;
     }
 
@@ -280,7 +273,7 @@ DistanceBetweenKingsScore(const ChessBoard& pos, const EvalData& ed)
         + 3 * (ed.bishops[WHITE] - ed.bishops[BLACK]) + 3 * (ed.knights[WHITE] - ed.knights[BLACK])
         + 5 * (ed.rooks[WHITE]   - ed.rooks[BLACK]  ) + 9 * (ed.queens[WHITE]  - ed.queens[BLACK] );
 
-    int distance = 14 - Dist(wk_sq, bk_sq);
+    int distance = 14 - Distance(wk_sq, bk_sq);
     Score score = (distance / 4) * (distance + 2) * material_diff;
     return score;
 }
@@ -486,7 +479,7 @@ CalcDistanceScore(const ChessBoard& pos)
     Score score = VALUE_ZERO;
 
     while (piece_bb != 0)
-        score += pieceVal * (10 - MinManhattanDistance(NextSquare(piece_bb), emyKingSq));
+        score += (pieceVal * (1 << (14 - Distance(NextSquare(piece_bb), emyKingSq)))) >> 6;
     
     return score;
 }
@@ -499,8 +492,8 @@ AttackDistanceScore(const ChessBoard& pos)
 
     distance_score += CalcDistanceScore<c_my, PAWN  , 1>(pos);
     distance_score += CalcDistanceScore<c_my, KNIGHT, 2>(pos);
-    distance_score += CalcDistanceScore<c_my, BISHOP, 3>(pos);
-    distance_score += CalcDistanceScore<c_my, ROOK  , 5>(pos);
+    distance_score += CalcDistanceScore<c_my, BISHOP, 5>(pos);
+    distance_score += CalcDistanceScore<c_my, ROOK  , 7>(pos);
     distance_score += CalcDistanceScore<c_my, QUEEN , 9>(pos);
 
     return distance_score;
@@ -513,14 +506,14 @@ OpenFilesScore(const ChessBoard& pos)
     Score score = VALUE_ZERO;
     Bitboard column_bb = FileA;
 
-    int king_col = pos.piece<c_my, KING>() & 7;
+    int king_col = SquareNo(pos.piece<c_my, KING>()) & 7;
     Bitboard pawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
 
-    for (int col = 0; col < 7; col++)
+    for (int col = 0; col < 8; col++)
     {
-        if ((column_bb & pawns) != 0)
-            score += 1 << abs(col - king_col);
-
+        if ((column_bb & pawns) == 0) {
+            score += 1 << (7 - abs(col - king_col));
+        }
         column_bb <<= 1;
     }
     return score;
@@ -554,7 +547,7 @@ KingMobilityScore(const ChessBoard& pos)
     attacked_squares |= GenAttackedSquares<~c_my, QUEEN>(pos);
     attacked_squares |= GenAttackedSquares<~c_my, KING>(pos);
 
-    return PopCount(AttackSquares<KING>(k_sq, 0) & ~(pieces_my & attacked_squares));
+    return PopCount(AttackSquares<KING>(k_sq, 0) & ~(pieces_my | attacked_squares));
 }
 
 template <Color c_my>
@@ -566,6 +559,22 @@ AttackersLeft(const EvalData& ed)
       + 3 * ed.rooks[c_my] + 5 * ed.queens[c_my] );
 }
 
+
+template <Color c_my>
+static Score
+DefendersCount(const ChessBoard& pos)
+{
+    Square k_sq = SquareNo(pos.piece<c_my, KING>());
+    //Pawns in front of king
+    Bitboard pawns = pos.piece<c_my, PAWNS>();
+    Bitboard mask = plt::PawnMasks[k_sq] | plt::PawnCaptureMasks[k_sq];
+
+    Bitboard pieces = (pos.piece<c_my, BISHOP>() | pos.piece<c_my, KNIGHT>() | pos.piece<c_my, ROOK>())
+        & (plt::KingMasks[k_sq] | plt::KingOuterMasks[k_sq]);
+
+    return 2 * PopCount(mask & pawns) + PopCount(pieces);
+}
+
 static Score
 Threat(const ChessBoard& pos, const EvalData& ed)
 {
@@ -574,6 +583,7 @@ Threat(const ChessBoard& pos, const EvalData& ed)
     //    - Whether pieces attack the king
     // King Safety
     //    - King Mobility
+    //    - Defenders
     //    - Open files
     // Long-term prospect
     //    - No. of attackers left
@@ -591,14 +601,41 @@ Threat(const ChessBoard& pos, const EvalData& ed)
     Score kingMobilityWhite = KingMobilityScore<WHITE>(pos);
     Score kingMobilityBlack = KingMobilityScore<BLACK>(pos);
 
-    Score openFileWhite = OpenFilesScore<WHITE>(pos);
-    Score openFileBlack = OpenFilesScore<BLACK>(pos);
+    Score openFileDeductionWhite = OpenFilesScore<WHITE>(pos);
+    Score openFileDeductionBlack = OpenFilesScore<BLACK>(pos);
 
     Score attackersLeftWhite = AttackersLeft<WHITE>(ed);
     Score attackersLeftBlack = AttackersLeft<BLACK>(ed);
 
-    return attackValueWhite + distanceScoreWhite + kingMobilityWhite + openFileWhite + attackersLeftWhite
-        - (attackValueBlack + distanceScoreBlack + kingMobilityBlack + openFileBlack + attackersLeftBlack);
+    Score defendersCountWhite = DefendersCount<WHITE>(pos);
+    Score defendersCountBlack = DefendersCount<BLACK>(pos);
+
+
+    cout << "attackValueWhite = " << attackValueWhite << endl;
+    cout << "attackValueBlack = " << attackValueBlack << endl;
+    cout << "distanceScoreWhite = " << distanceScoreWhite << endl;
+    cout << "distanceScoreBlack = " << distanceScoreBlack << endl;
+    cout << "kingMobilityWhite = " << kingMobilityWhite << endl;
+    cout << "kingMobilityBlack = " << kingMobilityBlack << endl;
+    cout << "openFileDeductionWhite = " << openFileDeductionWhite << endl;
+    cout << "openFileDeductionBlack = " << openFileDeductionBlack << endl;
+    cout << "attackersLeftWhite = " << attackersLeftWhite << endl;
+    cout << "attackersLeftBlack = " << attackersLeftBlack << endl;
+    cout << "defendersCountWhite = " << defendersCountWhite << endl;
+    cout << "defendersCountBlack = " << defendersCountBlack << endl;
+
+
+    Score currentAttackWhite = attackValueWhite * openFileDeductionBlack + distanceScoreWhite;
+    Score currentAttackBlack = attackValueBlack * openFileDeductionWhite + distanceScoreBlack;
+
+    Score currentDefenseWhite = 0;
+    Score currentDefenseBlack = 0;
+
+    Score longTermAttackWhite = attackersLeftWhite * openFileDeductionBlack;
+    Score longTermAttackBlack = attackersLeftBlack * openFileDeductionWhite;
+
+    return attackValueWhite + distanceScoreWhite + kingMobilityWhite + openFileDeductionWhite + attackersLeftWhite
+        - (attackValueBlack + distanceScoreBlack + kingMobilityBlack + openFileDeductionBlack + attackersLeftBlack);
 }
 
 
@@ -743,5 +780,16 @@ Score EvalDump(const ChessBoard& pos)
     cout << "----------------------------------------------" << endl;
 
     return score;
+}
+
+
+Score
+EvaluateThreats(const ChessBoard& pos)
+{
+    EvalData ed = EvalData(pos);
+    cout << "--------------------------------------------------------" << endl;
+    auto __x = Threat(pos, ed);
+    cout << "--------------------------------------------------------" << endl;
+    return __x;
 }
 

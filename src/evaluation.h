@@ -82,6 +82,9 @@ Score Evaluate(const ChessBoard& pos);
 
 Score EvalDump(const ChessBoard& pos);
 
+Score
+EvaluateThreats(const ChessBoard& pos);
+
 
 #endif
 
