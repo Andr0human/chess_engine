@@ -48,6 +48,246 @@ IsHypotheticalDraw(const EvalData& ed)
     return false;
 }
 
+template <Color c_my>
+static bool
+CannotWin(const ChessBoard& pos, const EvalData& ed)
+{
+    if (ed.pawns[c_my] > 0)
+        return false;
+    
+    if (ed.pieces[c_my] == 1)
+        return ed.knights[c_my] + ed.bishops[c_my] == 1;
+    
+    if ((ed.pieces[c_my] == 2) and (ed.knights[c_my] == 2))
+        return true;
+}
+
+
+#ifndef THREATS
+
+template <Color c_my, PieceType pt, Bitboard* mask, Score increment>
+static Score
+AttacksKing(const ChessBoard& pos)
+{
+    Score score = VALUE_ZERO;
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Bitboard occupied = pos.All();
+    Square king_sq_emy = SquareNo(pos.piece< ~c_my, KING>());
+
+    while (piece_bb != 0)
+    {
+        Square sq = NextSquare(piece_bb);
+        if ((AttackSquares<pt>(sq, occupied) & mask[king_sq_emy]) != 0)
+            score += increment;
+    }
+
+    return score;
+}
+
+template <Color c_my>
+static Score
+AttackValue(const ChessBoard& pos)
+{
+    using plt::KingMasks;
+    using plt::KingOuterMasks;
+
+    Score attack_value = VALUE_ZERO;
+
+    attack_value += AttacksKing<c_my, KNIGHT, KingMasks, 2>(pos);
+    attack_value += AttacksKing<c_my, BISHOP, KingMasks, 3>(pos);
+    attack_value += AttacksKing<c_my, ROOK  , KingMasks, 4>(pos);
+    attack_value += AttacksKing<c_my, QUEEN , KingMasks, 6>(pos);
+
+    attack_value += AttacksKing<c_my, KNIGHT, KingOuterMasks, 1>(pos);
+    attack_value += AttacksKing<c_my, BISHOP, KingOuterMasks, 2>(pos);
+    attack_value += AttacksKing<c_my, ROOK  , KingOuterMasks, 3>(pos);
+    attack_value += AttacksKing<c_my, QUEEN , KingOuterMasks, 4>(pos);
+
+    return attack_value / 7;
+}
+
+
+template <Color c_my, PieceType pt, int pieceVal>
+static Score
+CalcDistanceScore(const ChessBoard& pos)
+{
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Square emyKingSq = SquareNo(pos.piece<~c_my, KING>());
+
+    Score score = VALUE_ZERO;
+
+    while (piece_bb != 0) {
+        score += (pieceVal * (1 << (14 - Distance(NextSquare(piece_bb), emyKingSq)))) >> 7;
+        // int d = 14 - Distance(NextSquare(piece_bb), emyKingSq);
+        // score = (d * d) / 2;
+    }
+    
+    return score;
+}
+
+template <Color c_my>
+static Score
+AttackDistanceScore(const ChessBoard& pos)
+{
+    Score distance_score = VALUE_ZERO;
+
+    distance_score += CalcDistanceScore<c_my, PAWN  , 1>(pos);
+    distance_score += CalcDistanceScore<c_my, KNIGHT, 2>(pos);
+    distance_score += CalcDistanceScore<c_my, BISHOP, 3>(pos);
+    distance_score += CalcDistanceScore<c_my, ROOK  , 4>(pos);
+    distance_score += CalcDistanceScore<c_my, QUEEN , 7>(pos);
+
+    return distance_score;
+}
+
+template <Color c_my>
+static Score
+OpenFilesScore(const ChessBoard& pos)
+{
+    Score score = VALUE_ZERO;
+    Bitboard column_bb = FileA;
+
+    int king_col = SquareNo(pos.piece<c_my, KING>()) & 7;
+    Bitboard pawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
+
+    for (int col = 0; col < 8; col++)
+    {
+        if ((column_bb & pawns) == 0) {
+            score += 1 << (7 - abs(col - king_col));
+        }
+        column_bb <<= 1;
+    }
+    return (score / 4) + 1;
+}
+
+template <Color c_my, PieceType pt>
+static Bitboard
+GenAttackedSquares(const ChessBoard& pos)
+{
+    Bitboard squares = 0;
+    Bitboard piece_bb = pos.piece<c_my, pt>();
+    Bitboard occupied = pos.All();
+
+    while (piece_bb != 0)
+        squares |= AttackSquares<pt>(NextSquare(piece_bb), occupied);
+    return squares;
+}
+
+template <Color c_my>
+static Score
+KingMobilityScore(const ChessBoard& pos)
+{
+    Square k_sq = SquareNo(pos.piece<c_my, KING>());
+    Bitboard pieces_my = pos.piece<c_my, ALL>();
+    Bitboard attacked_squares = 0;
+
+    attacked_squares |= PawnAttackSquares<~c_my>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, BISHOP>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, KNIGHT>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, ROOK>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, QUEEN>(pos);
+    attacked_squares |= GenAttackedSquares<~c_my, KING>(pos);
+
+    int __x = PopCount(AttackSquares<KING>(k_sq, 0) & ~(pieces_my | attacked_squares));
+    return min(__x, 3);
+}
+
+template <Color c_my>
+static Score
+AttackersLeft(const EvalData& ed)
+{
+    return Score(
+        ed.knights[c_my] + 2 * ed.bishops[c_my]
+      + 3 * ed.rooks[c_my] + 5 * ed.queens[c_my] );
+}
+
+
+template <Color c_my>
+static Score
+DefendersCount(const ChessBoard& pos)
+{
+    Square k_sq = SquareNo(pos.piece<c_my, KING>());
+    //Pawns in front of king
+    Bitboard pawns = pos.piece<c_my, PAWN>();
+    Bitboard mask = plt::PawnMasks[c_my][k_sq] | plt::PawnCaptureMasks[c_my][k_sq];
+
+    Bitboard pieces = (pos.piece<c_my, BISHOP>() | pos.piece<c_my, KNIGHT>() | pos.piece<c_my, ROOK>())
+        & (plt::KingMasks[k_sq] | plt::KingOuterMasks[k_sq]);
+
+    return 2 * PopCount(mask & pawns) + PopCount(pieces);
+}
+
+static Score
+Threat(const ChessBoard& pos, const EvalData& ed)
+{
+    // Attack Value Currently
+    //    - Distance of pieces from king
+    //    - Whether pieces attack the king
+    // King Safety
+    //    - King Mobility
+    //    - Defenders
+    //    - Open files
+    // Long-term prospect
+    //    - No. of attackers left
+    //    - Open files
+
+    // Increase Attack Value if lack of KIngSafety
+    // Threat = Attack_Value * Lack_Of_Safety + Long_Term_Prospects
+
+    Score attackValueWhite = AttackValue<WHITE>(pos);
+    Score attackValueBlack = AttackValue<BLACK>(pos);
+
+    Score distanceScoreWhite = AttackDistanceScore<WHITE>(pos);
+    Score distanceScoreBlack = AttackDistanceScore<BLACK>(pos);
+
+    Score kingMobilityWhite = KingMobilityScore<WHITE>(pos);
+    Score kingMobilityBlack = KingMobilityScore<BLACK>(pos);
+
+    Score openFileDeductionWhite = OpenFilesScore<WHITE>(pos);
+    Score openFileDeductionBlack = OpenFilesScore<BLACK>(pos);
+
+    Score attackersLeftWhite = AttackersLeft<WHITE>(ed);
+    Score attackersLeftBlack = AttackersLeft<BLACK>(ed);
+
+    Score defendersCountWhite = DefendersCount<WHITE>(pos);
+    Score defendersCountBlack = DefendersCount<BLACK>(pos);
+
+
+    // cout << "attackValueWhite = " << attackValueWhite << endl;
+    // cout << "attackValueBlack = " << attackValueBlack << endl;
+    // cout << "distanceScoreWhite = " << distanceScoreWhite << endl;
+    // cout << "distanceScoreBlack = " << distanceScoreBlack << endl;
+    // cout << "kingMobilityWhite = " << kingMobilityWhite << endl;
+    // cout << "kingMobilityBlack = " << kingMobilityBlack << endl;
+    // cout << "openFileDeductionWhite = " << openFileDeductionWhite << endl;
+    // cout << "openFileDeductionBlack = " << openFileDeductionBlack << endl;
+    // cout << "attackersLeftWhite = " << attackersLeftWhite << endl;
+    // cout << "attackersLeftBlack = " << attackersLeftBlack << endl;
+    // cout << "defendersCountWhite = " << defendersCountWhite << endl;
+    // cout << "defendersCountBlack = " << defendersCountBlack << endl << endl;
+
+    Score lackOfSafetyWhite = (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
+    Score lackOfSafetyBlack = (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
+
+    Score currentAttackWhite = attackValueWhite * lackOfSafetyBlack + distanceScoreWhite;
+    Score currentAttackBlack = attackValueBlack * lackOfSafetyWhite + distanceScoreBlack;
+
+    Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite) + (openFileDeductionBlack * openFileDeductionBlack)) / 4;
+    Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftWhite) + (openFileDeductionWhite * openFileDeductionWhite)) / 4;
+
+    // cout << "lackOfSafetyWhite = " << lackOfSafetyWhite << endl;
+    // cout << "lackOfSafetyBlack = " << lackOfSafetyBlack << endl;
+    // cout << "currentAttackWhite = " << currentAttackWhite << endl;
+    // cout << "currentAttackBlack = " << currentAttackBlack << endl;
+    // cout << "longTermAttackWhite = " << longTermAttackWhite << endl;
+    // cout << "longTermAttackBlack = " << longTermAttackBlack << endl;
+
+
+    return (currentAttackWhite + longTermAttackWhite) - (currentAttackBlack + longTermAttackBlack);
+}
+
+
+#endif
 
 #ifndef MIDGAME
 
@@ -236,7 +476,8 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed)
     Score pieceTableScore = PieceTableStrengthMidGame(pos);
     Score mobilityScore   = MobilityStrength(pos);
     Score pawnStructure   = ed.pawnStructureScore;
-    Score threatsScore    = Threats(pos);
+    // Score threatsScore    = Threats(pos);
+    Score threatsScore   = ed.threatScore;
 
     float eval =
         ed.materialWeight     * float(materialScore)
@@ -413,231 +654,17 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
     Score pawnStructure   = ed.pawnStructureScore;
     Score distanceScore   = DistanceBetweenKingsScore(pos, ed);
     Score parityScore     = ColorParityScore(pos);
+    Score threatsScore    = ed.threatScore;
 
     float eval =
         ed.materialWeight     * float(materialScore)
       + ed.pieceTableWeight   * float(pieceTableScore)
       + ed.pawnSructureWeight * float(pawnStructure)
+      + ed.threatsWeight      * float(threatsScore)
       + float(distanceScore)  + float(parityScore);
 
     return Score(eval);
 }
-
-#endif
-
-#ifndef THREATS
-
-template <Color c_my, PieceType pt, Bitboard* mask, Score increment>
-static Score
-AttacksKing(const ChessBoard& pos)
-{
-    Score score = VALUE_ZERO;
-    Bitboard piece_bb = pos.piece<c_my, pt>();
-    Bitboard occupied = pos.All();
-    Square king_sq_emy = SquareNo(pos.piece< ~c_my, KING>());
-
-    while (piece_bb != 0)
-    {
-        Square sq = NextSquare(piece_bb);
-        if ((AttackSquares<pt>(sq, occupied) & mask[king_sq_emy]) != 0)
-            score += increment;
-    }
-
-    return score;
-}
-
-template <Color c_my>
-static Score
-AttackValue(const ChessBoard& pos)
-{
-    using plt::KingMasks;
-    using plt::KingOuterMasks;
-
-    Score attack_value = VALUE_ZERO;
-
-    attack_value += AttacksKing<c_my, KNIGHT, KingMasks, 2>(pos);
-    attack_value += AttacksKing<c_my, BISHOP, KingMasks, 3>(pos);
-    attack_value += AttacksKing<c_my, ROOK  , KingMasks, 4>(pos);
-    attack_value += AttacksKing<c_my, QUEEN , KingMasks, 6>(pos);
-
-    attack_value += AttacksKing<c_my, KNIGHT, KingOuterMasks, 1>(pos);
-    attack_value += AttacksKing<c_my, BISHOP, KingOuterMasks, 2>(pos);
-    attack_value += AttacksKing<c_my, ROOK  , KingOuterMasks, 3>(pos);
-    attack_value += AttacksKing<c_my, QUEEN , KingOuterMasks, 4>(pos);
-
-    return attack_value;
-}
-
-
-template <Color c_my, PieceType pt, int pieceVal>
-static Score
-CalcDistanceScore(const ChessBoard& pos)
-{
-    Bitboard piece_bb = pos.piece<c_my, pt>();
-    Square emyKingSq = SquareNo(pos.piece<~c_my, KING>());
-
-    Score score = VALUE_ZERO;
-
-    while (piece_bb != 0)
-        score += (pieceVal * (1 << (14 - Distance(NextSquare(piece_bb), emyKingSq)))) >> 6;
-    
-    return score;
-}
-
-template <Color c_my>
-static Score
-AttackDistanceScore(const ChessBoard& pos)
-{
-    Score distance_score = VALUE_ZERO;
-
-    distance_score += CalcDistanceScore<c_my, PAWN  , 1>(pos);
-    distance_score += CalcDistanceScore<c_my, KNIGHT, 2>(pos);
-    distance_score += CalcDistanceScore<c_my, BISHOP, 5>(pos);
-    distance_score += CalcDistanceScore<c_my, ROOK  , 7>(pos);
-    distance_score += CalcDistanceScore<c_my, QUEEN , 9>(pos);
-
-    return distance_score;
-}
-
-template <Color c_my>
-static Score
-OpenFilesScore(const ChessBoard& pos)
-{
-    Score score = VALUE_ZERO;
-    Bitboard column_bb = FileA;
-
-    int king_col = SquareNo(pos.piece<c_my, KING>()) & 7;
-    Bitboard pawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
-
-    for (int col = 0; col < 8; col++)
-    {
-        if ((column_bb & pawns) == 0) {
-            score += 1 << (7 - abs(col - king_col));
-        }
-        column_bb <<= 1;
-    }
-    return score;
-}
-
-template <Color c_my, PieceType pt>
-static Bitboard
-GenAttackedSquares(const ChessBoard& pos)
-{
-    Bitboard squares = 0;
-    Bitboard piece_bb = pos.piece<c_my, pt>();
-    Bitboard occupied = pos.All();
-
-    while (piece_bb != 0)
-        squares |= AttackSquares<pt>(NextSquare(piece_bb), occupied);
-    return squares;
-}
-
-template <Color c_my>
-static Score
-KingMobilityScore(const ChessBoard& pos)
-{
-    Square k_sq = SquareNo(pos.piece<c_my, KING>());
-    Bitboard pieces_my = pos.piece<c_my, ALL>();
-    Bitboard attacked_squares = 0;
-
-    attacked_squares |= PawnAttackSquares<~c_my>(pos);
-    attacked_squares |= GenAttackedSquares<~c_my, BISHOP>(pos);
-    attacked_squares |= GenAttackedSquares<~c_my, KNIGHT>(pos);
-    attacked_squares |= GenAttackedSquares<~c_my, ROOK>(pos);
-    attacked_squares |= GenAttackedSquares<~c_my, QUEEN>(pos);
-    attacked_squares |= GenAttackedSquares<~c_my, KING>(pos);
-
-    return PopCount(AttackSquares<KING>(k_sq, 0) & ~(pieces_my | attacked_squares));
-}
-
-template <Color c_my>
-static Score
-AttackersLeft(const EvalData& ed)
-{
-    return Score(
-        ed.knights[c_my] + 2 * ed.bishops[c_my]
-      + 3 * ed.rooks[c_my] + 5 * ed.queens[c_my] );
-}
-
-
-template <Color c_my>
-static Score
-DefendersCount(const ChessBoard& pos)
-{
-    Square k_sq = SquareNo(pos.piece<c_my, KING>());
-    //Pawns in front of king
-    Bitboard pawns = pos.piece<c_my, PAWNS>();
-    Bitboard mask = plt::PawnMasks[k_sq] | plt::PawnCaptureMasks[k_sq];
-
-    Bitboard pieces = (pos.piece<c_my, BISHOP>() | pos.piece<c_my, KNIGHT>() | pos.piece<c_my, ROOK>())
-        & (plt::KingMasks[k_sq] | plt::KingOuterMasks[k_sq]);
-
-    return 2 * PopCount(mask & pawns) + PopCount(pieces);
-}
-
-static Score
-Threat(const ChessBoard& pos, const EvalData& ed)
-{
-    // Attack Value Currently
-    //    - Distance of pieces from king
-    //    - Whether pieces attack the king
-    // King Safety
-    //    - King Mobility
-    //    - Defenders
-    //    - Open files
-    // Long-term prospect
-    //    - No. of attackers left
-    //    - Open files
-
-    // Increase Attack Value if lack of KIngSafety
-    // Threat = Attack_Value * Lack_Of_Safety + Long_Term_Prospects
-
-    Score attackValueWhite = AttackValue<WHITE>(pos);
-    Score attackValueBlack = AttackValue<BLACK>(pos);
-
-    Score distanceScoreWhite = AttackDistanceScore<WHITE>(pos);
-    Score distanceScoreBlack = AttackDistanceScore<BLACK>(pos);
-
-    Score kingMobilityWhite = KingMobilityScore<WHITE>(pos);
-    Score kingMobilityBlack = KingMobilityScore<BLACK>(pos);
-
-    Score openFileDeductionWhite = OpenFilesScore<WHITE>(pos);
-    Score openFileDeductionBlack = OpenFilesScore<BLACK>(pos);
-
-    Score attackersLeftWhite = AttackersLeft<WHITE>(ed);
-    Score attackersLeftBlack = AttackersLeft<BLACK>(ed);
-
-    Score defendersCountWhite = DefendersCount<WHITE>(pos);
-    Score defendersCountBlack = DefendersCount<BLACK>(pos);
-
-
-    cout << "attackValueWhite = " << attackValueWhite << endl;
-    cout << "attackValueBlack = " << attackValueBlack << endl;
-    cout << "distanceScoreWhite = " << distanceScoreWhite << endl;
-    cout << "distanceScoreBlack = " << distanceScoreBlack << endl;
-    cout << "kingMobilityWhite = " << kingMobilityWhite << endl;
-    cout << "kingMobilityBlack = " << kingMobilityBlack << endl;
-    cout << "openFileDeductionWhite = " << openFileDeductionWhite << endl;
-    cout << "openFileDeductionBlack = " << openFileDeductionBlack << endl;
-    cout << "attackersLeftWhite = " << attackersLeftWhite << endl;
-    cout << "attackersLeftBlack = " << attackersLeftBlack << endl;
-    cout << "defendersCountWhite = " << defendersCountWhite << endl;
-    cout << "defendersCountBlack = " << defendersCountBlack << endl;
-
-
-    Score currentAttackWhite = attackValueWhite * openFileDeductionBlack + distanceScoreWhite;
-    Score currentAttackBlack = attackValueBlack * openFileDeductionWhite + distanceScoreBlack;
-
-    Score currentDefenseWhite = 0;
-    Score currentDefenseBlack = 0;
-
-    Score longTermAttackWhite = attackersLeftWhite * openFileDeductionBlack;
-    Score longTermAttackBlack = attackersLeftBlack * openFileDeductionWhite;
-
-    return attackValueWhite + distanceScoreWhite + kingMobilityWhite + openFileDeductionWhite + attackersLeftWhite
-        - (attackValueBlack + distanceScoreBlack + kingMobilityBlack + openFileDeductionBlack + attackersLeftBlack);
-}
-
 
 #endif
 
@@ -656,6 +683,7 @@ Evaluate(const ChessBoard& pos)
         ? LoneKingEndGame<WHITE>(pos, ed) : LoneKingEndGame<BLACK>(pos, ed);
     
     ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
+    ed.threatScore = Threat(pos, ed);
 
     Score mg_score = MidGameScore(pos, ed);
     Score eg_score = EndGameScore(pos, ed);

@@ -39,6 +39,7 @@ class EvalData
 	float phase;
 
 	Score pawnStructureScore;
+	Score threatScore;
 
 	constexpr static float materialWeight = 1.0f;
 	constexpr static float pieceTableWeight = 1.8f;

@@ -28,13 +28,6 @@ int main(int argc, char **argv)
     FAST_IO();
     Init();
     Task(argc, argv);
-
-    Score x1 = EvaluateThreats(ChessBoard("1r1q1rk1/3bppbp/p4np1/2pPp3/2P1P3/2N1QP2/P3N1PP/2KR1B1R b - - 0 15"));
-    cout << "Score1 = " << x1 << endl;
-    Score x2 = EvaluateThreats(ChessBoard("rr4k1/1p3p2/p3pB1Q/3pP3/b1pP2PK/5P2/2P1n2P/4R3 b - - 0 27"));
-    cout << "Score2 = " << x2 << endl;
-    Score x3 = EvaluateThreats(ChessBoard("r3k2r/1B3p2/p3p3/8/Pp1q4/1P6/R1QN1P1b/5R1K b kq - 2 23"));
-    cout << "Score3 = " << x3 << endl;
 }
 
 
