@@ -318,7 +318,7 @@ BuildKingOuterTable(Bitboard* table)
         if (InRange(row - 1, col + 1)) value |= KingMasks[square - 7];
         if (InRange(row - 1, col - 1)) value |= KingMasks[square - 9];
 
-        table[square] = value & (KingMasks[square] | (1ULL << square));
+        table[square] = value ^ (value & (KingMasks[square] | (1ULL << square)));
     }
 }
 

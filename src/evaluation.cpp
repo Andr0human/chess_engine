@@ -103,7 +103,7 @@ AttackValue(const ChessBoard& pos)
     attack_value += AttacksKing<c_my, ROOK  , KingOuterMasks, 3>(pos);
     attack_value += AttacksKing<c_my, QUEEN , KingOuterMasks, 4>(pos);
 
-    return attack_value / 7;
+    return attack_value / 4;
 }
 
 
@@ -153,7 +153,7 @@ OpenFilesScore(const ChessBoard& pos)
     for (int col = 0; col < 8; col++)
     {
         if ((column_bb & pawns) == 0) {
-            score += 1 << (7 - abs(col - king_col));
+            score += (1 << (7 - abs(col - king_col))) / 2;
         }
         column_bb <<= 1;
     }
@@ -269,11 +269,11 @@ Threat(const ChessBoard& pos, const EvalData& ed)
     Score lackOfSafetyWhite = (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
     Score lackOfSafetyBlack = (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
 
-    Score currentAttackWhite = attackValueWhite * lackOfSafetyBlack + distanceScoreWhite;
-    Score currentAttackBlack = attackValueBlack * lackOfSafetyWhite + distanceScoreBlack;
+    Score currentAttackWhite = attackValueWhite * lackOfSafetyBlack + (distanceScoreWhite / (defendersCountBlack + 1));
+    Score currentAttackBlack = attackValueBlack * lackOfSafetyWhite + (distanceScoreBlack / (defendersCountBlack + 1));
 
-    Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite) + (openFileDeductionBlack * openFileDeductionBlack)) / 4;
-    Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftWhite) + (openFileDeductionWhite * openFileDeductionWhite)) / 4;
+    Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite) + (openFileDeductionBlack * openFileDeductionBlack)) / (32 + defendersCountBlack);
+    Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftBlack) + (openFileDeductionWhite * openFileDeductionWhite)) / (32 + defendersCountWhite);
 
     // cout << "lackOfSafetyWhite = " << lackOfSafetyWhite << endl;
     // cout << "lackOfSafetyBlack = " << lackOfSafetyBlack << endl;
@@ -654,13 +654,13 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
     Score pawnStructure   = ed.pawnStructureScore;
     Score distanceScore   = DistanceBetweenKingsScore(pos, ed);
     Score parityScore     = ColorParityScore(pos);
-    Score threatsScore    = ed.threatScore;
+    // Score threatsScore    = ed.threatScore;
 
     float eval =
         ed.materialWeight     * float(materialScore)
       + ed.pieceTableWeight   * float(pieceTableScore)
       + ed.pawnSructureWeight * float(pawnStructure)
-      + ed.threatsWeight      * float(threatsScore)
+    //   + ed.threatsWeight      * float(threatsScore)
       + float(distanceScore)  + float(parityScore);
 
     return Score(eval);
@@ -816,8 +816,67 @@ EvaluateThreats(const ChessBoard& pos)
 {
     EvalData ed = EvalData(pos);
     cout << "--------------------------------------------------------" << endl;
-    auto __x = Threat(pos, ed);
+    cout << "Phase = " << ed.phase << endl;
+
+    Score attackValueWhite = AttackValue<WHITE>(pos);
+    Score attackValueBlack = AttackValue<BLACK>(pos);
+
+    Score distanceScoreWhite = AttackDistanceScore<WHITE>(pos);
+    Score distanceScoreBlack = AttackDistanceScore<BLACK>(pos);
+
+    Score kingMobilityWhite = KingMobilityScore<WHITE>(pos);
+    Score kingMobilityBlack = KingMobilityScore<BLACK>(pos);
+
+    Score openFileDeductionWhite = OpenFilesScore<WHITE>(pos);
+    Score openFileDeductionBlack = OpenFilesScore<BLACK>(pos);
+
+    Score attackersLeftWhite = AttackersLeft<WHITE>(ed);
+    Score attackersLeftBlack = AttackersLeft<BLACK>(ed);
+
+    Score defendersCountWhite = DefendersCount<WHITE>(pos);
+    Score defendersCountBlack = DefendersCount<BLACK>(pos);
+
+    Score lackOfSafetyWhite = (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
+    Score lackOfSafetyBlack = (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
+
+    Score currentAttackWhite = attackValueWhite * lackOfSafetyBlack + (distanceScoreWhite / (defendersCountBlack + 1));
+    Score currentAttackBlack = attackValueBlack * lackOfSafetyWhite + (distanceScoreBlack / (defendersCountBlack + 1));
+
+    // Score longTermStablizationFactorWhite = 8;
+    // Score longTermStablizationFactorBlack = 8;
+
+    // if ((pos.csep & 384) != 0)
+    //     longTermStablizationFactorWhite += 8;
+    
+    // if ((pos.csep & 1536) != 0)
+    //     longTermStablizationFactorBlack += 8;
+
+    Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite) + (openFileDeductionBlack * openFileDeductionBlack)) / (32 + defendersCountBlack);
+    Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftBlack) + (openFileDeductionWhite * openFileDeductionWhite)) / (32 + defendersCountWhite);
+
+    cout << "attackValueWhite = " << attackValueWhite << endl;
+    cout << "attackValueBlack = " << attackValueBlack << endl;
+    cout << "distanceScoreWhite = " << distanceScoreWhite << endl;
+    cout << "distanceScoreBlack = " << distanceScoreBlack << endl;
+    cout << "kingMobilityWhite = " << kingMobilityWhite << endl;
+    cout << "kingMobilityBlack = " << kingMobilityBlack << endl;
+    cout << "openFileDeductionWhite = " << openFileDeductionWhite << endl;
+    cout << "openFileDeductionBlack = " << openFileDeductionBlack << endl;
+    cout << "attackersLeftWhite = " << attackersLeftWhite << endl;
+    cout << "attackersLeftBlack = " << attackersLeftBlack << endl;
+    cout << "defendersCountWhite = " << defendersCountWhite << endl;
+    cout << "defendersCountBlack = " << defendersCountBlack << endl << endl;
+
+    cout << "lackOfSafetyWhite = " << lackOfSafetyWhite << endl;
+    cout << "lackOfSafetyBlack = " << lackOfSafetyBlack << endl;
+    cout << "currentAttackWhite = " << currentAttackWhite << endl;
+    cout << "currentAttackBlack = " << currentAttackBlack << endl;
+    cout << "longTermAttackWhite = " << longTermAttackWhite << endl;
+    cout << "longTermAttackBlack = " << longTermAttackBlack << endl;
+
+    Score __x = (currentAttackWhite + longTermAttackWhite) - (currentAttackBlack + longTermAttackBlack);
     cout << "--------------------------------------------------------" << endl;
     return __x;
 }
 
+// (16 * 16 + 57 * 57) / (36 + 1)

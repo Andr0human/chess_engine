@@ -72,7 +72,7 @@ enum Value: int
     QueenValueMg  = 926,  QueenValueEg  = 942,
 
     // GamePhaseLimit = 800,
-    GamePhaseLimit = 4070,
+    GamePhaseLimit = 8140,
 };
 
 

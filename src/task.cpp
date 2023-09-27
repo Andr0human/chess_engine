@@ -361,6 +361,19 @@ Level1(const vector<string>& args)
 }
 
 
+static void
+ShowThreat(const vector<string>& args)
+{
+    if (args.size() < 2)
+    {
+        puts("No fen provided!");
+        return;
+    }
+    ChessBoard pos(args[1]);
+    auto __x = EvaluateThreats(pos);
+    cout << "ThreatsScore = " << __x << endl;
+}
+
 void Task(int argc, char *argv[])
 {
     const vector<string> argument_list =
@@ -412,6 +425,10 @@ void Task(int argc, char *argv[])
     else if (command == "level1")
     {
         Level1(argument_list);
+    }
+    else if (command == "threat")
+    {
+        ShowThreat(argument_list);
     }
     else
     {
