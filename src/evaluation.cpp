@@ -476,8 +476,8 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed)
     Score pieceTableScore = PieceTableStrengthMidGame(pos);
     Score mobilityScore   = MobilityStrength(pos);
     Score pawnStructure   = ed.pawnStructureScore;
-    // Score threatsScore    = Threats(pos);
-    Score threatsScore   = ed.threatScore;
+    Score threatsScore    = Threats(pos);
+    // Score threatsScore   = ed.threatScore;
 
     float eval =
         ed.materialWeight     * float(materialScore)
@@ -683,7 +683,7 @@ Evaluate(const ChessBoard& pos)
         ? LoneKingEndGame<WHITE>(pos, ed) : LoneKingEndGame<BLACK>(pos, ed);
     
     ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
-    ed.threatScore = Threat(pos, ed);
+    // ed.threatScore = Threat(pos, ed);
 
     Score mg_score = MidGameScore(pos, ed);
     Score eg_score = EndGameScore(pos, ed);
