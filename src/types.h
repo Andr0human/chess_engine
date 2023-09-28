@@ -65,14 +65,14 @@ enum Value: int
     VALUE_WINDOW = 4,
 
 
-    PawnValueMg   = 112,  PawnValueEg   = 132,
-    BishopValueMg = 312,  BishopValueEg = 336,
-    KnightValueMg = 300,  KnightValueEg = 320,
-    RookValueMg   = 512,  RookValueEg   = 576,
-    QueenValueMg  = 926,  QueenValueEg  = 942,
+    PawnValueMg   =  112,  PawnValueEg   =  132,
+    BishopValueMg =  352,  BishopValueEg =  392,
+    KnightValueMg =  336,  KnightValueEg =  374,
+    RookValueMg   =  574,  RookValueEg   =  644,
+    QueenValueMg  = 1040,  QueenValueEg  = 1168,
 
-    // GamePhaseLimit = 800,
-    GamePhaseLimit = 8140,
+    GamePhaseLimit = 800,
+    // GamePhaseLimit = 8140,
 };
 
 

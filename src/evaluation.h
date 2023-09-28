@@ -53,11 +53,11 @@ class EvalData
 		MaterialCount<BLACK>(pos);
 		pieceCount = pieces[WHITE] + pieces[BLACK];
 
-		// phase = float(
-		// 	10 * (pawns[WHITE] + pawns[BLACK])
-		//   + 30 * (bishops[WHITE] + bishops[BLACK] + knights[WHITE] + knights[BLACK])
-		//   + 55 * (rooks[WHITE] + rooks[BLACK])
-		//   + 90 * (queens[WHITE] + queens[BLACK]) ) / float(GamePhaseLimit);
+		phase = float(
+			10 * (pawns[WHITE] + pawns[BLACK])
+		  + 30 * (bishops[WHITE] + bishops[BLACK] + knights[WHITE] + knights[BLACK])
+		  + 55 * (rooks[WHITE] + rooks[BLACK])
+		  + 90 * (queens[WHITE] + queens[BLACK]) ) / float(GamePhaseLimit);
 
 		boardWeight =
 			PawnValueMg   * (  pawns[WHITE] +   pawns[BLACK])
@@ -66,7 +66,7 @@ class EvalData
 		  + RookValueMg   * (  rooks[WHITE] +   rooks[BLACK])
 		  + QueenValueMg  * ( queens[WHITE] +  queens[BLACK]);
 		
-		phase = float(boardWeight) / float(GamePhaseLimit);
+		// phase = float(boardWeight) / float(GamePhaseLimit);
 	}
 
 	constexpr bool
