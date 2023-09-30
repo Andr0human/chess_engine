@@ -304,7 +304,7 @@ static void
 ShowUpdateLog()
 {
     cout <<
-        "Version: 2.4\n\n"
+        "Version: 2.5\n\n"
         "Techniques Used:\n"
         "- Mini-Max with AlphaBeta\n"
         "- Quiescence Search\n"
@@ -332,6 +332,10 @@ ShowUpdateLog()
         "       - EndGame Score\n"
         "       - Final Score = phase * MidgameScore + (1 - phase) * EndgameScore\n"
         "   - LoneKing Endgames\n\n\n"
+        "- Version 2.5:\n"
+        "   - New Threats Function\n"
+        "   - Updated Piece [mid/end]game weights\n"
+        "   - Improved LMR logic\n"
         "- Version 2.4:\n"
         "   - Move priority Update\n"
         "   - Check moves included in move ordering\n"
@@ -373,6 +377,7 @@ ShowThreat(const vector<string>& args)
     auto __x = EvaluateThreats(pos);
     cout << "ThreatsScore = " << __x << endl;
 }
+
 
 void Task(int argc, char *argv[])
 {

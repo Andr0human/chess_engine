@@ -12,9 +12,9 @@
 // Endgame tests fen
 // Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
 // (Bishop | Knight vs Pawn) if the piece can capture the pawn
+// (Queen vs B/R/N) Endgame
 
 //* TODO Evaluation
-// Fix QueenValueEg, and QueenValueMg
 // Fix AttackStrength (Should depend on opponent king safety) (rr3k2/ppq3pQ/2nb4/3p1RP1/P2P4/1N5P/1P4K1/R1B5 b - - 0 24)
 
 //* TODO Search Extension
@@ -92,6 +92,7 @@ int main(int argc, char **argv)
     rr4k1/1p3p2/p3pB1Q/3pP3/b1pP2PK/5P2/2P1n2P/4R3 b - - 0 27
     r3k2r/1B3p2/p3p3/8/Pp1q4/1P6/R1QN1P1b/5R1K b kq - 2 23
     4rrk1/3R1p2/p2Q2p1/q7/5B2/5b1P/1P3P1P/5RK1 b - - 3 26
+    r3r1k1/1p3p2/p3p1n1/q2pP1BP/b1pP2P1/2P2Q2/2P2P2/R4RK1 b - - 0 21
     King Safety Understanding | King Mobility | Distance of pieces from the king
 
     3q3k/Pp3p1b/2p1p3/2PpP3/P7/2P3r1/3B4/R4QK1 w - - 0 26
