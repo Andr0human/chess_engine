@@ -65,7 +65,7 @@ class MoveList
 };
 
 
-// // Prints all the info on the encoded-move
+// Prints all the info on the encoded-move
 void
 DecodeMove(Move encoded_move);
 

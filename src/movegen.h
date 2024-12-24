@@ -7,6 +7,25 @@
 #include "lookup_table.h"
 #include "move_utils.h"
 
+/*
+
+***********************  MOVE STRUCTURE  ***********************
+
+    (str)  (check) (type) (color) (pp) (pFp) (pIp)  (fp)    (ip)
+    000000    0      00      0     00   000   000  000000  000000
+
+* str  (6 bits) - strength of the move [High-value captures, Checks, Threatening promotions]. Use in move-ordering
+* check (1 bit) - indicates whether the move places the opponent's king in check [0: No-check, 1: Check]
+* type (2 bits) - type of move [00: Quiet, 01: Castle, 10: Captures, 11: Promotion]
+* color (1 bit) - color of the piece making the move [0: Black, 1: White]
+* pp   (2 bits) - indicates the type of piece at pawn promotion [0: Knight, 1: Bishop, 2: Rook, 3: Queen]
+* ip   (6 bits) - initial square of the piece
+* fp   (6 bits) - destination square of the piece
+* pIp  (3 bits) - pieceType at initial square
+* pFp  (3 bits) - pieceType at destination square
+
+*/
+
 
 // Checks if move is valid for given position
 bool IsLegalMoveForPosition(Move move, ChessBoard& pos);

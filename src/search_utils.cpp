@@ -46,9 +46,9 @@ void
 MoveOrderClass::OrderMovesOnTime(MoveList& myMoves)
 {
     for (uint64_t i = 0; i < mCount; i++) {
-        int curr = moves[i].first;
+        Move current = moves[i].first;
         for (uint64_t j = i + 1; j < mCount; j++)
-            if (myMoves.pMoves[j] == curr)
+            if (myMoves.pMoves[j] == current)
                 std::swap(myMoves.pMoves[j], myMoves.pMoves[i]);
     }
 }

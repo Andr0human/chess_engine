@@ -5,18 +5,6 @@
 
 #ifndef MOVEGEN_UTILS
 
-
-/*
-    (priority) (check) (flag) (color) (promotion) (piece_fp) (piece_ip)   (fp)    (ip)
-      000000      0      00      0        00         000        000      000000  000000
-
-    0 -> Quiet
-    1 -> Castling
-    2 -> Captures
-    3 -> Promotion (captures included)
-    4 -> Checks
-*/
-
 template <Color c_my>
 bool
 MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
