@@ -87,6 +87,26 @@ PawnAttackSquares(const ChessBoard& _cb)
            shifter(pawns & LeftAttkingPawns , 8 - inc);
 }
 
+/**
+ * @brief Checks if the king of the active side is in check.
+ * 
+ * @param ChessBoard position
+**/
+template <Color c_my>
+bool
+InCheck(const ChessBoard& _cb)
+{
+    constexpr Color c_emy = ~c_my;
+
+    Square k_sq = SquareNo( _cb.piece<c_my, KING>() );
+    Bitboard occupied = _cb.All();
+
+    return (AttackSquares<ROOK>(k_sq, occupied) & (_cb.piece<c_emy, ROOK  >() | _cb.piece<c_emy, QUEEN>()))
+      or (AttackSquares<BISHOP>(k_sq, occupied) & (_cb.piece<c_emy, BISHOP>() | _cb.piece<c_emy, QUEEN>()))
+      or (AttackSquares<KNIGHT>(k_sq, occupied) &  _cb.piece<c_emy, KNIGHT>())
+      or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece<c_emy, PAWN  >());
+}
+
 
 #endif
 

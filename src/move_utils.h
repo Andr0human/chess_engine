@@ -71,16 +71,6 @@ DecodeMove(Move encoded_move);
 
 
 /**
- * @brief Checks if the king of the active side is in check.
- * 
- * @param ChessBoard position
-**/
-template <Color c_my>
-bool
-InCheck(const ChessBoard& _cb);
-
-
-/**
  * @brief Returns string readable move from encoded-move.
  * Invalid move leads to undefined behaviour.
  * 

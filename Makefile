@@ -25,7 +25,7 @@ SOURCEDIRS	:= $(SRC)
 # INCLUDEDIRS	:= $(INCLUDE)
 # LIBDIRS		:= $(LIB)
 FIXPATH = $(subst /,\,$1)
-RM			:= rm -f
+RM			:= del \Q
 MD	:= mkdir
 else
 MAIN	:= elsa
