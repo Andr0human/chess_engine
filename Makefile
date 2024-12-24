@@ -7,9 +7,11 @@
 CXX = g++
 
 # define any compile-time flags
-CXXFLAGS	:= -std=c++20 -g -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion\
-				-static -static-libgcc -static-libstdc++\
-				# -fsanitize=address
+ifeq ($(OS),Windows_NT)
+CXXFLAGS	:= -std=c++2a -g -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+else
+CXXFLAGS	:= -std=c++2a -g -march=native -O3 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
+endif
 
 # define output directory
 OUTPUT	:= output
