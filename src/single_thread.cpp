@@ -96,7 +96,7 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
         pos.UnmakeMove();
 
         // if timed-out, eval will be highly negative thus following code won't execute
-        if (eval > alpha)
+        if ((eval > alpha) and (R > 0))
         {
             pos.MakeMove(move);
             eval = -AlphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
