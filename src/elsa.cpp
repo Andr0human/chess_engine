@@ -99,7 +99,7 @@ int main(int argc, char **argv)
     Fix Pawn Structure
 
     8/8/8/6k1/1B2Kp2/8/2b1p3/8 w - - 2 84
-    No clue whats fucking things up?
+    No clue whats fucking things up? (King should stay around enemy pawns to lower opponent attack strength)
 
     4kb1r/2Qnnppp/4p3/1B1pP3/P7/8/3N1PPP/q1B2RK1 b k - 1 19
     Generate all attacks from both side, If active side has
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
     Excellent position to illustrate open_files and KingSafety in long term prospect.
 
 
-    8/8/6kP/8/5P2/8/4K3/8 w - - 1 62
+    8/8/6kP/8/5P2/8/4K3/8 w - - 1 62    D.M. f5+
     Avoid the use of LoneKing in these cases.
 
 
