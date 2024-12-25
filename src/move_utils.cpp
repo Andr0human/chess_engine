@@ -34,23 +34,6 @@ DecodeMove(Move move)
     cout << endl;
 }
 
-
-template <Color c_my>
-bool
-InCheck(const ChessBoard& _cb)
-{
-    constexpr Color c_emy = ~c_my;
-
-    Square k_sq = SquareNo( _cb.piece<c_my, KING>() );
-    Bitboard occupied = _cb.All();
-
-    return (AttackSquares<ROOK>(k_sq, occupied) & (_cb.piece<c_emy, ROOK  >() | _cb.piece<c_emy, QUEEN>()))
-      or (AttackSquares<BISHOP>(k_sq, occupied) & (_cb.piece<c_emy, BISHOP>() | _cb.piece<c_emy, QUEEN>()))
-      or (AttackSquares<KNIGHT>(k_sq, occupied) &  _cb.piece<c_emy, KNIGHT>())
-      or (plt::PawnCaptureMasks[c_my][k_sq]   &  _cb.piece<c_emy, PAWN  >());
-}
-
-
 string
 PrintMove(Move move, ChessBoard _cb)
 {
@@ -151,7 +134,6 @@ PrintMove(Move move, ChessBoard _cb)
 
     return piece_name + IndexToSquare(ip_row, ip_col) + end_part;
 }
-
 
 void
 PrintMovelist(MoveList myMoves, ChessBoard _cb)

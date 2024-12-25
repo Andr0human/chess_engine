@@ -3,7 +3,7 @@
 #include "attacks.h"
 
 using std::abs;
-using std::min, std::max;
+using std::min;
 
 
 static int

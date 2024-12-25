@@ -33,8 +33,6 @@ class UndoInfo
 };
 
 
-
-
 class ChessBoard
 {
     private:
@@ -206,15 +204,6 @@ class ChessBoard
     IntegrityCheck() const noexcept;
 };
 
-
-/*
-                    ------   MOVE   ------
-
-            str.    clr  ppt  cpt  pt  fp     ip
-            00000   1    00   000  000 000000 000000
-            25      20   19   17   14  11     5
-
-*/
 
 #endif
 

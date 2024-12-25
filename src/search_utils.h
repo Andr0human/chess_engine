@@ -43,7 +43,6 @@ class MoveOrderClass
 };
 
 
-
 class SearchData
 {
     private:
@@ -194,7 +193,6 @@ class SearchData
 };
 
 
-
 class TestPosition
 {
     public:
@@ -214,7 +212,6 @@ class TestPosition
     void
     Print();
 };
-
 
 
 class MovegenTestPosition

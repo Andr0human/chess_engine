@@ -92,10 +92,5 @@ BitsOnBoard(Bitboard value)
     return res;
 }
 
-
-
-
-
-
 }
 

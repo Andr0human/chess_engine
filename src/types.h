@@ -4,14 +4,12 @@
 
 #include <cstdint>
 
-using     Move =      int;
-using    Score =      int;
-using    Depth =      int;
-using      Ply =      int;
+using     Move = uint32_t;
+using    Score =  int32_t;
+using    Depth =  int32_t;
+using      Ply =  int32_t;
 using      Key = uint64_t;
 using Bitboard = uint64_t;
-
-
 
 
 enum Color: int
@@ -19,13 +17,11 @@ enum Color: int
     BLACK, WHITE, COLOR_NB
 };
 
-
 enum PieceType: int
 {
     NONE, PAWN, BISHOP, KNIGHT,
     ROOK, QUEEN, KING, ALL
 };
-
 
 enum Piece: int
 {
@@ -33,7 +29,6 @@ enum Piece: int
     W_PAWN = PAWN,     W_BISHOP, W_KNIGHT, W_ROOK, W_QUEEN, W_KING,
     B_PAWN = PAWN + 8, B_BISHOP, B_KNIGHT, B_ROOK, B_QUEEN, B_KING,
 };
-
 
 enum Search
 {
@@ -54,11 +49,10 @@ enum Search
     NULL_MOVE = 0,
 };
 
-
 enum Value: int
 {
     VALUE_ZERO = 0,
-    VALUE_DRAW = -25,
+    VALUE_DRAW = -5,
     VALUE_MATE = 16000,
     VALUE_INF  = 16001,
     VALUE_UNKNOWN = 555666777,
@@ -74,7 +68,6 @@ enum Value: int
     GamePhaseLimit = 800,
     // GamePhaseLimit = 8140,
 };
-
 
 enum Board: uint64_t
 {
@@ -106,7 +99,6 @@ enum Board: uint64_t
     BlackColorCorner = 0xF0E0C0800103070F,
 };
 
-
 enum Square : int
 {
     SQ_A1, SQ_B1, SQ_C1, SQ_D1, SQ_E1, SQ_F1, SQ_G1, SQ_H1,
@@ -122,7 +114,6 @@ enum Square : int
     SQUARE_ZERO = 0,
     SQUARE_NB   = 64
 };
-
 
 enum MoveType
 {
@@ -143,21 +134,17 @@ constexpr Color
 operator~(Color c)
 { return Color(c ^ WHITE); }
 
-
 constexpr Piece
 make_piece(Color c, PieceType pt)
 { return Piece((c << 3) + pt); }
-
 
 constexpr PieceType
 type_of(Piece pc)
 { return PieceType(pc & 7); }
 
-
 constexpr Color
 color_of(Piece pc)
 { return Color(pc >> 3); }
-
 
 constexpr Square from_sq(Move m)
 { return Square(m & 0x3f); }
@@ -167,7 +154,6 @@ constexpr Square to_sq(Move m)
 
 constexpr Move filter(Move m)
 { return m & 0x1fffff;}
-
 
 
 constexpr Square operator+ (Square s, int d)

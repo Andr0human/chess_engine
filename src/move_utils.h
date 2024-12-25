@@ -65,19 +65,9 @@ class MoveList
 };
 
 
-// // Prints all the info on the encoded-move
+// Prints all the info on the encoded-move
 void
 DecodeMove(Move encoded_move);
-
-
-/**
- * @brief Checks if the king of the active side is in check.
- * 
- * @param ChessBoard position
-**/
-template <Color c_my>
-bool
-InCheck(const ChessBoard& _cb);
 
 
 /**
