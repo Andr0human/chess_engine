@@ -54,26 +54,34 @@ RootReduction(Depth depth, size_t num)
 }
 
 int
-Reduction (Depth depth, size_t move_no)
+Reduction (Depth depth, size_t moveNo)
 {
-    if (depth < 2) return 0;
-    if (depth < 4 && move_no > 9) return 1; 
+    // LMR ok after depth 2 and LMR_LIMIT: 4
+    if (depth <= 4) 
+        return moveNo < 12 ? 1 : 2;
 
-    if (depth < 7) {
-        if (move_no < 9) return 1;
-        return 2;
+    if (depth <= 8) {
+        if (moveNo < 8) return 1;
+        if (moveNo < 12) return 2;
+        if (moveNo < 18) return 3;
+        return 4;
     }
 
-    if (move_no < 12) return 1;
-    if (move_no < 24) return 2;
-    return 3;
+    if (depth <= 12) {
+        if (moveNo < 8) return 2;
+        if (moveNo < 24) return 3;
+        return 4;
+    }
+
+    if (moveNo < 8) return 2;
+    return 4;
 }
 
 
 bool
 LmrOk(Move move, Depth depth, size_t move_no)
 {
-    if ((depth < 2) or (move_no < LMR_LIMIT) or InterestingMove(move))
+    if ((depth <= 2) or (move_no < LMR_LIMIT) or InterestingMove(move))
         return false;
 
     return true;
