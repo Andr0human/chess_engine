@@ -2,8 +2,6 @@
 
 #include "single_thread.h"
 
-#ifndef SINGLE_THREAD_NEGAMAX
-
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
 {
@@ -25,62 +23,6 @@ BulkCount(ChessBoard& _cb, Depth depth)
 }
 
 Score
-NegaMax(ChessBoard& _cb, Depth depth)
-{
-    if (depth <= 0)
-        return Evaluate(_cb);
-
-    MoveList myMoves = GenerateMoves(_cb);
-    if (myMoves.empty())
-        return (_cb.InCheck() ? CheckmateScore(0) : 0);
-
-    Score _eval = -VALUE_INF;
-
-    for (const auto move : myMoves)
-    {
-        _cb.MakeMove(move);
-        _eval = std::max(_eval, -NegaMax(_cb, depth - 1));
-        _cb.UnmakeMove();
-    }
-    return _eval;
-}
-
-std::pair<Move, Score>
-RootNegaMax(ChessBoard &_cb, Depth depth)
-{
-    if (LegalMovesPresent(_cb) == false)
-    {
-        Score score = _cb.InCheck() ? CheckmateScore(0) : VALUE_ZERO;
-        _cb.RemoveMovegenMetadata();
-        return std::make_pair(NULL_MOVE, score);
-    }
-
-    const MoveList myMoves = GenerateMoves(_cb);
-
-    Score best_eval = -VALUE_INF;
-    Move  best_move =  NULL_MOVE;
-
-    for (const auto move : myMoves)
-    {
-        _cb.MakeMove(move);
-        Score eval = -NegaMax(_cb, depth - 1);
-        _cb.UnmakeMove();
-
-        if (eval > best_eval)
-        {
-            best_move = move;
-            best_eval = eval;
-        }
-    }
-    return std::make_pair(best_move, best_eval);
-}
-
-#endif
-
-
-#ifndef SINGLE_THREAD_SEARCH
-
-Score
 QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
     // Check if Time Left for Search
@@ -88,24 +30,14 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
         return TIMEOUT;
 
     if (!LegalMovesPresent(pos))
-    {
-        Score score = pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO;
-        pos.RemoveMovegenMetadata();
-        return score;
-    }
-
-    // if (ka_pieces.attackers) return AlphaBetaNonPV(_cb, 1, alpha, beta, ply);
+        return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
 
     // Get a 'Stand Pat' Score
     Score stand_pat = Evaluate(pos);
 
-    // Checking for beta-cutoff
+    // Checking for beta-cutoff, usually called at the end of move-generation.
     if (stand_pat >= beta)
-    {
-        // Usually called at the end of move-generation.
-        pos.RemoveMovegenMetadata();
-        return beta;
-    }
+        return pos.HandleScore(beta);
 
     // int BIG_DELTA = 925;
     // if (stand_pat < alpha - BIG_DELTA) return alpha;
@@ -147,7 +79,6 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     return alpha;
 }
 
-
 template <ReductionFunc reductionFunction>
 static Score
 PlayMove(ChessBoard& pos, Move move, size_t moveNo,
@@ -157,16 +88,14 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
 
     if (LmrOk(move, depth, moveNo))
     {
+        //! TODO what if R is zero??
         int R = reductionFunction(depth, moveNo);
 
         pos.MakeMove(move);
         eval = -AlphaBeta(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
         pos.UnmakeMove();
 
-        //! TODO Test after removing this condition (looks unnecessary)
-        if (info.TimeOver())
-            return TIMEOUT;
-
+        // if timed-out, eval will be highly negative thus following code won't execute
         if (eval > alpha)
         {
             pos.MakeMove(move);
@@ -185,106 +114,84 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
     return eval;
 }
 
-
 Score
-AlphaBeta(ChessBoard& __pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions) 
+AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions) 
 {
     if (info.TimeOver())
         return TIMEOUT;
 
     {
         // check/stalemate check
-        if (LegalMovesPresent(__pos) == false)
-        {
-            Score score = __pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO;
-            __pos.RemoveMovegenMetadata();
-            return score;
-        }
+        if (!LegalMovesPresent(pos))
+            return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
 
         // 3-move repetition check or 50-move-rule-draw
-        if (__pos.ThreeMoveRepetition() or __pos.FiftyMoveDraw())
-        {
-            __pos.RemoveMovegenMetadata();
-            return VALUE_DRAW;
-        }
+        if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw())
+            return pos.HandleScore(VALUE_DRAW);
     }
 
+    // Depth 0, starting Quiensense Search
     if (depth <= 0)
-    {
-        // Depth 0, starting Quiensense Search
-        return QuiescenceSearch(__pos, alpha, beta, ply, pvIndex);
-    }
+        return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);
 
     {
-        // TT_lookup
+        // TT_lookup (Check if given board is already in transpostion table)
         #if defined(TRANSPOSITION_TABLE_H)
+            // check/stale-mate check needed before TT_lookup, else can lead to search failures.
+            Score tt_val = TT.LookupPosition(pos.Hash_Value, depth, alpha, beta);
 
-            // Check for 3-move repetition
-
-            // Check if given board is already in transpostion table
-            // Note : Need to check for check-mate/stale-mate possibility before TT_lookup,
-            //        else can lead to search failures.
-            Score tt_val = TT.LookupPosition(__pos.Hash_Value, depth, alpha, beta);
             if (tt_val != VALUE_UNKNOWN)
-            {
-                __pos.RemoveMovegenMetadata();
-                return tt_val;
-            }
+                return pos.HandleScore(tt_val);
         #endif
     }
 
+    //! TODO: Try with findChecks on and off [or on-off with different depth]
     // Generate moves for current board
-    MoveList myMoves  = GenerateMoves(__pos, false, true);
+    MoveList myMoves = GenerateMoves(pos, false, true);
 
     // Order moves according to heuristics for faster alpha-beta search
     OrderMoves(myMoves, true, true);
 
 
     // Search Extensions
-    // int extensions = SearchExtension(__pos, numExtensions);
+    // int extensions = SearchExtension(pos, numExtensions);
     // depth = depth + extensions;
     // numExtensions = numExtensions + extensions;
 
 
     // Set pvArray, for storing the search_tree
     pvArray[pvIndex] = NULL_MOVE;
-    int pvNextIndex = pvIndex + MAX_PLY - ply;
-
-    int hashf = HASH_ALPHA;
+    int pvNextIndex = pvIndex + MAX_PLY - ply, hashf = HASH_ALPHA;
+    Move bestMove = NULL_MOVE;
 
     for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
     {
         Move move = myMoves.pMoves[moveNo];
-        Score eval = PlayMove<Reduction>(__pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
+        Score eval = PlayMove<Reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
 
         // No time left!
         if (info.TimeOver())
             return TIMEOUT;
 
+        //! TODO: Why beta is not in root-search??
+        // beta-cut found
         if (eval >= beta)
         {
-            // beta-cut found
-
-            #if defined(TRANSPOSITION_TABLE_H)
-                TT.RecordPosition(__pos.Hash_Value, depth, move, beta, HASH_BETA);
-            #endif
-            
-            return beta;
+            hashf = HASH_BETA, bestMove = move, alpha = beta;
+            break;
         }
 
-        if (eval > alpha)
-        {
-            // Better move found, update the result
-            hashf = HASH_EXACT;
-            alpha = eval;
-            pvArray[pvIndex] = filter(move);
+        // Better move found, update the result
+        if (eval > alpha) {
+            hashf = HASH_EXACT, bestMove = move, alpha = eval;
+            pvArray[pvIndex] = filter(bestMove);
             movcpy (pvArray + pvIndex + 1,
                     pvArray + pvNextIndex, MAX_PLY - ply - 1);
         }
     }
 
     #if defined(TRANSPOSITION_TABLE_H)
-        TT.RecordPosition(__pos.Hash_Value, depth, pvArray[pvIndex], alpha, hashf);
+        TT.RecordPosition(pos.Hash_Value, depth, bestMove, alpha, hashf);
     #endif
 
     return alpha;
@@ -296,12 +203,10 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     perf_clock startTime;
     perf_ns_time duration;
 
-    int ply{0}, pvIndex{0}, pvNextIndex/* , R, i = 0 */;
-    Score eval;
+    int ply{0}, pvIndex{0}, pvNextIndex;
 
     MoveList myMoves = GenerateMoves(_cb, false, true);
     moc.OrderMovesOnTime(myMoves);
-
 
     pvArray[pvIndex] = NULL_MOVE; // no pv yet
     pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -310,32 +215,9 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     {
         Move move = myMoves.pMoves[moveNo];
         startTime = perf::now();
-        /* if ((i < LMR_LIMIT) or InterestingMove(move, _cb) or depth < 2)
-        {
-            _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, 0);
-            _cb.UnmakeMove();
-        }
-        else
-        {
-            R = RootReduction(depth, i);
-            _cb.MakeMove(move);
-            eval = -AlphaBeta(_cb, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, 0);
-            _cb.UnmakeMove();
 
-            if (info.TimeOver())
-                return TIMEOUT;
+        Score eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
 
-            if ((R > 0) and (eval > alpha))
-            {
-                startTime = perf::now();
-                _cb.MakeMove(move);
-                eval = -AlphaBeta(_cb, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, 0);
-                _cb.UnmakeMove();
-            }
-        } */
-        
-        eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
         duration = perf::now() - startTime;
         moc.Insert(moveNo, duration.count());
 
@@ -352,7 +234,6 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
     return alpha;
 }
-
 
 void
 Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
@@ -410,5 +291,3 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
     info.SearchCompleted();
     writer << "Search Done!" << endl;
 }
-
-#endif

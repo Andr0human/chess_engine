@@ -14,12 +14,6 @@ typedef int (*ReductionFunc)(Depth depth, size_t move_no);
 uint64_t
 BulkCount(ChessBoard& pos, Depth depth);
 
-Score
-NegaMax(ChessBoard& pos, Depth depth);
-
-std::pair<Move, Score>
-RootNegaMax(ChessBoard& pos, Depth depth);
-
 /**
  * @brief Iterative Search to search a board postion.
  * 

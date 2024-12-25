@@ -172,6 +172,12 @@ class ChessBoard
         enemyAttackedSquares = 0;
     }
 
+    inline Score
+    HandleScore (Score score) noexcept {
+        RemoveMovegenMetadata();
+        return score;
+    }
+
     constexpr bool
     InCheck() const noexcept
     { return checkers > 0; }
