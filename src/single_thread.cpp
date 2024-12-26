@@ -1,6 +1,9 @@
 
 
 #include "single_thread.h"
+#include "move_utils.h"
+#include "search.h"
+#include "types.h"
 
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
@@ -45,7 +48,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     if (stand_pat > alpha) alpha = stand_pat;
 
     MoveList myMoves = GenerateMoves(pos, true);
-    OrderMoves(myMoves, false, false);
+    OrderMoves(myMoves, ply, false, false, false);
 
 
     pvArray[pvIndex] = 0; // no pv yet
@@ -149,7 +152,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     MoveList myMoves = GenerateMoves(pos, false, true);
 
     // Order moves according to heuristics for faster alpha-beta search
-    OrderMoves(myMoves, true, true);
+    OrderMoves(myMoves, ply, true, true, true);
 
 
     // Search Extensions
@@ -186,6 +189,10 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
             pvArray[pvIndex] = filter(bestMove);
             movcpy (pvArray + pvIndex + 1,
                     pvArray + pvNextIndex, MAX_PLY - ply - 1);
+
+            if ((is_type<NORMAL>(move)) and (killerMoves[ply].size() < killerMoves[ply].capacity())) {
+                killerMoves[ply].emplace_back(move);
+            }
         }
     }
 

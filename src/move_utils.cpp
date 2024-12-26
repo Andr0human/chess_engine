@@ -5,22 +5,26 @@
 void
 DecodeMove(Move move)
 {
-    Square ip  = Square(move & 63);
-    Square fp  = Square((move >> 6) & 63);
+    Square ip = Square(move & 63);
+    Square fp = Square((move >> 6) & 63);
 
     PieceType pt  = PieceType((move >> 12) & 7);
     PieceType cpt = PieceType((move >> 15) & 7);
-    Color cl  = Color((move >> 20) & 1);
+    Color cl      = Color((move >> 20) & 1);
 
-    int ppt = (move >> 18) & 3;
-    int pr  = move >> 21;
+    int ppt          = (move >> 18) & 3;
+    int moveType     = (move >> 21) & 3;
+    int givesCheck   = (move >> 23) & 1;
+    int moveStrength = move >> 24;
 
-    cout << "Start_Square : " << ip << '\n';
-    cout << "End_Square : " << fp << '\n';
-    cout << "Piece_type : " << pt << '\n';
-    cout << "Cap_Piece_type : " << cpt << '\n';
-    cout << "Piece_color : " << (cl == 1 ? "White\n" : "Black\n");
-    cout << "Move_Strength : " << pr << '\n';
+    cout << "startSquare : " << ip << '\n';
+    cout << "endSquare : " << fp << '\n';
+    cout << "pieceType : " << pt << '\n';
+    cout << "captPieceType : " << cpt << '\n';
+    cout << "pieceColor : " << (cl == 1 ? "White\n" : "Black\n");
+    cout << "moveType: " << moveType << '\n';
+    cout << "moveStrength : " << moveStrength << '\n';
+    cout << "givesCheck: " << givesCheck << '\n';
 
     if (pt == PAWN && ((1ULL << fp) & Rank18))
     {

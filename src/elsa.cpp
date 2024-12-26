@@ -26,6 +26,9 @@
 int main(int argc, char **argv)
 {
     FAST_IO();
+    for (auto& inner : killerMoves) {
+        inner.reserve(MAX_MOVES >> 3);
+    }
     Init();
     Task(argc, argv);
 }
@@ -121,5 +124,7 @@ int main(int argc, char **argv)
     8/8/6kP/8/5P2/8/4K3/8 w - - 1 62
     Avoid the use of LoneKing in these cases.
 
-
+    6k1/3q1pp1/pp5p/1r5n/8/1P3PP1/PQ4BP/2R3K1 w - - 0 1      B.M. Bf1 (killer-move test)
 */
+
+// TODO: Test is_type function for all moveTypes

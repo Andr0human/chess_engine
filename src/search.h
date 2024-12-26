@@ -13,6 +13,7 @@
 
 extern Move pvArray[MAX_PV_ARRAY_SIZE];
 extern Move thread_array[MAX_THREADS][MAX_PV_ARRAY_SIZE];
+extern vector<vector<Move>> killerMoves;
 extern const string StartFen;
 
 // Utility
@@ -21,6 +22,10 @@ void movcpy (Move* pTarget, const Move* pSource, int n);
 void ResetPvLine();
 Score CheckmateScore(Ply ply);
 
+template <int flag>
+bool
+is_type(Move m)
+{ return ((m >> 21) & 7) == flag; }
 
 
 // Search_Checks
@@ -34,7 +39,7 @@ int RootReduction(Depth depth, size_t move_no);
 int SearchExtension(const MoveList& myMoves, int numExtensions);
 
 
-void OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves);
+void OrderMoves(MoveList& myMoves, Ply ply, bool pv_moves, bool check_moves, bool killerMoves);
 
 
 #endif

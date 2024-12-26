@@ -3,6 +3,8 @@
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
 Move thread_array[MAX_THREADS][MAX_PV_ARRAY_SIZE];
+vector<vector<Move>> killerMoves(MAX_PLY, vector<Move>{});
+
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 #ifndef TOOLS
@@ -27,17 +29,6 @@ CheckmateScore(Ply ply)
 #endif
 
 #ifndef SEARCH_UTIL
-
-template <int flag>
-static bool
-is_type(Move m)
-{ return (m & (flag << 21)) != 0; }
-
-template <>
-bool
-is_type<PV_MOVE>(Move m)
-{ return info.IsPartOfPV(m); }
-
 
 int
 RootReduction(Depth depth, size_t num)
@@ -111,6 +102,11 @@ SearchExtension(const MoveList& myMoves, int numExtensions)
 
 #ifndef MOVE_REORDERING
 
+template <>
+bool
+is_type<PV_MOVE>(Move m)
+{ return info.IsPartOfPV(m); }
+
 
 template <int flag>
 static size_t
@@ -126,7 +122,7 @@ PrioritizeMoves(MoveList& myMoves, size_t start)
 
 
 void
-OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves)
+OrderMoves(MoveList& myMoves, Ply ply, bool pv_moves, bool check_moves, bool killer_moves)
 {
     const auto SortMoves = [&] (int start, int end)
     {
@@ -148,6 +144,17 @@ OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves)
     const size_t pv_end      = pv_moves    ? PrioritizeMoves<PV_MOVE>(myMoves, check_end) : check_end;
 
     SortMoves(0, int(capture_end));
+
+    if (killer_moves) {
+        for (size_t i = pv_end; i < myMoves.size(); i++) {
+            Move& move = myMoves.pMoves[i];
+            if (std::find(killerMoves[ply].begin(), killerMoves[ply].end(), move) != killerMoves[ply].end()) {
+                const int value = move >> 24;
+                move |= (value + 10) << 24;
+            }
+        }
+    }
+
     SortMoves(int(pv_end), int(myMoves.size()));
 }
 
