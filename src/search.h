@@ -3,7 +3,7 @@
 #define SEARCH_H
 
 #include "perf.h"
-#include "base_utils.h"
+#include "bitboard.h"
 #include "movegen.h"
 #include "search_utils.h"
 
@@ -100,7 +100,7 @@ class SearchData
   vector<pair<Move, Score>> moveEvals;
 
   // Stores <move, time> for each move in each iteration.
-  pair<Move, double> moveTimes[MAX_MOVES];
+  pair<Move, uint64_t> moveTimes[MAX_MOVES];
 
   size_t moveCount = 0;
 
@@ -245,8 +245,17 @@ class SearchData
     });
   }
 
+  void Print(ChessBoard pos)
+  {
+    for (size_t i = 0; i < moveCount; i++)
+    {
+      const auto&[move, tm] = moveTimes[i];
+      cout << (i + 1) << "\t| " << PrintMove(move, pos) << "\t| " << tm << endl;
+    }
+  }
+
   void
-  InsertMoveToList(size_t moveNo, double timeOnMove)
+  InsertMoveToList(size_t moveNo, uint64_t timeOnMove)
   { moveTimes[moveNo].second = timeOnMove; }
 
   MoveList

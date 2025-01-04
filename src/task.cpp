@@ -133,6 +133,7 @@ SpeedTest()
   int64_t totalTime = 0;
   Nodes  totalNodes = 0;
   const int    loop = 3;
+  int positionNo    = 1;
 
   for (auto pos : positions)
   {
@@ -143,7 +144,7 @@ SpeedTest()
     totalTime  += currentTime;
 
     const auto current_speed = static_cast<float>(currentNodes / currentTime);
-    cout << " ---- " << "\t: " << current_speed << " M nodes/sec." << endl;
+    cout << "position-" << positionNo++ << "\t: " << current_speed << " M nodes/sec." << endl;
   }
 
   const auto speed = static_cast<float>(totalNodes / totalTime);
