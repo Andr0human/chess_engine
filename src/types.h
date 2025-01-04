@@ -10,6 +10,7 @@ using    Depth =  int32_t;
 using      Ply =  int32_t;
 using      Key = uint64_t;
 using Bitboard = uint64_t;
+using    Nodes = uint64_t;
 
 
 enum Color: int
@@ -49,7 +50,7 @@ enum Search
     NULL_MOVE = 0,
 };
 
-enum Value: int
+enum Value: Score
 {
     VALUE_ZERO = 0,
     VALUE_DRAW = -5,

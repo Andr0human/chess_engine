@@ -1,5 +1,7 @@
 
 #include "task.h"
+#include "search.h"
+#include "single_thread.h"
 
 void
 Init()
@@ -24,133 +26,78 @@ Init()
 }
 
 vector<TestPosition>
-get_test_positions(string filename)
+getTestPositions(string filename, string testType)
 {
-    std::ifstream infile;
-    infile.open("../Utility/" + filename + "_test_positions.txt");
+  std::ifstream infile;
+  infile.open("../Utility/" + filename);
 
-    string pos, text, name;
-    vector<string> tmp;
-    vector<TestPosition> res;
+  string str;
+  vector<TestPosition> testPositions;
 
-    while (true)
-    {
-        getline(infile, text);
-        if (text == "") break;
-        tmp = base_utils::Split(text, '|');
-        name = "--";
-        if (tmp.size() == 3) name = tmp[2].substr(1);
+  while (getline(infile, str))
+  {
+    if (str == "") break;
+    testPositions.emplace_back(TestPosition(str, testType));
+  }
 
-        pos = tmp[0];
-        tmp = base_utils::Split(tmp[1], ' ');
-        res.emplace_back(TestPosition(pos, std::stoi(tmp[0]), std::stoi(tmp[1]), name));
-    }
-
-    infile.close();
-    return res;
+  infile.close();
+  return testPositions;
 }
 
 void
 AccuracyTest()
 {
-    const auto get_test_pos = [] ()
+  const auto runTests = [] (const vector<TestPosition>& positions)
+  {
+    int posNo = 1;
+
+    for (const auto& pos : positions)
     {
-        string file_path = "../Utility/accuracy_test_positions.txt";
-        std::ifstream infile(file_path);
+      const auto depth = pos.maxDepth();
+      if (!pos.test(BulkCount, depth))
+        return false;
+      
+      cout << "Position " << (posNo++) << " passed!" << endl;
+    }
 
-        string line;
-        vector<MovegenTestPosition> tests;
+    return true;
+  };
 
-        while (true)
-        {
-            getline(infile, line);
-            if (line.empty()) break;
+  const auto failedTests = [] (const vector<TestPosition>& positions)
+  {
+    TestPosition bestCase = positions.front();
+    Depth minDepth = 100;
 
-            auto elements = base_utils::Split(line, '|');
-
-            const auto nodes_string = base_utils::Split(elements[1], ' ');
-            vector<uint64_t> nodes(nodes_string.size());
-
-            std::transform(begin(nodes_string), end(nodes_string), begin(nodes),
-                [] (const string& __s) {
-                    return std::stoull(__s);
-                }
-            );
-
-            // const auto nodes = to_nums(base_utils::Split(elements[1], ' '));
-            tests.push_back(MovegenTestPosition(base_utils::Strip(elements[0]), nodes));
-        }
-
-        infile.close();
-        return tests;
-    };
-
-    const auto run_tests = [] (const vector<MovegenTestPosition>& tests)
+    for (const auto& pos : positions)
     {
-        int pos_no = 1;
-
-        for (const auto& test : tests)
+      Depth depth = pos.maxDepth();
+      for (Depth dep = 1; dep <= depth; dep++)
+      {
+        if (pos.test(BulkCount, dep))
+          continue;
+        
+        if (dep < minDepth)
         {
-            const auto depth = test.depth();
-            ChessBoard _cb = test.Fen();
-            uint64_t found = BulkCount(_cb, static_cast<int>(depth));
-
-            if (found != test.expected_nodes(depth))
-                return false;
-            
-            cout << "Position " << (pos_no++) << " passed!" << endl;
+          bestCase = pos, minDepth = dep;
+          break;
         }
+      }
+    }
+    return bestCase;
+  };
 
-        return true;
-    };
+  const auto positions = getTestPositions("suite_2", "accuracy");
+  const auto testSuccess = runTests(positions);
 
-    const auto failed_tests = [] (const vector<MovegenTestPosition>& tests)
-    {
-        auto best_case = tests.front();
-        uint64_t best_depth = 100;
+  if (testSuccess) return;
 
-        for (const auto& test : tests)
-        {
-            const auto depth = test.depth();
-            ChessBoard _cb = test.Fen();
+  cout << "Accuracy Test Failed!!\n" <<
+          "Looking for best_case:\n\n" << std::flush;
 
-            for (uint64_t dep = 1; dep <= depth; dep++)
-            {
-                const auto found = BulkCount(_cb, static_cast<int>(dep));
+  const auto bestCase = failedTests(positions);
 
-                if (found == test.expected_nodes(dep))
-                    continue;
-                
-                if (dep < best_depth)
-                {
-                    best_case = test;
-                    best_depth = dep;
-                    break;
-                }
-            }
-        }
-        return best_case;
-    };
-
-    const auto tests = get_test_pos();
-    const auto test_success = run_tests(tests);
-
-    if (test_success) return;
-
-    cout << "Accuracy Test Failed!!\n" <<
-            "Looking for best_case:\n\n" << std::flush;
-
-    const auto best_case = failed_tests(tests);
-
-    cout << "Best Failed Case : \n";
-    cout << "Fen = " << best_case.Fen() << endl;
-
-    auto maxDepth = best_case.depth();
-    ChessBoard _cb = best_case.Fen();
-
-    for (uint64_t depth = 1; depth <= maxDepth; depth++)
-        cout << best_case.expected_nodes(depth)
-             << " | " << BulkCount(_cb, static_cast<int>(depth)) << endl;
+  cout << "Best Failed Case : \n";
+  cout << "Fen = " << bestCase.getFen() << endl;
 }
 
 void
@@ -180,81 +127,69 @@ Helper()
 void
 SpeedTest()
 {
-    using namespace std::chrono;
+  const auto positions = getTestPositions("suite_1", "speed");
+  cout << "Positions Found : " << positions.size() << '\n';
+  
+  int64_t totalTime = 0;
+  Nodes  totalNodes = 0;
+  const int    loop = 3;
 
-    const auto positions = get_test_positions("Speed");
-    const auto total_pos = positions.size();
+  for (auto pos : positions)
+  {
+    Nodes  currentNodes = pos.nodeCount(1) * loop;
+    int64_t currentTime = pos.time(BulkCount, loop);
 
-    cout << "Positions Found : " << total_pos << '\n';
-    
-    int64_t total_time = 0;
-    int64_t total_nodes = 0;
+    totalNodes += currentNodes;
+    totalTime  += currentTime;
 
-    for (auto pos : positions)
-    {
-        ChessBoard board = pos.fen;
-        int64_t nodes_current = 3 * pos.nodeCount;
-        int64_t time_current = 0;
+    const auto current_speed = static_cast<float>(currentNodes / currentTime);
+    cout << " ---- " << "\t: " << current_speed << " M nodes/sec." << endl;
+  }
 
-        const auto start = perf::now();
-        for (int i = 0; i < 3; i++)
-            BulkCount(board, pos.depth);
-        
-        const auto end = perf::now();
-        const auto duration = duration_cast<microseconds>(end - start);
-        time_current = duration.count();
-
-        total_time += time_current;
-        total_nodes += nodes_current;
-
-        const auto current_speed = static_cast<float>(nodes_current / time_current);
-        cout << pos.name << "\t: " << current_speed << " M nodes/sec." << endl;
-    }
-
-    const auto speed = static_cast<float>(total_nodes / total_time);
-    cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
+  const auto speed = static_cast<float>(totalNodes / totalTime);
+  cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
 }
 
 void
 DirectSearch(const vector<string> &_args)
 {
-    const size_t __n = _args.size();
-    const string fen = __n > 1 ? _args[1] : StartFen;
+  const size_t __n = _args.size();
+  const string fen = __n > 1 ? _args[1] : StartFen;
 
-    const double search_time = (__n >= 3) ?
-        std::stod(_args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
+  const double search_time = (__n >= 3) ?
+    std::stod(_args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
 
-    ChessBoard primary = fen;
-    cout << primary.VisualBoard() << endl;
+  ChessBoard primary = fen;
+  cout << primary.VisualBoard() << endl;
 
-    Search(primary, MAX_DEPTH, search_time);
-    cout << info.GetSearchResult(primary) << endl;
+  Search(primary, MAX_DEPTH, search_time);
+  cout << info.GetSearchResult(primary) << endl;
 }
 
 void
 NodeCount(const vector<string> &_args)
 {
-    const size_t __n = _args.size();
-    const string fen = __n > 1 ? _args[1] : StartFen;
-    Depth depth  = __n > 2 ? stoi(_args[2]) : 6;
-    ChessBoard _cb   = fen;
+  const size_t __n = _args.size();
+  const string fen = __n > 1 ? _args[1] : StartFen;
+  Depth depth  = __n > 2 ? stoi(_args[2]) : 6;
+  ChessBoard _cb   = fen;
 
-    cout << "Fen = " << fen << '\n';
-    cout << "Depth = " << depth << "\n" << endl;
+  cout << "Fen = " << fen << '\n';
+  cout << "Depth = " << depth << "\n" << endl;
 
-    const auto &[nodes, t] = perf::run_algo(BulkCount, _cb, depth);
+  const auto &[nodes, t] = perf::run_algo(BulkCount, _cb, depth);
 
-    cout << "Nodes(single-thread) = " << nodes << '\n';
-    cout << "Time (single-thread) = " << t << " sec.\n";
-    cout << "Speed(single-thread) = " << static_cast<double>(nodes) / (t * 1e6)
-         << " M nodes/sec.\n" << endl;
+  cout << "Nodes(single-thread) = " << nodes << '\n';
+  cout << "Time (single-thread) = " << t << " sec.\n";
+  cout << "Speed(single-thread) = " << static_cast<double>(nodes) / (t * 1e6)
+        << " M nodes/sec.\n" << endl;
 
-    // const auto &[nodes2, t2] = perf::run_algo(bulk_MultiCount, board, depth);
+  // const auto &[nodes2, t2] = perf::run_algo(bulk_MultiCount, board, depth);
 
-    // cout << "Nodes(multi- thread) = " << nodes2 << endl;
-    // cout << "Speed(multi- thread) = " << nodes2 / (t2 * 1'000'000)
-    //      << " M nodes/sec." << endl;
-    // cout << "Threads Used = " << threadCount << endl;
+  // cout << "Nodes(multi- thread) = " << nodes2 << endl;
+  // cout << "Speed(multi- thread) = " << nodes2 / (t2 * 1'000'000)
+  //      << " M nodes/sec." << endl;
+  // cout << "Threads Used = " << threadCount << endl;
 }
 
 void

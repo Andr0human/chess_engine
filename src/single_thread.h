@@ -6,6 +6,7 @@
 #include "bitboard.h"
 #include "movegen.h"
 #include "search.h"
+#include "evaluation.h"
 
 
 typedef int (*ReductionFunc)(Depth depth, size_t move_no);

@@ -15,7 +15,6 @@ using std::cout;
 using std::endl;
 
 
-
 #ifndef BIT_MANIPULATION
 
 // Define the type for the Lsb and Msb function pointers
