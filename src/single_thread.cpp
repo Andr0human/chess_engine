@@ -204,8 +204,9 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
     int ply{0}, pvIndex{0}, pvNextIndex;
 
-    MoveList myMoves = GenerateMoves(_cb, false, true);
-    moc.OrderMovesOnTime(myMoves);
+    // MoveList myMoves = GenerateMoves(_cb, false, true);
+    // moc.OrderMovesOnTime(myMoves);
+    MoveList myMoves = info.getMoves();
 
     pvArray[pvIndex] = NULL_MOVE; // no pv yet
     pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -218,7 +219,8 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
         Score eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
 
         duration = perf::now() - startTime;
-        moc.Insert(moveNo, duration.count());
+        // moc.Insert(moveNo, duration.count());
+        info.InsertMoveToList(moveNo, duration.count());
 
         if (info.TimeOver())
             return TIMEOUT;
@@ -284,7 +286,8 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
         if (within_valWindow and (__abs(eval) >= VALUE_INF - 500)) break;
 
         // Sort Moves according to time it took to explore the move.
-        moc.SortList(pvArray[0]);
+        // moc.SortList(pvArray[0]);
+        info.SortMovesOnTime(pvArray[0]);
     }
 
     info.SearchCompleted();

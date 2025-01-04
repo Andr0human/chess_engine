@@ -103,24 +103,24 @@ AccuracyTest()
 void
 Helper() 
 {
-    puts("/****************   Command List   ****************/\n");
+  puts("/****************   Command List   ****************/\n");
 
-    puts("** For Elsa's movegenerator self-accuracy test, type:\n");
-    puts("** elsa accuracy\n");
-    
-    puts("** For Elsa's movegenerator self-speed test, type:\n");
-    puts("** elsa speed\n");
+  puts("** For Elsa's movegenerator self-accuracy test, type:\n");
+  puts("** elsa accuracy\n");
+  
+  puts("** For Elsa's movegenerator self-speed test, type:\n");
+  puts("** elsa speed\n");
 
-    puts("** For Bulk-Counting, type:\n");
-    puts("** elsa count <fen> <depth>\n");
+  puts("** For Bulk-Counting, type:\n");
+  puts("** elsa count <fen> <depth>\n");
 
-    puts("** For Evaluating a position, type:\n");
-    puts("** elsa go <fen> <search_time>\n");
+  puts("** For Evaluating a position, type:\n");
+  puts("** elsa go <fen> <search_time>\n");
 
-    puts("** For debugging movegenerator, type:\n");
-    puts("** elsa debug <fen> <depth> <output_file_name>\n");
+  puts("** For debugging movegenerator, type:\n");
+  puts("** elsa debug <fen> <depth> <output_file_name>\n");
 
-    puts("/**************************************************/\n\n");
+  puts("/**************************************************/\n\n");
 }
 
 

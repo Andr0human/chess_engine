@@ -6,6 +6,8 @@
 // is_type<PV_MOVE>(Move m)
 // { return info.IsPartOfPV(m); }
 
+SearchData info;
+
 #ifndef MOVE_REORDERING
 
 

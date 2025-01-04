@@ -1,118 +1,88 @@
 
-
 #include "search_utils.h"
 
+Move pvArray[MAX_PV_ARRAY_SIZE];
+const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-SearchData info;
-MoveOrderClass moc;
-
-
-#ifndef MOVE_ORDER_CLASS
 
 void
-MoveOrderClass::Initialise(MoveList& myMoves)
+movcpy(Move* pTarget, const Move* pSource, int n)
+{ while (n-- && (*pTarget++ = *pSource++)); }
+
+void
+ResetPvLine()
 {
-    mCount = myMoves.size();
-    for (uint64_t i = 0; i < mCount; i++)
-        moves[i] = std::make_pair(filter(myMoves.pMoves[i]), 0);
+  for (size_t i = 0; i < MAX_PV_ARRAY_SIZE; i++)
+    pvArray[i] = NULL_MOVE;
 }
 
-void
-MoveOrderClass::Insert(uint64_t idx, double time_taken)
-{ moves[idx].second = time_taken; }
+Score
+CheckmateScore(Ply ply)
+{ return -VALUE_MATE + (20 * ply); }
 
-void
-MoveOrderClass::SortList(int best_move)
+bool
+LmrOk(Move move, Depth depth, size_t moveNo)
 {
-    for (uint64_t i = 0; i < mCount; i++)
-    {
-        if (filter(best_move) == filter(moves[i].first))
-        {
-            std::swap(moves[i], moves[0]);
-            break;
-        }
-    }
+  if ((depth < 2) or (moveNo < LMR_LIMIT) or InterestingMove(move))
+    return false;
 
-    for (uint64_t i = 1; i < mCount; i++)
-    {
-        uint64_t idx = i;
-        for (uint64_t j = i; j < mCount; j++)
-            if (moves[j].second > moves[idx].second) idx = j;
-        std::swap(moves[i], moves[idx]);
-    }
+  return true;
 }
 
-void
-MoveOrderClass::OrderMovesOnTime(MoveList& myMoves)
+bool
+InterestingMove(Move move)
 {
-    for (uint64_t i = 0; i < mCount; i++) {
-        Move current = moves[i].first;
-        for (uint64_t j = i + 1; j < mCount; j++)
-            if (myMoves.pMoves[j] == current)
-                std::swap(myMoves.pMoves[j], myMoves.pMoves[i]);
-    }
-}
+  if (is_type<CAPTURES>(move) or is_type<CHECK>(move))
+    return true;
 
-void
-MoveOrderClass::PrintAllMoves(ChessBoard& cb)
-{
-    for (uint64_t i = 0; i < mCount; i++)
-        cout << i + 1 << ") " << PrintMove(moves[i].first, cb)
-             << " | Time : " << moves[i].second << endl;
+  if (is_type<CASTLING>(move) or is_type<PROMOTION>(move))
+    return true;
+  
+  return false;
 }
 
 int
-MoveOrderClass::GetMove(uint64_t index)
-{ return moves[index].first; }
-
-uint64_t
-MoveOrderClass::MoveCount()
-{ return mCount; }
-
-void
-MoveOrderClass::Reset()
+RootReduction(Depth depth, size_t moveNo)
 {
-    for (uint64_t i = 0; i < mCount; i++)
-        moves[i].second = 0;
+  if (depth < 3) return 0;
+  if (depth < 6) {
+    if (moveNo < 9) return 1;
+    // if (num < 12) return 2;
+    return 2;
+  }
+  if (moveNo < 8) return 2;
+  // if (num < 15) return 3;
+  return 3;
 }
 
-#endif
-
-#ifndef TEST_POSITION
-
-TestPosition::TestPosition(string f, int d, uint64_t nc, int index)
+int
+Reduction (Depth depth, size_t moveNo)
 {
-    fen = f;
-    depth = d;
-    nodeCount = nc;
-    GenerateName(index);
+  if (depth < 2) return 0;
+  if ((depth < 4) and (moveNo > 9)) return 1; 
+
+  if (depth < 7) {
+    if (moveNo < 9) return 1;
+    return 2;
+  }
+
+  if (moveNo < 12) return 1;
+  if (moveNo < 24) return 2;
+  return 3;
 }
 
-TestPosition::TestPosition(string f, int d, uint64_t nc, string n)
+int
+SearchExtension(const MoveList& myMoves, int numExtensions)
 {
-    fen = f;
-    name = n;
-    depth = d;
-    nodeCount = nc;
-}
+  int extension = 0;
 
-void
-TestPosition::GenerateName(int index)
-{
-    if (index == 1) name = "pawn";
-    else if (index == 2) name = "bishop";
-    else if (index == 3) name = "knight";
-    else if (index == 4) name = "rook";
-    else if (index == 5) name = "queen";
-    else name = "--";
+  if (numExtensions >= EXTENSION_LIMIT)
+    return 0;
+  
+  // If king is in check, add 1
+  if (myMoves.checkers > 0)
+    extension += 1;
+  
+  return extension;
 }
-
-void
-TestPosition::Print()
-{
-    cout << name << " : " << fen << "\n" << "|   Depth : " \
-    << depth << "\t|   Nodes : " << nodeCount << "\t|\n" << endl;
-}
-
-#endif
 
