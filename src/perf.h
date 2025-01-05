@@ -2,16 +2,17 @@
 #ifndef PERF_H
 #define PERF_H
 
+#include <cstdint>
 #include <iostream>
 #include <chrono>
 #include <utility>
 
 #define FAST_IO() std::ios::sync_with_stdio(0); std::cin.tie(0)
-#define perf_clock std::chrono::_V2::high_resolution_clock::time_point
-#define perf_time std::chrono::duration<double>
-#define perf_ms_time std::chrono::duration<double, std::milli>
-#define perf_ns_time std::chrono::duration<double, std::nano>
 
+using perf_clock = std::chrono::_V2::high_resolution_clock::time_point;
+using perf_time = std::chrono::duration<double>;
+using perf_ms_time = std::chrono::duration<int64_t, std::milli>;
+using perf_ns_time = std::chrono::duration<int64_t, std::nano>;
 
 namespace perf
 {

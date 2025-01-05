@@ -1,113 +1,12 @@
 
 #include "search.h"
 
-Move pvArray[MAX_PV_ARRAY_SIZE];
-Move thread_array[MAX_THREADS][MAX_PV_ARRAY_SIZE];
-const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+// template <>
+// bool
+// is_type<PV_MOVE>(Move m)
+// { return info.IsPartOfPV(m); }
 
-#ifndef TOOLS
-
-
-void
-movcpy(Move* pTarget, const Move* pSource, int n)
-{ while (n-- && (*pTarget++ = *pSource++)); }
-
-
-void
-ResetPvLine()
-{
-    for (size_t i = 0; i < MAX_PV_ARRAY_SIZE; i++)
-        pvArray[i] = NULL_MOVE;
-}
-
-Score
-CheckmateScore(Ply ply)
-{ return -VALUE_MATE + (20 * ply); }
-
-#endif
-
-#ifndef SEARCH_UTIL
-
-template <int flag>
-static bool
-is_type(Move m)
-{ return (m & (flag << 21)) != 0; }
-
-template <>
-bool
-is_type<PV_MOVE>(Move m)
-{ return info.IsPartOfPV(m); }
-
-
-int
-RootReduction(Depth depth, size_t num)
-{
-    if (depth < 3) return 0;
-    if (depth < 6) {
-        if (num < 9) return 1;
-        // if (num < 12) return 2;
-        return 2;
-    }
-    if (num < 8) return 2;
-    // if (num < 15) return 3;
-    return 3;
-}
-
-int
-Reduction (Depth depth, size_t move_no)
-{
-    if (depth < 2) return 0;
-    if (depth < 4 && move_no > 9) return 1; 
-
-    if (depth < 7) {
-        if (move_no < 9) return 1;
-        return 2;
-    }
-
-    if (move_no < 12) return 1;
-    if (move_no < 24) return 2;
-    return 3;
-}
-
-
-bool
-LmrOk(Move move, Depth depth, size_t move_no)
-{
-    if ((depth < 2) or (move_no < LMR_LIMIT) or InterestingMove(move))
-        return false;
-
-    return true;
-}
-
-bool
-InterestingMove(Move move)
-{
-    if (is_type<CAPTURES>(move) or is_type<CHECK>(move))
-        return true;
-
-    if (is_type<CASTLING>(move) or is_type<PROMOTION>(move))
-        return true;
-    
-    return false;
-}
-
-
-int
-SearchExtension(const MoveList& myMoves, int numExtensions)
-{
-    int extension = 0;
-
-    if (numExtensions >= EXTENSION_LIMIT)
-        return 0;
-    
-    // If king is in check, add 1
-    if (myMoves.checkers > 0)
-        extension += 1;
-    
-    return extension;
-}
-
-#endif
+SearchData info;
 
 #ifndef MOVE_REORDERING
 
