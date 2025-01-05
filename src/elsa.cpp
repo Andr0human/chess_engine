@@ -123,3 +123,17 @@ int main(int argc, char **argv)
 
 
 */
+
+/*  Endgames
+
+    8/8/8/p2k4/8/8/3K4/2n5 b - - 3 59 (static evaluation)
+    5K2/8/8/8/3k4/8/8/R7 w - - 5 113 (Rook endgame)
+
+    8/5b2/8/p7/8/p1k5/8/1K6 b - - 5 77 (King vs Bishop and pawn)
+    8/8/8/p2K4/P7/1k6/5b2/8 b - - 99 103 (50-move rule draw)
+
+    8/8/6p1/5k2/8/8/4K3/8 b - - 4 122 (pawn)
+    8/8/8/8/3k4/2bb4/8/2K5 b - - 11 81 (bishop)
+
+    8/4B3/3Pk3/8/2RK4/8/8/r7 w - - 55 110 (misc)
+*/
