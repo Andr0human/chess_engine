@@ -62,7 +62,7 @@ class EvalData
       + KnightValueMg * (knights[WHITE] + knights[BLACK])
       + RookValueMg   * (  rooks[WHITE] +   rooks[BLACK])
       + QueenValueMg  * ( queens[WHITE] +  queens[BLACK]);
-    
+
     // phase = float(boardWeight) / float(GamePhaseLimit);
   }
 

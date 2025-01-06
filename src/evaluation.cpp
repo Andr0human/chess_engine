@@ -1,6 +1,9 @@
 
 #include "evaluation.h"
 #include "attacks.h"
+#include "base_utils.h"
+#include "bitboard.h"
+#include "types.h"
 
 using std::abs;
 using std::min;
@@ -16,8 +19,12 @@ Distance(Square s, Square t)
 }
 
 static bool
-IsHypotheticalDraw(const EvalData& ed)
+IsTheoreticalDraw(const EvalData& ed)
 {
+  // No pieces left
+  if (ed.boardWeight == 0)
+    return true;
+
   // No draws if pawns on the board
   if (ed.pawns[WHITE] + ed.pawns[BLACK] > 0)
     return false;
@@ -54,10 +61,10 @@ CannotWin(const ChessBoard& pos, const EvalData& ed)
 {
   if (ed.pawns[c_my] > 0)
     return false;
-  
+
   if (ed.pieces[c_my] == 1)
     return ed.knights[c_my] + ed.bishops[c_my] == 1;
-  
+
   if ((ed.pieces[c_my] == 2) and (ed.knights[c_my] == 2))
     return true;
 }
@@ -121,7 +128,7 @@ CalcDistanceScore(const ChessBoard& pos)
     // int d = 14 - Distance(NextSquare(piece_bb), emyKingSq);
     // score = (d * d) / 2;
   }
-  
+
   return score;
 }
 
@@ -285,7 +292,7 @@ AddStrScore(const ChessBoard& pos)
 {
   Bitboard piece_bb = pos.piece<c_my, pt>();
   Score score = 0;
-  
+
   while (piece_bb > 0)
     score += strTable[NextSquare(piece_bb)];
   return score;
@@ -318,13 +325,13 @@ AddMobilityScore(const ChessBoard& pos)
 
   while (piece_bb > 0)
     squares |= AttackSquares<pt>(NextSquare(piece_bb), occupied);
-  
+
   return PopCount(squares);
 }
 
 static Score
 MobilityStrength(const ChessBoard& pos)
-{   
+{
   Score bishops = AddMobilityScore<WHITE, BISHOP>(pos) - AddMobilityScore<BLACK, BISHOP>(pos);
   Score knights = AddMobilityScore<WHITE, KNIGHT>(pos) - AddMobilityScore<BLACK, KNIGHT>(pos);
   Score rooks   = AddMobilityScore<WHITE, ROOK  >(pos) - AddMobilityScore<BLACK, ROOK  >(pos);
@@ -433,7 +440,7 @@ BishopColorCornerScore(const ChessBoard& pos)
   Bitboard lost_king = pos.piece< ~winningSide, KING>();
 
   if (PopCount(bishops) != 1)
-      return VALUE_ZERO;
+    return VALUE_ZERO;
 
   Score score = VALUE_ZERO;
 
@@ -459,27 +466,44 @@ BishopColorCornerScore(const ChessBoard& pos)
   return score;
 }
 
-template <Color winningSide>
+template <Color winningSide, bool debug = 0>
 static Score
 LoneKingEndGame(const ChessBoard& pos, const EvalData& ed)
 {
   /**
-    * Evaluates the score for an endgame position where the 
+    * Evaluates the score for an endgame position where the
     * losing side has no major, minor pieces, or pawns left.
-    * 
+    *
     * Intuition:
-    * In this endgame scenario, the primary objective is to 
-    * corner the king of the losing side. Simultaneously, 
+    * In this endgame scenario, the primary objective is to
+    * corner the king of the losing side. Simultaneously,
     * bringing the winning side's king closer to the opponent's
     * king for checkmate setup.
-    * 
-    * If the winning side has a bishop, the strategy for checkmate  
-    * corner differs based on the bishop's color. If white bishop 
+    *
+    * If the winning side has a bishop, the strategy for checkmate
+    * corner differs based on the bishop's color. If white bishop
     * bring the losing king to white corners. Conversely,
     * if the bishop is black, focus on bringing the losing side
     * king to black corner.
   **/
   // Note : Failed so far
+
+  /* KPK endgame
+  drawn if:
+
+  Defending king stands directly in front of the pawn, the other king - directly behind it, weaker side to move
+  Defending king as above, the other king diagonally behind the pawn, stronger side to mov
+
+  won if:
+  Defending king is outside the square of pawn
+
+
+  */
+
+  // square of the pawn (applies to pieceless games)
+
+
+
 
   // Color winningSide = (ed.pawns[WHITE] + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
   constexpr Color losingSide  = ~winningSide;
@@ -496,10 +520,20 @@ LoneKingEndGame(const ChessBoard& pos, const EvalData& ed)
                       + LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
   Score materialScore = MaterialDiffereceEndGame(ed);
 
-  Score score = materialScore + distanceScore + parityScore + centreScore;
   int side2move = 2 * int(pos.color) - 1;
+  Score score = (materialScore + distanceScore + parityScore + centreScore) * side2move;
 
-  return score * side2move;
+  if (debug)
+  {
+    cout << "Winning Side  = " << winningSide   << endl;
+    cout << "DistanceScore = " << distanceScore << endl;
+    cout << "parityScore   = " << parityScore   << endl;
+    cout << "centreScore   = " << centreScore   << endl;
+    cout << "materialScore = " << materialScore << endl;
+    cout << "Score = " << score << endl;
+  }
+
+  return score;
 }
 
 static Score
@@ -509,7 +543,7 @@ PieceTableStrengthEndGame(const ChessBoard& pos)
   {
     Score score = 0;
     while (piece > 0)
-        score += strTable[NextSquare(piece)];
+      score += strTable[NextSquare(piece)];
     return score;
   };
 
@@ -538,10 +572,10 @@ ColorParityScore(const ChessBoard& pos)
   Score incForCorrectSide = 40;
 
   if ((b_king & endSquaresForWhite) != 0)
-      score += incForCorrectSide;
+    score += incForCorrectSide;
 
   if ((w_king & endSquaresForBlack) != 0)
-      score -= incForCorrectSide;
+    score -= incForCorrectSide;
 
   return score;
 }
@@ -571,6 +605,97 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
   return Score(eval);
 }
 
+static bool
+IsPawnOnlyEndGame(const ChessBoard& pos)
+{
+  Bitboard pawnMask = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
+  Bitboard kingMask = pos.piece<WHITE, KING>() | pos.piece<BLACK, KING>();
+  Bitboard allMask  = pos.piece<WHITE,  ALL>() | pos.piece<BLACK,  ALL>();
+
+  Bitboard pieceMask = allMask ^ (pawnMask | kingMask);
+  return pieceMask == 0;
+}
+
+/* KPK endgame
+  drawn if:
+
+  Defending king stands directly in front of the pawn, the other king - directly behind it, weaker side to move
+  Defending king as above, the other king diagonally behind the pawn, stronger side to mov
+
+  won if:
+  Defending king is outside the square of pawn
+
+
+  */
+
+  // square of the pawn (applies to pieceless games)
+
+bool
+isSquarePawn(const ChessBoard& pos, const Bitboard pawn)
+{
+  const Square pawnSq = SquareNo(pawn);
+  const int side = (pawn & pos.piece<WHITE, PAWN>()) != 0;
+  // assume white for now
+
+  return side == WHITE;
+}
+
+template <Color side>
+static Score
+OnePawnEndgame(const ChessBoard& pos)
+{
+  // Assuming its white
+  constexpr Color emySide = ~side;
+
+  const Bitboard    pawn = pos.piece<side   , PAWN>();
+  const Bitboard  myKing = pos.piece<side   , KING>();
+  const Bitboard emyKing = pos.piece<emySide, KING>();
+
+  const int incFactor = 2 * side - 1;
+
+  if (!pawn)
+    return VALUE_ZERO;
+
+  const Square pawnSq    = SquareNo(pawn   );
+  const Square myKingSq  = SquareNo(myKing );
+  const Square emyKingSq = SquareNo(emyKing);
+
+  if ((pawnSq + 8 * incFactor == emyKingSq) and
+      (pawnSq - 8 * incFactor ==  myKingSq) and
+      ((pos.color == emySide) or (!(emyKing & Rank18) and (pos.color == side)))
+    ) return VALUE_ZERO;
+
+  if ((pawnSq + 8 * incFactor == emyKingSq) and
+      ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
+      ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
+    ) return VALUE_ZERO;
+
+  return PawnValueEg + (20 * ((7 * ~side) + (pawnSq >> 3) * side));
+}
+
+static Score
+PawnEndgame(const ChessBoard& pos, const EvalData& ed)
+{
+  if (ed.pawns[WHITE] + ed.pawns[BLACK] == 1) {
+    // Calculate one pawn endgame
+    // const Score whiteScore = OnePawnEndgame<WHITE>(pos);
+    // const Score blackScore = OnePawnEndgame<BLACK>(pos);
+    // cout << "WhiteScore = " << whiteScore << endl;
+    // cout << "BlackScore = " << blackScore << endl;
+    return OnePawnEndgame<WHITE>(pos) - OnePawnEndgame<BLACK>(pos);
+  }
+
+  /** Factors:
+  Passed Pawn
+  Rule of Square
+  Distance to promotion
+
+
+  */
+  return VALUE_UNKNOWN;
+}
+
+
 #endif
 
 Score
@@ -579,14 +704,19 @@ Evaluate(const ChessBoard& pos)
   EvalData ed = EvalData(pos);
   int side2move = 2 * int(pos.color) - 1;
 
-  if ((ed.boardWeight == 0) or IsHypotheticalDraw(ed))
-    return VALUE_DRAW;
+  if (IsTheoreticalDraw(ed))
+    return VALUE_DRAW * side2move;
+
+  // IsPawnOnlyEndGame() -> Then KPK endgame, rule of square
+
+  if (IsPawnOnlyEndGame(pos))
+    return PawnEndgame(pos, ed) * side2move;
 
   // Special EndGames
   if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard())
     return (ed.pawns[WHITE] + ed.pieces[WHITE] > 0)
     ? LoneKingEndGame<WHITE>(pos, ed) : LoneKingEndGame<BLACK>(pos, ed);
-  
+
   ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
 
   Score mg_score = MidGameScore(pos, ed);
@@ -601,46 +731,31 @@ Evaluate(const ChessBoard& pos)
 Score EvalDump(const ChessBoard& pos)
 {
   EvalData ed = EvalData(pos);
+  int side2move = 2 * int(pos.color) - 1;
   float phase = ed.phase;
 
   cout << "----------------------------------------------" << endl;
   cout << "BoardWeight = " << ed.boardWeight << endl;
   cout << "Phase = " << phase << endl;
 
-  if (IsHypotheticalDraw(ed))
+  if (IsTheoreticalDraw(ed))
   {
-      cout << "Position in Theoretical Draw!" << endl;
-      return VALUE_DRAW;
+    cout << "Position in Theoretical Draw!" << endl;
+    return VALUE_DRAW;
   }
 
+  if (IsPawnOnlyEndGame(pos)) {
+    cout << "In Pawn Only Endgame!" << endl;
+    return PawnEndgame(pos, ed) * side2move;
+  }
 
-  if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard()) {
-      // cout << "In LoneKingEndgame!" << endl;
-      // Color winningSide = (ed.pawns[WHITE] + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
-      // Color losingSide  = ~winningSide;
+  if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard())
+  {
+    cout << "In LoneKingEndgame!" << endl;
 
-      // Square  wonKingSq = SquareNo( pos.piece(winningSide, KING) );
-      // Square lostKingSq = SquareNo( pos.piece(losingSide , KING) );
-
-      // Score winningSideCorrectionFactor = 2 * winningSide - 1;
-      // Score  losingSideCorrectionFactor = 2 *  losingSide - 1;
-
-      // Score distanceScore = DistanceBetweenKingsScore(pos, ed);
-      // Score parityScore   = BishopColorCornerScore(pos, winningSide);
-      // Score centreScore   = LongKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor
-      //                     + LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
-      // Score materialScore = MaterialDiffereceEndGame(ed);
-
-      // cout << "distanceScore = " << distanceScore << endl;
-      // cout << "parityScore   = " << parityScore   << endl;
-      // cout << "centreScore   = " << centreScore   << endl;
-      // cout << "materialScore = " << materialScore << endl;
-
-      // Score score = materialScore + distanceScore + parityScore + centreScore;
-      // int side2move = 2 * int(pos.color) - 1;
-
-      // cout << "finalScore = " << score * side2move << endl;
-      // return score * side2move;
+    if (ed.NoWhitePiecesOnBoard() or ed.NoBlackPiecesOnBoard())
+      return (ed.pawns[WHITE] + ed.pieces[WHITE] > 0)
+      ? LoneKingEndGame<WHITE, 1>(pos, ed) : LoneKingEndGame<BLACK, 1>(pos, ed);
   }
 
 
@@ -692,7 +807,7 @@ Score EvalDump(const ChessBoard& pos)
   cout << "distanceScore   = " << distanceScore   << endl;
   cout << "parityScore     = " << parityScore     << endl;
 
-  
+
   Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
 
   cout << "mg_score = " << mg_score << endl;

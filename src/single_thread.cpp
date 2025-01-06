@@ -129,6 +129,12 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
             return pos.HandleScore(VALUE_DRAW);
     }
 
+    // Check for theoretical draws
+    // if ()
+    // {
+
+    // }
+
     // Depth 0, starting Quiensense Search
     if (depth <= 0)
         return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);

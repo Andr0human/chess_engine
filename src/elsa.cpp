@@ -136,4 +136,7 @@ int main(int argc, char **argv)
     8/8/8/8/3k4/2bb4/8/2K5 b - - 11 81 (bishop)
 
     8/4B3/3Pk3/8/2RK4/8/8/r7 w - - 55 110 (misc)
+
+    2n1k1r1/p7/3B1Rp1/2P2pKp/8/4P1P1/5P1P/8 w - - 17 45     D.M Rxg6 (square of the pawn)
+    8/4k3/6P1/4K3/1p6/p7/P7/8 w - - 0 1
 */
