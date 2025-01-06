@@ -6,15 +6,7 @@ uint64_t tmp_total_counter = 0;
 uint64_t tmp_this_counter = 0;
 
 ChessBoard::ChessBoard()
-{
-    color = Color::WHITE;
-    csep = undoInfoStackCounter = 0;
-    Hash_Value = 0;
-    halfmove = fullmove = 0;
-    checkers = -1;
-    for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq) board[sq] = NO_PIECE;
-    for (int i = 0; i < 16; i++) piece_bb[i] = 0; 
-}
+{ Reset(); }
 
 ChessBoard::ChessBoard(const string& fen)
 { SetPositionWithFen(fen); }
@@ -65,7 +57,9 @@ ChessBoard::SetPositionWithFen(const string& fen) noexcept
                 Piece __x = Piece(char_to_piece_type(elem));
                 board[square] = __x;
                 piece_bb[__x] |= 1ULL << square;
+                piece_ct[__x]++;
                 piece_bb[(__x & 8) + 7] |= 1ULL << square;
+                piece_ct[(__x & 8) + 7]++;
                 ++square;
             }
         }
@@ -245,8 +239,10 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
 
     if (fpt != NO_PIECE)
     {
+        piece_ct[fpt]--;
         piece_bb[fpt] ^= fPos;
-        piece_bb[((color ^ 1) << 3) + 7] ^= fPos;
+        piece_ct[(fpt & 8) + ALL]--;
+        piece_bb[(fpt & 8) + ALL] ^= fPos;
 
         #if defined(TRANSPOSITION_TABLE_H)
             Hash_Value ^= TT.HashkeyUpdate(fpt, fp);
@@ -315,20 +311,22 @@ ChessBoard::MakeMoveEnpassant(Square ip, Square ep) noexcept
     Square cap_pawn_fp = ep - 8 * (2 * color - 1);
 
     // Remove opp. pawn from the Pieces-table
-    piece_bb[emy + 1] ^= 1ULL << cap_pawn_fp;
-    piece_bb[emy + 7] ^= 1ULL << cap_pawn_fp;
+    piece_bb[emy + PAWN] ^= 1ULL << cap_pawn_fp;
+    piece_bb[emy + ALL ] ^= 1ULL << cap_pawn_fp;
+    piece_ct[emy + PAWN]--;
+    piece_ct[emy + ALL ]--;
     board[cap_pawn_fp] = NO_PIECE;
 
     // Shift own pawn in Pieces-table
-    piece_bb[own + 1] ^= (1ULL << ip) ^ (1ULL << ep);
-    piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << ep);
+    piece_bb[own + PAWN] ^= (1ULL << ip) ^ (1ULL << ep);
+    piece_bb[own + ALL] ^= (1ULL << ip) ^ (1ULL << ep);
 
     color = ~color;
 
     #if defined(TRANSPOSITION_TABLE_H)
-        Hash_Value ^= TT.HashkeyUpdate(emy + 1, cap_pawn_fp);
-        Hash_Value ^= TT.HashkeyUpdate(own + 1, ip)
-                    ^ TT.HashkeyUpdate(own + 1, ep)
+        Hash_Value ^= TT.HashkeyUpdate(emy + PAWN, cap_pawn_fp);
+        Hash_Value ^= TT.HashkeyUpdate(own + PAWN, ip)
+                    ^ TT.HashkeyUpdate(own + PAWN, ep)
                     ^ TT.HashKey(0);
     #endif
 }
@@ -344,16 +342,20 @@ ChessBoard::MakeMovePawnPromotion(Move move) noexcept
     int emy = own ^ 8;
     PieceType new_pt = PieceType(((move >> 18) & 3) + 2);
 
-    piece_bb[own + 1] ^= 1ULL << ip;
+    piece_bb[own + PAWN  ] ^= 1ULL << ip;
+    piece_ct[own + PAWN  ]--;
     piece_bb[own + new_pt] ^= 1ULL << fp;
-    piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
+    piece_ct[own + new_pt]++;
+    piece_bb[own + ALL   ] ^= (1ULL << ip) ^ (1ULL << fp);
     // board[fp] = own + new_pt;
     board[fp] = make_piece(color, new_pt);
 
     if (cpt > 0)
     {
         piece_bb[emy + cpt] ^= 1ULL << fp;
-        piece_bb[emy +   7] ^= 1ULL << fp;
+        piece_bb[emy + ALL] ^= 1ULL << fp;
+        piece_ct[emy + cpt]--;
+        piece_ct[emy + ALL]--;
 
         #if defined(TRANSPOSITION_TABLE_H)
             Hash_Value ^= TT.HashkeyUpdate(emy + cpt, fp);
@@ -442,8 +444,10 @@ ChessBoard::UnmakeMove() noexcept
 
     if (fpt != NO_PIECE)
     {
+        piece_ct[fpt]++;
+        piece_ct[(fpt & 8) + ALL]++;
         piece_bb[fpt] ^= fPos;
-        piece_bb[emy + 7] ^= fPos;  
+        piece_bb[(fpt & 8) + ALL] ^= fPos;  
     }
 
     piece_bb[ipt] ^= iPos ^ fPos;
@@ -454,15 +458,19 @@ ChessBoard::UnmakeMove() noexcept
         if (fp == ep)
         {
             Square pawn_fp = ep - 8 * (2 * color - 1);
-            piece_bb[emy + 1] ^= 1ULL << (pawn_fp);
-            piece_bb[emy + 7] ^= 1ULL << (pawn_fp);
-            board[pawn_fp] = Piece(emy + 1);
+            piece_bb[emy + PAWN] ^= 1ULL << (pawn_fp);
+            piece_bb[emy + ALL ] ^= 1ULL << (pawn_fp);
+            piece_ct[emy + PAWN]++;
+            piece_ct[emy + ALL ]++;
+            board[pawn_fp] = Piece(emy + PAWN);
         }
         else if ((fPos & 0xFF000000000000FF) != 0)
         {
             ipt = Piece((((move >> 18) & 3) + 2) + own);
-            piece_bb[own + 1] ^= fPos;
+            piece_bb[own + PAWN] ^= fPos;
             piece_bb[ipt] ^= fPos;
+            piece_ct[own + PAWN]++;
+            piece_ct[ipt]--;
         }
     }
 
@@ -573,7 +581,7 @@ void
 ChessBoard::Reset()
 {
     for (Square i = SQ_A1; i < SQUARE_NB; ++i) board[i] = NO_PIECE;
-    for (int i = 0; i < 16; i++) piece_bb[i] = 0;
+    for (int i = 0; i < 16; i++) piece_bb[i] = 0, piece_ct[i] = 0;
     csep = 0;
     Hash_Value = 0;
     undoInfoStackCounter = 0;
