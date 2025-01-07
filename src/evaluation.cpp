@@ -75,6 +75,9 @@ isTheoreticalDraw(const ChessBoard& pos)
 
     if (pos.pieceCount<WHITE, ALL>() == 2 and pos.pieceCount<BLACK, ALL>() == 2)
     {
+        if (pos.pieceCount<WHITE, PAWN>() + pos.pieceCount<BLACK, PAWN>() > 0)
+            return false;
+
         if (((pos.pieceCount<WHITE, QUEEN>() > 0) and (pos.pieceCount<BLACK, QUEEN>() == 0))
          or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>() == 0))) return false;
         return true;
