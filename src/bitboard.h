@@ -47,6 +47,9 @@ class ChessBoard
     // Stores bitboard location of a piece
     Bitboard piece_bb[16];
 
+    // Stores count of each piece
+    int piece_ct[16];
+
     // Halfmove and Fullmove
     int halfmove, fullmove;
 
@@ -190,6 +193,11 @@ class ChessBoard
     Bitboard
     piece() const noexcept
     { return piece_bb[make_piece(c, pt)]; }
+
+    template <Color c, PieceType pt>
+    int
+    pieceCount() const noexcept
+    { return piece_ct[make_piece(c, pt)]; }
 
     Bitboard
     get_piece(Piece piece) const noexcept

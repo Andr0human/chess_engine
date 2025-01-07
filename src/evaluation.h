@@ -13,12 +13,10 @@ class EvalData
 	template <Color c_my>
 	void MaterialCount(const ChessBoard& pos)
 	{
-		pawns[c_my]   = PopCount(pos.piece<c_my, PAWN  >());
-		bishops[c_my] = PopCount(pos.piece<c_my, BISHOP>());
-		knights[c_my] = PopCount(pos.piece<c_my, KNIGHT>());
-		rooks[c_my]   = PopCount(pos.piece<c_my, ROOK  >());
-		queens[c_my]  = PopCount(pos.piece<c_my, QUEEN >());
-		pieces[c_my]  = bishops[c_my] + knights[c_my] + rooks[c_my] + queens[c_my];
+		pieces[c_my]  = pos.pieceCount<c_my, BISHOP>()
+					  + pos.pieceCount<c_my, KNIGHT>()
+					  + pos.pieceCount<c_my, ROOK>()
+					  + pos.pieceCount<c_my, QUEEN>();
 	}
 
 
@@ -27,11 +25,6 @@ class EvalData
 	// int w_pawns, w_knights, w_bishops, w_rooks, w_queens, w_pieces;
 	// int b_pawns, b_knights, b_bishops, b_rooks, b_queens, b_pieces;
 
-	int   pawns[COLOR_NB];
-	int bishops[COLOR_NB];
-	int knights[COLOR_NB];
-	int   rooks[COLOR_NB];
-	int  queens[COLOR_NB];
 	int  pieces[COLOR_NB];
 
 	int pieceCount;
@@ -54,28 +47,30 @@ class EvalData
 		pieceCount = pieces[WHITE] + pieces[BLACK];
 
 		phase = float(
-			10 * (pawns[WHITE] + pawns[BLACK])
-		  + 30 * (bishops[WHITE] + bishops[BLACK] + knights[WHITE] + knights[BLACK])
-		  + 55 * (rooks[WHITE] + rooks[BLACK])
-		  + 90 * (queens[WHITE] + queens[BLACK]) ) / float(GamePhaseLimit);
+			10 * (pos.pieceCount<WHITE, PAWN  >() + pos.pieceCount<BLACK, PAWN  >())
+		  + 30 * (pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>())
+		  + 30 * (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>())
+		  + 55 * (pos.pieceCount<WHITE, ROOK  >() + pos.pieceCount<BLACK, ROOK  >())
+		  + 90 * (pos.pieceCount<WHITE, QUEEN >() + pos.pieceCount<BLACK, QUEEN >())
+		) / float(GamePhaseLimit);
 
 		boardWeight =
-			PawnValueMg   * (  pawns[WHITE] +   pawns[BLACK])
-		  + BishopValueMg * (bishops[WHITE] + bishops[BLACK])
-		  + KnightValueMg * (knights[WHITE] + knights[BLACK])
-		  + RookValueMg   * (  rooks[WHITE] +   rooks[BLACK])
-		  + QueenValueMg  * ( queens[WHITE] +  queens[BLACK]);
+			PawnValueMg   * (pos.pieceCount<WHITE, PAWN  >() + pos.pieceCount<BLACK, PAWN  >())
+		  + BishopValueMg * (pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>())
+		  + KnightValueMg * (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>())
+		  + RookValueMg   * (pos.pieceCount<WHITE, ROOK  >() + pos.pieceCount<BLACK, ROOK  >())
+		  + QueenValueMg  * (pos.pieceCount<WHITE, QUEEN >() + pos.pieceCount<BLACK, QUEEN >());
 		
 		// phase = float(boardWeight) / float(GamePhaseLimit);
 	}
 
-	constexpr bool
-	NoWhitePiecesOnBoard() const noexcept
-	{ return pawns[WHITE] + pieces[WHITE] == 0; }
+	bool
+	NoWhitePiecesOnBoard(const ChessBoard& pos) const noexcept
+	{ return pos.pieceCount<WHITE, PAWN>() + pieces[WHITE] == 0; }
 
-	constexpr bool
-	NoBlackPiecesOnBoard() const noexcept
-	{ return pawns[BLACK] + pieces[BLACK] == 0; }
+	bool
+	NoBlackPiecesOnBoard(const ChessBoard& pos) const noexcept
+	{ return pos.pieceCount<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
 
