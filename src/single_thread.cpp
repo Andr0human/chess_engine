@@ -32,7 +32,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     if (!LegalMovesPresent(pos))
         return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
 
-    if (isTheoreticalDraw(pos))
+    if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
         return pos.HandleScore(VALUE_DRAW);
 
     // Get a 'Stand Pat' Score
@@ -132,7 +132,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
             return pos.HandleScore(VALUE_DRAW);
     }
 
-    if (isTheoreticalDraw(pos))
+    if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
         return pos.HandleScore(VALUE_DRAW);
 
     // Depth 0, starting Quiensense Search

@@ -951,6 +951,33 @@ GenerateMoves(ChessBoard& pos, bool qsSearch, bool findChecks)
       : MoveGenerator<BLACK>(pos, qsSearch, findChecks);
 }
 
+bool
+CapturesExistInPosition(const ChessBoard& pos)
+{
+    Bitboard attackMask = 0;
+    Bitboard occupied = pos.All();
+
+    if (pos.color == WHITE)
+    {
+        attackMask |= PawnAttackSquares<WHITE>(pos);
+        attackMask |= AttackedSquaresGen<WHITE, BISHOP>(pos, occupied);
+        attackMask |= AttackedSquaresGen<WHITE, KNIGHT>(pos, occupied);
+        attackMask |= AttackedSquaresGen<WHITE, ROOK  >(pos, occupied);
+        attackMask |= AttackedSquaresGen<WHITE, QUEEN >(pos, occupied);
+        attackMask |= AttackedSquaresGen<WHITE, KING  >(pos, occupied);
+
+        return (attackMask & pos.piece<BLACK, ALL>()) != 0;
+    }
+
+    attackMask |= PawnAttackSquares<BLACK>(pos);
+    attackMask |= AttackedSquaresGen<BLACK, BISHOP>(pos, occupied);
+    attackMask |= AttackedSquaresGen<BLACK, KNIGHT>(pos, occupied);
+    attackMask |= AttackedSquaresGen<BLACK, ROOK  >(pos, occupied);
+    attackMask |= AttackedSquaresGen<BLACK, QUEEN >(pos, occupied);
+    attackMask |= AttackedSquaresGen<BLACK, KING  >(pos, occupied);
+
+    return (attackMask & pos.piece<WHITE, ALL>()) != 0;
+}
 
 #endif
 
