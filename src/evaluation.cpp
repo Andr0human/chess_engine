@@ -1,8 +1,6 @@
 
 #include "evaluation.h"
 #include "attacks.h"
-#include "bitboard.h"
-#include "types.h"
 
 using std::abs;
 using std::min;
@@ -76,39 +74,6 @@ isTheoreticalDraw(const ChessBoard& pos)
     }
 
     if (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 2) return true;
-    return false;
-}
-
-static bool
-IsHypotheticalDraw(const EvalData& ed, const ChessBoard& pos)
-{
-    // No draws if pawns on the board
-    if (pos.pieceCount<WHITE, PAWN>() + pos.pieceCount<BLACK, PAWN>() > 0)
-        return false;
-
-    if ((ed.pieces[WHITE] > 2) or (ed.pieces[BLACK] > 2))
-        return false;
-
-    // If one piece remains and its bishop or knight
-    if (ed.pieces[WHITE] + ed.pieces[BLACK] == 1) {
-        if ((pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>() == 1)
-         or (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 1)) return true;
-    }
-
-    //* TODO Test for [WQ_BQ, WR_BR] positions
-
-    // If one piece of both sides left, and its not [WQ_BR, WR_BQ]
-    // Then it is a draw (almost)
-    if ((ed.pieces[WHITE] == 1) and (ed.pieces[BLACK] == 1)) {
-        if (((pos.pieceCount<WHITE, QUEEN>() > 0) and (pos.pieceCount<BLACK, QUEEN>() == 0))
-         or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>() == 0))) return false;
-
-        return true;
-    }
-
-    if ((ed.pieces[WHITE] + ed.pieces[BLACK] == 2) and (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 2))
-        return true;
-
     return false;
 }
 
@@ -645,9 +610,6 @@ Evaluate(const ChessBoard& pos)
     EvalData ed = EvalData(pos);
     int side2move = 2 * int(pos.color) - 1;
 
-    if ((ed.boardWeight == 0) or IsHypotheticalDraw(ed, pos))
-        return VALUE_DRAW;
-
     // Special EndGames
     if (ed.NoWhitePiecesOnBoard(pos) or ed.NoBlackPiecesOnBoard(pos))
         return (pos.pieceCount<WHITE, PAWN>() + ed.pieces[WHITE] > 0)
@@ -672,13 +634,6 @@ Score EvalDump(const ChessBoard& pos)
     cout << "----------------------------------------------" << endl;
     cout << "BoardWeight = " << ed.boardWeight << endl;
     cout << "Phase = " << phase << endl;
-
-    if (IsHypotheticalDraw(ed, pos))
-    {
-        cout << "Position in Theoretical Draw!" << endl;
-        return VALUE_DRAW;
-    }
-
 
     if (ed.NoWhitePiecesOnBoard(pos) or ed.NoBlackPiecesOnBoard(pos)) {
         // cout << "In LoneKingEndgame!" << endl;
@@ -828,5 +783,3 @@ EvaluateThreats(const ChessBoard& pos)
     cout << "--------------------------------------------------------" << endl;
     return __x;
 }
-
-// (16 * 16 + 57 * 57) / (36 + 1)
