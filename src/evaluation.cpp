@@ -1,10 +1,41 @@
 
 #include "evaluation.h"
 #include "attacks.h"
+#include "bitboard.h"
+#include "types.h"
 
 using std::abs;
 using std::min;
 
+template <Color side>
+static bool
+OnePawnEndgame(const ChessBoard& pos)
+{
+  // Assuming its white
+  constexpr Color emySide = ~side;
+
+  const Bitboard    pawn = pos.piece<side   , PAWN>();
+  const Bitboard  myKing = pos.piece<side   , KING>();
+  const Bitboard emyKing = pos.piece<emySide, KING>();
+
+  const int incFactor = 2 * side - 1;
+
+  const Square pawnSq    = SquareNo(pawn   );
+  const Square myKingSq  = SquareNo(myKing );
+  const Square emyKingSq = SquareNo(emyKing);
+
+  if ((pawnSq + 8 * incFactor == emyKingSq) and
+      (pawnSq - 8 * incFactor ==  myKingSq) and
+      ((pos.color == emySide) or (!(emyKing & Rank18) and (pos.color == side)))
+    ) return true;
+
+  if ((pawnSq + 8 * incFactor == emyKingSq) and
+      ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
+      ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
+    ) return true;
+
+  return false;
+}
 
 static int
 Distance(Square s, Square t)
@@ -13,6 +44,39 @@ Distance(Square s, Square t)
     int t_x = t & 7, t_y = t >> 3;
 
     return abs(s_x - t_x) + abs(s_y - t_y);
+}
+
+bool
+isTheoreticalDraw(const ChessBoard& pos)
+{
+    int pieceCount = pos.pieceCount<WHITE, ALL>() + pos.pieceCount<BLACK, ALL>() - 2;
+    if (pieceCount > 2)
+        return false;
+
+    // KPK position
+    if (pieceCount == 0)
+        return true;
+
+    if (pieceCount == 1)
+    {
+        if (pos.pieceCount<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() > 0)
+            return pos.pieceCount<WHITE, PAWN>() == 1 ? OnePawnEndgame<WHITE>(pos) : OnePawnEndgame<BLACK>(pos);
+
+        if ((pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>() == 1)
+         or (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 1)) return true;
+
+        return false;
+    }
+
+    if (pos.pieceCount<WHITE, ALL>() == 2 and pos.pieceCount<BLACK, ALL>() == 2)
+    {
+        if (((pos.pieceCount<WHITE, QUEEN>() > 0) and (pos.pieceCount<BLACK, QUEEN>() == 0))
+         or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>() == 0))) return false;
+        return true;
+    }
+
+    if (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 2) return true;
+    return false;
 }
 
 static bool
@@ -37,7 +101,7 @@ IsHypotheticalDraw(const EvalData& ed, const ChessBoard& pos)
     // Then it is a draw (almost)
     if ((ed.pieces[WHITE] == 1) and (ed.pieces[BLACK] == 1)) {
         if (((pos.pieceCount<WHITE, QUEEN>() > 0) and (pos.pieceCount<BLACK, QUEEN>() == 0))
-         or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>()))) return false;
+         or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>() == 0))) return false;
 
         return true;
     }

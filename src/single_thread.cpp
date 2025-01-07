@@ -1,6 +1,8 @@
 
 
 #include "single_thread.h"
+#include "evaluation.h"
+#include "types.h"
 
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
@@ -31,6 +33,9 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
     if (!LegalMovesPresent(pos))
         return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
+
+    if (isTheoreticalDraw(pos))
+        return pos.HandleScore(VALUE_DRAW);
 
     // Get a 'Stand Pat' Score
     Score stand_pat = Evaluate(pos);
@@ -128,6 +133,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
         if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw())
             return pos.HandleScore(VALUE_DRAW);
     }
+
+    if (isTheoreticalDraw(pos))
+        return pos.HandleScore(VALUE_DRAW);
 
     // Depth 0, starting Quiensense Search
     if (depth <= 0)

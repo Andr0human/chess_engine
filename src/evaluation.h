@@ -73,6 +73,8 @@ class EvalData
 	{ return pos.pieceCount<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
+bool
+isTheoreticalDraw(const ChessBoard& pos);
 
 Score Evaluate(const ChessBoard& pos);
 

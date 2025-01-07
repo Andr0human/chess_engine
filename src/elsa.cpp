@@ -1,3 +1,5 @@
+#include "bitboard.h"
+#include "evaluation.h"
 #include "task.h"
 
 
@@ -28,6 +30,9 @@ int main(int argc, char **argv)
     FAST_IO();
     Init();
     Task(argc, argv);
+
+    ChessBoard pos("8/8/3k4/3P4/4K3/8/8/8 w - - 0 1");
+    cout << "Theo_Draw = " << isTheoreticalDraw(pos) << endl;
 }
 
 
