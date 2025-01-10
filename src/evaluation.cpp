@@ -33,6 +33,11 @@ OnePawnEndgame(const ChessBoard& pos)
       ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
       ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
     ) return true;
+  
+  if (((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
+      ((pawnSq + 16 * incFactor == emyKingSq) and
+      ((pos.color == emySide)))
+    ) return true;
 
   if ((pawnSq +  8 * incFactor ==  myKingSq) and
       (pawnSq + 24 * incFactor == emyKingSq) and
@@ -58,12 +63,12 @@ isTheoreticalDraw(const ChessBoard& pos)
     if (pieceCount > 2)
         return false;
 
-    // KPK position
     if (pieceCount == 0)
         return true;
 
     if (pieceCount == 1)
     {
+        // KPK position
         if (pos.pieceCount<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() > 0)
             return pos.pieceCount<WHITE, PAWN>() == 1 ? OnePawnEndgame<WHITE>(pos) : OnePawnEndgame<BLACK>(pos);
 
