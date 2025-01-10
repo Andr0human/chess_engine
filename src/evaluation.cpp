@@ -5,6 +5,47 @@
 using std::abs;
 using std::min;
 
+template <Color side>
+static bool
+OnePawnEndgame(const ChessBoard& pos)
+{
+  // Assuming its white
+  constexpr Color emySide = ~side;
+
+  const Bitboard    pawn = pos.piece<side   , PAWN>();
+  const Bitboard  myKing = pos.piece<side   , KING>();
+  const Bitboard emyKing = pos.piece<emySide, KING>();
+
+  const int incFactor = 2 * side - 1;
+
+  const Square pawnSq    = SquareNo(pawn   );
+  const Square myKingSq  = SquareNo(myKing );
+  const Square emyKingSq = SquareNo(emyKing);
+
+//   8/4k3/8/4K3/4P3/8/8/8 w - - 0 1
+
+  if ((pawnSq + 8 * incFactor == emyKingSq) and
+      (pawnSq - 8 * incFactor ==  myKingSq) and
+      ((pos.color == emySide) or (!(emyKing & Rank18) and (pos.color == side)))
+    ) return true;
+
+  if ((pawnSq + 8 * incFactor == emyKingSq) and
+      ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
+      ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
+    ) return true;
+  
+  if (((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
+      ((pawnSq + 16 * incFactor == emyKingSq) and
+      ((pos.color == emySide)))
+    ) return true;
+
+  if ((pawnSq +  8 * incFactor ==  myKingSq) and
+      (pawnSq + 24 * incFactor == emyKingSq) and
+      ((pos.color == side) and !(emyKing & Rank18))
+    ) return true;
+
+  return false;
+}
 
 static int
 Distance(Square s, Square t)
@@ -15,36 +56,39 @@ Distance(Square s, Square t)
     return abs(s_x - t_x) + abs(s_y - t_y);
 }
 
-static bool
-IsHypotheticalDraw(const EvalData& ed, const ChessBoard& pos)
+bool
+isTheoreticalDraw(const ChessBoard& pos)
 {
-    // No draws if pawns on the board
-    if (pos.pieceCount<WHITE, PAWN>() + pos.pieceCount<BLACK, PAWN>() > 0)
+    int pieceCount = pos.pieceCount<WHITE, ALL>() + pos.pieceCount<BLACK, ALL>() - 2;
+    if (pieceCount > 2)
         return false;
 
-    if ((ed.pieces[WHITE] > 2) or (ed.pieces[BLACK] > 2))
-        return false;
+    if (pieceCount == 0)
+        return true;
 
-    // If one piece remains and its bishop or knight
-    if (ed.pieces[WHITE] + ed.pieces[BLACK] == 1) {
+    if (pieceCount == 1)
+    {
+        // KPK position
+        if (pos.pieceCount<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() > 0)
+            return pos.pieceCount<WHITE, PAWN>() == 1 ? OnePawnEndgame<WHITE>(pos) : OnePawnEndgame<BLACK>(pos);
+
         if ((pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>() == 1)
          or (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 1)) return true;
+
+        return false;
     }
 
-    //* TODO Test for [WQ_BQ, WR_BR] positions
+    if (pos.pieceCount<WHITE, ALL>() == 2 and pos.pieceCount<BLACK, ALL>() == 2)
+    {
+        if (pos.pieceCount<WHITE, PAWN>() + pos.pieceCount<BLACK, PAWN>() > 0)
+            return false;
 
-    // If one piece of both sides left, and its not [WQ_BR, WR_BQ]
-    // Then it is a draw (almost)
-    if ((ed.pieces[WHITE] == 1) and (ed.pieces[BLACK] == 1)) {
         if (((pos.pieceCount<WHITE, QUEEN>() > 0) and (pos.pieceCount<BLACK, QUEEN>() == 0))
-         or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>()))) return false;
-
+         or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>() == 0))) return false;
         return true;
     }
 
-    if ((ed.pieces[WHITE] + ed.pieces[BLACK] == 2) and (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 2))
-        return true;
-
+    if (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 2) return true;
     return false;
 }
 
@@ -375,6 +419,7 @@ PawnStructure(const ChessBoard& pos)
     return score;
 }
 
+template<int debug = 0>
 static Score
 MidGameScore(const ChessBoard& pos, const EvalData& ed)
 {
@@ -383,6 +428,15 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed)
     Score mobilityScore   = MobilityStrength(pos);
     Score pawnStructure   = ed.pawnStructureScore;
     Score threatsScore    = Threats(pos);
+
+    if (debug == 1)
+    {
+        cout << " -- MIDGAME -- " << endl;
+        cout << "materialScore   = " << materialScore   << endl;
+        cout << "pieceTableScore = " << pieceTableScore << endl;
+        cout << "mobilityScore   = " << mobilityScore   << endl;
+        cout << "threatsScore    = " << threatsScore    << endl << endl;
+    }
 
     float eval =
         ed.materialWeight     * float(materialScore)
@@ -548,6 +602,7 @@ ColorParityScore(const ChessBoard& pos)
     return score;
 }
 
+template<int debug = 0>
 static Score
 EndGameScore(const ChessBoard& pos, const EvalData& ed)
 {
@@ -562,6 +617,15 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
     Score distanceScore   = DistanceBetweenKingsScore(pos);
     Score parityScore     = ColorParityScore(pos);
     // Score threatsScore    = ed.threatScore;
+
+    if (debug)
+    {
+        cout << " -- ENDGAME -- " << endl;
+        cout << "materialScore   = " << materialScore   << endl;
+        cout << "pieceTableScore = " << pieceTableScore << endl;
+        cout << "distanceScore   = " << distanceScore   << endl;
+        cout << "parityScore     = " << parityScore     << endl << endl;
+    }
 
     float eval =
         ed.materialWeight     * float(materialScore)
@@ -580,9 +644,6 @@ Evaluate(const ChessBoard& pos)
 {
     EvalData ed = EvalData(pos);
     int side2move = 2 * int(pos.color) - 1;
-
-    if ((ed.boardWeight == 0) or IsHypotheticalDraw(ed, pos))
-        return VALUE_DRAW;
 
     // Special EndGames
     if (ed.NoWhitePiecesOnBoard(pos) or ed.NoBlackPiecesOnBoard(pos))
@@ -609,43 +670,6 @@ Score EvalDump(const ChessBoard& pos)
     cout << "BoardWeight = " << ed.boardWeight << endl;
     cout << "Phase = " << phase << endl;
 
-    if (IsHypotheticalDraw(ed, pos))
-    {
-        cout << "Position in Theoretical Draw!" << endl;
-        return VALUE_DRAW;
-    }
-
-
-    if (ed.NoWhitePiecesOnBoard(pos) or ed.NoBlackPiecesOnBoard(pos)) {
-        // cout << "In LoneKingEndgame!" << endl;
-        // Color winningSide = (pos.pieceCount<WHITE, PAWN>() + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
-        // Color losingSide  = ~winningSide;
-
-        // Square  wonKingSq = SquareNo( pos.piece(winningSide, KING) );
-        // Square lostKingSq = SquareNo( pos.piece(losingSide , KING) );
-
-        // Score winningSideCorrectionFactor = 2 * winningSide - 1;
-        // Score  losingSideCorrectionFactor = 2 *  losingSide - 1;
-
-        // Score distanceScore = DistanceBetweenKingsScore(pos, ed);
-        // Score parityScore   = BishopColorCornerScore(pos, winningSide);
-        // Score centreScore   = LongKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor
-        //                     + LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
-        // Score materialScore = MaterialDiffereceEndGame(ed);
-
-        // cout << "distanceScore = " << distanceScore << endl;
-        // cout << "parityScore   = " << parityScore   << endl;
-        // cout << "centreScore   = " << centreScore   << endl;
-        // cout << "materialScore = " << materialScore << endl;
-
-        // Score score = materialScore + distanceScore + parityScore + centreScore;
-        // int side2move = 2 * int(pos.color) - 1;
-
-        // cout << "finalScore = " << score * side2move << endl;
-        // return score * side2move;
-    }
-
-
     Score pawnStructrueWhite = PawnStructure<WHITE>(pos);
     Score pawnStructrueBlack = PawnStructure<BLACK>(pos);
     ed.pawnStructureScore = pawnStructrueWhite - pawnStructrueBlack;
@@ -654,52 +678,14 @@ Score EvalDump(const ChessBoard& pos)
     cout << "Score_pawn_structure_black = " << pawnStructrueBlack << endl;
     cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl << endl;
 
+    Score mgScore = MidGameScore<1>(pos, ed);
+    Score egScore = EndGameScore<1>(pos, ed);
 
-    Score mg_score = 0, eg_score = 0;
+    Score score = Score( phase * float(mgScore) + (1 - phase) * float(egScore) );
 
-    // MidGame
-    Score materialScoreMid   = MaterialDiffereceMidGame(pos);
-    Score pieceTableScoreMid = PieceTableStrengthMidGame(pos);
-    Score mobilityScoreMid   = MobilityStrength(pos);
-    Score threatsScoreMid    = Threats(pos);
-
-    cout << " -- MIDGAME -- " << endl;
-    cout << "materialScore   = " << materialScoreMid   << endl;
-    cout << "pieceTableScore = " << pieceTableScoreMid << endl;
-    cout << "mobilityScore   = " << mobilityScoreMid   << endl << endl;
-
-
-    mg_score = Score(
-        ed.materialWeight     * float(materialScoreMid)
-      + ed.pieceTableWeight   * float(pieceTableScoreMid)
-      + ed.mobilityWeight     * float(mobilityScoreMid)
-      + ed.pawnSructureWeight * float(ed.pawnStructureScore)
-      + ed.threatsWeight      * float(threatsScoreMid) );
-
-    // Endgame
-    Score materialScore   = MaterialDiffereceEndGame(pos);
-    Score pieceTableScore = PieceTableStrengthEndGame(pos);
-    Score distanceScore   = DistanceBetweenKingsScore(pos);
-    Score parityScore     = ColorParityScore(pos);
-
-    eg_score = Score(
-        ed.materialWeight     * float(materialScore)
-      + ed.pieceTableWeight   * float(pieceTableScore)
-      + ed.pawnSructureWeight * float(ed.pawnStructureScore)
-      + float(distanceScore)  + float(parityScore) );
-
-    cout << " -- ENDGAME -- " << endl;
-    cout << "materialScore   = " << materialScore   << endl;
-    cout << "pieceTableScore = " << pieceTableScore << endl;
-    cout << "distanceScore   = " << distanceScore   << endl;
-    cout << "parityScore     = " << parityScore     << endl;
-
-
-    Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
-
-    cout << "mg_score = " << mg_score << endl;
-    cout << "eg_score = " << eg_score << endl;
-    cout << "score    = " << score << endl;
+    cout << "mg_score = " << mgScore << endl;
+    cout << "eg_score = " << egScore << endl;
+    cout << "score    = " << score   << endl;
     cout << "----------------------------------------------" << endl;
 
     return score;
@@ -764,5 +750,3 @@ EvaluateThreats(const ChessBoard& pos)
     cout << "--------------------------------------------------------" << endl;
     return __x;
 }
-
-// (16 * 16 + 57 * 57) / (36 + 1)

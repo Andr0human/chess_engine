@@ -43,5 +43,7 @@ bool LegalMovesPresent(ChessBoard& _cb);
 MoveList GenerateMoves(ChessBoard& pos, bool qsSearch = false, bool findChecks = false);
 
 
+bool
+CapturesExistInPosition(const ChessBoard& pos);
 
 #endif
