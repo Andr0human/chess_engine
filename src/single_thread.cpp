@@ -159,9 +159,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
 
     // Search Extensions
-    // int extensions = SearchExtension(pos, numExtensions);
-    // depth = depth + extensions;
-    // numExtensions = numExtensions + extensions;
+    int extensions = SearchExtension(myMoves, numExtensions);
+    depth         += extensions;
+    numExtensions += extensions;
 
 
     // Set pvArray, for storing the search_tree
