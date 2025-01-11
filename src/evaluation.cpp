@@ -421,8 +421,11 @@ PawnStructure(const ChessBoard& pos)
 
 template<int debug = 0>
 static Score
-MidGameScore(const ChessBoard& pos, const EvalData& ed)
+MidGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 {
+    if (phase < 0.2)
+        return 0;
+
     Score materialScore   = MaterialDiffereceMidGame(pos);
     Score pieceTableScore = PieceTableStrengthMidGame(pos);
     Score mobilityScore   = MobilityStrength(pos);
@@ -604,12 +607,15 @@ ColorParityScore(const ChessBoard& pos)
 
 template<int debug = 0>
 static Score
-EndGameScore(const ChessBoard& pos, const EvalData& ed)
+EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 {
     // Distance between kings
     // King in corners
     // BN endgames
     // Rule of Square (2n1k1r1/p7/3B1Rp1/2P2pKp/8/4P1P1/5P1P/8 w - - 17 45)
+
+    if (phase < 0.2)
+        return 0;
 
     Score materialScore   = MaterialDiffereceEndGame(pos);
     Score pieceTableScore = PieceTableStrengthEndGame(pos);
@@ -639,6 +645,7 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed)
 
 #endif
 
+
 Score
 Evaluate(const ChessBoard& pos)
 {
@@ -651,11 +658,11 @@ Evaluate(const ChessBoard& pos)
         ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
 
     ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
-
-    Score mg_score = MidGameScore(pos, ed);
-    Score eg_score = EndGameScore(pos, ed);
-
     float phase = ed.phase;
+
+    Score mg_score = MidGameScore(pos, ed, phase);
+    Score eg_score = EndGameScore(pos, ed, 1 - phase);
+
     Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
     return score * side2move;
 }
@@ -678,8 +685,8 @@ Score EvalDump(const ChessBoard& pos)
     cout << "Score_pawn_structure_black = " << pawnStructrueBlack << endl;
     cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl << endl;
 
-    Score mgScore = MidGameScore<1>(pos, ed);
-    Score egScore = EndGameScore<1>(pos, ed);
+    Score mgScore = MidGameScore<1>(pos, ed, ed.phase);
+    Score egScore = EndGameScore<1>(pos, ed, 1 - ed.phase);
 
     Score score = Score( phase * float(mgScore) + (1 - phase) * float(egScore) );
 
