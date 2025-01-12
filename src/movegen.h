@@ -35,10 +35,10 @@ bool LegalMovesPresent(ChessBoard& _cb);
 
 /**
  * @brief Returns a list of all the legal moves in current position.
- * 
+ *
  * @param _cb ChessBoard
- * @param qSearch 
- * @return MoveList 
+ * @param qSearch
+ * @return MoveList
  */
 MoveList GenerateMoves(ChessBoard& pos, bool qsSearch = false, bool findChecks = false);
 

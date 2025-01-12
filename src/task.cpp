@@ -6,23 +6,23 @@
 void
 Init()
 {
-    perf_clock start = perf::now();
-    plt::Init();
+  perf_clock start = perf::now();
+  plt::Init();
 
-    #if defined(TRANSPOSITION_TABLE_H)
-        TT.resize(0);
-    #endif
-    perf_time dur = perf::now() - start;
-    const auto it = dur.count();
+  #if defined(TRANSPOSITION_TABLE_H)
+    TT.resize(0);
+  #endif
+  perf_time dur = perf::now() - start;
+  const auto it = dur.count();
 
-    bool sec = (it >= 1);
-    cout << "Table Gen. took " << (sec ? it : it * 1000)
-         << (sec ? " s.\n" : " ms.") << endl;
+  bool sec = (it >= 1);
+  cout << "Table Gen. took " << (sec ? it : it * 1000)
+        << (sec ? " s.\n" : " ms.") << endl;
 
-    #if defined(TRANSPOSITION_TABLE_H)
-        cout << "Transposition Table Size = " << TT.size()
-            << "\n\n" << std::flush;
-    #endif
+  #if defined(TRANSPOSITION_TABLE_H)
+    cout << "Transposition Table Size = " << TT.size()
+        << "\n\n" << std::flush;
+  #endif
 }
 
 vector<TestPosition>
@@ -196,184 +196,134 @@ NodeCount(const vector<string> &_args)
 void
 DebugMoveGenerator(const vector<string> &_args)
 {
-    // Argument : elsa debug <fen> <depth> <output_file_name>
+  // Argument : elsa debug <fen> <depth> <output_file_name>
 
-    const auto moveName = [] (int move)
-    {
-        int ip = (move & 63);
-        int fp = (move >> 6) & 63;
+  const auto moveName = [] (int move)
+  {
+    int ip = (move & 63);
+    int fp = (move >> 6) & 63;
 
-        int ix = ip & 7, iy = (ip - ix) >> 3;
-        int fx = fp & 7, fy = (fp - fx) >> 3;
+    int ix = ip & 7, iy = (ip - ix) >> 3;
+    int fx = fp & 7, fy = (fp - fx) >> 3;
 
-        char a1 = static_cast<char>(97 + ix);             // 'a' + ix
-        char a2 = static_cast<char>(49 + iy);             // '1' + iy
-        char b1 = static_cast<char>(97 + fx);             // 'a' + fx
-        char b2 = static_cast<char>(49 + fy);             // '1' + fy
+    char a1 = static_cast<char>(97 + ix);             // 'a' + ix
+    char a2 = static_cast<char>(49 + iy);             // '1' + iy
+    char b1 = static_cast<char>(97 + fx);             // 'a' + fx
+    char b2 = static_cast<char>(49 + fy);             // '1' + fy
 
-        return string({a1, a2, b1, b2});
-    };
+    return string({a1, a2, b1, b2});
+  };
 
-    const auto __n = _args.size();
-    const auto fen = __n > 1 ? _args[1] : StartFen;
-    const auto dep = __n > 2 ? stoi(_args[2]) : 2;
-    const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
-    
-    std::ofstream out(_fn);
-    ChessBoard _cb = fen;
-    MoveList myMoves = GenerateMoves(_cb);
+  const auto __n = _args.size();
+  const auto fen = __n > 1 ? _args[1] : StartFen;
+  const auto dep = __n > 2 ? stoi(_args[2]) : 2;
+  const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
+  
+  std::ofstream out(_fn);
+  ChessBoard _cb = fen;
+  MoveList myMoves = GenerateMoves(_cb);
 
-    for (const auto move : myMoves)
-    {
-        _cb.MakeMove(move);
-        const auto current = BulkCount(_cb, dep - 1);
-        out << moveName(move) << " : " << current << '\n';
-        // out << print(move, _cb) << " : " << current << '\n';
-        _cb.UnmakeMove();
-    }
+  for (const auto move : myMoves)
+  {
+    _cb.MakeMove(move);
+    const auto current = BulkCount(_cb, dep - 1);
+    out << moveName(move) << " : " << current << '\n';
+    _cb.UnmakeMove();
+  }
 
-    out.close();
-}
-
-
-static void
-ShowUpdateLog()
-{
-    cout <<
-        "Version: 2.5\n\n"
-        "Techniques Used:\n"
-        "- Mini-Max with AlphaBeta\n"
-        "- Quiescence Search\n"
-        "- Move Ordering (Time Based Move-Reordering at Root)\n"
-        "   - Capture Moves(MVV-LVA)\n"
-        "   - Check Moves\n"
-        "   - Pv-Moves\n"
-        "   - Castle move\n"
-        "   - Quiet-Moves\n"
-        "- Iterative-Deepening (Incremental Update by depth 1)\n"
-        "- Search Window (Window grows by 2 in case of falling outside the window)\n"
-        "- Transposition Table\n"
-        "- Late Move Reductions | LMR_LIMIT(4)\n"
-        "- Move to exempt from LMR if :\n"
-        "   - captures a piece\n"
-        "   - en-passan or passed pawn\n"
-        "   - castling move\n"
-        "   - Gives a check\n"
-        // "- Search Extension | EXTENSION_LIMIT(12)\n"
-        // "- Extension Consideration :\n"
-        // "   - If position is in check\n"
-        "- Evaluation Considerations:\n"
-        "   - Phase-Based Evaluation\n"
-        "       - MidGame Score\n"
-        "       - EndGame Score\n"
-        "       - Final Score = phase * MidgameScore + (1 - phase) * EndgameScore\n"
-        "   - LoneKing Endgames\n\n\n"
-        "- Version 2.5:\n"
-        "   - New Threats Function\n"
-        "   - Updated Piece [mid/end]game weights\n"
-        "   - Improved LMR logic\n"
-        "- Version 2.4:\n"
-        "   - Move priority Update\n"
-        "   - Check moves included in move ordering\n"
-        "- Version 2.3:\n"
-        "   - LoneKing Endgames"
-        << endl;
+  out.close();
 }
 
 
 static void
 Level1(const vector<string>& args)
 {
-    if (args.size() == 1)
-    {
-        puts("No fen provided!");
-        return;
-    }
+  if (args.size() == 1)
+  {
+    puts("No fen provided!");
+    return;
+  }
 
-    ChessBoard pos(args[1]);
-    bool qs = (args.size() >= 3 and args[2] == "q");
+  ChessBoard pos(args[1]);
+  bool qs = (args.size() >= 3 and args[2] == "q");
 
-    MoveList myMoves = GenerateMoves(pos, qs, true);
-    OrderMoves(myMoves, qs, true);
-    PrintMovelist(myMoves, pos);
+  MoveList myMoves = GenerateMoves(pos, qs, true);
+  OrderMoves(myMoves, qs, true);
+  PrintMovelist(myMoves, pos);
 
-    EvalDump(pos);
+  EvalDump(pos);
 }
 
 
 static void
 ShowThreat(const vector<string>& args)
 {
-    if (args.size() < 2)
-    {
-        puts("No fen provided!");
-        return;
-    }
-    ChessBoard pos(args[1]);
-    auto __x = EvaluateThreats(pos);
-    cout << "ThreatsScore = " << __x << endl;
+  if (args.size() < 2)
+  {
+    puts("No fen provided!");
+    return;
+  }
+  ChessBoard pos(args[1]);
+  auto __x = EvaluateThreats(pos);
+  cout << "ThreatsScore = " << __x << endl;
 }
 
 
 void Task(int argc, char *argv[])
 {
-    const vector<string> argument_list =
-        base_utils::ExtractArgumentList(argc, argv);
+  const vector<string> argument_list =
+    base_utils::ExtractArgumentList(argc, argv);
 
-    string command = argument_list.empty() ? "" : argument_list[0];
+  string command = argument_list.empty() ? "" : argument_list[0];
 
-    if (argument_list.empty())
-    {
-        puts("No Task Found!");
-        puts("Type : \'elsa help\' to view command list.\n");
-    }
-    else if (command == "help")
-    {
-        Helper();
-    }
-    else if (command == "accuracy")
-    {
-        // Argument : elsa accuracy
-        AccuracyTest();
-    }
-    else if (command == "speed")
-    {
-        // Argument : elsa speed
-        SpeedTest();
-    }
-    else if (command == "go")
-    {
-        // Argument : elsa go "fen" allowed_search_time allowed_extra_time
-        DirectSearch(argument_list);
-    }
-    else if (command == "play")
-    {
-        Play(argument_list);
-    }
-    else if (command == "count")
-    {
-        // Argument : elsa count {fen} {depth}
-        NodeCount(argument_list);
-    }
-    else if (command == "debug")
-    {
-        DebugMoveGenerator(argument_list);
-    }
-    else if (command == "info")
-    {
-        ShowUpdateLog();
-    }
-    else if (command == "level1")
-    {
-        Level1(argument_list);
-    }
-    else if (command == "threat")
-    {
-        ShowThreat(argument_list);
-    }
-    else
-    {
-        puts("No Valid Task!");
-    }
+  if (argument_list.empty())
+  {
+    puts("No Task Found!");
+    puts("Type : \'elsa help\' to view command list.\n");
+  }
+  else if (command == "help")
+  {
+    Helper();
+  }
+  else if (command == "accuracy")
+  {
+    // Argument : elsa accuracy
+    AccuracyTest();
+  }
+  else if (command == "speed")
+  {
+    // Argument : elsa speed
+    SpeedTest();
+  }
+  else if (command == "go")
+  {
+    // Argument : elsa go "fen" allowed_search_time allowed_extra_time
+    DirectSearch(argument_list);
+  }
+  else if (command == "play")
+  {
+    Play(argument_list);
+  }
+  else if (command == "count")
+  {
+    // Argument : elsa count {fen} {depth}
+    NodeCount(argument_list);
+  }
+  else if (command == "debug")
+  {
+    DebugMoveGenerator(argument_list);
+  }
+  else if (command == "level1")
+  {
+    Level1(argument_list);
+  }
+  else if (command == "threat")
+  {
+    ShowThreat(argument_list);
+  }
+  else
+  {
+    puts("No Valid Task!");
+  }
 }
 

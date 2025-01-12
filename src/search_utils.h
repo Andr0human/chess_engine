@@ -22,11 +22,6 @@ constexpr bool
 is_type(Move m)
 { return (m & (flag << 21)) != 0; }
 
-// template <>
-// bool
-// is_type<PV_MOVE>(Move m)
-// { return info.IsPartOfPV(m); }
-
 
 int
 RootReduction(Depth depth, size_t moveNo);
