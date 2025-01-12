@@ -9,9 +9,9 @@ Init()
   perf_clock start = perf::now();
   plt::Init();
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     TT.resize(0);
-  #endif
+  }
   perf_time dur = perf::now() - start;
   const auto it = dur.count();
 
@@ -19,10 +19,10 @@ Init()
   cout << "Table Gen. took " << (sec ? it : it * 1000)
         << (sec ? " s.\n" : " ms.") << endl;
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     cout << "Transposition Table Size = " << TT.size()
         << "\n\n" << std::flush;
-  #endif
+  }
 }
 
 vector<TestPosition>

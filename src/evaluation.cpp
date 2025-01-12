@@ -635,7 +635,7 @@ Evaluate(const ChessBoard& pos)
 
   // Special EndGames
   if (ed.NoWhitePiecesOnBoard(pos) or ed.NoBlackPiecesOnBoard(pos))
-    return (pos.pieceCount<WHITE, PAWN>() + ed.pieces[WHITE] > 0)
+    return (ed.pieces[WHITE] > 0)
       ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
 
   ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);

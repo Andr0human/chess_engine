@@ -194,10 +194,10 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
   board[ip] = NO_PIECE;
   board[fp] = ipt;
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     if (ep != SQUARE_NB)
       Hash_Value ^= TT.HashKey(ep + 1);
-  #endif
+  }
 
   // Reset the en-passant state
   csep = (csep & 1920) ^ SQUARE_NB;
@@ -242,9 +242,9 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     piece_ct[(fpt & 8) + ALL]--;
     piece_bb[(fpt & 8) + ALL] ^= fPos;
 
-    #if defined(TRANSPOSITION_TABLE_H)
+    if constexpr (useTT) {
       Hash_Value ^= TT.HashkeyUpdate(fpt, fp);
-    #endif
+    }
   }
 
   piece_bb[ipt] ^= iPos ^ fPos;
@@ -253,11 +253,11 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
   // Flip the sides.
   color = ~color;
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     Hash_Value ^= TT.HashkeyUpdate(ipt, ip)
                 ^ TT.HashkeyUpdate(ipt, fp)
                 ^ TT.HashKey(0);
-  #endif
+  }
 }
 
 
@@ -290,13 +290,13 @@ ChessBoard::MakeMoveDoublePawnPush(Square ip, Square fp) noexcept
   piece_bb[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
   piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     // Add current enpassant-state to hash_value
     Hash_Value ^= TT.HashKey(1 + EnPassantSquare());
     Hash_Value ^= TT.HashkeyUpdate(own + 1, ip)
                 ^ TT.HashkeyUpdate(own + 1, fp)
                 ^ TT.HashKey(0);
-  #endif
+  }
 
   color = ~color;
 }
@@ -321,12 +321,12 @@ ChessBoard::MakeMoveEnpassant(Square ip, Square ep) noexcept
 
   color = ~color;
 
-  #if defined(TRANSPOSITION_TABLE_H)
-      Hash_Value ^= TT.HashkeyUpdate(emy + PAWN, cap_pawn_fp);
-      Hash_Value ^= TT.HashkeyUpdate(own + PAWN, ip)
-                  ^ TT.HashkeyUpdate(own + PAWN, ep)
-                  ^ TT.HashKey(0);
-  #endif
+  if constexpr (useTT) {
+    Hash_Value ^= TT.HashkeyUpdate(emy + PAWN, cap_pawn_fp);
+    Hash_Value ^= TT.HashkeyUpdate(own + PAWN, ip)
+                ^ TT.HashkeyUpdate(own + PAWN, ep)
+                ^ TT.HashKey(0);
+  }
 }
 
 void
@@ -354,18 +354,18 @@ ChessBoard::MakeMovePawnPromotion(Move move) noexcept
     piece_ct[emy + cpt]--;
     piece_ct[emy + ALL]--;
 
-    #if defined(TRANSPOSITION_TABLE_H)
-        Hash_Value ^= TT.HashkeyUpdate(emy + cpt, fp);
-    #endif
+    if constexpr (useTT) {
+      Hash_Value ^= TT.HashkeyUpdate(emy + cpt, fp);
+    }
   }
 
   color = ~color;
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     Hash_Value ^= TT.HashkeyUpdate(own + 1, ip);
     Hash_Value ^= TT.HashkeyUpdate(own + new_pt, fp);
     Hash_Value ^= TT.HashKey(0);
-  #endif
+  }
 }
 
 void
@@ -398,13 +398,13 @@ ChessBoard::MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexc
     piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
     color = ~color;
 
-    #if defined(TRANSPOSITION_TABLE_H)
+    if constexpr (useTT) {
       int __p1 = LsbIndex(rooks_indexes);
       int __p2 = MsbIndex(rooks_indexes);
       Hash_Value ^= TT.HashkeyUpdate(own + 6, ip) ^ TT.HashkeyUpdate(own + 6, fp);
       Hash_Value ^= TT.HashkeyUpdate(own + 4, __p1) ^ TT.HashkeyUpdate(own + 4, __p2);
       Hash_Value ^= TT.HashKey(0);
-    #endif
+    }
   }
 }
 
@@ -525,7 +525,7 @@ ChessBoard::GenerateHashkey() const
 {
   Key key = 0;
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     int castle_offset = 66;
     if (color == 0)
       key ^= TT.HashKey(0);
@@ -548,7 +548,7 @@ ChessBoard::GenerateHashkey() const
         key ^= TT.HashkeyUpdate(piece, __pos);
       }
     }
-  #endif
+  }
 
   return key;
 }
