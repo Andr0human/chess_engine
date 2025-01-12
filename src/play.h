@@ -1,7 +1,7 @@
 
 
 #ifndef PLAY_H
-#define PlAY_H
+#define PLAY_H
 
 #include "perf.h"
 #include "single_thread.h"
