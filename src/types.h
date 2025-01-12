@@ -77,7 +77,7 @@ enum Value: Score
   GamePhaseLimit = 800,
 };
 
-enum Board: uint64_t
+enum Board: Bitboard
 {
   Rank1 = 255ULL, Rank2 = Rank1 << 8, Rank3 = Rank1 << 16, Rank4 = Rank1 << 24,
   Rank5 = Rank1 << 32, Rank6 = Rank1 << 40, Rank7 = Rank1 << 48, Rank8 = Rank1 << 56,
