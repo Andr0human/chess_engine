@@ -80,8 +80,9 @@ SearchExtension(const MoveList& myMoves, int numExtensions)
     return 0;
   
   // If king is in check, add 1
-  if (myMoves.checkers > 0)
+  if (myMoves.checkers > 0 and myMoves.size() < 3) {
     extension += 1;
+  }
   
   return extension;
 }
