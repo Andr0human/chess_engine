@@ -13,6 +13,13 @@ using Bitboard = uint64_t;
 using    Nodes = uint64_t;
 
 
+enum SearchTechnique: bool
+{
+  useTT = true,
+  useLMR = true,
+  useExtensions = true,
+};
+
 enum Color: int
 {
   BLACK, WHITE, COLOR_NB

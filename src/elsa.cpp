@@ -69,17 +69,11 @@ int main(int argc, char **argv)
   8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
   2kr3r/pppq4/3b4/3bn3/2N1p1p1/PP2P1N1/1B3PPP/2RQ1RK1 b - - 1 18           // B.M Nf3+
 
-  To check for depth 1 quiescense:
-
-  5r2/pp1k4/3p2p1/4b2p/4P2Q/P5PP/1P1q1n2/4RRK1 b - - 4 38
-  r2q1rk1/pp1bppbp/3p2p1/6B1/P1BQP1n1/1PN5/2P2PPP/R4RK1 w - - 1 12
-  8/5ppp/4k3/p2pP3/Pr3PP1/R3K3/7P/8 b - - 0 33
-
   Quiescence Explosion:
   q2k2q1/2nqn2b/1n1P1n1b/2rnr2Q/1NQ1QN1Q/3Q3B/2RQR2B/Q2K2Q1 w - - 0 1
-  r4rk1/1p1n1pp1/1bq1bn1p/2pp4/p1P1N1P1/1N1PB2B/PPQ2P1P/R4RK1 w - - 3 19
-  2Q2n2/2R4p/1p1qpp1k/8/3P3P/3B2P1/5PK1/r7 w - - 0 1
-  rnbqkbnr/rrrrrrrr/8/8/8/8/RRRRRRRR/RNBQKBNR w KQkq - 0 1
+
+  Static eval:
+  r4rk1/1p3pp1/2q4p/2b5/p5B1/3PP3/PPQ4P/R4RK1 w - - 0 24
 */
 
 
