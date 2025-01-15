@@ -1,10 +1,10 @@
 
 #include "search.h"
 
-// template <>
-// bool
-// is_type<PV_MOVE>(Move m)
-// { return info.IsPartOfPV(m); }
+template <>
+bool
+is_type<PV_MOVE>(Move m)
+{ return info.IsPartOfPV(m); }
 
 SearchData info;
 
