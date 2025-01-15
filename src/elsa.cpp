@@ -13,12 +13,13 @@
 // Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
 // (Bishop | Knight vs Pawn) if the piece can capture the pawn
 // (Queen vs B/R/N) Endgame
+// Pawn Race (8/5ppk/7p/8/P7/8/1K6/8 w - - 0 1)
 
 //* TODO Evaluation
 // Fix AttackStrength (Should depend on opponent king safety) (rr3k2/ppq3pQ/2nb4/3p1RP1/P2P4/1N5P/1P4K1/R1B5 b - - 0 24)
 
 //* TODO Search Extension
-// If promotion is possible and no enemy piece can capture it.
+// If promotion is possible and no enemy piece can capture it. (3k4/8/5N2/nR6/3P4/p7/1p3PP1/6K1 w - - 0 51)
 // instead move_gives_check in LMR, use it as in SearchExtension.
 // Add depth 1, if opponent pawn attacks own piece
 
@@ -64,22 +65,15 @@ int main(int argc, char **argv)
   8/8/4K1n1/4p1P1/4k3/8/8/8 b - - 1 63                                     // D.M (Ke3)           (Endgame)
   8/7p/6p1/pP3p2/P2p1k2/1r5P/3KBP2/8 b - - 3 44                            // D.M (Rxh3)          (Endgame)
   8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1                                  // Kb1
-  7k/5P2/4KN1P/6p1/8/8/8/4r3 w - - 5 64                                    // B.M Kf5
   r4rk1/2R3bp/4p3/1p3p2/3p1P2/1P1P2P1/4N2P/5R1K w - - 0 29                 // D.M Rxg7+
   8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
   2kr3r/pppq4/3b4/3bn3/2N1p1p1/PP2P1N1/1B3PPP/2RQ1RK1 b - - 1 18           // B.M Nf3+
 
-  To check for depth 1 quiescense:
-
-  5r2/pp1k4/3p2p1/4b2p/4P2Q/P5PP/1P1q1n2/4RRK1 b - - 4 38
-  r2q1rk1/pp1bppbp/3p2p1/6B1/P1BQP1n1/1PN5/2P2PPP/R4RK1 w - - 1 12
-  8/5ppp/4k3/p2pP3/Pr3PP1/R3K3/7P/8 b - - 0 33
-
   Quiescence Explosion:
   q2k2q1/2nqn2b/1n1P1n1b/2rnr2Q/1NQ1QN1Q/3Q3B/2RQR2B/Q2K2Q1 w - - 0 1
-  r4rk1/1p1n1pp1/1bq1bn1p/2pp4/p1P1N1P1/1N1PB2B/PPQ2P1P/R4RK1 w - - 3 19
-  2Q2n2/2R4p/1p1qpp1k/8/3P3P/3B2P1/5PK1/r7 w - - 0 1
-  rnbqkbnr/rrrrrrrr/8/8/8/8/RRRRRRRR/RNBQKBNR w KQkq - 0 1
+
+  Static eval:
+  r4rk1/1p3pp1/2q4p/2b5/p5B1/3PP3/PPQ4P/R4RK1 w - - 0 24
 */
 
 

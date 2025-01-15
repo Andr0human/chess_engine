@@ -84,11 +84,11 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 template <ReductionFunc reductionFunction>
 static Score
 PlayMove(ChessBoard& pos, Move move, size_t moveNo,
-    Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
+  Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
 {
   Score eval = VALUE_ZERO;
 
-  if (LmrOk(move, depth, moveNo))
+  if (useLMR and LmrOk(move, depth, moveNo))
   {
     int R = reductionFunction(depth, moveNo);
 
@@ -138,30 +138,29 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (depth <= 0)
     return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);
 
-  {
+  if constexpr (useTT) {
     // TT_lookup (Check if given board is already in transpostion table)
-    #if defined(TRANSPOSITION_TABLE_H)
-      // check/stale-mate check needed before TT_lookup, else can lead to search failures.
-      Score tt_val = TT.LookupPosition(pos.Hash_Value, depth, alpha, beta);
+    // check/stale-mate check needed before TT_lookup, else can lead to search failures.
+    Score tt_val = TT.LookupPosition(pos.Hash_Value, depth, alpha, beta);
 
-      if (tt_val != VALUE_UNKNOWN)
-        return pos.HandleScore(tt_val);
-    #endif
+    if (tt_val != VALUE_UNKNOWN)
+      return pos.HandleScore(tt_val);
   }
 
-  //! TODO: Try with findChecks on and off [or on-off with different depth]
+  // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
   MoveList myMoves = GenerateMoves(pos, false, true);
 
   // Order moves according to heuristics for faster alpha-beta search
   OrderMoves(myMoves, true, true);
 
-
-  // Search Extensions
-  int extensions = SearchExtension(myMoves, numExtensions);
-  depth         += extensions;
-  numExtensions += extensions;
-
+  if constexpr (useExtensions)
+  {
+    // Search Extensions
+    int extensions = SearchExtension(myMoves, numExtensions);
+    depth         += extensions;
+    numExtensions += extensions;
+  }
 
   // Set pvArray, for storing the search_tree
   pvArray[pvIndex] = NULL_MOVE;
@@ -194,9 +193,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     }
   }
 
-  #if defined(TRANSPOSITION_TABLE_H)
+  if constexpr (useTT) {
     TT.RecordPosition(pos.Hash_Value, depth, bestMove, alpha, hashf);
-  #endif
+  }
 
   return alpha;
 }
