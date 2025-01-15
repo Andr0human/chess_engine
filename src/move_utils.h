@@ -2,6 +2,7 @@
 #ifndef MOVE_UTILS_H
 #define MOVE_UTILS_H
 
+#include <array>
 #include <iomanip>
 #include "bitboard.h"
 #include "lookup_table.h"
@@ -9,15 +10,12 @@
 
 class MoveList
 {
-    // Note : Need to create a copy constructor before copying this class.
-    // __begin, __end address pointer needs to fix for copying.
     private:
-    Move* __begin;
-    Move* __end;
+    size_t moveCount;
 
     public:
     // Stores all moves for current position
-    Move pMoves[MAX_MOVES];
+    array<Move, MAX_MOVES> pMoves;
 
     // Active side color
     Color color;
@@ -41,27 +39,35 @@ class MoveList
 
 
     MoveList(Color c, bool qs = false)
-    : __begin(pMoves), __end(pMoves), color(c), qsSearch(qs), checkers(0) {}
+    : moveCount(0), color(c), qsSearch(qs), checkers(0) {}
 
     inline void
     Add(Move move) noexcept
-    { *__end++ = move; }
+    { pMoves[moveCount++] = move; }
 
     inline bool
     empty() const noexcept
-    { return __begin == __end; }
+    { return moveCount == 0; }
 
-    inline Move*
+    Move*
+    begin() noexcept
+    { return pMoves.begin(); }
+
+    Move*
+    end() noexcept
+    { return pMoves.begin() + moveCount; }
+
+    const Move*
     begin() const noexcept
-    { return __begin; }
+    { return pMoves.begin(); }
 
-    inline Move*
+    const Move*
     end() const noexcept
-    { return __end; }
+    { return pMoves.begin() + moveCount; }
 
     inline uint64_t
     size() const noexcept
-    { return __end - __begin; }
+    { return moveCount; }
 };
 
 

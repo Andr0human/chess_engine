@@ -2,6 +2,7 @@
 #ifndef BITBOARD_H
 #define BITBOARD_H
 
+#include <array>
 #include "types.h"
 #include "base_utils.h"
 #include "tt.h"
@@ -9,6 +10,8 @@
 
 extern uint64_t tmp_total_counter;
 extern uint64_t tmp_this_counter;
+
+using std::array;
 
 
 class UndoInfo
@@ -37,18 +40,18 @@ class ChessBoard
 {
   private:
 
-  UndoInfo undo_info[256];
+  array<UndoInfo, 256> undoInfo;
 
   int undoInfoStackCounter;
 
   // Stores the piece at each index
-  Piece board[SQUARE_NB];
+  array<Piece, SQUARE_NB> board;
 
   // Stores bitboard location of a piece
-  Bitboard piece_bb[16];
+  array<Bitboard, 16> piece_bb;
 
   // Stores count of each piece
-  int piece_ct[16];
+  array<int, 16> piece_ct;
 
   // Halfmove and Fullmove
   int halfmove, fullmove;

@@ -94,7 +94,7 @@ isTheoreticalDraw(const ChessBoard& pos)
 
 #ifndef THREATS
 
-template <Color c_my, PieceType pt, Bitboard* mask, Score increment>
+template <Color c_my, PieceType pt, const MaskTable& mask, Score increment>
 static Score
 AttacksKing(const ChessBoard& pos)
 {
@@ -306,7 +306,7 @@ MaterialDiffereceMidGame(const ChessBoard& pos)
      + QueenValueMg  * (pos.pieceCount<WHITE, QUEEN >() - pos.pieceCount<BLACK, QUEEN >());
 }
 
-template<Color c_my, PieceType pt, Score* strTable>
+template<Color c_my, PieceType pt, const ScoreTable& strTable>
 static Score
 AddStrScore(const ChessBoard& pos)
 {
@@ -546,7 +546,7 @@ LoneKingEndGame(const ChessBoard& pos)
 static Score
 PieceTableStrengthEndGame(const ChessBoard& pos)
 {
-  const auto StrScore = [] (Bitboard piece, int* strTable)
+  const auto StrScore = [] (Bitboard piece, const ScoreTable& strTable)
   {
     Score score = 0;
     while (piece > 0)
