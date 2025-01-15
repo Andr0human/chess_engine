@@ -228,8 +228,10 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     int filter = 2047 ^ (384 << (color * 2));
     csep &= filter;
 
-    Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
-    Hash_Value ^= TT.HashKey((csep >> 7) + 66);
+    if constexpr (useTT) {
+      Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
+      Hash_Value ^= TT.HashKey((csep >> 7) + 66);
+    }
 
     if (IsCastling(ip, fp))
       return MakeMoveCastling(ip, fp, 1);
@@ -276,8 +278,10 @@ ChessBoard::MakeMoveCastleCheck(PieceType piece, Square sq) noexcept
     int z  = y + (y < 7 ? 9 : 0);
     csep &= 2047 ^ (1 << z);
 
-    Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
-    Hash_Value ^= TT.HashKey((csep >> 7) + 66);
+    if constexpr (useTT) {
+      Hash_Value ^= TT.HashKey((old_csep >> 7) + 66);
+      Hash_Value ^= TT.HashKey((csep >> 7) + 66);
+    }
   }
 }
 
@@ -585,7 +589,7 @@ ChessBoard::Reset()
   color = Color::WHITE;
 
   halfmove = 0;
-  fullmove = 1;
+  fullmove = 2;
 }
 
 string
