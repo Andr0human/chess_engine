@@ -304,7 +304,7 @@ PawnMovement(const ChessBoard &_cb, MoveList &myMoves,
 
 #endif
 
-template <Color c_my, BitboardFunc bitboardFunc, Bitboard* maskTable, char pawn>
+template <Color c_my, BitboardFunc bitboardFunc, const MaskTable& maskTable, char pawn>
 static Bitboard
 PinsCheck(const ChessBoard& pos, MoveList& myMoves, int KA, Bitboard sliding_piece_my, Bitboard sliding_piece_emy)
 {
@@ -612,7 +612,7 @@ LegalPinnedPieces(const ChessBoard& _cb)
   if (!((ray_line & erq) | (ray_diag & ebq)))
     return 0;
 
-  const auto can_pinned = [&] (const auto &__f, const auto *table,
+  const auto can_pinned = [&] (const auto &__f, const MaskTable& table,
         Bitboard ownP, Bitboard emyP, const char pawn) -> bool
   {
     Bitboard pieces = table[kpos] & _Ap;
@@ -837,7 +837,7 @@ SquaresForDiscoveredCheck(const ChessBoard& pos)
   Bitboard occupied_my = pos.piece<c_my, ALL>();
   Bitboard calculatedBitboard = 0;
 
-  const auto checkSquare = [&] (const auto &__f, Bitboard* atk_table, Bitboard my_piece)
+  const auto checkSquare = [&] (const auto &__f, const MaskTable& atk_table, Bitboard my_piece)
   {
     Bitboard mask = atk_table[k_sq] & occupied;
     Bitboard first_piece  = __f(mask);

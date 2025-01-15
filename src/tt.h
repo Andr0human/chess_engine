@@ -6,7 +6,9 @@
 #include "types.h"
 #include <iostream>
 #include <random>
+#include <array>
 
+using std::array;
 
 class ZobristHashKey
 {
@@ -40,26 +42,18 @@ class ZobristHashKey
 
 class TranspositionTable
 {
-    const static int HASHEMPTY = 0;
-    const static int HASHEXACT = 1;
-    const static int HASHALPHA = 2;
-    const static int HASHBETA  = 3;
-    const static int HASH_INDEXES_SIZE = 855;
-
     /**
      * 0 -> 100 MB table_size
      * 1 ->   1 GB table_size 
      */
-    const uint64_t tt_sizes[2] = {
-        2189477ULL, 22508861ULL
-    };
+    array<uint64_t, 2> tt_sizes = { 2189477ULL, 22508861ULL };
 
     uint64_t TT_SIZE = 0;
 
     ZobristHashKey *primary_tt_table;
     ZobristHashKey *secondary_tt_table;
 
-    uint64_t HashIndex[HASH_INDEXES_SIZE];    
+    array<uint64_t, HASH_INDEXES_SIZE> HashIndex;
 
     void GetRandomKeys() noexcept;
 

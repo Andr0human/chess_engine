@@ -4,6 +4,11 @@
 #define LOOKUP_TABLE_H
 
 #include "types.h"
+#include <array>
+
+using std::array;
+using MaskTable  = array<Bitboard, SQUARE_NB>;
+using ShiftTable = array<int     , SQUARE_NB>;
 
 
 #define __abs(x) ((x >= 0) ? (x) : -(x))
@@ -11,39 +16,39 @@
 namespace plt
 {
 
-extern Bitboard    UpMasks[SQUARE_NB];
-extern Bitboard  DownMasks[SQUARE_NB];
-extern Bitboard  LeftMasks[SQUARE_NB];
-extern Bitboard RightMasks[SQUARE_NB];
+extern MaskTable    UpMasks;
+extern MaskTable  DownMasks;
+extern MaskTable  LeftMasks;
+extern MaskTable RightMasks;
 
-extern Bitboard   UpRightMasks[SQUARE_NB];
-extern Bitboard    UpLeftMasks[SQUARE_NB];
-extern Bitboard DownRightMasks[SQUARE_NB];
-extern Bitboard  DownLeftMasks[SQUARE_NB];
+extern MaskTable   UpRightMasks;
+extern MaskTable    UpLeftMasks;
+extern MaskTable DownRightMasks;
+extern MaskTable  DownLeftMasks;
 
-extern Bitboard     LineMasks[SQUARE_NB];	// (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
-extern Bitboard DiagonalMasks[SQUARE_NB];	// (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
+extern MaskTable     LineMasks;             // (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
+extern MaskTable DiagonalMasks;             // (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
 
-extern Bitboard      RookMasks[SQUARE_NB];
-extern Bitboard    BishopMasks[SQUARE_NB];
-extern Bitboard    KnightMasks[SQUARE_NB];
-extern Bitboard      KingMasks[SQUARE_NB];
-extern Bitboard KingOuterMasks[SQUARE_NB];
+extern MaskTable      RookMasks;
+extern MaskTable    BishopMasks;
+extern MaskTable    KnightMasks;
+extern MaskTable      KingMasks;
+extern MaskTable KingOuterMasks;
 
-extern Bitboard        PawnMasks[COLOR_NB][SQUARE_NB];
-extern Bitboard PawnCaptureMasks[COLOR_NB][SQUARE_NB];
-extern Bitboard  PassedPawnMasks[COLOR_NB][SQUARE_NB];
+extern array<MaskTable, COLOR_NB>        PawnMasks;
+extern array<MaskTable, COLOR_NB> PawnCaptureMasks;
+extern array<MaskTable, COLOR_NB>  PassedPawnMasks;
 
-extern Bitboard   RookStartIndex[SQUARE_NB];
-extern Bitboard BishopStartIndex[SQUARE_NB];
+extern MaskTable   RookStartIndex;
+extern MaskTable BishopStartIndex;
 
 extern Bitboard*   RookMovesLookUp;
 extern Bitboard* BishopMovesLookUp;
 
-extern Bitboard   RookMagics[SQUARE_NB];
-extern 		int   RookShifts[SQUARE_NB];
-extern Bitboard BishopMagics[SQUARE_NB];
-extern 		int BishopShifts[SQUARE_NB];
+extern  MaskTable   RookMagics;
+extern ShiftTable   RookShifts;
+extern  MaskTable BishopMagics;
+extern ShiftTable BishopShifts;
 
 void
 Init();
