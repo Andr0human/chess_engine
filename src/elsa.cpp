@@ -13,12 +13,13 @@
 // Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
 // (Bishop | Knight vs Pawn) if the piece can capture the pawn
 // (Queen vs B/R/N) Endgame
+// Pawn Race (8/5ppk/7p/8/P7/8/1K6/8 w - - 0 1)
 
 //* TODO Evaluation
 // Fix AttackStrength (Should depend on opponent king safety) (rr3k2/ppq3pQ/2nb4/3p1RP1/P2P4/1N5P/1P4K1/R1B5 b - - 0 24)
 
 //* TODO Search Extension
-// If promotion is possible and no enemy piece can capture it.
+// If promotion is possible and no enemy piece can capture it. (3k4/8/5N2/nR6/3P4/p7/1p3PP1/6K1 w - - 0 51)
 // instead move_gives_check in LMR, use it as in SearchExtension.
 // Add depth 1, if opponent pawn attacks own piece
 
