@@ -270,7 +270,13 @@ class SearchData
   }
 };
 
-void OrderMoves(MoveList& myMoves, bool pv_moves, bool check_moves);
+void OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_moves);
+
+Score
+SeeScore(const ChessBoard& pos, Move move);
+
+void
+ShowMovelist(MoveList myMoves, ChessBoard _cb);
 
 extern SearchData info;
 
