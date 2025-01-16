@@ -633,10 +633,9 @@ Evaluate(const ChessBoard& pos)
   EvalData ed = EvalData(pos);
   int side2move = 2 * int(pos.color) - 1;
 
-  // Special EndGames
-  if (ed.NoWhitePiecesOnBoard(pos) or ed.NoBlackPiecesOnBoard(pos))
-    return (ed.pieces[WHITE] > 0)
-      ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
+  // Special Piece EndGames 
+  if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
+    return (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
 
   ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
   float phase = ed.phase;
