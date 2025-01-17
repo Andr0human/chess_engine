@@ -500,7 +500,7 @@ BishopColorCornerScore(const ChessBoard& pos)
   return score;
 }
 
-template <Color winningSide>
+template <Color winningSide, bool debug = 0>
 static Score
 LoneKingEndGame(const ChessBoard& pos)
 {
@@ -533,14 +533,29 @@ LoneKingEndGame(const ChessBoard& pos)
 
   Score distanceScore = DistanceBetweenKingsScore(pos);
   Score parityScore   = BishopColorCornerScore<winningSide>(pos);
-  Score centreScore   = LongKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor
+  Score centreScore   = LoneKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor
                       + LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
   Score materialScore = MaterialDiffereceEndGame(pos);
 
   Score score = materialScore + distanceScore + parityScore + centreScore;
-  int side2move = 2 * int(pos.color) - 1;
 
-  return score * side2move;
+  if (debug)
+  {
+    cout << "winningSide = " << winningSide << endl;
+    cout << "winningSideCorrectionFactor = " << winningSideCorrectionFactor << endl;
+    cout << "losingSideCorrectionFactor  = " <<  losingSideCorrectionFactor << endl;
+
+    cout << "centreScoreWinning = " << (LoneKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor) << endl;
+    cout << "centreScoreLosing  = " << (LoneKingLosingEndGameTable[lostKingSq] *  losingSideCorrectionFactor) << endl;
+
+    cout << "MaterialScore = " << materialScore << endl;
+    cout << "DistanceScore = " << distanceScore << endl;
+    cout << "ParityScore   = " << parityScore   << endl;
+    cout << "CentreScore   = " << centreScore   << endl;
+    cout << "score         = " << score         << endl;
+  }
+
+  return score;
 }
 
 static Score
@@ -635,7 +650,10 @@ Evaluate(const ChessBoard& pos)
 
   // Special Piece EndGames 
   if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
-    return (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
+  {
+    Score score = (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
+    return score * side2move;
+  }
 
   ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
   float phase = ed.phase;
@@ -656,6 +674,10 @@ Score EvalDump(const ChessBoard& pos)
   cout << "----------------------------------------------" << endl;
   cout << "BoardWeight = " << ed.boardWeight << endl;
   cout << "Phase = " << phase << endl;
+
+  // Special Piece EndGames 
+  if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
+    return (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE, 1>(pos) : LoneKingEndGame<BLACK, 1>(pos);
 
   Score pawnStructrueWhite = PawnStructure<WHITE>(pos);
   Score pawnStructrueBlack = PawnStructure<BLACK>(pos);
