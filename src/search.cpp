@@ -28,7 +28,6 @@ PrioritizeMoves(MoveList& myMoves, size_t start)
 void
 OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_moves)
 {
-
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
 
@@ -38,7 +37,6 @@ OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_m
 
   std::sort(myMoves.begin()            , myMoves.begin() + capture_end, seeComparator);
   std::sort(myMoves.begin() + check_end, myMoves.begin() +      pv_end, seeComparator);
-  std::sort(myMoves.begin() +    pv_end, myMoves.end()                , seeComparator);
 }
 
 Score
