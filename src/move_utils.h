@@ -37,6 +37,8 @@ class MoveList
     // Bitboard of squares that have pinned pieces on them
     Bitboard pinnedPiecesSquares;
 
+    // Bitboard representing squares under enemy attack
+    Bitboard enemyAttackedSquares;
 
     MoveList(Color c, bool qs = false)
     : moveCount(0), color(c), qsSearch(qs), checkers(0) {}

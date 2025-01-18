@@ -112,4 +112,45 @@ int main(int argc, char **argv)
 
   8/8/6kP/8/5P2/8/4K3/8 w - - 1 62
   Avoid the use of LoneKing in these cases.
+
+  8/8/6kP/1p3N2/1npKB3/8/8/8 w - - 5 55
+  2 minor piece vs 1 minor piece is draw
+
+  1k6/1P1R3p/6pr/5p2/5P1P/4K1P1/8/8 w - - 35 78
+  Bring the king closer to pawn which is closer to promotion
+
+  8/8/6p1/2k1K3/4N3/8/8/8 b - - 3 89
+  KPNK is draw if knight can capture the pawn and there is no captures in position
+
+  8/8/8/5b2/2Pk4/1P6/P4K2/8 w - - 3 62
+  No winning with only a minor piece
+
+  8/3Q1k2/6pp/8/7q/P3P3/4K3/8 b - - 7 42    D.M Qe7
+  Square of pawn
+
+  8/3P3k/5Kp1/2R4p/8/8/3r4/8 w - - 1 52     D.M Ke7
+
+  r7/P7/R2K4/5pk1/6p1/6P1/8/8 w - - 8 51    D.M Kc7
+
+  8/3k4/R5P1/1r2K3/8/8/8/8 w - - 4 69       B.M Kf6
+*/
+
+/*
+  endgame-suite
+
+  8/6k1/1n1p2p1/3P1pPp/7P/1B1NK3/8/8 b - - 35 84
+
+  8/8/6p1/2k1K3/4N3/8/8/8 b - - 3 89
+
+  5K2/6Pk/8/8/3P4/1b6/8/4B3 b - - 13 70
+
+  8/4k3/6pp/8/8/P3P3/4K3/8 w - - 0 44
+
+  r7/P7/R2K4/5pk1/6p1/6P1/8/8 w - - 8 51
+
+  8/3k4/R5P1/1r2K3/8/8/8/8 w - - 4 69
+
+  8/8/r7/1R6/4k1P1/6K1/8/8 w - - 11 68
+
+  8/8/r7/4k1P1/1R6/6K1/8/8 b - - 0 69
 */

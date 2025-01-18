@@ -871,6 +871,8 @@ MoveGenerator(ChessBoard& pos, bool qsSearch, bool checks)
   if (!pos.EnemyAttackedSquaresGenerated())
     pos.enemyAttackedSquares = GenerateAttackedSquares<c_my>(pos);
 
+  myMoves.enemyAttackedSquares = pos.enemyAttackedSquares;
+
   if (!pos.AttackersFound())
     KingAttackers<c_my>(pos);
 
