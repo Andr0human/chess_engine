@@ -1,6 +1,7 @@
 
 #include "evaluation.h"
 #include "attacks.h"
+#include "base_utils.h"
 
 using std::abs;
 using std::min;
@@ -203,16 +204,17 @@ template <Color c_my>
 static Score
 KingMobilityScore(const ChessBoard& pos)
 {
+  const Color c_emy = ~c_my;
   Square k_sq = SquareNo(pos.piece<c_my, KING>());
   Bitboard pieces_my = pos.piece<c_my, ALL>();
   Bitboard attacked_squares = 0;
 
-  attacked_squares |= PawnAttackSquares<~c_my>(pos);
-  attacked_squares |= GenAttackedSquares<~c_my, BISHOP>(pos);
-  attacked_squares |= GenAttackedSquares<~c_my, KNIGHT>(pos);
-  attacked_squares |= GenAttackedSquares<~c_my, ROOK>(pos);
-  attacked_squares |= GenAttackedSquares<~c_my, QUEEN>(pos);
-  attacked_squares |= GenAttackedSquares<~c_my, KING>(pos);
+  attacked_squares |= PawnAttackSquares <c_emy>(pos);
+  attacked_squares |= GenAttackedSquares<c_emy, BISHOP>(pos);
+  attacked_squares |= GenAttackedSquares<c_emy, KNIGHT>(pos);
+  attacked_squares |= GenAttackedSquares<c_emy, ROOK>(pos);
+  attacked_squares |= GenAttackedSquares<c_emy, QUEEN>(pos);
+  attacked_squares |= GenAttackedSquares<c_emy, KING>(pos);
 
   int __x = PopCount(AttackSquares<KING>(k_sq, 0) & ~(pieces_my | attacked_squares));
   return min(__x, 3);

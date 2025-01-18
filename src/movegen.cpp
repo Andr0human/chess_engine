@@ -1,11 +1,10 @@
 
 #include "attacks.h"
+#include "base_utils.h"
 #include "movegen.h"
 
 
 #ifndef MOVEGEN_UTILS
-
-typedef Bitboard (*ShifterFunc)(Bitboard val, int shift);
 
 template <Color c_my>
 bool
@@ -933,20 +932,38 @@ CapturesExistInPosition(const ChessBoard& pos)
   return (attackMask & pos.piece<WHITE, ALL>()) != 0;
 }
 
+bool
+QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
+{
+  Bitboard queens      = pos.get_piece(pos.color, QUEEN);
+  Bitboard occupied_my = pos.get_piece(pos.color,   ALL);
+  Bitboard occupied    = pos.All();
+
+  while (queens != 0)
+  {
+    Square queenSq = NextSquare(queens);
+    Bitboard  mask = LegalSquares<QUEEN>(queenSq, occupied_my, occupied);
+
+    if ((mask ^ (mask & enemyAttackedSquares)) == 0) {
+      // Return true if piece attacking the queen is not opponent queen
+      const PieceType pt = type_of(pos.PieceOnSquare(GetSmallestAttacker(pos, queenSq, ~pos.color, 0)));
+      if (pt != QUEEN)
+        return true;
+    }
+  }
+
+  return false;
+}
+
 template<Color side>
 Square
 SmallestAttacker(const ChessBoard& pos, const Square square, Bitboard removedPieces)
 {
-  const int pawnInc = 2 * side - 1;
-
-  if ((1ULL << (square - (7 * pawnInc))) & (pos.piece<side, PAWN>() ^ (pos.piece<side, PAWN>() & removedPieces)))
-    return square - 7 * pawnInc;
-
-  if ((1ULL << (square - (9 * pawnInc))) & (pos.piece<side, PAWN>() ^ (pos.piece<side, PAWN>() & removedPieces)))
-    return square - 9 * pawnInc;
-
-  const Bitboard occupied = pos.All() ^ removedPieces;
+  Bitboard occupied = pos.All() ^ removedPieces;
   Bitboard mask;
+
+  mask = AttackSquares<~side, PAWN>(square) & (pos.piece<side, PAWN>() ^ (pos.piece<side, PAWN>() & removedPieces));
+  if (mask) return MsbIndex(mask);
 
   mask = AttackSquares<KNIGHT>(square, occupied) & (pos.piece<side, KNIGHT>() ^ (pos.piece<side, KNIGHT>() & removedPieces));
   if (mask) return MsbIndex(mask);

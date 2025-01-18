@@ -1,5 +1,6 @@
 
 #include "search_utils.h"
+#include "movegen.h"
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -72,18 +73,23 @@ Reduction (Depth depth, size_t moveNo)
 }
 
 int
-SearchExtension(const MoveList& myMoves, int numExtensions)
+SearchExtension(const ChessBoard& pos, const MoveList& myMoves, int numExtensions)
 {
-  int extension = 0;
-
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
   
   // If king is in check, add 1
-  if (myMoves.checkers > 0 and myMoves.size() < 3) {
-    extension += 1;
-  }
+  if (myMoves.checkers > 0 and myMoves.size() < 3)
+    return 1;
+
+  // if queen trapped and attacked by minor piece, add 1
+  if (
+    (myMoves.checkers == 0) and
+    ((pos.get_piece(pos.color, QUEEN) & myMoves.pinnedPiecesSquares ) == 0) and
+    ((pos.get_piece(pos.color, QUEEN) & myMoves.enemyAttackedSquares) != 0) and
+    QueenTrapped(pos, myMoves.enemyAttackedSquares)
+  ) return 1;
   
-  return extension;
+  return 0;
 }
 

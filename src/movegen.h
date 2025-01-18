@@ -46,6 +46,9 @@ MoveList GenerateMoves(ChessBoard& pos, bool qsSearch = false, bool findChecks =
 bool
 CapturesExistInPosition(const ChessBoard& pos);
 
+bool
+QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares);
+
 Square
 GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces);
 
