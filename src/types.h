@@ -18,6 +18,7 @@ enum SearchTechnique: bool
   useTT = true,
   useLMR = true,
   useExtensions = true,
+  useMoveOrder = true,
 };
 
 enum Color: int

@@ -248,7 +248,7 @@ Level1(const vector<string>& args)
   bool qs = (args.size() >= 3 and args[2] == "q");
 
   MoveList myMoves = GenerateMoves(pos, qs, true);
-  OrderMoves(myMoves, qs, true);
+  OrderMoves(pos, myMoves, qs, true);
   PrintMovelist(myMoves, pos);
 
   EvalDump(pos);

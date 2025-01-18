@@ -362,6 +362,16 @@ MobilityStrength(const ChessBoard& pos)
 
 template <Color c_my>
 static Score
+isPassedPawn(const ChessBoard& pos, Square pawnSq)
+{
+  const Color c_emy = ~c_my;
+  const Bitboard emyPawns = pos.piece<c_emy, PAWN>();
+
+  return (plt::PassedPawnMasks[c_my][pawnSq] & emyPawns) == 0;
+}
+
+template <Color c_my>
+static Score
 PawnStructure(const ChessBoard& pos)
 {
   constexpr Color c_emy = ~c_my;
