@@ -235,8 +235,8 @@ BuildSlidingTable(MaskTable& _arr, int index, int index_inc, int inc_x, int inc_
     Bitboard val = 0;
     for (int i = x, j = y; InRange(i, j); i += inc_x, j += inc_y)
     {
-        _arr[8 * j + i] = val;
-        val |= 1ULL << (8 * j + i);
+      _arr[8 * j + i] = val;
+      val |= 1ULL << (8 * j + i);
     }
   }
 }
