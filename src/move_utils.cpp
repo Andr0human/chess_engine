@@ -108,7 +108,7 @@ PrintMove(Move move, ChessBoard _cb)
         (pt == ROOK   ? AttackSquares< ROOK >(fp, Apieces) :
         AttackSquares<QUEEN>(fp, Apieces))));
 
-    pieces = (pieces & _cb.get_piece(make_piece(_cb.color, pt))) ^ (1ULL << ip);
+    pieces = (pieces & _cb.get_piece(_cb.color, pt)) ^ (1ULL << ip);
 
     string piece_name = string(1, piece_names[pt - 2]);
     string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;

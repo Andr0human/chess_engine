@@ -202,16 +202,12 @@ class ChessBoard
   { return piece_ct[make_piece(c, pt)]; }
 
   Bitboard
-  get_piece(Piece piece) const noexcept
-  { return piece_bb[int(piece)]; }
+  get_piece(Color c, PieceType pt) const noexcept
+  { return piece_bb[make_piece(c, pt)]; }
 
   constexpr Bitboard
   All() const noexcept
-  {
-    constexpr Piece white_all = make_piece(WHITE, ALL);
-    constexpr Piece black_all = make_piece(BLACK, ALL);
-    return piece_bb[white_all] | piece_bb[black_all];
-  }
+  { return piece_bb[make_piece(WHITE, ALL)] | piece_bb[make_piece(BLACK, ALL)]; }
 
   void
   Dump(std::ostream& writer = std::cout);
