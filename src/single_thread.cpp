@@ -48,7 +48,9 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (stand_pat > alpha) alpha = stand_pat;
 
   MoveList myMoves = GenerateMoves(pos, true);
-  OrderMoves(myMoves, false, false);
+
+  if constexpr (useMoveOrder)
+    OrderMoves(pos, myMoves, false, false);
 
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -152,12 +154,13 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   MoveList myMoves = GenerateMoves(pos, false, true);
 
   // Order moves according to heuristics for faster alpha-beta search
-  OrderMoves(myMoves, true, true);
+  if constexpr (useMoveOrder)
+    OrderMoves(pos, myMoves, true, true);
 
   if constexpr (useExtensions)
   {
     // Search Extensions
-    int extensions = SearchExtension(myMoves, numExtensions);
+    int extensions = SearchExtension(pos, myMoves, numExtensions);
     depth         += extensions;
     numExtensions += extensions;
   }

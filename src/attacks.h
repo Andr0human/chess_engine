@@ -7,6 +7,7 @@
 #include "lookup_table.h"
 #include "bitboard.h"
 
+typedef Bitboard (*ShifterFunc)(Bitboard val, int shift);
 
 // Returns and removes the LsbIndex
 inline Square
@@ -22,6 +23,20 @@ template <PieceType pt>
 Bitboard
 AttackSquares(Square sq, Bitboard occupied) = delete;
 
+template <Color c, PieceType pt>
+Bitboard
+AttackSquares(Square sq) = delete;
+
+// Returns all squares attacked by pawn on index sq
+template <>
+inline Bitboard
+AttackSquares<WHITE, PAWN>(Square sq)
+{ return plt::PawnCaptureMasks[WHITE][sq]; }
+
+template <>
+inline Bitboard
+AttackSquares<BLACK, PAWN>(Square sq)
+{ return plt::PawnCaptureMasks[BLACK][sq]; }
 
 // Returns all squares attacked by bishop on index sq
 template <>
@@ -79,12 +94,12 @@ template <Color c_my>
 Bitboard
 PawnAttackSquares(const ChessBoard& _cb)
 {
-    constexpr int inc  = 2 * int(c_my) - 1;
     Bitboard pawns = _cb.piece<c_my, PAWN>();
-    const auto shifter = (c_my == WHITE) ? LeftShift : RightShift;
+    const int inc  = 2 * int(c_my) - 1;
+    const ShifterFunc shift = c_my == WHITE ? LeftShift : RightShift;
 
-    return shifter(pawns & RightAttkingPawns, 8 + inc) |
-           shifter(pawns & LeftAttkingPawns , 8 - inc);
+    return shift(pawns & RightAttkingPawns, 8 + inc) |
+           shift(pawns & LeftAttkingPawns , 8 - inc);
 }
 
 /**

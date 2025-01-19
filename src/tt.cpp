@@ -108,9 +108,9 @@ TranspositionTable::LookupPosition
   const auto lookup = [&] (const ZobristHashKey &__pos)
   {
     if (__pos.key == zkey && __pos.depth > depth) {
-      if (__pos.flag == HASHEXACT) return __pos.eval;
-      if (__pos.flag == HASHALPHA && __pos.eval <= alpha) return alpha;
-      if (__pos.flag == HASHBETA  && __pos.eval >= beta ) return beta;
+      if (__pos.flag == HASH_EXACT) return __pos.eval;
+      if (__pos.flag == HASH_ALPHA && __pos.eval <= alpha) return alpha;
+      if (__pos.flag == HASH_BETA  && __pos.eval >= beta ) return beta;
     }
 
     return int(VALUE_UNKNOWN);

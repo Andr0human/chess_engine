@@ -18,6 +18,7 @@ enum SearchTechnique: bool
   useTT = true,
   useLMR = true,
   useExtensions = true,
+  useMoveOrder = true,
 };
 
 enum Color: int
@@ -38,10 +39,17 @@ enum Piece: int
   B_PAWN = PAWN + 8, B_BISHOP, B_KNIGHT, B_ROOK, B_QUEEN, B_KING,
 };
 
+enum Table: uint64_t
+{
+  ROOK_LOOKUP_TABLE_SIZE = 106495,
+  BISHOP_LOOKUP_TABLE_SIZE = 5248,
+};
+
 enum Search
 {
   HASH_EMPTY = 0, HASH_EXACT = 1,
   HASH_ALPHA = 2, HASH_BETA  = 3,
+  HASH_INDEXES_SIZE = 855,
 
   MAX_MOVES = 256,
   MAX_PLY = 40,

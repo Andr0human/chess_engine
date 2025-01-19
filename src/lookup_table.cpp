@@ -4,37 +4,37 @@
 namespace plt
 {
 
-Bitboard    UpMasks[SQUARE_NB];
-Bitboard  DownMasks[SQUARE_NB];
-Bitboard  LeftMasks[SQUARE_NB];
-Bitboard RightMasks[SQUARE_NB];
+MaskTable    UpMasks;
+MaskTable  DownMasks;
+MaskTable  LeftMasks;
+MaskTable RightMasks;
 
-Bitboard   UpRightMasks[SQUARE_NB];
-Bitboard    UpLeftMasks[SQUARE_NB];
-Bitboard DownRightMasks[SQUARE_NB];
-Bitboard  DownLeftMasks[SQUARE_NB];
+MaskTable   UpRightMasks;
+MaskTable    UpLeftMasks;
+MaskTable DownRightMasks;
+MaskTable  DownLeftMasks;
 
-Bitboard     LineMasks[SQUARE_NB];
-Bitboard DiagonalMasks[SQUARE_NB];
+MaskTable     LineMasks;
+MaskTable DiagonalMasks;
 
-Bitboard      RookMasks[SQUARE_NB];
-Bitboard    BishopMasks[SQUARE_NB];
-Bitboard    KnightMasks[SQUARE_NB];
-Bitboard      KingMasks[SQUARE_NB];
-Bitboard KingOuterMasks[SQUARE_NB];
+MaskTable      RookMasks;
+MaskTable    BishopMasks;
+MaskTable    KnightMasks;
+MaskTable      KingMasks;
+MaskTable KingOuterMasks;
 
-Bitboard        PawnMasks[COLOR_NB][SQUARE_NB];
-Bitboard PawnCaptureMasks[COLOR_NB][SQUARE_NB];
-Bitboard  PassedPawnMasks[COLOR_NB][SQUARE_NB];
+array<MaskTable, COLOR_NB>        PawnMasks;
+array<MaskTable, COLOR_NB> PawnCaptureMasks;
+array<MaskTable, COLOR_NB>  PassedPawnMasks;
 
-Bitboard   RookStartIndex[SQUARE_NB];
-Bitboard BishopStartIndex[SQUARE_NB];
+MaskTable   RookStartIndex;
+MaskTable BishopStartIndex;
 
-Bitboard*   RookMovesLookUp = new Bitboard[106495];
-Bitboard* BishopMovesLookUp = new Bitboard[5248];
+Bitboard*   RookMovesLookUp = new Bitboard[ROOK_LOOKUP_TABLE_SIZE  ];
+Bitboard* BishopMovesLookUp = new Bitboard[BISHOP_LOOKUP_TABLE_SIZE];
 
 
-Bitboard RookMagics[SQUARE_NB] = {
+MaskTable RookMagics = {
    0x68000814008B4A0, 0x8600114481020020, 0x1F000AC0F1002001, 0x1600020063144099, 0xCE1E254B3BA3A1E2, 0x61000C00A1002812, 0x1E00080200331AA4, 0x5E000102004BA584,
   0x5DF88002400A8927, 0x1D2700210186C007,  0x27A0025F20081C1, 0x1676002040A8B200, 0xA7AE00044A002150, 0x24AE002912006410, 0x552A000528243200, 0xD7A1002346009500,
   0x18B189800BE14003, 0x35D5C1C000E01001,   0x79B20042006082, 0x402E420010E02A01, 0x14B501000800910C, 0x9F1B0100189A0400, 0x72AEC40012087330, 0xA0A46A000A91410C,
@@ -45,7 +45,7 @@ Bitboard RookMagics[SQUARE_NB] = {
   0x93D60083630254C2, 0x5218204001910381, 0xD13C6832008260C2, 0xE59E00C238522012, 0x701200AC50982006, 0xE6B600348308101E, 0x3E9D78060690091C, 0xFA315A8C0F38A902
 };
 
-int RookShifts[SQUARE_NB] = {
+ShiftTable RookShifts = {
   52, 53, 53, 52, 52, 53, 53, 52,
   53, 54, 54, 54, 54, 54, 54, 53,
   53, 54, 54, 54, 54, 54, 54, 53,
@@ -56,7 +56,7 @@ int RookShifts[SQUARE_NB] = {
   52, 53, 53, 53, 53, 53, 53, 52
 };
 
-Bitboard BishopMagics[SQUARE_NB] = {
+MaskTable BishopMagics = {
   0xC17820058E05C10A, 0xD64E4C58028F0605, 0x2884780208C84BD4, 0x17DC4C0980A3E81E, 0x807C04209FE149EC, 0x9CF4F3E16786090D, 0xED0A5A0620A03652, 0xC124818808051430,
   0xB51458CE5C081A17, 0xC9A4780AD80366ED, 0x488578184B04A6F3, 0xD36D882081ABFD8B, 0xA3EA63F35E48A68C, 0xD5A8920190A81095, 0x7C731BEBD6EBAF4A, 0x7E7F28340CC8A7C3,
   0xF816947223301C03, 0xC89456D02C180DDD, 0xF59C13E80A4C0008, 0xC248033C2041F1AA, 0xFD6087D400A012D5, 0x6CC6802348200804, 0xA50C9F012B4EF288, 0x1520457F07480C1E,
@@ -67,7 +67,7 @@ Bitboard BishopMagics[SQUARE_NB] = {
   0x165AF40B080A103E, 0x2DD4D902839058AD, 0xFE4FCD7B12231075, 0xB265FF1781840C0B, 0x50E49B7311A6020E, 0x1F1AF5200A161606, 0x7A0F700C07542C00, 0x839CB842080E0010
 };
 
-int BishopShifts[SQUARE_NB] = {
+ShiftTable BishopShifts = {
   58, 59, 59, 59, 59, 59, 59, 58,
   59, 59, 59, 59, 59, 59, 59, 59,
   59, 59, 57, 57, 57, 57, 59, 59,
@@ -194,7 +194,7 @@ BishopSquaresBasic(Square sq, Bitboard blocker)
 }
 
 static void
-BuildLookUpTable(Bitboard* masks, Bitboard* magic_table, int* shift_table, Bitboard* start_index,
+BuildLookUpTable(MaskTable& masks, MaskTable& magic_table, ShiftTable& shift_table, MaskTable& start_index,
                  Bitboard* lookup_table, Bitboard (*atk_square_gen)(Square, Bitboard))
 {
 	Bitboard blockers[4096];
@@ -226,7 +226,7 @@ BuildLookUpTable(Bitboard* masks, Bitboard* magic_table, int* shift_table, Bitbo
 
 
 static void
-BuildSlidingTable(Bitboard* _arr, int index, int index_inc, int inc_x, int inc_y)
+BuildSlidingTable(MaskTable& _arr, int index, int index_inc, int inc_x, int inc_y)
 {
   for (int idx = index;; idx += index_inc)
   {
@@ -235,15 +235,15 @@ BuildSlidingTable(Bitboard* _arr, int index, int index_inc, int inc_x, int inc_y
     Bitboard val = 0;
     for (int i = x, j = y; InRange(i, j); i += inc_x, j += inc_y)
     {
-        _arr[8 * j + i] = val;
-        val |= 1ULL << (8 * j + i);
+      _arr[8 * j + i] = val;
+      val |= 1ULL << (8 * j + i);
     }
   }
 }
 
 
 static void
-BuildKnightTable(Bitboard* _arr)
+BuildKnightTable(MaskTable& _arr)
 {
   const int inc_x[2] = {2, -2};
   const int inc_y[2] = {1, -1};
@@ -272,7 +272,7 @@ BuildKnightTable(Bitboard* _arr)
 
 
 static void
-BuildKingTable(Bitboard* _arr)
+BuildKingTable(MaskTable& _arr)
 {
   const int inc[SQUARE_NB] = {1, -1};
 
@@ -303,7 +303,7 @@ BuildKingTable(Bitboard* _arr)
 
 
 static void
-BuildKingOuterTable(Bitboard* table)
+BuildKingOuterTable(MaskTable& table)
 {
   for (Square square = SQ_A1; square < SQUARE_NB; ++square)
   {
@@ -323,7 +323,7 @@ BuildKingOuterTable(Bitboard* table)
 
 
 static void
-BuildPawnTable(Bitboard* _arr, int dir, bool captures)
+BuildPawnTable(MaskTable& _arr, int dir, bool captures)
 {
   for (int i = 0; i < 64; i++)
   {
@@ -344,7 +344,7 @@ BuildPawnTable(Bitboard* _arr, int dir, bool captures)
 
 
 static void
-BuildPassedPawnTable(Bitboard* _arr, Bitboard* gen_table)
+BuildPassedPawnTable(MaskTable& _arr, MaskTable& gen_table)
 {
   for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
   {
@@ -358,7 +358,7 @@ BuildPassedPawnTable(Bitboard* _arr, Bitboard* gen_table)
 
 
 static void
-MergeTable(Bitboard* to_table, Bitboard* from_table1, Bitboard* from_table2)
+MergeTable(MaskTable& to_table, MaskTable& from_table1, MaskTable& from_table2)
 {
   for (int i = 0; i < 64; i++)
     to_table[i] |= from_table1[i] | from_table2[i];
@@ -366,7 +366,7 @@ MergeTable(Bitboard* to_table, Bitboard* from_table1, Bitboard* from_table2)
 
 
 static void
-SetZero(Bitboard* table)
+SetZero(MaskTable& table)
 {
   for (int i = 0; i < 64; i++)
     table[i] = 0;

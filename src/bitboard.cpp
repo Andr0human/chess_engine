@@ -485,7 +485,7 @@ ChessBoard::UndoInfoPush(PieceType it, PieceType ft, Move move, bool in_search)
   if (!in_search and ((ft != NONE) or (it == PAWN)))
     undoInfoStackCounter = 0;
 
-  undo_info[undoInfoStackCounter++] = UndoInfo(move, csep, Hash_Value, halfmove);
+  undoInfo[undoInfoStackCounter++] = UndoInfo(move, csep, Hash_Value, halfmove);
 }
 
 
@@ -493,10 +493,10 @@ Move
 ChessBoard::UndoInfoPop()
 {
   undoInfoStackCounter--;
-  csep = undo_info[undoInfoStackCounter].csep;
-  Hash_Value = undo_info[undoInfoStackCounter].hash;
-  halfmove = undo_info[undoInfoStackCounter].halfmove;
-  return undo_info[undoInfoStackCounter].move;
+  csep = undoInfo[undoInfoStackCounter].csep;
+  Hash_Value = undoInfo[undoInfoStackCounter].hash;
+  halfmove = undoInfo[undoInfoStackCounter].halfmove;
+  return undoInfo[undoInfoStackCounter].move;
 }
 
 
@@ -504,7 +504,7 @@ void
 ChessBoard::AddPreviousBoardPositions(const vector<Key>& prev_keys) noexcept
 {
   for (Key key : prev_keys)
-    undo_info[undoInfoStackCounter++] = UndoInfo(0, 0, key, 0);
+    undoInfo[undoInfoStackCounter++] = UndoInfo(0, 0, key, 0);
 }
 
 bool
@@ -514,7 +514,7 @@ ChessBoard::ThreeMoveRepetition() const noexcept
   int last = std::max(0, undoInfoStackCounter - halfmove);
 
   for (int i = undoInfoStackCounter - 1; i >= last; i--)
-    if (Hash_Value == undo_info[i].hash)
+    if (Hash_Value == undoInfo[i].hash)
         ++pos_count;
 
   return pos_count >= 1;
@@ -663,11 +663,11 @@ ChessBoard::Dump(std::ostream& writer)
   writer << "enemy_attacked_squares: " << enemyAttackedSquares << endl;
 
   writer << "movenum: " << undoInfoStackCounter << endl;
-  writer << "undo_info: \n";
+  writer << "undoInfo: \n";
 
   for (int i = 0; i < undoInfoStackCounter; i++)
-    writer << undo_info[i].move << ", " << undo_info[i].hash
-           << ", " << undo_info[i].csep << ", " << undo_info[i].halfmove << endl;
+    writer << undoInfo[i].move << ", " << undoInfo[i].hash
+           << ", " << undoInfo[i].csep << ", " << undoInfo[i].halfmove << endl;
 
   writer << endl;
 }

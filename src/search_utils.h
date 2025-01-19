@@ -36,7 +36,7 @@ bool
 LmrOk(Move move, Depth depth, size_t moveNo);
 
 int
-SearchExtension(const MoveList& myMoves, int numExtensions);
+SearchExtension(const ChessBoard& pos, const MoveList& myMoves, int numExtensions);
 
 
 #endif
