@@ -57,6 +57,14 @@ Distance(Square s, Square t)
   return abs(s_x - t_x) + abs(s_y - t_y);
 }
 
+static int
+ChebyshevDistance(Square s1, Square s2)
+{
+  int rank1 = s1 >> 3, file1 = s1 & 7;
+  int rank2 = s2 >> 3, file2 = s2 & 7;
+  return std::max(abs(rank1 - rank2), abs(file1 - file2));
+}
+
 bool
 isTheoreticalDraw(const ChessBoard& pos)
 {
@@ -363,7 +371,7 @@ MobilityStrength(const ChessBoard& pos)
 }
 
 template <Color c_my>
-static Score
+static bool
 isPassedPawn(const ChessBoard& pos, Square pawnSq)
 {
   const Color c_emy = ~c_my;
@@ -373,14 +381,29 @@ isPassedPawn(const ChessBoard& pos, Square pawnSq)
 }
 
 template <Color c_my>
-static Score
-PawnStructure(const ChessBoard& pos)
+static bool
+CanSafelyPromote(const ChessBoard& pos, Square pawnSq)
 {
-  constexpr Color c_emy = ~c_my;
-  Score score = 0;
+  Square emykingSq = SquareNo(pos.piece<~c_my, KING>());
+  Square   promoSq = Square(SQ_A8 * c_my) + (pawnSq & 7);
+
+  int emyKingToMove = c_my != pos.color;
+
+  if (min(5, ChebyshevDistance(pawnSq, promoSq)) < ChebyshevDistance(emykingSq, promoSq) - emyKingToMove)
+    return true;
+
+  return false;
+}
+
+template <Color c_my>
+static Score
+PawnStructure(const ChessBoard& pos, const EvalData& ed)
+{
+  const Color c_emy = ~c_my;
   Bitboard     pawns = pos.piece<c_my , PAWN>();
   Bitboard emy_pawns = pos.piece<c_emy, PAWN>();
   Bitboard    column = FileA;
+  Score score = 0;
 
   // Punish Double Pawns on same column
   for (int i = 0; i < 8; i++)
@@ -392,21 +415,30 @@ PawnStructure(const ChessBoard& pos)
 
   while (pawns != 0)
   {
-    Square pawn_sq = NextSquare(pawns);
-    if ((plt::PassedPawnMasks[c_my][pawn_sq] & emy_pawns) != 0)
+    Square pawnSq = NextSquare(pawns);
+    if ((plt::PassedPawnMasks[c_my][pawnSq] & emy_pawns) != 0)
       continue;
 
-    Score d = (7 * (c_my ^ 1)) + (pawn_sq >> 3) * (2 * c_my - 1);
+    if (isPassedPawn<c_my>(pos, pawnSq))
+    {
+      // Reward for passed pawn
+      Score distToPromotion = (7 * (c_my ^ 1)) + (pawnSq >> 3) * (2 * c_my - 1);
+      score += 3 * distToPromotion * distToPromotion;
 
-    // Reward for having passed pawn
-    score += 3 * d * d;
+      if (CanSafelyPromote<c_my>(pos, pawnSq))
+      {
+        Score reward = ed.pieces[c_emy] == 0 ? QueenValueEg : PawnValueEg >> 2;
+        score += reward + 3 * distToPromotion * distToPromotion;
+      }
+    }
 
     Square  kpos = SquareNo(pos.piece<c_my , KING>());
     Square ekpos = SquareNo(pos.piece<c_emy, KING>());
 
+    // TODO: More points for being close to pawn which is closer to promotion
     // Add score for king close to passed pawn and
     // Reduce score if enemy king is close to pawn
-    int dist = (14 - Distance(pawn_sq, kpos)) - (14 - Distance(pawn_sq, ekpos));
+    int dist = (14 - Distance(pawnSq, kpos)) - (14 - Distance(pawnSq, ekpos));
     score += 6 * dist;
   }
 
@@ -636,17 +668,19 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   if (debug)
   {
     cout << " -- ENDGAME -- " << endl;
-    cout << "materialScore   = " << materialScore   << endl;
-    cout << "pieceTableScore = " << pieceTableScore << endl;
-    cout << "distanceScore   = " << distanceScore   << endl;
-    cout << "parityScore     = " << parityScore     << endl << endl;
+    cout << "materialScore      = " << materialScore   << endl;
+    cout << "pieceTableScore    = " << pieceTableScore << endl;
+    cout << "pawnStructureScore = " << pawnStructure   << endl;
+    cout << "distanceScore      = " << distanceScore   << endl;
+    cout << "parityScore        = " << parityScore     << endl << endl;
   }
 
   float eval =
       ed.materialWeight     * float(materialScore)
     + ed.pieceTableWeight   * float(pieceTableScore)
-    + ed.pawnSructureWeight * float(pawnStructure)
-    + float(distanceScore)  + float(parityScore);
+    + 0.7f                  * float(pawnStructure)
+    + float(distanceScore)
+    + float(parityScore);
 
   return Score(eval);
 }
@@ -667,7 +701,7 @@ Evaluate(const ChessBoard& pos)
     return score * side2move;
   }
 
-  ed.pawnStructureScore = PawnStructure<WHITE>(pos) - PawnStructure<BLACK>(pos);
+  ed.pawnStructureScore = PawnStructure<WHITE>(pos, ed) - PawnStructure<BLACK>(pos, ed);
   float phase = ed.phase;
 
   Score mg_score = MidGameScore(pos, ed, phase);
@@ -691,8 +725,8 @@ Score EvalDump(const ChessBoard& pos)
   if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
     return (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE, 1>(pos) : LoneKingEndGame<BLACK, 1>(pos);
 
-  Score pawnStructrueWhite = PawnStructure<WHITE>(pos);
-  Score pawnStructrueBlack = PawnStructure<BLACK>(pos);
+  Score pawnStructrueWhite = PawnStructure<WHITE>(pos, ed);
+  Score pawnStructrueBlack = PawnStructure<BLACK>(pos, ed);
   ed.pawnStructureScore = pawnStructrueWhite - pawnStructrueBlack;
 
   cout << "Score_pawn_structure_white = " << pawnStructrueWhite << endl;
