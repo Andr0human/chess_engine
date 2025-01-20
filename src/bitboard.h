@@ -198,8 +198,13 @@ class ChessBoard
 
   template <Color c, PieceType pt>
   int
-  pieceCount() const noexcept
+  count() const noexcept
   { return piece_ct[make_piece(c, pt)]; }
+
+  template <PieceType pt>
+  int
+  count() const noexcept
+  { return count<WHITE, pt>() + count<BLACK, pt>(); }
 
   Bitboard
   get_piece(Color c, PieceType pt) const noexcept
@@ -229,8 +234,10 @@ class ChessBoard
     for (int sq = 0; sq < 64; sq++) {
       if (board[sq] == 0) continue;
       piece_bb[board[sq]] |= 1ULL << sq;
-      piece_ct[board[sq]]++;
       piece_bb[(board[sq] & 8) + 7] |= 1ULL << sq;
+      piece_ct[board[sq]]++;
+
+      if ((board[sq] & 7) == KING) continue;
       piece_ct[(board[sq] & 8) + 7]++;
     }
 
