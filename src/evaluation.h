@@ -13,10 +13,10 @@ class EvalData
 	template <Color c_my>
 	void MaterialCount(const ChessBoard& pos)
 	{
-		pieces[c_my]  = pos.pieceCount<c_my, BISHOP>()
-					  + pos.pieceCount<c_my, KNIGHT>()
-					  + pos.pieceCount<c_my, ROOK>()
-					  + pos.pieceCount<c_my, QUEEN>();
+		pieces[c_my]  = pos.count<c_my, BISHOP>()
+					  + pos.count<c_my, KNIGHT>()
+					  + pos.count<c_my, ROOK  >()
+					  + pos.count<c_my, QUEEN >();
 	}
 
 
@@ -47,30 +47,30 @@ class EvalData
 		pieceCount = pieces[WHITE] + pieces[BLACK];
 
 		phase = float(
-			10 * (pos.pieceCount<WHITE, PAWN  >() + pos.pieceCount<BLACK, PAWN  >())
-		  + 30 * (pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>())
-		  + 30 * (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>())
-		  + 55 * (pos.pieceCount<WHITE, ROOK  >() + pos.pieceCount<BLACK, ROOK  >())
-		  + 90 * (pos.pieceCount<WHITE, QUEEN >() + pos.pieceCount<BLACK, QUEEN >())
+			10 * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
+		  + 30 * (pos.count<WHITE, BISHOP>() + pos.count<BLACK, BISHOP>())
+		  + 30 * (pos.count<WHITE, KNIGHT>() + pos.count<BLACK, KNIGHT>())
+		  + 55 * (pos.count<WHITE, ROOK  >() + pos.count<BLACK, ROOK  >())
+		  + 90 * (pos.count<WHITE, QUEEN >() + pos.count<BLACK, QUEEN >())
 		) / float(GamePhaseLimit);
 
 		boardWeight =
-			PawnValueMg   * (pos.pieceCount<WHITE, PAWN  >() + pos.pieceCount<BLACK, PAWN  >())
-		  + BishopValueMg * (pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>())
-		  + KnightValueMg * (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>())
-		  + RookValueMg   * (pos.pieceCount<WHITE, ROOK  >() + pos.pieceCount<BLACK, ROOK  >())
-		  + QueenValueMg  * (pos.pieceCount<WHITE, QUEEN >() + pos.pieceCount<BLACK, QUEEN >());
+			PawnValueMg   * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
+		  + BishopValueMg * (pos.count<WHITE, BISHOP>() + pos.count<BLACK, BISHOP>())
+		  + KnightValueMg * (pos.count<WHITE, KNIGHT>() + pos.count<BLACK, KNIGHT>())
+		  + RookValueMg   * (pos.count<WHITE, ROOK  >() + pos.count<BLACK, ROOK  >())
+		  + QueenValueMg  * (pos.count<WHITE, QUEEN >() + pos.count<BLACK, QUEEN >());
 		
 		// phase = float(boardWeight) / float(GamePhaseLimit);
 	}
 
 	bool
 	NoWhitePiecesOnBoard(const ChessBoard& pos) const noexcept
-	{ return pos.pieceCount<WHITE, PAWN>() + pieces[WHITE] == 0; }
+	{ return pos.count<WHITE, PAWN>() + pieces[WHITE] == 0; }
 
 	bool
 	NoBlackPiecesOnBoard(const ChessBoard& pos) const noexcept
-	{ return pos.pieceCount<BLACK, PAWN>() + pieces[BLACK] == 0; }
+	{ return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
 bool

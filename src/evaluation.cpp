@@ -6,48 +6,6 @@
 using std::abs;
 using std::min;
 
-template <Color side>
-static bool
-OnePawnEndgame(const ChessBoard& pos)
-{
-  // Assuming its white
-  constexpr Color emySide = ~side;
-
-  const Bitboard    pawn = pos.piece<side   , PAWN>();
-  const Bitboard  myKing = pos.piece<side   , KING>();
-  const Bitboard emyKing = pos.piece<emySide, KING>();
-
-  const int incFactor = 2 * side - 1;
-
-  const Square pawnSq    = SquareNo(pawn   );
-  const Square myKingSq  = SquareNo(myKing );
-  const Square emyKingSq = SquareNo(emyKing);
-
-//   8/4k3/8/4K3/4P3/8/8/8 w - - 0 1
-
-  if ((pawnSq + 8 * incFactor == emyKingSq) and
-      (pawnSq - 8 * incFactor ==  myKingSq) and
-      ((pos.color == emySide) or (!(emyKing & Rank18) and (pos.color == side)))
-    ) return true;
-
-  if ((pawnSq + 8 * incFactor == emyKingSq) and
-      ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
-      ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
-    ) return true;
-
-  if (((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
-      ((pawnSq + 16 * incFactor == emyKingSq) and
-      ((pos.color == emySide)))
-    ) return true;
-
-  if ((pawnSq +  8 * incFactor ==  myKingSq) and
-      (pawnSq + 24 * incFactor == emyKingSq) and
-      ((pos.color == side) and !(emyKing & Rank18))
-    ) return true;
-
-  return false;
-}
-
 static int
 Distance(Square s, Square t)
 {
@@ -63,42 +21,6 @@ ChebyshevDistance(Square s1, Square s2)
   int rank1 = s1 >> 3, file1 = s1 & 7;
   int rank2 = s2 >> 3, file2 = s2 & 7;
   return std::max(abs(rank1 - rank2), abs(file1 - file2));
-}
-
-bool
-isTheoreticalDraw(const ChessBoard& pos)
-{
-  int pieceCount = pos.pieceCount<WHITE, ALL>() + pos.pieceCount<BLACK, ALL>() - 2;
-  if (pieceCount > 2)
-    return false;
-
-  if (pieceCount == 0)
-    return true;
-
-  if (pieceCount == 1)
-  {
-    // KPK position
-    if (pos.pieceCount<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() > 0)
-      return pos.pieceCount<WHITE, PAWN>() == 1 ? OnePawnEndgame<WHITE>(pos) : OnePawnEndgame<BLACK>(pos);
-
-    if ((pos.pieceCount<WHITE, BISHOP>() + pos.pieceCount<BLACK, BISHOP>() == 1)
-     or (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 1)) return true;
-
-    return false;
-  }
-
-  if (pos.pieceCount<WHITE, ALL>() == 2 and pos.pieceCount<BLACK, ALL>() == 2)
-  {
-    if (pos.pieceCount<WHITE, PAWN>() + pos.pieceCount<BLACK, PAWN>() > 0)
-      return false;
-
-    if (((pos.pieceCount<WHITE, QUEEN>() > 0) and (pos.pieceCount<BLACK, QUEEN>() == 0))
-     or ((pos.pieceCount<BLACK, QUEEN>() > 0) and (pos.pieceCount<WHITE, QUEEN>() == 0))) return false;
-    return true;
-  }
-
-  if (pos.pieceCount<WHITE, KNIGHT>() + pos.pieceCount<BLACK, KNIGHT>() == 2) return true;
-  return false;
 }
 
 #ifndef THREATS
@@ -233,8 +155,8 @@ static Score
 AttackersLeft(const ChessBoard& pos)
 {
   return Score(
-    pos.pieceCount<c_my, KNIGHT>() + 2 * pos.pieceCount<c_my, BISHOP>()
-    + 3 * pos.pieceCount<c_my, ROOK>() + 5 * pos.pieceCount<c_my, QUEEN>()
+    pos.count<c_my, KNIGHT>() + 2 * pos.count<c_my, BISHOP>()
+    + 3 * pos.count<c_my, ROOK>() + 5 * pos.count<c_my, QUEEN>()
   );
 }
 
@@ -309,11 +231,11 @@ Threats(const ChessBoard& pos)
 static Score
 MaterialDiffereceMidGame(const ChessBoard& pos)
 {
-  return PawnValueMg * (pos.pieceCount<WHITE, PAWN  >() - pos.pieceCount<BLACK, PAWN  >())
-     + BishopValueMg * (pos.pieceCount<WHITE, BISHOP>() - pos.pieceCount<BLACK, BISHOP>())
-     + KnightValueMg * (pos.pieceCount<WHITE, KNIGHT>() - pos.pieceCount<BLACK, KNIGHT>())
-     + RookValueMg   * (pos.pieceCount<WHITE, ROOK  >() - pos.pieceCount<BLACK, ROOK  >())
-     + QueenValueMg  * (pos.pieceCount<WHITE, QUEEN >() - pos.pieceCount<BLACK, QUEEN >());
+  return PawnValueMg * (pos.count<WHITE, PAWN  >() - pos.count<BLACK, PAWN  >())
+     + BishopValueMg * (pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>())
+     + KnightValueMg * (pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>())
+     +   RookValueMg * (pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >())
+     +  QueenValueMg * (pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >());
 }
 
 template<Color c_my, PieceType pt, const ScoreTable& strTable>
@@ -485,11 +407,11 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 static Score
 MaterialDiffereceEndGame(const ChessBoard& pos)
 {
-  return PawnValueEg * (pos.pieceCount<WHITE, PAWN  >() - pos.pieceCount<BLACK, PAWN  >())
-     + BishopValueEg * (pos.pieceCount<WHITE, BISHOP>() - pos.pieceCount<BLACK, BISHOP>())
-     + KnightValueEg * (pos.pieceCount<WHITE, KNIGHT>() - pos.pieceCount<BLACK, KNIGHT>())
-     +   RookValueEg * (pos.pieceCount<WHITE, ROOK  >() - pos.pieceCount<BLACK, ROOK  >())
-     +  QueenValueEg * (pos.pieceCount<WHITE, QUEEN >() - pos.pieceCount<BLACK, QUEEN >());
+  return PawnValueEg * (pos.count<WHITE, PAWN  >() - pos.count<BLACK, PAWN  >())
+     + BishopValueEg * (pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>())
+     + KnightValueEg * (pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>())
+     +   RookValueEg * (pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >())
+     +  QueenValueEg * (pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >());
 }
 
 static Score
@@ -499,10 +421,10 @@ DistanceBetweenKingsScore(const ChessBoard& pos)
   Square bk_sq = SquareNo( pos.piece<BLACK, KING>() );
 
   int material_diff =
-    + 3 * (pos.pieceCount<WHITE, BISHOP>() - pos.pieceCount<BLACK, BISHOP>())
-    + 3 * (pos.pieceCount<WHITE, KNIGHT>() - pos.pieceCount<BLACK, KNIGHT>())
-    + 5 * (pos.pieceCount<WHITE, ROOK  >() - pos.pieceCount<BLACK, ROOK  >())
-    + 9 * (pos.pieceCount<WHITE, QUEEN >() - pos.pieceCount<BLACK, QUEEN >());
+    + 3 * (pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>())
+    + 3 * (pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>())
+    + 5 * (pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >())
+    + 9 * (pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >());
 
   int distance = 14 - Distance(wk_sq, bk_sq);
   Score score = (distance / 4) * (distance + 2) * material_diff;

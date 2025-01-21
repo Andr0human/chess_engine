@@ -57,10 +57,12 @@ ChessBoard::SetPositionWithFen(const string& fen) noexcept
         Piece __x = Piece(char_to_piece_type(elem));
         board[square] = __x;
         piece_bb[__x] |= 1ULL << square;
-        piece_ct[__x]++;
         piece_bb[(__x & 8) + 7] |= 1ULL << square;
-        piece_ct[(__x & 8) + 7]++;
+        piece_ct[__x]++;
         ++square;
+
+        if ((__x & 7) == KING) continue;
+        piece_ct[(__x & 8) + 7]++;
       }
     }
   }

@@ -198,8 +198,13 @@ class ChessBoard
 
   template <Color c, PieceType pt>
   int
-  pieceCount() const noexcept
+  count() const noexcept
   { return piece_ct[make_piece(c, pt)]; }
+
+  template <PieceType pt>
+  int
+  count() const noexcept
+  { return count<WHITE, pt>() + count<BLACK, pt>(); }
 
   Bitboard
   get_piece(Color c, PieceType pt) const noexcept
@@ -214,6 +219,41 @@ class ChessBoard
 
   bool
   IntegrityCheck() const noexcept;
+
+  void
+  LoadPosition(int _board[64], Color c, string castling, string enpassant)
+  {
+    Reset();
+
+    for (int i = 0; i < 64; i++) {
+      board[i] = Piece(_board[i]);
+    }
+    
+    color = c;
+
+    for (int sq = 0; sq < 64; sq++) {
+      if (board[sq] == 0) continue;
+      piece_bb[board[sq]] |= 1ULL << sq;
+      piece_bb[(board[sq] & 8) + 7] |= 1ULL << sq;
+      piece_ct[board[sq]]++;
+
+      if ((board[sq] & 7) == KING) continue;
+      piece_ct[(board[sq] & 8) + 7]++;
+    }
+
+    for (char ch : castling) {
+      if (ch == '-')
+        continue;
+
+      int v = static_cast<int>(ch);
+      csep |= 1 << (10 - (v % 5));
+    }
+
+    if (enpassant == "-") csep |= 64;
+    else csep |= 28 + ((2 * color - 1) * 12) + (enpassant[0] - 'a');
+
+    Hash_Value = GenerateHashkey();
+  }
 };
 
 

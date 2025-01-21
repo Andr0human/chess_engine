@@ -65,6 +65,17 @@ enum Search
   NULL_MOVE = 0,
 };
 
+enum class Endgames: uint32_t
+{
+  KPK,
+  KNK,
+  KBK,
+  KBNK,
+  KBBK,
+  KNNK,
+  KRBK,
+};
+
 enum Value: Score
 {
   VALUE_ZERO = 0,
