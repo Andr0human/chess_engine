@@ -307,7 +307,7 @@ static bool
 CanSafelyPromote(const ChessBoard& pos, Square pawnSq)
 {
   Square emykingSq = SquareNo(pos.piece<~c_my, KING>());
-  Square   promoSq = Square(SQ_A8 * c_my) + (pawnSq & 7);
+  Square   promoSq = Square(int(SQ_A8) * int(c_my)) + (pawnSq & 7);
 
   int emyKingToMove = c_my != pos.color;
 
