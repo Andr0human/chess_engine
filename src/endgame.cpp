@@ -5,6 +5,8 @@
 using plt::PassedPawnMasks;
 
 
+// TODO: KRRK, KRNK, KBPK
+
 static int
 ChebyshevDistance(Square s1, Square s2)
 {
@@ -209,7 +211,7 @@ isTheoreticalDraw(const ChessBoard& pos)
   if (pieceCount == 2)
   {
     if (isEndgame<Endgames::KNNK>(pos))
-      return false;
+      return true;
 
     if (isEndgame<Endgames::KBBK>(pos))
       return Endgame<Endgames::KBBK>(pos);
