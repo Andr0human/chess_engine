@@ -90,16 +90,6 @@ string
 PrintMove(Move move, ChessBoard _cb);
 
 
-/**
- * @brief Prints all encoded-moves in list to human-readable strings
- * 
- * @param _cb board position
- * @param myMoves Movelist for board positions.
- */
-void
-PrintMovelist(MoveList myMoves, ChessBoard _cb);
-
-
 #endif
 
 

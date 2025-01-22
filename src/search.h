@@ -275,8 +275,14 @@ void OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool ch
 Score
 SeeScore(const ChessBoard& pos, Move move);
 
+/**
+ * @brief Prints all encoded-moves in list to human-readable strings
+ * 
+ * @param myMoves Movelist for board positions.
+ * @param pos board position
+ */
 void
-ShowMovelist(MoveList myMoves, ChessBoard _cb);
+PrintMovelist(MoveList myMoves, ChessBoard pos);
 
 extern SearchData info;
 

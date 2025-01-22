@@ -124,7 +124,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     return TIMEOUT;
 
   {
-      // check/stalemate check
+    // check/stalemate check
     if (!LegalMovesPresent(pos))
       return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
 

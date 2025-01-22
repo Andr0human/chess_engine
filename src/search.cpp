@@ -77,17 +77,10 @@ SeeScore(const ChessBoard& pos, Move move)
 }
 
 void
-ShowMovelist(MoveList myMoves, ChessBoard _cb)
+PrintMovelist(MoveList myMoves, ChessBoard pos)
 {
   using std::setw;
-
-  // Sort the moves based on their priority
-  for (size_t i = 0; i < myMoves.size(); i++) {
-    for (size_t j = i + 1; j < myMoves.size(); j++) {
-      if ((myMoves.pMoves[i] >> 21) < (myMoves.pMoves[j] >> 21))
-        std::swap(myMoves.pMoves[i], myMoves.pMoves[j]);
-    }
-  }
+  OrderMoves(pos, myMoves, false, true);
 
   cout << "MoveCount : " << myMoves.size() << '\n'
        << " | No. |   Move   | Encode-Move | Priority | See-Score |" << endl;
@@ -95,8 +88,8 @@ ShowMovelist(MoveList myMoves, ChessBoard _cb)
   for (size_t i = 0; i < myMoves.size(); i++)
   {
     Move move = myMoves.pMoves[i];
-    string moveString = PrintMove(move, _cb);
-    Score seeScore = SeeScore(_cb, move);
+    string moveString = PrintMove(move, pos);
+    Score seeScore = SeeScore(pos, move);
     int priority = move >> 24;
 
     cout << " | " << setw(3)  << (i + 1)
