@@ -33,6 +33,9 @@ bool
 InterestingMove(Move move);
 
 bool
+FutilityOk(Move move);
+
+bool
 LmrOk(Move move, Depth depth, size_t moveNo);
 
 int
