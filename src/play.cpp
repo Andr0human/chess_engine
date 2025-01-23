@@ -176,8 +176,6 @@ ExecuteLateCommands(PlayBoard& board)
 
         board.SearchDone();
 
-        WriteLog(info.GetSearchResult(__pos));
-
         WriteSearchResult(board);
 
         board.UpdateQuery();

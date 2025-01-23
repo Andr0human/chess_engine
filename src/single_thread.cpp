@@ -211,8 +211,6 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
   int ply{0}, pvIndex{0}, pvNextIndex;
 
-  // MoveList myMoves = GenerateMoves(_cb, false, true);
-  // moc.OrderMovesOnTime(myMoves);
   MoveList myMoves = info.getMoves();
 
   pvArray[pvIndex] = NULL_MOVE; // no pv yet
@@ -259,6 +257,8 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
   Score alpha = -VALUE_INF, beta = VALUE_INF;
   int valWindowCnt = 0;
 
+  info.ShowHeader(writer);
+
   for (Depth depth = 1; depth <= mDepth;)
   {
     Score eval = RootAlphabeta(board, alpha, beta, depth);
@@ -283,7 +283,7 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
       valWindowCnt = 0;
 
       info.AddResult(board, eval, pvArray);
-      writer << info.ShowLastDepthResult(board) << endl;
+      info.ShowLastDepthResult(board, writer);
 
       depth++;
     }
