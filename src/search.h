@@ -3,6 +3,7 @@
 #define SEARCH_H
 
 #include "perf.h"
+#include "varray.h"
 #include "bitboard.h"
 #include "movegen.h"
 #include "search_utils.h"
@@ -43,7 +44,7 @@ class TestPosition
   test(Nodes (*BulkCountFunc)(ChessBoard&, Depth), Depth d) const
   {
     ChessBoard pos(fen);
-    return BulkCountFunc(pos, d) == nodes[d - 1]; 
+    return BulkCountFunc(pos, d) == nodes[d - 1];
   }
 
   auto
@@ -81,8 +82,8 @@ class SearchData
   // Store which side to play for search_position
   Color side;
 
-  // Stores length of pv-line.
-  Ply pvLength;
+  // Stores current depth
+  Depth depth;
 
   // Time provided to find move for current position
   nanoseconds allotedTime;
@@ -90,17 +91,13 @@ class SearchData
   // Time spend on searching for move in position (in secs.)
   double timeForSearch = 0;
 
-  // Stores the pv of the lastest search
-  Move pvLine[MAX_PLY];
-
-  // Stores current depth
-  Depth depth;
+  Varray<Move, MAX_PLY> pvLine;
 
   // Stores the <best_move, eval> for each depth during search.
-  vector<pair<Move, Score>> moveEvals;
+  Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
   // Stores <move, time> for each move in each iteration.
-  pair<Move, uint64_t> moveTimes[MAX_MOVES];
+  Varray<pair<Move, uint64_t> , MAX_MOVES> moveTimes;
 
   size_t moveCount = 0;
 
@@ -110,7 +107,7 @@ class SearchData
     string res;
     bool qmoves_found = false;
 
-    for (Ply i = 0; i < pvLength; i++)
+    for (size_t i = 0; i < pvLine.size(); i++)
     {
       const Move move = pvLine[i];
       if (((move & QS_MOVE) != 0) and !qmoves_found)
@@ -132,19 +129,19 @@ class SearchData
   public:
 
   SearchData()
-  : startTime(perf::now()), pvLength(0) {}
+  : startTime(perf::now()) {}
 
   SearchData(ChessBoard& position, double _allotedTime)
-  : startTime(perf::now()), side(position.color), pvLength(0),
+  : startTime(perf::now()), side(position.color), depth(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
     const MoveList myMoves = GenerateMoves(position);
     Move zeroMove = myMoves.pMoves[0];
-    moveEvals.emplace_back(std::make_pair( zeroMove, 0 ));
-    
-    std::transform(myMoves.begin(), myMoves.end(), moveTimes,
-        [] (const Move m) { return make_pair(m, 0); }
-    );
+    moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
+
+    for (const Move move : myMoves)
+      moveTimes.add(make_pair(move, VALUE_ZERO));
+
     moveCount = myMoves.size();
   }
 
@@ -153,7 +150,7 @@ class SearchData
   {
     const Move filteredMove = filter(m);
 
-    for (Ply i = 0; i < pvLength; i++) {
+    for (size_t i = 0; i < pvLine.size(); i++) {
       if (filter(pvLine[i]) == filteredMove)
         return true;
     }
@@ -170,16 +167,16 @@ class SearchData
   void
   AddResult(ChessBoard pos, Score eval, Move pv[])
   {
-    pvLength = 0;
+    pvLine.clear();
 
     for (int i = 0; i < MAX_PV_ARRAY_SIZE; i++)
     {
-      if (!IsLegalMoveForPosition(pv[i], pos) or pvLength >= MAX_PLY)
+      if (!IsLegalMoveForPosition(pv[i], pos))
         break;
-      pvLine[pvLength++] = pv[i];
+      pvLine.add(pv[i]);
       pos.MakeMove(pv[i]);
     }
-    moveEvals.emplace_back(make_pair(pv[0], eval * (2 * side - 1)));
+    moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
   }
 
   void
@@ -207,7 +204,7 @@ class SearchData
       + "\nLine = " + ReadablePvLine(board)
       + "\nTime_Spend = " + to_string(timeForSearch) + " sec."
       + "\n-------------------------";
-    
+
     return result;
   }
 
@@ -240,7 +237,7 @@ class SearchData
       }
     }
 
-    std::sort(moveTimes + 1, moveTimes + moveCount, [](const auto &a, const auto &b) {
+    std::sort(moveTimes.begin() + 1, moveTimes.end(), [](const auto &a, const auto &b) {
       return a.second > b.second;
     });
   }
@@ -277,7 +274,7 @@ SeeScore(const ChessBoard& pos, Move move);
 
 /**
  * @brief Prints all encoded-moves in list to human-readable strings
- * 
+ *
  * @param myMoves Movelist for board positions.
  * @param pos board position
  */
