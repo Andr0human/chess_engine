@@ -94,7 +94,7 @@ class SearchData
   Varray<Move, MAX_PLY> pvLine;
 
   // Stores the <best_move, eval> for each depth during search.
-  Varray<pair<Move, Score>, MAX_DEPTH> moveEvals;
+  Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
   // Stores <move, time> for each move in each iteration.
   Varray<pair<Move, uint64_t> , MAX_MOVES> moveTimes;
