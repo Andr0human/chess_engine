@@ -81,6 +81,8 @@ class SearchData
   // Store which side to play for search_position
   Color side;
 
+  uint64_t nodes;
+
   // Time provided to find move for current position
   nanoseconds allotedTime;
 
@@ -125,7 +127,7 @@ class SearchData
   : startTime(perf::now()) {}
 
   SearchData(ChessBoard& position, double _allotedTime)
-  : startTime(perf::now()), side(position.color),
+  : startTime(perf::now()), side(position.color), nodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
     const MoveList myMoves = GenerateMoves(position);
@@ -184,6 +186,14 @@ class SearchData
     timeForSearch = duration.count();
   }
 
+  void
+  AddNode() noexcept
+  { nodes++; }
+
+  void
+  ResetNodeCount() noexcept
+  { nodes = 0; }
+
   pair<Move, Score> LastIterationResult() const noexcept
   { return moveEvals.back(); }
 
@@ -200,6 +210,7 @@ class SearchData
     writer << " | " << setw(6) << right << fixed << setprecision(2) << TimeSpent()
            << " | " << setw(5) << right << fixed << dep
            << " | " << setw(7) << right << fixed << setprecision(2) << evalConv
+           << " | " << setw(8) << right << fixed  << nodes
            << " | " << ReadablePvLine(pos) << endl;
   }
 
@@ -209,6 +220,7 @@ class SearchData
     writer << " | " << setw(6) << "Time"
            << " | " << setw(5) << "Depth"
            << " | " << setw(7) << "Score"
+           << " | " << setw(8) << "Nodes"
            << " | " << "PV" << "\n";
   }
 

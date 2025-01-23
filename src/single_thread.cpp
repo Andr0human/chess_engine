@@ -133,12 +133,15 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
       return pos.HandleScore(VALUE_DRAW);
   }
 
-  if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
-    return pos.HandleScore(VALUE_DRAW);
-
   // Depth 0, starting Quiensense Search
   if (depth <= 0)
     return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);
+
+  // check for theoretical drawn position
+  if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
+    return pos.HandleScore(VALUE_DRAW);
+
+  info.AddNode();
 
   if constexpr (useTT) {
     // TT_lookup (Check if given board is already in transpostion table)
@@ -284,6 +287,7 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
 
       info.AddResult(board, eval, pvArray);
       info.ShowLastDepthResult(board, writer);
+      info.ResetNodeCount();
 
       depth++;
     }
