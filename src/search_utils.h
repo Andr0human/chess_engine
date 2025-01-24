@@ -18,9 +18,10 @@ Score
 CheckmateScore(Ply ply);
 
 template <int flag>
-constexpr bool
+bool
 is_type(Move m)
-{ return (m & (flag << 21)) != 0; }
+{ return ((m >> 21) & 7) == flag; }
+
 
 
 int
