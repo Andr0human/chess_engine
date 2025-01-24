@@ -10,7 +10,6 @@
 
 using std::pair;
 using std::make_pair;
-using std::to_string;
 using std::chrono::nanoseconds;
 
 class TestPosition
@@ -82,8 +81,7 @@ class SearchData
   // Store which side to play for search_position
   Color side;
 
-  // Stores current depth
-  Depth depth;
+  uint64_t nodes;
 
   // Time provided to find move for current position
   nanoseconds allotedTime;
@@ -99,17 +97,14 @@ class SearchData
   // Stores <move, time> for each move in each iteration.
   Varray<pair<Move, uint64_t> , MAX_MOVES> moveTimes;
 
-  size_t moveCount = 0;
-
   string
   ReadablePvLine(ChessBoard board) const noexcept
   {
     string res;
     bool qmoves_found = false;
 
-    for (size_t i = 0; i < pvLine.size(); i++)
+    for (const Move move : pvLine)
     {
-      const Move move = pvLine[i];
       if (((move & QS_MOVE) != 0) and !qmoves_found)
       {
         res += "(";
@@ -132,7 +127,7 @@ class SearchData
   : startTime(perf::now()) {}
 
   SearchData(ChessBoard& position, double _allotedTime)
-  : startTime(perf::now()), side(position.color), depth(0),
+  : startTime(perf::now()), side(position.color), nodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
     const MoveList myMoves = GenerateMoves(position);
@@ -141,8 +136,6 @@ class SearchData
 
     for (const Move move : myMoves)
       moveTimes.add(make_pair(move, VALUE_ZERO));
-
-    moveCount = myMoves.size();
   }
 
   bool
@@ -158,10 +151,17 @@ class SearchData
   }
 
   bool
-  TimeOver() noexcept
+  TimeOver() const noexcept
   {
     nanoseconds duration = perf::now() - startTime;
     return duration >= allotedTime;
+  }
+
+  double
+  TimeSpent() const noexcept
+  {
+    nanoseconds duration = perf::now() - startTime;
+    return double(duration.count()) / 1e9;
   }
 
   void
@@ -186,49 +186,48 @@ class SearchData
     timeForSearch = duration.count();
   }
 
-  std::pair<Move, Score> LastIterationResult() const noexcept
+  void
+  AddNode() noexcept
+  { nodes++; }
+
+  void
+  ResetNodeCount() noexcept
+  { nodes = 0; }
+
+  pair<Move, Score> LastIterationResult() const noexcept
   { return moveEvals.back(); }
 
-  string
-  GetSearchResult(ChessBoard board)
+  // Prints the results of last searched depth
+  void
+  ShowLastDepthResult(ChessBoard pos, std::ostream& writer) const noexcept
   {
-    const auto&[move, eval] = moveEvals.back();
-    const double eval_conv = static_cast<double>(eval) / 100.0;
+    using std::setw, std::right, std::fixed, std::setprecision;
 
-    string result = "------ SEARCH-INFO ------";
+    const size_t dep = moveEvals.size() - 1;
+    const Score eval = moveEvals.back().second;
+    double evalConv  = double(eval) / 100.0;
 
-    result +=
-      + "\nDepth Searched = " + to_string(moveEvals.size() - 1)
-      + "\nBest Move = " + PrintMove(move, board)
-      + "\nEval = " + to_string(eval_conv)
-      + "\nLine = " + ReadablePvLine(board)
-      + "\nTime_Spend = " + to_string(timeForSearch) + " sec."
-      + "\n-------------------------";
-
-    return result;
+    writer << " | " << setw(6) << right << fixed << setprecision(2) << TimeSpent()
+           << " | " << setw(5) << right << fixed << dep
+           << " | " << setw(7) << right << fixed << setprecision(2) << evalConv
+           << " | " << setw(8) << right << fixed  << nodes
+           << " | " << ReadablePvLine(pos) << endl;
   }
 
-  // Prints the results of last searched depth
-  string
-  ShowLastDepthResult(ChessBoard board) const noexcept
+  void ShowHeader(std::ostream& writer) const noexcept
   {
-    const size_t dep = (moveEvals.size() - 1);
-    const auto& [move, eval] = moveEvals.back();
-    const double eval_conv = static_cast<double>(eval) / 100.0;
-    const string gap = (dep < 10) ? (" ") : ("");
-
-    string result = "Depth " + gap + to_string(dep) + " | ";
-
-    result +=
-        "Eval = " + to_string(eval_conv) + "\t| "
-      + "Pv = " + ReadablePvLine(board);
-    return result;
+    using std::setw;
+    writer << " | " << setw(6) << "Time"
+           << " | " << setw(5) << "Depth"
+           << " | " << setw(7) << "Score"
+           << " | " << setw(8) << "Nodes"
+           << " | " << "PV" << "\n";
   }
 
   void
   SortMovesOnTime(Move bestMove)
   {
-    for (size_t i = 0; i < moveCount; i++)
+    for (size_t i = 0; i < moveTimes.size(); i++)
     {
       if (filter(bestMove) == filter(moveTimes[i].first))
       {
@@ -244,11 +243,9 @@ class SearchData
 
   void Print(ChessBoard pos)
   {
-    for (size_t i = 0; i < moveCount; i++)
-    {
-      const auto&[move, tm] = moveTimes[i];
-      cout << (i + 1) << "\t| " << PrintMove(move, pos) << "\t| " << tm << endl;
-    }
+    int moveNo = 1;
+    for (const auto& [move, tm] : moveTimes)
+      cout << moveNo++ << "\t| " << PrintMove(move, pos) << "\t| " << tm << endl;
   }
 
   void
@@ -260,8 +257,8 @@ class SearchData
   {
     MoveList myMoves(side, false);
 
-    for (size_t i = 0; i < moveCount; i++)
-      myMoves.Add(moveTimes[i].first);
+    for (const auto& moveTime : moveTimes)
+      myMoves.Add(moveTime.first);
 
     return myMoves;
   }

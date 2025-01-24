@@ -164,7 +164,6 @@ DirectSearch(const vector<string> &_args)
   cout << primary.VisualBoard() << endl;
 
   Search(primary, MAX_DEPTH, search_time);
-  cout << info.GetSearchResult(primary) << endl;
 }
 
 void
