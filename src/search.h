@@ -257,7 +257,7 @@ class SearchData
   {
     MoveList myMoves(side, false);
 
-    for (const auto moveTime : moveTimes)
+    for (const auto& moveTime : moveTimes)
       myMoves.Add(moveTime.first);
 
     return myMoves;
