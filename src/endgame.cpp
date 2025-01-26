@@ -166,6 +166,9 @@ template <>
 bool
 Endgame<Endgames::KRBK>(const ChessBoard& pos)
 {
+  if ((pos.count<WHITE, ALL>() == 2) or (pos.count<BLACK, ALL>() == 2))
+    return false;
+
   const Color side = pos.count<WHITE, ROOK>() ? WHITE : BLACK;
   const Color emySide = ~side;
 

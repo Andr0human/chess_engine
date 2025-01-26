@@ -22,6 +22,7 @@
 // If promotion is possible and no enemy piece can capture it. (3k4/8/5N2/nR6/3P4/p7/1p3PP1/6K1 w - - 0 51)
 // instead move_gives_check in LMR, use it as in SearchExtension.
 // Add depth 1, if opponent pawn attacks own piece
+// 8/pb1n3k/1p4pp/8/2q1PQ2/Pn3P1B/1B1r2PP/2R3K1 b - - 3 31      Critical-leaf-Node extension
 
 
 int main(int argc, char **argv)
@@ -48,6 +49,7 @@ int main(int argc, char **argv)
   3r2k1/6pp/5p2/2q5/p1P1PP2/N1Pr3P/R3Q2K/1R6 w - - 5 30                    // Rb8 e5 Rb5          (horizon effect)
   r1b2r2/pp1p2kp/2q1p1p1/2p2n2/N1B5/2PP4/PP3PPP/1R1QR1K1 w - - 1 18        // d4                  (horizon effect)
   5rk1/1pnqb1r1/p2pRp2/2pP1PpQ/P1P1NpP1/3B1P2/1P1K4/7R w - - 0 1           // Nxg5                (LMR Test)
+  7k/5R2/4p1r1/p2pP3/P2P4/1P1q4/5Q2/4K3 b - - 4 57                         // Qe4+                (LMR Test)
   4rrk1/1p3ppp/p7/3N3n/P1PpP3/R7/5PPP/5RK1 w - - 0 20                      // f3
   r4rk1/1p1b1p2/2pp1bp1/p6p/2PN4/1P2P1P1/P4PBP/3R1RK1 w - - 0 20           // D.M (Nxc6)
   5r2/7k/1p1p1r1p/2pP1Pp1/2Pq4/PK3R1P/4Q3/5R2 w - - 1 34                   // D.M (Ka4)
