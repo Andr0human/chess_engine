@@ -97,7 +97,7 @@ enum Value: Score
   RookValueMg   =  574,  RookValueEg   =  644,
   QueenValueMg  = 1040,  QueenValueEg  = 1168,
 
-  GamePhaseLimit = 800,
+  GamePhaseLimit = 16 * PawnValueMg + 4 * (BishopValueMg + KnightValueMg + RookValueMg) + 2 * QueenValueMg
 };
 
 enum Board: Bitboard
