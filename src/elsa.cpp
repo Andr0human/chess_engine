@@ -23,6 +23,7 @@
 // instead move_gives_check in LMR, use it as in SearchExtension.
 // Add depth 1, if opponent pawn attacks own piece
 // 8/pb1n3k/1p4pp/8/2q1PQ2/Pn3P1B/1B1r2PP/2R3K1 b - - 3 31      Critical-leaf-Node extension
+// 8/2K5/8/8/P3kp2/8/8/8 b - - 0 74                             (Pawn Race fix)
 
 
 int main(int argc, char **argv)
@@ -39,7 +40,6 @@ int main(int argc, char **argv)
   2k1r3/p1p2p1p/2p3p1/2bb1qB1/2P5/PP3P2/4N1PP/R2QK2R w KQ - 1 18           // Qd2 cxd5 Bh4
   rn1qkbnr/4p1pp/2p2p2/pp2PbN1/2pP4/2N5/PP3PPP/R1BQKB1R w KQkq - 0 8       // Qf3 g4 Nf3
   rnb1kb1r/ppp2ppp/5n2/q7/5B2/2N5/PPP1NPPP/R2QKB1R w KQkq - 4 8            // Nd4 a3 Qd3
-  rnbqkb1r/1p1n1ppp/p3p3/1BppP3/3P4/2N2N2/PPP2PPP/R1BQK2R w KQkq - 0 7     // Bxd7+ Bg5
   2kr1b1r/pppn1ppp/4bn2/q7/3Q1B2/2N5/PPP1NPPP/1K1R1B1R w - - 10 11         // f3 Qa4
   7R/1p1k2r1/3n4/p2p2B1/P2P2K1/6P1/8/8 w - - 15 49                         // Kf4
   2r1r1k1/pb1nqppp/1p6/3p4/1b2n3/PPN1P1PB/1BQ1NP1P/3RR1K1 b - - 0 1        // Nxf2
@@ -50,9 +50,7 @@ int main(int argc, char **argv)
   r1b2r2/pp1p2kp/2q1p1p1/2p2n2/N1B5/2PP4/PP3PPP/1R1QR1K1 w - - 1 18        // d4                  (horizon effect)
   5rk1/1pnqb1r1/p2pRp2/2pP1PpQ/P1P1NpP1/3B1P2/1P1K4/7R w - - 0 1           // Nxg5                (LMR Test)
   7k/5R2/4p1r1/p2pP3/P2P4/1P1q4/5Q2/4K3 b - - 4 57                         // Qe4+                (LMR Test)
-  4rrk1/1p3ppp/p7/3N3n/P1PpP3/R7/5PPP/5RK1 w - - 0 20                      // f3
   r4rk1/1p1b1p2/2pp1bp1/p6p/2PN4/1P2P1P1/P4PBP/3R1RK1 w - - 0 20           // D.M (Nxc6)
-  5r2/7k/1p1p1r1p/2pP1Pp1/2Pq4/PK3R1P/4Q3/5R2 w - - 1 34                   // D.M (Ka4)
   r1b2Q2/1pq2p2/p1kppNp1/P1p5/R3P3/2Nn4/1nK2PPP/7R w - - 3 22              // Nfd5
   r1bq1rk1/pppnnppp/4p3/3pP3/1b1P4/2NB3N/PPP2PPP/R1BQK2R w KQ - 3 7        // Bxh7+
   2rq4/p6k/1p1p2pp/2pP1p2/1bP2R2/1R4QP/P1B2PPK/4r3 w - - 0 1               // Rxf5
@@ -64,18 +62,12 @@ int main(int argc, char **argv)
 
   8/5k2/R5p1/p7/1r5P/4BK2/8/8 w - - 8 45                                   // D.M (Rxa5)          (Endgame)
   rB6/P6p/2k3p1/R6P/6b1/4K3/8/8 w - - 1 36                                 // h6                  (Endgame)
-  8/8/4K1n1/4p1P1/4k3/8/8/8 b - - 1 63                                     // D.M (Ke3)           (Endgame)
-  8/7p/6p1/pP3p2/P2p1k2/1r5P/3KBP2/8 b - - 3 44                            // D.M (Rxh3)          (Endgame)
   8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1                                  // Kb1
-  r4rk1/2R3bp/4p3/1p3p2/3p1P2/1P1P2P1/4N2P/5R1K w - - 0 29                 // D.M Rxg7+
   8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
   2kr3r/pppq4/3b4/3bn3/2N1p1p1/PP2P1N1/1B3PPP/2RQ1RK1 b - - 1 18           // B.M Nf3+
 
   Quiescence Explosion:
   q2k2q1/2nqn2b/1n1P1n1b/2rnr2Q/1NQ1QN1Q/3Q3B/2RQR2B/Q2K2Q1 w - - 0 1
-
-  Static eval:
-  r4rk1/1p3pp1/2q4p/2b5/p5B1/3PP3/PPQ4P/R4RK1 w - - 0 24
 */
 
 
@@ -94,12 +86,6 @@ int main(int argc, char **argv)
 
   8/8/8/6k1/1B2Kp2/8/2b1p3/8 w - - 2 84
   No clue whats fucking things up?
-
-  4kb1r/2Qnnppp/4p3/1B1pP3/P7/8/3N1PPP/q1B2RK1 b k - 1 19
-  Generate all attacks from both side, If active side has
-  more pieces attacking a square, extend Search
-  (Might have more cost than benefits, maybe just do the
-    check on squares of non-active pieces)
 
   B7/7k/8/6KP/8/8/8/8 w - - 1 156
   Attention in regards to LoneKing function.
@@ -126,9 +112,6 @@ int main(int argc, char **argv)
 
   8/8/8/5b2/2Pk4/1P6/P4K2/8 w - - 3 62
   No winning with only a minor piece
-
-  8/3Q1k2/6pp/8/7q/P3P3/4K3/8 b - - 7 42    D.M Qe7
-  Square of pawn
 
   8/3P3k/5Kp1/2R4p/8/8/3r4/8 w - - 1 52     D.M Ke7
 
