@@ -10,66 +10,66 @@
 
 class MoveList
 {
-    private:
-    size_t moveCount;
+  private:
+  size_t moveCount;
 
-    public:
-    // Stores all moves for current position
-    array<Move, MAX_MOVES> pMoves;
+  public:
+  // Stores all moves for current position
+  array<Move, MAX_MOVES> pMoves;
 
-    // Active side color
-    Color color;
+  // Active side color
+  Color color;
 
-    // Generate moves for Quisense Search
-    bool qsSearch;
+  // Generate moves for Quisense Search
+  bool qsSearch;
 
-    int checkers;
+  int checkers;
 
-    // Array to store squares that give check to the enemy king
-    // {Pawn, Bishop, Knight, Rook, Queen}
-    // Index 1: Squares where a bishop can give check to the enemy king
-    Bitboard squaresThatCheckEnemyKing[5];
+  // Array to store squares that give check to the enemy king
+  // {Pawn, Bishop, Knight, Rook, Queen}
+  // Index 1: Squares where a bishop can give check to the enemy king
+  Bitboard squaresThatCheckEnemyKing[5];
 
-    // Bitboard of initial squares from which a moving piece
-    // could potentially give a discovered check to the opponent's king.
-    Bitboard discoverCheckSquares;
+  // Bitboard of initial squares from which a moving piece
+  // could potentially give a discovered check to the opponent's king.
+  Bitboard discoverCheckSquares;
 
-    // Bitboard of squares that have pinned pieces on them
-    Bitboard pinnedPiecesSquares;
+  // Bitboard of squares that have pinned pieces on them
+  Bitboard pinnedPiecesSquares;
 
-    // Bitboard representing squares under enemy attack
-    Bitboard enemyAttackedSquares;
+  // Bitboard representing squares under enemy attack
+  Bitboard enemyAttackedSquares;
 
-    MoveList(Color c, bool qs = false)
-    : moveCount(0), color(c), qsSearch(qs), checkers(0) {}
+  MoveList(Color c, bool qs = false)
+  : moveCount(0), color(c), qsSearch(qs), checkers(0) {}
 
-    inline void
-    Add(Move move) noexcept
-    { pMoves[moveCount++] = move; }
+  inline void
+  Add(Move move) noexcept
+  { pMoves[moveCount++] = move; }
 
-    inline bool
-    empty() const noexcept
-    { return moveCount == 0; }
+  inline bool
+  empty() const noexcept
+  { return moveCount == 0; }
 
-    Move*
-    begin() noexcept
-    { return pMoves.begin(); }
+  Move*
+  begin() noexcept
+  { return pMoves.begin(); }
 
-    Move*
-    end() noexcept
-    { return pMoves.begin() + moveCount; }
+  Move*
+  end() noexcept
+  { return pMoves.begin() + moveCount; }
 
-    const Move*
-    begin() const noexcept
-    { return pMoves.begin(); }
+  const Move*
+  begin() const noexcept
+  { return pMoves.begin(); }
 
-    const Move*
-    end() const noexcept
-    { return pMoves.begin() + moveCount; }
+  const Move*
+  end() const noexcept
+  { return pMoves.begin() + moveCount; }
 
-    inline uint64_t
-    size() const noexcept
-    { return moveCount; }
+  inline uint64_t
+  size() const noexcept
+  { return moveCount; }
 };
 
 
