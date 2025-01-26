@@ -30,15 +30,15 @@ TranspositionTable::FreeTables()
   if (TT_SIZE == 0)
     return;
 
-  delete[] primary_tt_table;
-  delete[] secondary_tt_table;
+  delete[] ttPrimary;
+  delete[] ttSecondary;
 }
 
 void
 TranspositionTable::AllocateTables()
 {
-  primary_tt_table   = new ZobristHashKey[TT_SIZE]();
-  secondary_tt_table = new ZobristHashKey[TT_SIZE]();
+  ttPrimary   = new ZobristHashKey[TT_SIZE]();
+  ttSecondary = new ZobristHashKey[TT_SIZE]();
 }
 
 void
@@ -80,48 +80,47 @@ TranspositionTable::HashkeyUpdate
 
 void
 TranspositionTable::RecordPosition
-    (uint64_t zkey, Depth depth, Move move, Score eval, int flag) noexcept
+    (uint64_t hashValue, Depth depth, Score eval, Flag flag) noexcept
 {
-  const auto add_entry = [&] (ZobristHashKey& __pos)
+  const auto addEntry = [&] (ZobristHashKey& key)
   {
-    __pos.key = zkey;
-    __pos.depth = depth;
-    __pos.move = move;
-    __pos.eval = eval;
-    __pos.flag = flag;
+    key.hashValue = hashValue;
+    key.eval = eval;
+    key.depthFlag = depth << 2 | int(flag);
   };
 
-  uint64_t index = zkey % TT_SIZE;
-  int primary_key_depth = primary_tt_table[index].depth;
+  size_t index = hashValue % TT_SIZE;
 
-  if (depth > primary_key_depth)
-    add_entry(primary_tt_table[index]);
+  if (depth > ttPrimary[index].depth())
+    addEntry(ttPrimary[index]);
 
-  add_entry(secondary_tt_table[index]);
+  addEntry(ttSecondary[index]);
 }
 
 
 int
 TranspositionTable::LookupPosition
-  (uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept
+  (uint64_t hashValue, Depth depth, Score alpha, Score beta) const noexcept
 {
-  const auto lookup = [&] (const ZobristHashKey &__pos)
+  const auto lookup = [&] (const ZobristHashKey &key)
   {
-    if (__pos.key == zkey && __pos.depth > depth) {
-      if (__pos.flag == HASH_EXACT) return __pos.eval;
-      if (__pos.flag == HASH_ALPHA && __pos.eval <= alpha) return alpha;
-      if (__pos.flag == HASH_BETA  && __pos.eval >= beta ) return beta;
+    Flag flag = key.flag();
+
+    if (key.hashValue == hashValue and key.depth() > depth) {
+      if (flag == Flag::HASH_EXACT) return key.eval;
+      if (flag == Flag::HASH_ALPHA and key.eval <= alpha) return alpha;
+      if (flag == Flag::HASH_BETA  and key.eval >= beta ) return beta;
     }
 
     return int(VALUE_UNKNOWN);
   };
 
-  uint64_t index = zkey % TT_SIZE;
+  size_t index = hashValue % TT_SIZE;
 
-  int res = lookup(primary_tt_table[index]);
+  int res = lookup(ttPrimary[index]);
   if (res != VALUE_UNKNOWN) return res;
 
-  return lookup(secondary_tt_table[index]);
+  return lookup(ttSecondary[index]);
 }
 
 
@@ -129,9 +128,6 @@ void
 TranspositionTable::Clear() noexcept
 {
   for (size_t i = 0; i < TT_SIZE; i++)
-  {
-    primary_tt_table[i].Clear();
-    secondary_tt_table[i].Clear();
-  }
+    ttPrimary[i].hashValue = ttSecondary[i].hashValue = 0;
 }
 

@@ -172,7 +172,8 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // Set pvArray, for storing the search_tree
   pvArray[pvIndex] = NULL_MOVE;
-  int pvNextIndex = pvIndex + MAX_PLY - ply, hashf = HASH_ALPHA;
+  int pvNextIndex = pvIndex + MAX_PLY - ply;
+  Flag hashf = Flag::HASH_ALPHA;
   Move bestMove = NULL_MOVE;
 
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
@@ -188,13 +189,13 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     // beta-cut found
     if (eval >= beta)
     {
-      hashf = HASH_BETA, bestMove = move, alpha = beta;
+      hashf = Flag::HASH_BETA, alpha = beta;
       break;
     }
 
     // Better move found, update the result
     if (eval > alpha) {
-      hashf = HASH_EXACT, bestMove = move, alpha = eval;
+      hashf = Flag::HASH_EXACT, bestMove = move, alpha = eval;
       pvArray[pvIndex] = filter(bestMove);
       movcpy (pvArray + pvIndex + 1,
               pvArray + pvNextIndex, MAX_PLY - ply - 1);
@@ -202,7 +203,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   }
 
   if constexpr (useTT) {
-    TT.RecordPosition(pos.Hash_Value, depth, bestMove, alpha, hashf);
+    TT.RecordPosition(pos.Hash_Value, depth, alpha, hashf);
   }
 
   return alpha;
