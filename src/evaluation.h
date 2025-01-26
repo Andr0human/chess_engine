@@ -13,21 +13,18 @@ class EvalData
 	template <Color c_my>
 	void MaterialCount(const ChessBoard& pos)
 	{
-		pieces[c_my]  = pos.count<c_my, BISHOP>()
-					  + pos.count<c_my, KNIGHT>()
-					  + pos.count<c_my, ROOK  >()
-					  + pos.count<c_my, QUEEN >();
+		pieces[c_my] =
+				pos.count<c_my, BISHOP>()
+			+ pos.count<c_my, KNIGHT>()
+			+ pos.count<c_my, ROOK  >()
+			+ pos.count<c_my, QUEEN >();
 	}
 
 
 	public:
 
-	// int w_pawns, w_knights, w_bishops, w_rooks, w_queens, w_pieces;
-	// int b_pawns, b_knights, b_bishops, b_rooks, b_queens, b_pieces;
-
 	int  pieces[COLOR_NB];
 
-	int pieceCount;
 	int boardWeight;
 	float phase;
 
@@ -44,10 +41,9 @@ class EvalData
 	{
 		MaterialCount<WHITE>(pos);
 		MaterialCount<BLACK>(pos);
-		pieceCount = pieces[WHITE] + pieces[BLACK];
 
 		phase = float(
-			10 * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
+			  10 * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
 		  + 30 * (pos.count<WHITE, BISHOP>() + pos.count<BLACK, BISHOP>())
 		  + 30 * (pos.count<WHITE, KNIGHT>() + pos.count<BLACK, KNIGHT>())
 		  + 55 * (pos.count<WHITE, ROOK  >() + pos.count<BLACK, ROOK  >())
@@ -55,7 +51,7 @@ class EvalData
 		) / float(GamePhaseLimit);
 
 		boardWeight =
-			PawnValueMg   * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
+			  PawnValueMg   * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
 		  + BishopValueMg * (pos.count<WHITE, BISHOP>() + pos.count<BLACK, BISHOP>())
 		  + KnightValueMg * (pos.count<WHITE, KNIGHT>() + pos.count<BLACK, KNIGHT>())
 		  + RookValueMg   * (pos.count<WHITE, ROOK  >() + pos.count<BLACK, ROOK  >())
