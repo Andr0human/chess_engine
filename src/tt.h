@@ -13,45 +13,47 @@ using std::array;
 class ZobristHashKey
 {
   public:
-  uint64_t key;
-  int32_t depth, move;
-  int32_t eval, flag;
+  Bitboard hashValue;
+  Score         eval;
+  uint32_t depthFlag;
 
-  ZobristHashKey() noexcept
-  { Clear(); }
+  ZobristHashKey() : hashValue(0) {}
 
-  void
-  Clear() noexcept
-  {
-    key = 0;
-    depth = move = 0;
-    eval = flag = 0;
-  }
+  // void
+  // Clear() noexcept
+  // { hashValue = 0; }
+
+  inline Depth
+  depth() const noexcept
+  { return depthFlag >> 2; }
+
+  inline Flag
+  flag() const noexcept
+  { return Flag(depthFlag & 3); }
 
   void
   show() const noexcept
   {
     std::cout 
-      << "Key = " << key << '\n'
-      << "Depth = " << depth << '\n'
-      << "Move = " << move << '\n'
+      << "Key = " << hashValue << '\n'
+      << "Depth = " << depth() << '\n'
       << "Eval = " << eval << '\n'
-      << "Flag = " << flag << std::endl;
+      << "Flag = " << int(flag()) << std::endl;
   }
 };
 
 class TranspositionTable
 {
   /**
-    * 0 -> 100 MB table_size
-    * 1 ->   1 GB table_size 
-    */
+   * 0 ->  66 MB table_size
+   * 1 -> 686 MB table_size 
+  */
   array<uint64_t, 2> tt_sizes = { 2189477ULL, 22508861ULL };
 
-  uint64_t TT_SIZE = 0;
+  size_t TT_SIZE = 0;
 
-  ZobristHashKey *primary_tt_table;
-  ZobristHashKey *secondary_tt_table;
+  ZobristHashKey *ttPrimary;
+  ZobristHashKey *ttSecondary;
 
   array<uint64_t, HASH_INDEXES_SIZE> HashIndex;
 
@@ -85,10 +87,10 @@ class TranspositionTable
   HashkeyUpdate(int piece, int __pos) const noexcept;
 
   void
-  RecordPosition(uint64_t zkey, Depth depth, Move move, Score eval, int flag) noexcept;
+  RecordPosition(uint64_t hashValue, Depth depth, Score eval, Flag flag) noexcept;
   
   int
-  LookupPosition(uint64_t zkey, Depth depth, Score alpha, Score beta) const noexcept;
+  LookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta) const noexcept;
 };
 
 

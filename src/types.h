@@ -47,8 +47,6 @@ enum Table: uint64_t
 
 enum Search
 {
-  HASH_EMPTY = 0, HASH_EXACT = 1,
-  HASH_ALPHA = 2, HASH_BETA  = 3,
   HASH_INDEXES_SIZE = 855,
 
   MAX_MOVES = 256,
@@ -63,6 +61,12 @@ enum Search
   MAX_PV_ARRAY_SIZE = (MAX_PLY * (MAX_PLY + 1)) / 2,
 
   NULL_MOVE = 0,
+};
+
+enum class Flag
+{
+  HASH_EMPTY = 0, HASH_EXACT = 1,
+  HASH_ALPHA = 2, HASH_BETA  = 3,
 };
 
 enum class Endgames: uint32_t
