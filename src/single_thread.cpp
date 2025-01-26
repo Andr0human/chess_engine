@@ -35,6 +35,8 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
     return pos.HandleScore(VALUE_DRAW);
 
+  info.AddQNode();
+
   // Get a 'Stand Pat' Score
   Score stand_pat = Evaluate(pos);
 
@@ -227,7 +229,7 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     Score eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
 
     duration = perf::now() - startTime;
-    info.InsertMoveToList(moveNo, duration.count());
+    info.InsertMoveToList(moveNo);
 
     if (info.TimeOver())
       return TIMEOUT;
