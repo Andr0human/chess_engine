@@ -7,12 +7,13 @@ BulkCount(ChessBoard& _cb, Depth depth)
 {
   if (depth <= 0) return 1;
 
-  const MoveList myMoves = GenerateMoves(_cb);
+  const MoveList2 myMoves = GenerateMoves(_cb);
+  const auto movesArray = myMoves.getMoves(_cb);
 
-  if (depth == 1) return myMoves.size();
+  if (depth == 1) return movesArray.size();
   uint64_t answer = 0;
 
-  for (const Move move : myMoves)
+  for (const Move move : movesArray)
   {
     _cb.MakeMove(move);
     answer += BulkCount(_cb, depth - 1);
@@ -49,15 +50,16 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (stand_pat > alpha) alpha = stand_pat;
 
-  MoveList myMoves = GenerateMoves(pos, true);
+  MoveList2 myMoves = GenerateMoves(pos, true);
+  auto movesArray = myMoves.getMoves(pos);
 
-  if constexpr (useMoveOrder)
-    OrderMoves(pos, myMoves, false, false);
+  // if constexpr (useMoveOrder)
+  //   OrderMoves(pos, myMoves, false, false);
 
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-  for (const Move capture_move : myMoves)
+  for (const Move capture_move : movesArray)
   {
     pos.MakeMove(capture_move);
     Score score = -QuiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
@@ -156,19 +158,20 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
-  MoveList myMoves = GenerateMoves(pos, false, true);
+  MoveList2 myMoves = GenerateMoves(pos, false, true);
+  auto movesArray = myMoves.getMoves(pos);
 
   // Order moves according to heuristics for faster alpha-beta search
-  if constexpr (useMoveOrder)
-    OrderMoves(pos, myMoves, true, true);
+ /*  if constexpr (useMoveOrder)
+    OrderMoves(pos, myMoves, true, true); */
 
-  if constexpr (useExtensions)
+  /* if constexpr (useExtensions)
   {
     // Search Extensions
     int extensions = SearchExtension(pos, myMoves, numExtensions);
     depth         += extensions;
     numExtensions += extensions;
-  }
+  } */
 
   // Set pvArray, for storing the search_tree
   pvArray[pvIndex] = NULL_MOVE;
@@ -176,9 +179,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   Flag hashf = Flag::HASH_ALPHA;
   Move bestMove = NULL_MOVE;
 
-  for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
+  for (size_t moveNo = 0; moveNo < movesArray.size(); ++moveNo)
   {
-    Move move = myMoves.pMoves[moveNo];
+    Move move = movesArray[moveNo];
     Score eval = PlayMove<Reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
 
     // No time left!

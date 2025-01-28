@@ -1,5 +1,6 @@
 
 #include "task.h"
+#include "move_utils.h"
 #include "search.h"
 #include "single_thread.h"
 
@@ -220,9 +221,10 @@ DebugMoveGenerator(const vector<string> &_args)
   
   std::ofstream out(_fn);
   ChessBoard _cb = fen;
-  MoveList myMoves = GenerateMoves(_cb);
+  MoveList2 myMoves = GenerateMoves(_cb);
+  auto movesArray = myMoves.getMoves(_cb);
 
-  for (const auto move : myMoves)
+  for (const auto move : movesArray)
   {
     _cb.MakeMove(move);
     const auto current = BulkCount(_cb, dep - 1);
@@ -246,9 +248,15 @@ Level1(const vector<string>& args)
   ChessBoard pos(args[1]);
   bool qs = (args.size() >= 3 and args[2] == "q");
 
-  MoveList myMoves = GenerateMoves(pos, qs, true);
-  OrderMoves(pos, myMoves, qs, true);
-  PrintMovelist(myMoves, pos);
+  MoveList2 myMoves = GenerateMoves(pos, qs, true);
+  MoveArray movesArray = myMoves.getMoves(pos);
+  // OrderMoves(pos, myMoves, qs, true);
+  // PrintMovelist(myMoves, pos);
+  cout << "Length = " << movesArray.size() << endl;
+
+  for (const Move move : movesArray) {
+    cout << PrintMove(move, pos) << endl;
+  }
 
   EvalDump(pos);
 }

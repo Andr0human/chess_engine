@@ -3,6 +3,7 @@
 #define SEARCH_H
 
 #include "perf.h"
+#include "types.h"
 #include "varray.h"
 #include "bitboard.h"
 #include "movegen.h"
@@ -130,11 +131,12 @@ class SearchData
   : startTime(perf::now()), side(position.color), nodes(0), qNodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
-    const MoveList myMoves = GenerateMoves(position);
-    Move zeroMove = myMoves.pMoves[0];
+    const MoveList2 myMoves = GenerateMoves(position);
+    const Varray<Move, MAX_MOVES> movesArray = myMoves.getMoves(position);
+    Move zeroMove = movesArray[0];
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 
-    for (const Move move : myMoves)
+    for (const Move move : movesArray)
       moveTimes.add(make_pair(move, VALUE_ZERO));
   }
 
