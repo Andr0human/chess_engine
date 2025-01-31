@@ -77,10 +77,10 @@ SearchExtension(const ChessBoard& pos, const MoveList& myMoves, int numExtension
 {
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
-  
+
   // If king is in check, add 1
-  if (myMoves.checkers > 0 and myMoves.size() < 3)
-    return 1;
+  /* if (myMoves.checkers > 0 and myMoves.size() < 3)
+    return 1; */
 
   // if queen trapped and attacked by minor piece, add 1
   if (

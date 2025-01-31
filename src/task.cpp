@@ -221,7 +221,7 @@ DebugMoveGenerator(const vector<string> &_args)
   
   std::ofstream out(_fn);
   ChessBoard _cb = fen;
-  MoveList2 myMoves = GenerateMoves(_cb);
+  MoveList myMoves = GenerateMoves(_cb);
   auto movesArray = myMoves.getMoves(_cb);
 
   for (const auto move : movesArray)
@@ -246,9 +246,8 @@ Level1(const vector<string>& args)
   }
 
   ChessBoard pos(args[1]);
-  bool qs = (args.size() >= 3 and args[2] == "q");
 
-  MoveList2 myMoves = GenerateMoves(pos, qs, true);
+  MoveList myMoves = GenerateMoves(pos);
   MoveArray movesArray = myMoves.getMoves(pos);
   // OrderMoves(pos, myMoves, qs, true);
   // PrintMovelist(myMoves, pos);

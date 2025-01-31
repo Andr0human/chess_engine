@@ -1,5 +1,6 @@
 
 #include "search.h"
+#include "move_utils.h"
 #include <algorithm>
 
 template <>
@@ -14,19 +15,19 @@ SearchData info;
 
 template <int flag>
 static size_t
-PrioritizeMoves(MoveList& myMoves, size_t start)
+PrioritizeMoves(MoveArray& myMoves, size_t start)
 {
   for (size_t i = start; i < myMoves.size(); i++)
   {
-    if (is_type<flag>(myMoves.pMoves[i]))
-      std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
+    if (is_type<flag>(myMoves[i]))
+      std::swap(myMoves[i], myMoves[start++]);
   }
   return start;
 }
 
 
 void
-OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_moves)
+OrderMoves(const ChessBoard& pos, MoveArray& myMoves, bool pv_moves, bool check_moves)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
@@ -77,7 +78,7 @@ SeeScore(const ChessBoard& pos, Move move)
 }
 
 void
-PrintMovelist(MoveList myMoves, ChessBoard pos)
+PrintMovelist(MoveArray myMoves, ChessBoard pos)
 {
   using std::setw;
   OrderMoves(pos, myMoves, false, true);
@@ -87,7 +88,7 @@ PrintMovelist(MoveList myMoves, ChessBoard pos)
 
   for (size_t i = 0; i < myMoves.size(); i++)
   {
-    Move move = myMoves.pMoves[i];
+    Move move = myMoves[i];
     string moveString = PrintMove(move, pos);
     Score seeScore = SeeScore(pos, move);
     int priority = move >> 24;

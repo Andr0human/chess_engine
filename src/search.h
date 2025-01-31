@@ -2,6 +2,7 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
+#include "move_utils.h"
 #include "perf.h"
 #include "types.h"
 #include "varray.h"
@@ -127,12 +128,12 @@ class SearchData
   SearchData()
   : startTime(perf::now()) {}
 
-  SearchData(ChessBoard& position, double _allotedTime)
-  : startTime(perf::now()), side(position.color), nodes(0), qNodes(0),
+  SearchData(ChessBoard& pos, double _allotedTime)
+  : startTime(perf::now()), side(pos.color), nodes(0), qNodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
-    const MoveList2 myMoves = GenerateMoves(position);
-    const Varray<Move, MAX_MOVES> movesArray = myMoves.getMoves(position);
+    const MoveList myMoves = GenerateMoves(pos);
+    const MoveArray movesArray = myMoves.getMoves(pos);
     Move zeroMove = movesArray[0];
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 
@@ -272,15 +273,15 @@ class SearchData
     ResetNodeCount();
   }
 
-  MoveList
+  MoveArray
   getMoves () const
   {
-    MoveList myMoves(side, false);
+    MoveArray movesArray;
 
     for (const auto& moveTime : moveTimes)
-      myMoves.Add(moveTime.first);
+      movesArray.add(moveTime.first);
 
-    return myMoves;
+    return movesArray;
   }
 };
 

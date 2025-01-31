@@ -13,72 +13,8 @@
 
 using MoveArray = Varray<Move, MAX_MOVES>;
 
+
 class MoveList
-{
-  private:
-  size_t moveCount;
-
-  public:
-  // Stores all moves for current position
-  array<Move, MAX_MOVES> pMoves;
-
-  // Active side color
-  Color color;
-
-  // Generate moves for Quisense Search
-  bool qsSearch;
-
-  int checkers;
-
-  // Array to store squares that give check to the enemy king
-  // {Pawn, Bishop, Knight, Rook, Queen}
-  // Index 1: Squares where a bishop can give check to the enemy king
-  Bitboard squaresThatCheckEnemyKing[5];
-
-  // Bitboard of initial squares from which a moving piece
-  // could potentially give a discovered check to the opponent's king.
-  Bitboard discoverCheckSquares;
-
-  // Bitboard of squares that have pinned pieces on them
-  Bitboard pinnedPiecesSquares;
-
-  // Bitboard representing squares under enemy attack
-  Bitboard enemyAttackedSquares;
-
-  MoveList(Color c, bool qs = false)
-  : moveCount(0), color(c), qsSearch(qs), checkers(0) {}
-
-  inline void
-  Add(Move move) noexcept
-  { pMoves[moveCount++] = move; }
-
-  inline bool
-  empty() const noexcept
-  { return moveCount == 0; }
-
-  Move*
-  begin() noexcept
-  { return pMoves.begin(); }
-
-  Move*
-  end() noexcept
-  { return pMoves.begin() + moveCount; }
-
-  const Move*
-  begin() const noexcept
-  { return pMoves.begin(); }
-
-  const Move*
-  end() const noexcept
-  { return pMoves.begin() + moveCount; }
-
-  inline uint64_t
-  size() const noexcept
-  { return moveCount; }
-};
-
-
-class MoveList2
 {
   public:
 
@@ -88,12 +24,11 @@ class MoveList2
   // Active side color
   Color color;
 
-  // Generate moves for Quisense Search
-  bool qsSearch;
-
   int checkers;
 
   Bitboard initSquares;
+
+  Bitboard enpassantPawns;
 
   // Array to store squares that give check to the enemy king
   // {Pawn, Bishop, Knight, Rook, Queen}
@@ -110,8 +45,8 @@ class MoveList2
   // Bitboard representing squares under enemy attack
   Bitboard enemyAttackedSquares;
 
-  MoveList2(Color c, bool qs = false)
-  : color(c), qsSearch(qs), checkers(0), initSquares(0) {}
+  MoveList(Color c)
+  : color(c), checkers(0), initSquares(0), enpassantPawns(0) {}
 
   void
   Add(Square sq, Bitboard _destSquares)
@@ -126,6 +61,28 @@ class MoveList2
   AddPawns(size_t index, Bitboard _destSquares)
   { pawnDestSquares[index] = _destSquares; }
 
+  template <MoveType mt>
+  void
+  FillMoves(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    Move baseMove
+  ) const noexcept
+  {
+    constexpr int flagBit = mt << 21;
+
+    while (endSquares > 0)
+    {
+      Square fp = NextSquare(endSquares);
+      PieceType fpt = type_of(pos.PieceOnSquare(fp));
+
+      Move move = baseMove | flagBit | (fpt << 15) | (fp << 6);
+      movesArray.add(move);
+    }
+  }
+
+  template<bool captures = true, bool quiet = true>
   MoveArray
   getMoves(const ChessBoard& pos) const noexcept
   {
@@ -154,38 +111,74 @@ class MoveList2
       }
     };
 
+    // fix pawns
+    Bitboard pawns = pos.get_piece(c, PAWN);
+    Bitboard pawns2 = pawns & initSquares;
+    Bitboard temp = initSquares ^ pawns2;
+
     if (checkers < 2)
     {
-      addPawnMoves( 7 - 16 * c, pawnDestSquares[0]);
-      addPawnMoves( 9 - 16 * c, pawnDestSquares[1]);
-      addPawnMoves(16 - 32 * c, pawnDestSquares[2]);
-      addPawnMoves( 8 - 16 * c, pawnDestSquares[3]);
+      if (captures)
+      {
+        addPawnMoves( 7 - 16 * c, pawnDestSquares[0]);
+        addPawnMoves( 9 - 16 * c, pawnDestSquares[1]);
+      }
+      if (quiet)
+      {
+        addPawnMoves(16 - 32 * c, pawnDestSquares[2]);
+        addPawnMoves( 8 - 16 * c, pawnDestSquares[3]);
+      }
+
+      while (pawns2 > 0)
+      {
+        Square ip = NextSquare(pawns2);
+        PieceType ipt = type_of(pos.PieceOnSquare(ip));
+        Bitboard finalSquares = destSquares[ip];
+        
+        while (finalSquares > 0)
+        {
+          Square fp = NextSquare(finalSquares);
+          PieceType fpt = type_of(pos.PieceOnSquare(fp));
+
+          Move move = colorBit | (fpt << 15) | (ipt << 12) | (fp << 6) | ip;
+          myMoves.add(move);
+
+          if ((ipt == PAWN) and ((1ULL << fp) & Rank18))
+          {
+            myMoves.add(move | 0xC0000);
+            myMoves.add(move | 0x80000);
+            myMoves.add(move | 0x40000);
+          }
+        }
+      }
     }
 
-    uint64_t temp = initSquares;
+    Bitboard epPawns = enpassantPawns;
+    // Encode enpassant-pawns
+    while (epPawns > 0)
+    {
+      Square ip = NextSquare(epPawns);
+      Square fp = pos.EnPassantSquare();
+
+      Move move = (CAPTURES << 21) | colorBit | (PAWN << 12) | (fp << 6) | ip; 
+      myMoves.add(move);
+    }
 
     while (temp > 0)
     {
-      Square ip = NextSquare(temp);
+      Square     ip = NextSquare(temp);
+      PieceType ipt = type_of(pos.PieceOnSquare(ip));
+      Move baseMove = colorBit | (ipt << 12) | ip;
+
       Bitboard finalSquares = destSquares[ip];
-      
-      while (finalSquares > 0)
-      {
-        Square fp = NextSquare(finalSquares);
+      Bitboard  captSquares = finalSquares & pos.get_piece(~c, ALL);
+      Bitboard quietSquares = finalSquares ^ captSquares;
 
-        PieceType ipt = type_of(pos.PieceOnSquare(ip));
-        PieceType fpt = type_of(pos.PieceOnSquare(fp));
+      if (captures)
+        FillMoves<CAPTURES>(pos, myMoves, captSquares, baseMove);
 
-        Move move = colorBit | (fpt << 15) | (ipt << 12) | (fp << 6) | ip;
-        myMoves.add(move);
-
-        if ((ipt == PAWN) and ((1ULL << fp) & Rank18))
-        {
-          myMoves.add(move | 0xC0000);
-          myMoves.add(move | 0x80000);
-          myMoves.add(move | 0x40000);
-        }
-      }
+      if (quiet)
+        FillMoves<NORMAL>(pos, myMoves, quietSquares, baseMove);
     }
     return myMoves;
   }

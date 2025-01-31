@@ -25,36 +25,11 @@
 // 8/pb1n3k/1p4pp/8/2q1PQ2/Pn3P1B/1B1r2PP/2R3K1 b - - 3 31      Critical-leaf-Node extension
 // 8/2K5/8/8/P3kp2/8/8/8 b - - 0 74                             (Pawn Race fix)
 
-
-void test()
-{
-  perf::Timer T("Movegen");
-
-  ChessBoard pos[4] = {
-    ChessBoard("r2q3r/1b1k1pbp/p4np1/2BP1pN1/p1B5/P1Q5/1PP3PP/R3K2R w KQ - 0 19"),
-    ChessBoard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"),
-    ChessBoard("r3k2r/1bp2pP1/5n2/1P1Q4/1pPq4/5N2/1B1P2p1/R3K2R b KQkq c3 0 1"),
-    ChessBoard("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8")
-  };
-
-  int result = 0;
-  for (int i = 0; i < 1000000; i++)
-  {
-    MoveList2 myMoves = GenerateMoves(pos[i & 3]);
-    result += myMoves.checkers;
-  }
-
-  cout << "Result = " << result << endl;
-}
-
-
 int main(int argc, char **argv)
 {
   FAST_IO();
   Init();
   Task(argc, argv);
-
-  test();
 }
 
 

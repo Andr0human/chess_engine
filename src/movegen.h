@@ -40,7 +40,7 @@ bool LegalMovesPresent(ChessBoard& _cb);
  * @param qSearch
  * @return MoveList
  */
-MoveList2 GenerateMoves(ChessBoard& pos, bool qsSearch = false, bool findChecks = false);
+MoveList GenerateMoves(ChessBoard& pos);
 
 
 bool
@@ -56,5 +56,6 @@ GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitb
 // TODO: Flags for moves
 // TODO: MoveGivesCheck
 // TODO: IsLegalMoveForPosition
+// TODO: Search extension - king in check
 
 #endif

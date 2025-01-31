@@ -1,14 +1,16 @@
 
 
 #include "single_thread.h"
+#include "move_utils.h"
 
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
 {
   if (depth <= 0) return 1;
 
-  const MoveList2 myMoves = GenerateMoves(_cb);
-  const auto movesArray = myMoves.getMoves(_cb);
+  const MoveList myMoves = GenerateMoves(_cb);
+  const MoveArray movesArray = myMoves.getMoves(_cb);
+  // MoveArray movesArray = FillMovesArray<true, true>(_cb, myMoves);
 
   if (depth == 1) return movesArray.size();
   uint64_t answer = 0;
@@ -50,8 +52,8 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (stand_pat > alpha) alpha = stand_pat;
 
-  MoveList2 myMoves = GenerateMoves(pos, true);
-  auto movesArray = myMoves.getMoves(pos);
+  const MoveList myMoves = GenerateMoves(pos);
+  MoveArray movesArray = myMoves.getMoves<true, false>(pos);
 
   // if constexpr (useMoveOrder)
   //   OrderMoves(pos, myMoves, false, false);
@@ -158,8 +160,8 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
-  MoveList2 myMoves = GenerateMoves(pos, false, true);
-  auto movesArray = myMoves.getMoves(pos);
+  MoveList myMoves = GenerateMoves(pos);
+  MoveArray movesArray = myMoves.getMoves(pos);
 
   // Order moves according to heuristics for faster alpha-beta search
  /*  if constexpr (useMoveOrder)
@@ -220,14 +222,14 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
   int ply{0}, pvIndex{0}, pvNextIndex;
 
-  MoveList myMoves = info.getMoves();
+  MoveArray myMoves = info.getMoves();
 
   pvArray[pvIndex] = NULL_MOVE; // no pv yet
   pvNextIndex = pvIndex + MAX_PLY - ply;
 
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
-    Move move = myMoves.pMoves[moveNo];
+    Move move = myMoves[moveNo];
     startTime = perf::now();
 
     Score eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
