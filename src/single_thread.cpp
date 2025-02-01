@@ -55,8 +55,8 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   const MoveList myMoves = GenerateMoves(pos);
   MoveArray movesArray = myMoves.getMoves<true, false>(pos);
 
-  // if constexpr (useMoveOrder)
-  //   OrderMoves(pos, myMoves, false, false);
+  if constexpr (useMoveOrder)
+    OrderMoves(pos, movesArray, false, false);
 
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -164,16 +164,16 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   MoveArray movesArray = myMoves.getMoves(pos);
 
   // Order moves according to heuristics for faster alpha-beta search
- /*  if constexpr (useMoveOrder)
-    OrderMoves(pos, myMoves, true, true); */
+  if constexpr (useMoveOrder)
+    OrderMoves(pos, movesArray, true, true);
 
-  /* if constexpr (useExtensions)
+  if constexpr (useExtensions)
   {
     // Search Extensions
-    int extensions = SearchExtension(pos, myMoves, numExtensions);
+    int extensions = SearchExtension(pos, myMoves, movesArray, numExtensions);
     depth         += extensions;
     numExtensions += extensions;
-  } */
+  }
 
   // Set pvArray, for storing the search_tree
   pvArray[pvIndex] = NULL_MOVE;

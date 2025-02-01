@@ -285,7 +285,7 @@ class SearchData
   }
 };
 
-void OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_moves);
+void OrderMoves(const ChessBoard& pos, MoveArray& movesArray, bool pv_moves, bool check_moves);
 
 Score
 SeeScore(const ChessBoard& pos, Move move);
@@ -297,7 +297,7 @@ SeeScore(const ChessBoard& pos, Move move);
  * @param pos board position
  */
 void
-PrintMovelist(MoveList myMoves, ChessBoard pos);
+PrintMovelist(MoveArray myMoves, ChessBoard pos);
 
 extern SearchData info;
 

@@ -144,11 +144,11 @@ SpeedTest()
     totalNodes += currentNodes;
     totalTime  += currentTime;
 
-    const auto current_speed = static_cast<float>(currentNodes / currentTime);
+    const auto current_speed = currentNodes / currentTime;
     cout << "position-" << positionNo++ << "\t: " << current_speed << " M nodes/sec." << endl;
   }
 
-  const auto speed = static_cast<float>(totalNodes / totalTime);
+  const auto speed = totalNodes / totalTime;
   cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
 }
 
@@ -249,13 +249,8 @@ Level1(const vector<string>& args)
 
   MoveList myMoves = GenerateMoves(pos);
   MoveArray movesArray = myMoves.getMoves(pos);
-  // OrderMoves(pos, myMoves, qs, true);
-  // PrintMovelist(myMoves, pos);
-  cout << "Length = " << movesArray.size() << endl;
-
-  for (const Move move : movesArray) {
-    cout << PrintMove(move, pos) << endl;
-  }
+  OrderMoves(pos, movesArray, true, true);
+  PrintMovelist(movesArray, pos);
 
   EvalDump(pos);
 }

@@ -82,37 +82,62 @@ class MoveList
     }
   }
 
-  template<bool captures = true, bool quiet = true>
+  void
+  FillEnpassantPawns(MoveArray& movesArray, Square fp) const noexcept
+  {
+    constexpr Move typeBit = CAPTURES << 21;
+    const int colorBit = color << 20;
+    Bitboard epPawns = enpassantPawns;
+
+    while (epPawns > 0)
+    {
+      Square ip = NextSquare(epPawns);
+
+      Move move = typeBit | (colorBit) | (PAWN << 12) | (fp << 6) | ip; 
+      movesArray.add(move);
+    }
+  }
+
+  template <MoveType mt>
+  void
+  FillShiftPawns(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    int shift
+  ) const noexcept
+  {
+    const int  colorBit = color << 20;
+    const Move baseMove = (mt << 21) | colorBit | (PAWN << 12);
+
+    while (endSquares > 0)
+    {
+      Square fp = NextSquare(endSquares);
+      Square ip = fp + shift;
+
+      PieceType fpt = type_of(pos.PieceOnSquare(fp));
+
+      Move move = baseMove | (fpt << 15) | (fp << 6) | ip;
+      movesArray.add(move);
+
+      if (((1ULL << fp) & Rank18))
+      {
+        movesArray.add(move | 0xC0000);
+        movesArray.add(move | 0x80000);
+        movesArray.add(move | 0x40000);
+      }
+    }
+  }
+
+  template<Color c_my, bool captures, bool quiet>
   MoveArray
   getMoves(const ChessBoard& pos) const noexcept
   {
     MoveArray myMoves;
-    Color c = pos.color;
-    int colorBit = c << 20;
-
-    const auto addPawnMoves = [&] (int shift, Bitboard endSquares) {
-      Move base_move = colorBit | (PAWN << 12);
-      while (endSquares != 0)
-      {
-        Square fp = NextSquare(endSquares);
-        Square ip = fp + shift;
-
-        PieceType fpt = type_of(pos.PieceOnSquare(fp));
-
-        Move move = base_move | (fpt << 15) | (fp << 6) | ip;
-        myMoves.add(move);
-
-        if (((1ULL << fp) & Rank18))
-        {
-          myMoves.add(move | 0xC0000);
-          myMoves.add(move | 0x80000);
-          myMoves.add(move | 0x40000);
-        }
-      }
-    };
+    const int colorBit = c_my << 20;
 
     // fix pawns
-    Bitboard pawns = pos.get_piece(c, PAWN);
+    Bitboard pawns = pos.piece<c_my, PAWN>();
     Bitboard pawns2 = pawns & initSquares;
     Bitboard temp = initSquares ^ pawns2;
 
@@ -120,13 +145,13 @@ class MoveList
     {
       if (captures)
       {
-        addPawnMoves( 7 - 16 * c, pawnDestSquares[0]);
-        addPawnMoves( 9 - 16 * c, pawnDestSquares[1]);
+        FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[0], 7 - 16 * c_my);
+        FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[1], 9 - 16 * c_my);
       }
       if (quiet)
       {
-        addPawnMoves(16 - 32 * c, pawnDestSquares[2]);
-        addPawnMoves( 8 - 16 * c, pawnDestSquares[3]);
+        FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[2], 16 - 32 * c_my);
+        FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[3],  8 - 16 * c_my);
       }
 
       while (pawns2 > 0)
@@ -134,7 +159,7 @@ class MoveList
         Square ip = NextSquare(pawns2);
         PieceType ipt = type_of(pos.PieceOnSquare(ip));
         Bitboard finalSquares = destSquares[ip];
-        
+
         while (finalSquares > 0)
         {
           Square fp = NextSquare(finalSquares);
@@ -143,7 +168,7 @@ class MoveList
           Move move = colorBit | (fpt << 15) | (ipt << 12) | (fp << 6) | ip;
           myMoves.add(move);
 
-          if ((ipt == PAWN) and ((1ULL << fp) & Rank18))
+          if ((1ULL << fp) & Rank18)
           {
             myMoves.add(move | 0xC0000);
             myMoves.add(move | 0x80000);
@@ -153,16 +178,7 @@ class MoveList
       }
     }
 
-    Bitboard epPawns = enpassantPawns;
-    // Encode enpassant-pawns
-    while (epPawns > 0)
-    {
-      Square ip = NextSquare(epPawns);
-      Square fp = pos.EnPassantSquare();
-
-      Move move = (CAPTURES << 21) | colorBit | (PAWN << 12) | (fp << 6) | ip; 
-      myMoves.add(move);
-    }
+    FillEnpassantPawns(myMoves, pos.EnPassantSquare());
 
     while (temp > 0)
     {
@@ -171,16 +187,25 @@ class MoveList
       Move baseMove = colorBit | (ipt << 12) | ip;
 
       Bitboard finalSquares = destSquares[ip];
-      Bitboard  captSquares = finalSquares & pos.get_piece(~c, ALL);
+      Bitboard  captSquares = finalSquares & pos.piece<~c_my, ALL>();
       Bitboard quietSquares = finalSquares ^ captSquares;
 
       if (captures)
         FillMoves<CAPTURES>(pos, myMoves, captSquares, baseMove);
 
       if (quiet)
-        FillMoves<NORMAL>(pos, myMoves, quietSquares, baseMove);
+        FillMoves<NORMAL  >(pos, myMoves, quietSquares, baseMove);
     }
     return myMoves;
+  }
+
+  template<bool captures = true, bool quiet = true>
+  MoveArray
+  getMoves(const ChessBoard& pos) const noexcept
+  {
+    return color == WHITE
+      ? getMoves<WHITE, captures, quiet>(pos)
+      : getMoves<BLACK, captures, quiet>(pos);
   }
 };
 

@@ -50,10 +50,11 @@ IsLegalMoveForPosition(Move move, ChessBoard& pos)
   if ((fpt != 0) and ((fpt >> 3) & 1) == side)
     return false;
 
-  /* MoveList myMoves = GenerateMoves(pos);
+  MoveList myMoves = GenerateMoves(pos);
+  MoveArray movesArray = myMoves.getMoves(pos);
 
-  for (const Move legal_move : myMoves)
-    if (filter(move) == filter(legal_move)) return true; */
+  for (const Move legal_move : movesArray)
+    if (filter(move) == filter(legal_move)) return true;
 
   return false;
 }
