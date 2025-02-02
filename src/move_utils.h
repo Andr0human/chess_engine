@@ -70,14 +70,14 @@ class MoveList
     Move baseMove
   ) const noexcept
   {
-    constexpr int flagBit = mt << 21;
+    constexpr int typeBit = mt << 21;
 
     while (endSquares > 0)
     {
       Square fp = NextSquare(endSquares);
       PieceType fpt = type_of(pos.PieceOnSquare(fp));
 
-      Move move = baseMove | flagBit | (fpt << 15) | (fp << 6);
+      Move move = baseMove | typeBit | (fpt << 15) | (fp << 6);
       movesArray.add(move);
     }
   }
@@ -93,7 +93,7 @@ class MoveList
     {
       Square ip = NextSquare(epPawns);
 
-      Move move = typeBit | (colorBit) | (PAWN << 12) | (fp << 6) | ip; 
+      Move move = typeBit | (colorBit) | (PAWN << 12) | (fp << 6) | ip;
       movesArray.add(move);
     }
   }
@@ -129,17 +129,68 @@ class MoveList
     }
   }
 
+  template <MoveType mt>
+  void
+  FillPawns(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    Move baseMove
+  ) const noexcept
+  {
+    constexpr int typeBit = mt << 21;
+    while (endSquares > 0)
+    {
+      Square fp = NextSquare(endSquares);
+      PieceType fpt = type_of(pos.PieceOnSquare(fp));
+
+      Move move = baseMove | typeBit | (fpt << 15) | (fp << 6);
+      movesArray.add(move);
+
+      if ((1ULL << fp) & Rank18)
+      {
+        movesArray.add(move | 0xC0000);
+        movesArray.add(move | 0x80000);
+        movesArray.add(move | 0x40000);
+      }
+    }
+  }
+
+  template <typename _Callable, Color c_my, bool captures, bool quiet>
+  void
+  AddMoves(const _Callable& fillFunc, const ChessBoard& pos, MoveArray& movesArray, Bitboard iSquares)
+  {
+    constexpr int colorBit = c_my << 21;
+
+    while (iSquares > 0)
+    {
+      Square     ip = NextSquare(iSquares);
+      PieceType ipt = type_of(pos.PieceOnSquare(ip));
+      Move baseMove = colorBit | (ipt << 12) | ip;
+
+      Bitboard finalSquares = destSquares[ip];
+      Bitboard  captSquares = finalSquares & pos.piece<~c_my, ALL>();
+      Bitboard quietSquares = finalSquares ^ captSquares;
+
+      if (captures)
+        fillFunc(pos, movesArray, captSquares, baseMove);
+
+      if (quiet)
+        fillFunc(pos, movesArray, quietSquares, baseMove);
+    }
+  }
+
   template<Color c_my, bool captures, bool quiet>
   MoveArray
   getMoves(const ChessBoard& pos) const noexcept
   {
     MoveArray myMoves;
-    const int colorBit = c_my << 20;
+    constexpr int colorBit = c_my << 21;
 
     // fix pawns
-    Bitboard pawns = pos.piece<c_my, PAWN>();
-    Bitboard pawns2 = pawns & initSquares;
-    Bitboard temp = initSquares ^ pawns2;
+    Bitboard myPawns = pos.piece<c_my, PAWN>();
+    Bitboard pawnMask = myPawns & initSquares;
+    Bitboard pieceMask = initSquares ^ pawnMask;
 
     if (checkers < 2)
     {
@@ -154,35 +205,30 @@ class MoveList
         FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[3],  8 - 16 * c_my);
       }
 
-      while (pawns2 > 0)
+      while (pawnMask > 0)
       {
-        Square ip = NextSquare(pawns2);
+        Square ip = NextSquare(pawnMask);
         PieceType ipt = type_of(pos.PieceOnSquare(ip));
+        Move baseMove = colorBit | (ipt << 12) | ip;
+
         Bitboard finalSquares = destSquares[ip];
+        Bitboard  captSquares = finalSquares & pos.piece<~c_my, ALL>();
+        Bitboard quietSquares = finalSquares ^ captSquares;
 
-        while (finalSquares > 0)
-        {
-          Square fp = NextSquare(finalSquares);
-          PieceType fpt = type_of(pos.PieceOnSquare(fp));
+        if (captures)
+          FillPawns<CAPTURES>(pos, myMoves,  captSquares, baseMove);
 
-          Move move = colorBit | (fpt << 15) | (ipt << 12) | (fp << 6) | ip;
-          myMoves.add(move);
-
-          if ((1ULL << fp) & Rank18)
-          {
-            myMoves.add(move | 0xC0000);
-            myMoves.add(move | 0x80000);
-            myMoves.add(move | 0x40000);
-          }
-        }
+        if (quiet)
+          FillPawns<NORMAL  >(pos, myMoves, quietSquares, baseMove);
       }
     }
 
-    FillEnpassantPawns(myMoves, pos.EnPassantSquare());
+    if (captures)
+      FillEnpassantPawns(myMoves, pos.EnPassantSquare());
 
-    while (temp > 0)
+    while (pieceMask > 0)
     {
-      Square     ip = NextSquare(temp);
+      Square     ip = NextSquare(pieceMask);
       PieceType ipt = type_of(pos.PieceOnSquare(ip));
       Move baseMove = colorBit | (ipt << 12) | ip;
 
@@ -218,10 +264,10 @@ DecodeMove(Move encoded_move);
 /**
  * @brief Returns string readable move from encoded-move.
  * Invalid move leads to undefined behaviour.
- * 
+ *
  * @param move encoded-move
  * @param _cb board position
- * @return string 
+ * @return string
  */
 string
 PrintMove(Move move, ChessBoard _cb);
