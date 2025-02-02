@@ -9,8 +9,8 @@ BulkCount(ChessBoard& _cb, Depth depth)
   if (depth <= 0) return 1;
 
   const MoveList myMoves = GenerateMoves(_cb);
-  const MoveArray movesArray = myMoves.getMoves(_cb);
-  // MoveArray movesArray = FillMovesArray<true, true>(_cb, myMoves);
+  MoveArray movesArray;
+  myMoves.getMoves<true, true>(_cb, movesArray);
 
   if (depth == 1) return movesArray.size();
   uint64_t answer = 0;
@@ -53,7 +53,8 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (stand_pat > alpha) alpha = stand_pat;
 
   const MoveList myMoves = GenerateMoves(pos);
-  MoveArray movesArray = myMoves.getMoves<true, false>(pos);
+  MoveArray movesArray;
+  myMoves.getMoves<true, false>(pos, movesArray);
 
   if constexpr (useMoveOrder)
     OrderMoves(pos, movesArray, false, false);
@@ -161,7 +162,8 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
   MoveList myMoves = GenerateMoves(pos);
-  MoveArray movesArray = myMoves.getMoves(pos);
+  MoveArray movesArray;
+  myMoves.getMoves(pos, movesArray);
 
   // Order moves according to heuristics for faster alpha-beta search
   if constexpr (useMoveOrder)

@@ -156,53 +156,29 @@ class MoveList
     }
   }
 
-  template <typename _Callable, Color c_my, bool captures, bool quiet>
+  template<bool captures=true, bool quiet=true>
   void
-  AddMoves(const _Callable& fillFunc, const ChessBoard& pos, MoveArray& movesArray, Bitboard iSquares)
+  getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
   {
-    constexpr int colorBit = c_my << 21;
-
-    while (iSquares > 0)
-    {
-      Square     ip = NextSquare(iSquares);
-      PieceType ipt = type_of(pos.PieceOnSquare(ip));
-      Move baseMove = colorBit | (ipt << 12) | ip;
-
-      Bitboard finalSquares = destSquares[ip];
-      Bitboard  captSquares = finalSquares & pos.piece<~c_my, ALL>();
-      Bitboard quietSquares = finalSquares ^ captSquares;
-
-      if (captures)
-        fillFunc(pos, movesArray, captSquares, baseMove);
-
-      if (quiet)
-        fillFunc(pos, movesArray, quietSquares, baseMove);
-    }
-  }
-
-  template<Color c_my, bool captures, bool quiet>
-  MoveArray
-  getMoves(const ChessBoard& pos) const noexcept
-  {
-    MoveArray myMoves;
-    constexpr int colorBit = c_my << 21;
+    const int colorBit = color << 21;
 
     // fix pawns
-    Bitboard myPawns = pos.piece<c_my, PAWN>();
-    Bitboard pawnMask = myPawns & initSquares;
+    Bitboard emyPieces = pos.get_piece(~color, ALL);
+    Bitboard myPawns   = pos.get_piece(color, PAWN);
+    Bitboard pawnMask  = myPawns & initSquares;
     Bitboard pieceMask = initSquares ^ pawnMask;
 
     if (checkers < 2)
     {
       if (captures)
       {
-        FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[0], 7 - 16 * c_my);
-        FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[1], 9 - 16 * c_my);
+        FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[0], 7 - 16 * color);
+        FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[1], 9 - 16 * color);
       }
       if (quiet)
       {
-        FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[2], 16 - 32 * c_my);
-        FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[3],  8 - 16 * c_my);
+        FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[2], 16 - 32 * color);
+        FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[3],  8 - 16 * color);
       }
 
       while (pawnMask > 0)
@@ -212,7 +188,7 @@ class MoveList
         Move baseMove = colorBit | (ipt << 12) | ip;
 
         Bitboard finalSquares = destSquares[ip];
-        Bitboard  captSquares = finalSquares & pos.piece<~c_my, ALL>();
+        Bitboard  captSquares = finalSquares & emyPieces;
         Bitboard quietSquares = finalSquares ^ captSquares;
 
         if (captures)
@@ -233,7 +209,7 @@ class MoveList
       Move baseMove = colorBit | (ipt << 12) | ip;
 
       Bitboard finalSquares = destSquares[ip];
-      Bitboard  captSquares = finalSquares & pos.piece<~c_my, ALL>();
+      Bitboard  captSquares = finalSquares & emyPieces;
       Bitboard quietSquares = finalSquares ^ captSquares;
 
       if (captures)
@@ -242,16 +218,6 @@ class MoveList
       if (quiet)
         FillMoves<NORMAL  >(pos, myMoves, quietSquares, baseMove);
     }
-    return myMoves;
-  }
-
-  template<bool captures = true, bool quiet = true>
-  MoveArray
-  getMoves(const ChessBoard& pos) const noexcept
-  {
-    return color == WHITE
-      ? getMoves<WHITE, captures, quiet>(pos)
-      : getMoves<BLACK, captures, quiet>(pos);
   }
 };
 

@@ -133,7 +133,8 @@ class SearchData
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
     const MoveList myMoves = GenerateMoves(pos);
-    const MoveArray movesArray = myMoves.getMoves(pos);
+    MoveArray movesArray;
+    myMoves.getMoves(pos, movesArray);
     Move zeroMove = movesArray[0];
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 

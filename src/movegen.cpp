@@ -51,7 +51,8 @@ IsLegalMoveForPosition(Move move, ChessBoard& pos)
     return false;
 
   MoveList myMoves = GenerateMoves(pos);
-  MoveArray movesArray = myMoves.getMoves(pos);
+  MoveArray movesArray;
+  myMoves.getMoves(pos, movesArray);
 
   for (const Move legal_move : movesArray)
     if (filter(move) == filter(legal_move)) return true;
