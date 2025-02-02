@@ -20,8 +20,24 @@ MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
     return true;
 
   // Discover Checks
-  if (((1ULL << ip) & myMoves.discoverCheckSquares) == 0)
+  if ((pt != PAWN) and (((1ULL << ip) & myMoves.discoverCheckSquares) == 0))
     return false;
+
+  if (pt == PAWN)
+  {
+    if ((1ULL << fp) & Rank18) {
+      const int ppt = 2 + ((move >> 18) & 3);
+      if (((1ULL << fp) & myMoves.squaresThatCheckEnemyKing[ppt - 1]))
+        return true;
+    }
+    else {
+      if (((1ULL << ip) & myMoves.discoverCheckSquares) == 0)
+        return false;
+    }
+  }
+
+  if (pt != PAWN and pt != KING)
+    return true;
 
   // Last Resort
   pos.MakeMove(move);
