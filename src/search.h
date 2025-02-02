@@ -277,9 +277,19 @@ class SearchData
 
   void Print(ChessBoard pos)
   {
+    using std::setw, std::right, std::fixed;
+    cout << " | " << setw(6) << "moveNo"
+         << " | " << setw(5) << "Move"
+         << " | " << setw(8) << "Nodes"
+         << " | " << setw(10) << "QNodes |\n";
     int moveNo = 1;
     for (const auto& [move, tm] : moveTimes)
-      cout << moveNo++ << "\t| " << PrintMove(move, pos) << "\t| " << tm.first << endl;
+    {
+      cout << " | " << setw(6) << fixed << moveNo++
+           << " | " << setw(5) << fixed << PrintMove(move, pos)
+           << " | " << setw(8) << fixed << tm.first
+           << " | " << setw(7) << fixed << tm.second << " |\n";
+    }
   }
 
   void
