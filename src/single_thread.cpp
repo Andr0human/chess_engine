@@ -151,12 +151,6 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
       return pos.HandleScore(VALUE_DRAW);
   }
 
-  // Depth 0, starting Quiensense Search
-  if (depth <= 0)
-    return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);
-
-  info.AddNode();
-
   // check for theoretical drawn position
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
     return pos.HandleScore(VALUE_DRAW);
