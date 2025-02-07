@@ -43,12 +43,12 @@ class EvalData
 		MaterialCount<BLACK>(pos);
 
 		boardWeight =
-			  PawnValueMg   * (pos.count<WHITE, PAWN  >() + pos.count<BLACK, PAWN  >())
-		  + BishopValueMg * (pos.count<WHITE, BISHOP>() + pos.count<BLACK, BISHOP>())
-		  + KnightValueMg * (pos.count<WHITE, KNIGHT>() + pos.count<BLACK, KNIGHT>())
-		  + RookValueMg   * (pos.count<WHITE, ROOK  >() + pos.count<BLACK, ROOK  >())
-		  + QueenValueMg  * (pos.count<WHITE, QUEEN >() + pos.count<BLACK, QUEEN >());
-		
+			  PawnValueMg   * (pos.count<PAWN  >())
+		  + BishopValueMg * (pos.count<BISHOP>())
+		  + KnightValueMg * (pos.count<KNIGHT>())
+		  + RookValueMg   * (pos.count<ROOK  >())
+		  + QueenValueMg  * (pos.count<QUEEN >());
+
 		phase = float(boardWeight) / float(GamePhaseLimit);
 	}
 
