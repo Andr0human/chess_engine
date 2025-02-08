@@ -75,9 +75,11 @@ class MoveList
     while (endSquares > 0)
     {
       Square fp = NextSquare(endSquares);
-      PieceType fpt = type_of(pos.PieceOnSquare(fp));
+      Move move = baseMove | typeBit | (fp << 6);
 
-      Move move = baseMove | typeBit | (fpt << 15) | (fp << 6);
+      if (mt == CAPTURES)
+        move |= type_of(pos.PieceOnSquare(fp)) << 15;
+      
       movesArray.add(move);
     }
   }
@@ -115,9 +117,11 @@ class MoveList
       Square fp = NextSquare(endSquares);
       Square ip = fp + shift;
 
-      PieceType fpt = type_of(pos.PieceOnSquare(fp));
+      Move move = baseMove | (fp << 6) | ip;
 
-      Move move = baseMove | (fpt << 15) | (fp << 6) | ip;
+      if (mt == CAPTURES)
+        move |= type_of(pos.PieceOnSquare(fp)) << 15;
+
       movesArray.add(move);
 
       if (((1ULL << fp) & Rank18))
@@ -142,9 +146,10 @@ class MoveList
     while (endSquares > 0)
     {
       Square fp = NextSquare(endSquares);
-      PieceType fpt = type_of(pos.PieceOnSquare(fp));
+      Move move = baseMove | typeBit | (fp << 6);
 
-      Move move = baseMove | typeBit | (fpt << 15) | (fp << 6);
+      if (mt == CAPTURES)
+        move |= type_of(pos.PieceOnSquare(fp)) << 15;
       movesArray.add(move);
 
       if ((1ULL << fp) & Rank18)
@@ -160,7 +165,7 @@ class MoveList
   void
   getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
   {
-    const int colorBit = color << 21;
+    const int colorBit = color << 20;
 
     // fix pawns
     Bitboard emyPieces = pos.get_piece(~color, ALL);

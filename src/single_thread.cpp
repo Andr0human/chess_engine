@@ -303,7 +303,6 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
       valWindowCnt = 0;
 
       info.AddResult(board, eval, pvArray);
-      info.Print(board);
       info.ShowLastDepthResult(board, writer);
       info.ResetNodeCount();
 
