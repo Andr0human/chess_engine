@@ -66,6 +66,7 @@ int main(int argc, char **argv)
   8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1                                  // Kb1
   8/5Pk1/4K2p/4N1PP/8/8/5r2/8 b - - 2 60                                   // B.M Rxf7
   2kr3r/pppq4/3b4/3bn3/2N1p1p1/PP2P1N1/1B3PPP/2RQ1RK1 b - - 1 18           // B.M Nf3+
+  8/1p1k3p/7P/8/6r1/5p2/p2r1B2/K3R3 b - - 3 70                             // D.M Rxf2
 
   Quiescence Explosion:
   q2k2q1/2nqn2b/1n1P1n1b/2rnr2Q/1NQ1QN1Q/3Q3B/2RQR2B/Q2K2Q1 w - - 0 1
