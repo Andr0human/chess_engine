@@ -2,6 +2,172 @@
 #include "move_utils.h"
 #include "attacks.h"
 
+
+template <MoveType mt>
+void
+MoveList::FillMoves(
+  const ChessBoard& pos,
+  MoveArray& movesArray,
+  Bitboard endSquares,
+  Move baseMove
+) const noexcept
+{
+  constexpr int typeBit = mt << 21;
+
+  while (endSquares > 0)
+  {
+    Square fp = NextSquare(endSquares);
+    Move move = baseMove | typeBit | (fp << 6);
+
+    if (mt == CAPTURES)
+      move |= type_of(pos.PieceOnSquare(fp)) << 15;
+    
+    movesArray.add(move);
+  }
+}
+
+void
+MoveList::FillEnpassantPawns(MoveArray& movesArray, Square fp) const noexcept
+{
+  constexpr Move typeBit = CAPTURES << 21;
+  const int colorBit = color << 20;
+  Bitboard epPawns = enpassantPawns;
+
+  while (epPawns > 0)
+  {
+    Square ip = NextSquare(epPawns);
+
+    Move move = typeBit | (colorBit) | (PAWN << 12) | (fp << 6) | ip;
+    movesArray.add(move);
+  }
+}
+
+template <MoveType mt>
+void
+MoveList::FillShiftPawns(
+  const ChessBoard& pos,
+  MoveArray& movesArray,
+  Bitboard endSquares,
+  int shift
+) const noexcept
+{
+  const int  colorBit = color << 20;
+  const Move baseMove = (mt << 21) | colorBit | (PAWN << 12);
+
+  while (endSquares > 0)
+  {
+    Square fp = NextSquare(endSquares);
+    Square ip = fp + shift;
+
+    Move move = baseMove | (fp << 6) | ip;
+
+    if (mt == CAPTURES)
+      move |= type_of(pos.PieceOnSquare(fp)) << 15;
+
+    movesArray.add(move);
+
+    if (((1ULL << fp) & Rank18))
+    {
+      movesArray.add(move | 0xC0000);
+      movesArray.add(move | 0x80000);
+      movesArray.add(move | 0x40000);
+    }
+  }
+}
+
+template <MoveType mt>
+void
+MoveList::FillPawns(
+  const ChessBoard& pos,
+  MoveArray& movesArray,
+  Bitboard endSquares,
+  Move baseMove
+) const noexcept
+{
+  constexpr int typeBit = mt << 21;
+  while (endSquares > 0)
+  {
+    Square fp = NextSquare(endSquares);
+    Move move = baseMove | typeBit | (fp << 6);
+
+    if (mt == CAPTURES)
+      move |= type_of(pos.PieceOnSquare(fp)) << 15;
+
+    movesArray.add(move);
+
+    if ((1ULL << fp) & Rank18)
+    {
+      movesArray.add(move | 0xC0000);
+      movesArray.add(move | 0x80000);
+      movesArray.add(move | 0x40000);
+    }
+  }
+}
+
+template<bool captures, bool quiet>
+void
+MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
+{
+  const int colorBit = color << 20;
+
+  // fix pawns
+  Bitboard emyPieces = pos.get_piece(~color, ALL);
+  Bitboard myPawns   = pos.get_piece(color, PAWN);
+  Bitboard pawnMask  = myPawns & initSquares;
+  Bitboard pieceMask = initSquares ^ pawnMask;
+
+  if (checkers < 2)
+  {
+    if (captures)
+    {
+      FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[0], 7 - 16 * color);
+      FillShiftPawns<CAPTURES>(pos, myMoves, pawnDestSquares[1], 9 - 16 * color);
+    }
+    if (quiet)
+    {
+      FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[2], 16 - 32 * color);
+      FillShiftPawns<NORMAL>(pos, myMoves, pawnDestSquares[3],  8 - 16 * color);
+    }
+
+    while (pawnMask > 0)
+    {
+      Square ip = NextSquare(pawnMask);
+      PieceType ipt = type_of(pos.PieceOnSquare(ip));
+      Move baseMove = colorBit | (ipt << 12) | ip;
+
+      Bitboard finalSquares = destSquares[ip];
+      Bitboard  captSquares = finalSquares & emyPieces;
+      Bitboard quietSquares = finalSquares ^ captSquares;
+
+      if (captures)
+        FillPawns<CAPTURES>(pos, myMoves,  captSquares, baseMove);
+
+      if (quiet)
+        FillPawns<NORMAL  >(pos, myMoves, quietSquares, baseMove);
+    }
+  }
+
+  if (captures)
+    FillEnpassantPawns(myMoves, pos.EnPassantSquare());
+
+  while (pieceMask > 0)
+  {
+    Square     ip = NextSquare(pieceMask);
+    PieceType ipt = type_of(pos.PieceOnSquare(ip));
+    Move baseMove = colorBit | (ipt << 12) | ip;
+
+    Bitboard finalSquares = destSquares[ip];
+    Bitboard  captSquares = finalSquares & emyPieces;
+    Bitboard quietSquares = finalSquares ^ captSquares;
+
+    if (captures)
+      FillMoves<CAPTURES>(pos, myMoves, captSquares, baseMove);
+
+    if (quiet)
+      FillMoves<NORMAL  >(pos, myMoves, quietSquares, baseMove);
+  }
+}
+
 void
 DecodeMove(Move move)
 {
@@ -139,3 +305,13 @@ PrintMove(Move move, ChessBoard _cb)
   return piece_name + IndexToSquare(ip_row, ip_col) + end_part;
 }
 
+template void MoveList::FillMoves<CAPTURES>(const ChessBoard&, MoveArray&, Bitboard, Move) const noexcept;
+template void MoveList::FillMoves<NORMAL>(const ChessBoard&, MoveArray&, Bitboard, Move) const noexcept;
+template void MoveList::FillShiftPawns<CAPTURES>(const ChessBoard&, MoveArray&, Bitboard, int) const noexcept;
+template void MoveList::FillShiftPawns<NORMAL>(const ChessBoard&, MoveArray&, Bitboard, int) const noexcept;
+template void MoveList::FillPawns<CAPTURES>(const ChessBoard&, MoveArray&, Bitboard, Move) const noexcept;
+template void MoveList::FillPawns<NORMAL>(const ChessBoard&, MoveArray&, Bitboard, Move) const noexcept;
+template void MoveList::getMoves<true, true>(const ChessBoard&, MoveArray&) const noexcept;
+template void MoveList::getMoves<true, false>(const ChessBoard&, MoveArray&) const noexcept;
+template void MoveList::getMoves<false, true>(const ChessBoard&, MoveArray&) const noexcept;
+template void MoveList::getMoves<false, false>(const ChessBoard&, MoveArray&) const noexcept;
