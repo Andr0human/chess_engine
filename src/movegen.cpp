@@ -821,16 +821,21 @@ SquaresForDiscoveredCheck(const ChessBoard& pos)
         (((first_piece & occupied_my) != 0) and ((second_piece & my_piece) != 0)) ? first_piece : 0;
   };
 
+  if (rq)
+  {
+    checkSquare(Lsb, plt::RightMasks, rq);
+    checkSquare(Msb, plt::LeftMasks , rq);
+    checkSquare(Lsb, plt::UpMasks   , rq);
+    checkSquare(Msb, plt::DownMasks , rq);
+  }
 
-  checkSquare(Lsb, plt::RightMasks, rq);
-  checkSquare(Msb, plt::LeftMasks , rq);
-  checkSquare(Lsb, plt::UpMasks   , rq);
-  checkSquare(Msb, plt::DownMasks , rq);
-
-  checkSquare(Lsb, plt::UpRightMasks  , bq);
-  checkSquare(Lsb, plt::UpLeftMasks   , bq);
-  checkSquare(Msb, plt::DownRightMasks, bq);
-  checkSquare(Msb, plt::DownLeftMasks , bq);
+  if (bq)
+  {
+    checkSquare(Lsb, plt::UpRightMasks  , bq);
+    checkSquare(Lsb, plt::UpLeftMasks   , bq);
+    checkSquare(Msb, plt::DownRightMasks, bq);
+    checkSquare(Msb, plt::DownLeftMasks , bq);
+  }
 
   return calculatedBitboard;
 }
