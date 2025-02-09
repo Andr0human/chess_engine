@@ -8,11 +8,6 @@ bool
 is_type<PV_MOVE>(Move m)
 { return info.IsPartOfPV(m); }
 
-template <>
-bool
-is_type<CHECK>(Move m)
-{ return (m >> 23) & 1; }
-
 SearchData info;
 
 #ifndef MOVE_REORDERING

@@ -19,7 +19,8 @@ class MoveList
   public:
 
   array<Bitboard, 4> pawnDestSquares;
-  array<Bitboard , SQUARE_NB>  destSquares;
+  array<Bitboard, SQUARE_NB> destSquares;
+  array<Bitboard, SQUARE_NB> discoverCheckMasks;
 
   // Active side color
   Color color;
@@ -61,13 +62,13 @@ class MoveList
   AddPawns(size_t index, Bitboard _destSquares)
   { pawnDestSquares[index] = _destSquares; }
 
-  template<bool captures=true, bool quiet=true>
+  template<bool captures=true, bool quiet=true, bool checks=false>
   void
   getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept;
 
   private:
 
-  template <MoveType mt>
+  template <MoveType mt, bool checks>
   void
   FillMoves(
     const ChessBoard& pos,
@@ -76,10 +77,11 @@ class MoveList
     Move baseMove
   ) const noexcept;
 
+  template <bool checks>
   void
-  FillEnpassantPawns(MoveArray& movesArray, Square fp) const noexcept;
+  FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
 
-  template <MoveType mt>
+  template <MoveType mt, bool checks>
   void
   FillShiftPawns(
     const ChessBoard& pos,
@@ -88,9 +90,18 @@ class MoveList
     int shift
   ) const noexcept;
 
-  template <MoveType mt>
+  template <MoveType mt, bool checks>
   void
   FillPawns(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    Move baseMove
+  ) const noexcept;
+
+  template <MoveType mt, bool checks>
+  void
+  FillKingMoves(
     const ChessBoard& pos,
     MoveArray& movesArray,
     Bitboard endSquares,

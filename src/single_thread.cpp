@@ -10,7 +10,7 @@ BulkCount(ChessBoard& _cb, Depth depth)
 
   const MoveList myMoves = GenerateMoves(_cb);
   MoveArray movesArray;
-  myMoves.getMoves<true, true>(_cb, movesArray);
+  myMoves.getMoves(_cb, movesArray);
 
   if (depth == 1) return movesArray.size();
   uint64_t answer = 0;
@@ -168,9 +168,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
-  MoveList myMoves = GenerateMoves(pos);
+  MoveList myMoves = GenerateMoves(pos, true);
   MoveArray movesArray;
-  myMoves.getMoves(pos, movesArray);
+  myMoves.getMoves<true, true, true>(pos, movesArray);
 
   // Order moves according to heuristics for faster alpha-beta search
   if constexpr (useMoveOrder)
