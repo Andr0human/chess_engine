@@ -25,7 +25,6 @@
 // 8/pb1n3k/1p4pp/8/2q1PQ2/Pn3P1B/1B1r2PP/2R3K1 b - - 3 31      Critical-leaf-Node extension
 // 8/2K5/8/8/P3kp2/8/8/8 b - - 0 74                             (Pawn Race fix)
 
-
 int main(int argc, char **argv)
 {
   FAST_IO();

@@ -1,16 +1,12 @@
 
 #include "search.h"
+#include "move_utils.h"
 #include <algorithm>
 
 template <>
 bool
 is_type<PV_MOVE>(Move m)
 { return info.IsPartOfPV(m); }
-
-template <>
-bool
-is_type<CHECK>(Move m)
-{ return (m >> 23) & 1; }
 
 SearchData info;
 
@@ -19,29 +15,58 @@ SearchData info;
 
 template <int flag>
 static size_t
-PrioritizeMoves(MoveList& myMoves, size_t start)
+PrioritizeMoves(MoveArray& myMoves, size_t start)
 {
   for (size_t i = start; i < myMoves.size(); i++)
   {
-    if (is_type<flag>(myMoves.pMoves[i]))
-      std::swap(myMoves.pMoves[i], myMoves.pMoves[start++]);
+    if (is_type<flag>(myMoves[i]))
+      std::swap(myMoves[i], myMoves[start++]);
   }
   return start;
 }
 
-
-void
-OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_moves)
+template <Sorts sortType>
+size_t
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
 
-  const size_t capture_end = PrioritizeMoves<CAPTURES>(myMoves, 0);
-  const size_t check_end   = check_moves ? PrioritizeMoves<CHECK>(myMoves, capture_end) : capture_end;
-  const size_t pv_end      = pv_moves    ? PrioritizeMoves<PV_MOVE>(myMoves, check_end) : check_end;
+  if (sortType == Sorts::CAPTURES)
+  {
+    const size_t end = PrioritizeMoves<CAPTURES>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
 
-  std::sort(myMoves.begin()            , myMoves.begin() + capture_end, seeComparator);
-  std::sort(myMoves.begin() + check_end, myMoves.begin() +      pv_end, seeComparator);
+  if (sortType == Sorts::PROMOTIONS)
+  {
+    const size_t end = PrioritizeMoves<PROMOTION>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
+
+  if (sortType == Sorts::CHECKS)
+  {
+    const size_t end = PrioritizeMoves<CHECK>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
+
+  if (sortType == Sorts::PV)
+  {
+    const size_t end = PrioritizeMoves<PV_MOVE>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
+
+  if (sortType == Sorts::QUIET)
+  {
+    std::sort(movesArray.begin() + start, movesArray.end(), seeComparator);
+    return movesArray.size();
+  }
+
+  return 0;
 }
 
 Score
@@ -82,7 +107,7 @@ SeeScore(const ChessBoard& pos, Move move)
 }
 
 void
-PrintMovelist(MoveList myMoves, ChessBoard pos)
+PrintMovelist(MoveArray myMoves, ChessBoard pos)
 {
   using std::setw;
 
@@ -91,7 +116,7 @@ PrintMovelist(MoveList myMoves, ChessBoard pos)
 
   for (size_t i = 0; i < myMoves.size(); i++)
   {
-    Move move = myMoves.pMoves[i];
+    Move move = myMoves[i];
     string moveString = PrintMove(move, pos);
     Score seeScore = SeeScore(pos, move);
     int priority = move >> 24;
@@ -106,5 +131,12 @@ PrintMovelist(MoveList myMoves, ChessBoard pos)
 
   cout << endl;
 }
+
+
+template size_t OrderMoves<Sorts::CAPTURES>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::PV>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::QUIET>(const ChessBoard&, MoveArray&, size_t);
 
 #endif

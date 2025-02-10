@@ -1,5 +1,6 @@
 
 #include "task.h"
+#include "move_utils.h"
 #include "search.h"
 #include "single_thread.h"
 
@@ -143,11 +144,11 @@ SpeedTest()
     totalNodes += currentNodes;
     totalTime  += currentTime;
 
-    const auto current_speed = static_cast<float>(currentNodes / currentTime);
+    const auto current_speed = currentNodes / currentTime;
     cout << "position-" << positionNo++ << "\t: " << current_speed << " M nodes/sec." << endl;
   }
 
-  const auto speed = static_cast<float>(totalNodes / totalTime);
+  const auto speed = totalNodes / totalTime;
   cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
 }
 
@@ -221,8 +222,10 @@ DebugMoveGenerator(const vector<string> &_args)
   std::ofstream out(_fn);
   ChessBoard _cb = fen;
   MoveList myMoves = GenerateMoves(_cb);
+  MoveArray movesArray;
+  myMoves.getMoves(_cb, movesArray);
 
-  for (const auto move : myMoves)
+  for (const auto move : movesArray)
   {
     _cb.MakeMove(move);
     const auto current = BulkCount(_cb, dep - 1);
@@ -244,11 +247,12 @@ Level1(const vector<string>& args)
   }
 
   ChessBoard pos(args[1]);
-  bool qs = (args.size() >= 3 and args[2] == "q");
 
-  MoveList myMoves = GenerateMoves(pos, qs, true);
-  OrderMoves(pos, myMoves, qs, true);
-  PrintMovelist(myMoves, pos);
+  MoveList myMoves = GenerateMoves(pos);
+  MoveArray movesArray;
+  myMoves.getMoves(pos, movesArray);
+  OrderMoves<Sorts::CAPTURES>(pos, movesArray);
+  PrintMovelist(movesArray, pos);
 
   EvalDump(pos);
 }
