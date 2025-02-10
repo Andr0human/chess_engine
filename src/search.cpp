@@ -25,19 +25,48 @@ PrioritizeMoves(MoveArray& myMoves, size_t start)
   return start;
 }
 
-
-void
-OrderMoves(const ChessBoard& pos, MoveArray& myMoves, bool pv_moves, bool check_moves)
+template <Sorts sortType>
+size_t
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
 
-  const size_t capture_end = PrioritizeMoves<CAPTURES>(myMoves, 0);
-  const size_t check_end   = check_moves ? PrioritizeMoves<CHECK>(myMoves, capture_end) : capture_end;
-  const size_t pv_end      = pv_moves    ? PrioritizeMoves<PV_MOVE>(myMoves, check_end) : check_end;
+  if (sortType == Sorts::CAPTURES)
+  {
+    const size_t end = PrioritizeMoves<CAPTURES>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
 
-  std::sort(myMoves.begin()            , myMoves.begin() + capture_end, seeComparator);
-  std::sort(myMoves.begin() + check_end, myMoves.begin() +      pv_end, seeComparator);
+  if (sortType == Sorts::PROMOTIONS)
+  {
+    const size_t end = PrioritizeMoves<PROMOTION>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
+
+  if (sortType == Sorts::CHECKS)
+  {
+    const size_t end = PrioritizeMoves<CHECK>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
+
+  if (sortType == Sorts::PV)
+  {
+    const size_t end = PrioritizeMoves<PV_MOVE>(movesArray, start);
+    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
+    return end;
+  }
+
+  if (sortType == Sorts::QUIET)
+  {
+    std::sort(movesArray.begin() + start, movesArray.end(), seeComparator);
+    return movesArray.size();
+  }
+
+  return 0;
 }
 
 Score
@@ -102,5 +131,12 @@ PrintMovelist(MoveArray myMoves, ChessBoard pos)
 
   cout << endl;
 }
+
+
+template size_t OrderMoves<Sorts::CAPTURES>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::PV>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::QUIET>(const ChessBoard&, MoveArray&, size_t);
 
 #endif

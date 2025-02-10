@@ -63,6 +63,16 @@ enum Search
   NULL_MOVE = 0,
 };
 
+enum class Sorts
+{
+  CAPTURES,
+  PROMOTIONS,
+  CHECKS,
+  PV,
+  KILLER,
+  QUIET
+};
+
 enum class Flag
 {
   HASH_EMPTY = 0, HASH_EXACT = 1,
