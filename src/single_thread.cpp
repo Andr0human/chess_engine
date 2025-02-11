@@ -186,34 +186,43 @@ PlayAllMoves(
   // Set pvArray, for storing the search_tree
   pvArray[pvIndex] = NULL_MOVE;
   size_t start = 0, end = 0;
+  int extensions, newDepth, newNumExtensions;
 
   MoveArray movesArray;
   myMoves.getMoves<true, false, true>(pos, movesArray);
 
+  extensions = SearchExtension(pos, myMoves, movesArray, numExtensions);
+  newDepth   = depth + extensions;
+  newNumExtensions = numExtensions + extensions;
+
   end = OrderMoves<Sorts::CAPTURES>(pos, movesArray, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
   if (hashf == Flag::HASH_BETA)
     return;
 
   myMoves.getMoves<false, true, true>(pos, movesArray);
 
+  extensions = SearchExtension(pos, myMoves, movesArray, numExtensions);
+  newDepth   = depth + extensions;
+  newNumExtensions = numExtensions + extensions;
+
   start = end;
   end = OrderMoves<Sorts::PROMOTIONS>(pos, movesArray, start);
   end = OrderMoves<Sorts::CHECKS>(pos, movesArray, end);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   start = end;
   end = OrderMoves<Sorts::PV>(pos, movesArray, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   start = end;
-  PlayPartialMoves<Reduction>(pos, movesArray, start, movesArray.size(), alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, movesArray.size(), alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
 }
 
 Score
@@ -254,14 +263,6 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
   MoveList myMoves = GenerateMoves(pos, true);
-
-  if constexpr (useExtensions)
-  {
-    // Search Extensions
-    int extensions = SearchExtension(pos, myMoves, numExtensions);
-    depth         += extensions;
-    numExtensions += extensions;
-  }
 
   Flag hashf = Flag::HASH_ALPHA;
 
