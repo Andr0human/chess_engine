@@ -176,7 +176,8 @@ DefendersCount(const ChessBoard& pos)
   return 2 * PopCount(mask & pawns) + PopCount(pieces);
 }
 
-static Score
+template <bool debug>
+Score
 Threats(const ChessBoard& pos)
 {
   // Attack Value Currently
@@ -220,7 +221,34 @@ Threats(const ChessBoard& pos)
   Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite) + (openFileDeductionBlack * openFileDeductionBlack)) / (32 + defendersCountBlack);
   Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftBlack) + (openFileDeductionWhite * openFileDeductionWhite)) / (32 + defendersCountWhite);
 
-  return (currentAttackWhite + longTermAttackWhite) - (currentAttackBlack + longTermAttackBlack);
+  Score threatsScore = (currentAttackWhite + longTermAttackWhite) - (currentAttackBlack + longTermAttackBlack);
+
+  if (debug)
+  {
+    cout << "-------------------- THREATS --------------------\n"
+      << "\nattackValueWhite   = " << attackValueWhite
+      << "\nattackValueBlack   = " << attackValueBlack
+      << "\ndistanceScoreWhite = " << distanceScoreWhite
+      << "\ndistanceScoreBlack = " << distanceScoreBlack
+      << "\nkingMobilityWhite  = " << kingMobilityWhite
+      << "\nkingMobilityBlack  = " << kingMobilityBlack
+      << "\nopenFileDeductionWhite = " << openFileDeductionWhite
+      << "\nopenFileDeductionBlack = " << openFileDeductionBlack
+      << "\nattackersLeftWhite  = " << attackersLeftWhite
+      << "\nattackersLeftBlack  = " << attackersLeftBlack
+      << "\ndefendersCountWhite = " << defendersCountWhite
+      << "\ndefendersCountBlack = " << defendersCountBlack << "\n"
+      << "\nlackOfSafetyWhite   = " << lackOfSafetyWhite
+      << "\nlackOfSafetyBlack   = " << lackOfSafetyBlack
+      << "\ncurrentAttackWhite  = " << currentAttackWhite
+      << "\ncurrentAttackBlack  = " << currentAttackBlack
+      << "\nlongTermAttackWhite = " << longTermAttackWhite
+      << "\nlongTermAttackBlack = " << longTermAttackBlack
+      << "\n\nThreatsScore = " << threatsScore
+      << "\n-------------------------------------------------" << endl;
+  }
+
+  return threatsScore;
 }
 
 
@@ -367,7 +395,7 @@ PawnStructure(const ChessBoard& pos, const EvalData& ed)
   return score;
 }
 
-template<int debug = 0>
+template<bool debug>
 static Score
 MidGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 {
@@ -378,15 +406,16 @@ MidGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   Score pieceTableScore = PieceTableStrengthMidGame(pos);
   Score mobilityScore   = MobilityStrength(pos);
   Score pawnStructure   = ed.pawnStructureScore;
-  Score threatsScore    = Threats(pos);
+  Score threatsScore    = Threats<debug>(pos);
 
-  if (debug == 1)
+  if (debug)
   {
-    cout << " -- MIDGAME -- " << endl;
-    cout << "materialScore   = " << materialScore   << endl;
-    cout << "pieceTableScore = " << pieceTableScore << endl;
-    cout << "mobilityScore   = " << mobilityScore   << endl;
-    cout << "threatsScore    = " << threatsScore    << endl << endl;
+    cout << "-------------------- MIDGAME --------------------\n"
+      << "\nmaterialScore   = " << materialScore
+      << "\npieceTableScore = " << pieceTableScore
+      << "\nmobilityScore   = " << mobilityScore
+      << "\nthreatsScore    = " << threatsScore
+      << "\n-------------------------------------------------" << endl;
   }
 
   float eval =
@@ -466,7 +495,7 @@ BishopColorCornerScore(const ChessBoard& pos)
   return score;
 }
 
-template <Color winningSide, bool debug = 0>
+template <Color winningSide, bool debug>
 static Score
 LoneKingEndGame(const ChessBoard& pos)
 {
@@ -568,7 +597,7 @@ ColorParityScore(const ChessBoard& pos)
   return score;
 }
 
-template<int debug = 0>
+template<bool debug>
 static Score
 EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 {
@@ -589,12 +618,13 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 
   if (debug)
   {
-    cout << " -- ENDGAME -- " << endl;
-    cout << "materialScore      = " << materialScore   << endl;
-    cout << "pieceTableScore    = " << pieceTableScore << endl;
-    cout << "pawnStructureScore = " << pawnStructure   << endl;
-    cout << "distanceScore      = " << distanceScore   << endl;
-    cout << "parityScore        = " << parityScore     << endl << endl;
+    cout << "-------------------- ENDGAME --------------------\n"
+      << "\nmaterialScore      = " << materialScore
+      << "\npieceTableScore    = " << pieceTableScore
+      << "\npawnStructureScore = " << pawnStructure
+      << "\ndistanceScore      = " << distanceScore
+      << "\nparityScore        = " << parityScore
+      << "\n-------------------------------------------------" << endl;
   }
 
   float eval =
@@ -610,120 +640,58 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 #endif
 
 
+template <bool debug>
 Score
 Evaluate(const ChessBoard& pos)
 {
   EvalData ed = EvalData(pos);
   int side2move = 2 * int(pos.color) - 1;
+  float phase = ed.phase;
 
-  // Special Piece EndGames 
-  if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
+  if (debug)
   {
-    Score score = (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE>(pos) : LoneKingEndGame<BLACK>(pos);
-    return score * side2move;
+    cout << "----------------------------------------------" << endl;
+    cout << "BoardWeight = " << ed.boardWeight << endl;
+    cout << "Phase = " << phase << endl;
   }
 
-  ed.pawnStructureScore = PawnStructure<WHITE>(pos, ed) - PawnStructure<BLACK>(pos, ed);
-  float phase = ed.phase;
-
-  Score mg_score = MidGameScore(pos, ed, phase);
-  Score eg_score = EndGameScore(pos, ed, 1 - phase);
-
-  Score score = Score( phase * float(mg_score) + (1 - phase) * float(eg_score) );
-  return score * side2move;
-}
-
-
-Score EvalDump(const ChessBoard& pos)
-{
-  EvalData ed = EvalData(pos);
-  float phase = ed.phase;
-
-  cout << "----------------------------------------------" << endl;
-  cout << "BoardWeight = " << ed.boardWeight << endl;
-  cout << "Phase = " << phase << endl;
-
-  // Special Piece EndGames 
+  // Special Piece EndGames
   if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
-    return (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE, 1>(pos) : LoneKingEndGame<BLACK, 1>(pos);
+  {
+    Score score = (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE, debug>(pos) : LoneKingEndGame<BLACK, debug>(pos);
+    return score * side2move;
+  }
 
   Score pawnStructrueWhite = PawnStructure<WHITE>(pos, ed);
   Score pawnStructrueBlack = PawnStructure<BLACK>(pos, ed);
   ed.pawnStructureScore = pawnStructrueWhite - pawnStructrueBlack;
 
-  cout << "Score_pawn_structure_white = " << pawnStructrueWhite << endl;
-  cout << "Score_pawn_structure_black = " << pawnStructrueBlack << endl;
-  cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl << endl;
+  if (debug)
+  {
+    cout << "Score_pawn_structure_white = " << pawnStructrueWhite << endl;
+    cout << "Score_pawn_structure_black = " << pawnStructrueBlack << endl;
+    cout << "Score_pawn_structure_total = " << ed.pawnStructureScore << endl << endl;
+  }
 
-  Score mgScore = MidGameScore<1>(pos, ed,     ed.phase);
-  Score egScore = EndGameScore<1>(pos, ed, 1 - ed.phase);
+  Score mgScore = MidGameScore<debug>(pos, ed,     phase);
+  Score egScore = EndGameScore<debug>(pos, ed, 1 - phase);
 
   Score score = Score( phase * float(mgScore) + (1 - phase) * float(egScore) );
 
-  cout << "mg_score = " << mgScore << endl;
-  cout << "eg_score = " << egScore << endl;
-  cout << "score    = " << score   << endl;
-  cout << "----------------------------------------------" << endl;
+  if (debug)
+  {
+    cout << "mg_score = " << mgScore << endl;
+    cout << "eg_score = " << egScore << endl;
+    cout << "score    = " << score   << endl;
+    cout << "----------------------------------------------" << endl;
+  }
 
-  return score;
+  return score * side2move;
 }
 
 
-Score
-EvaluateThreats(const ChessBoard& pos)
-{
-  EvalData ed = EvalData(pos);
-  cout << "--------------------------------------------------------" << endl;
-  cout << "Phase = " << ed.phase << endl;
+template Score Threats<false>(const ChessBoard& pos);
+template Score Threats<true >(const ChessBoard& pos);
 
-  Score attackValueWhite = AttackValue<WHITE>(pos);
-  Score attackValueBlack = AttackValue<BLACK>(pos);
-
-  Score distanceScoreWhite = AttackDistanceScore<WHITE>(pos);
-  Score distanceScoreBlack = AttackDistanceScore<BLACK>(pos);
-
-  Score kingMobilityWhite = KingMobilityScore<WHITE>(pos);
-  Score kingMobilityBlack = KingMobilityScore<BLACK>(pos);
-
-  Score openFileDeductionWhite = OpenFilesScore<WHITE>(pos);
-  Score openFileDeductionBlack = OpenFilesScore<BLACK>(pos);
-
-  Score attackersLeftWhite = AttackersLeft<WHITE>(pos);
-  Score attackersLeftBlack = AttackersLeft<BLACK>(pos);
-
-  Score defendersCountWhite = DefendersCount<WHITE>(pos);
-  Score defendersCountBlack = DefendersCount<BLACK>(pos);
-
-  Score lackOfSafetyWhite = (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
-  Score lackOfSafetyBlack = (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
-
-  Score currentAttackWhite = attackValueWhite * lackOfSafetyBlack + (distanceScoreWhite / (defendersCountBlack + 1));
-  Score currentAttackBlack = attackValueBlack * lackOfSafetyWhite + (distanceScoreBlack / (defendersCountBlack + 1));
-
-  Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite) + (openFileDeductionBlack * openFileDeductionBlack)) / (32 + defendersCountBlack);
-  Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftBlack) + (openFileDeductionWhite * openFileDeductionWhite)) / (32 + defendersCountWhite);
-
-  cout << "attackValueWhite   = " << attackValueWhite   << endl;
-  cout << "attackValueBlack   = " << attackValueBlack   << endl;
-  cout << "distanceScoreWhite = " << distanceScoreWhite << endl;
-  cout << "distanceScoreBlack = " << distanceScoreBlack << endl;
-  cout << "kingMobilityWhite  = " << kingMobilityWhite  << endl;
-  cout << "kingMobilityBlack  = " << kingMobilityBlack  << endl;
-  cout << "openFileDeductionWhite = " << openFileDeductionWhite << endl;
-  cout << "openFileDeductionBlack = " << openFileDeductionBlack << endl;
-  cout << "attackersLeftWhite  = " << attackersLeftWhite << endl;
-  cout << "attackersLeftBlack  = " << attackersLeftBlack << endl;
-  cout << "defendersCountWhite = " << defendersCountWhite << endl;
-  cout << "defendersCountBlack = " << defendersCountBlack << endl << endl;
-
-  cout << "lackOfSafetyWhite   = " << lackOfSafetyWhite   << endl;
-  cout << "lackOfSafetyBlack   = " << lackOfSafetyBlack   << endl;
-  cout << "currentAttackWhite  = " << currentAttackWhite  << endl;
-  cout << "currentAttackBlack  = " << currentAttackBlack  << endl;
-  cout << "longTermAttackWhite = " << longTermAttackWhite << endl;
-  cout << "longTermAttackBlack = " << longTermAttackBlack << endl;
-
-  Score __x = (currentAttackWhite + longTermAttackWhite) - (currentAttackBlack + longTermAttackBlack);
-  cout << "--------------------------------------------------------" << endl;
-  return __x;
-}
+template Score Evaluate<false>(const ChessBoard& pos);
+template Score Evaluate<true >(const ChessBoard& pos);
