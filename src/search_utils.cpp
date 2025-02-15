@@ -75,6 +75,8 @@ Reduction (Depth depth, size_t moveNo)
 int
 SearchExtension(const ChessBoard& pos, const MoveList& myMoves, int numExtensions)
 {
+  int side2move = 2 * pos.color - 1;
+
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
   

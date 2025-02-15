@@ -138,16 +138,16 @@ SpeedTest()
   for (auto pos : positions)
   {
     Nodes  currentNodes = pos.nodeCount(1) * loop;
-    int64_t currentTime = pos.time(BulkCount, loop);
+    uint64_t currentTime = pos.time(BulkCount, loop);
 
     totalNodes += currentNodes;
     totalTime  += currentTime;
 
-    const auto current_speed = static_cast<float>(currentNodes / currentTime);
+    const uint64_t current_speed = currentNodes / currentTime;
     cout << "position-" << positionNo++ << "\t: " << current_speed << " M nodes/sec." << endl;
   }
 
-  const auto speed = static_cast<float>(totalNodes / totalTime);
+  const uint64_t speed = totalNodes / totalTime;
   cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
 }
 
@@ -250,21 +250,7 @@ Level1(const vector<string>& args)
   OrderMoves(pos, myMoves, qs, true);
   PrintMovelist(myMoves, pos);
 
-  EvalDump(pos);
-}
-
-
-static void
-ShowThreat(const vector<string>& args)
-{
-  if (args.size() < 2)
-  {
-    puts("No fen provided!");
-    return;
-  }
-  ChessBoard pos(args[1]);
-  auto __x = EvaluateThreats(pos);
-  cout << "ThreatsScore = " << __x << endl;
+  Evaluate<true>(pos);
 }
 
 
@@ -315,10 +301,6 @@ void Task(int argc, char *argv[])
   else if (command == "level1")
   {
     Level1(argument_list);
-  }
-  else if (command == "threat")
-  {
-    ShowThreat(argument_list);
   }
   else
   {
