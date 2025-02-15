@@ -1,7 +1,6 @@
 
 #include "search_utils.h"
 #include "movegen.h"
-#include "evaluation.h"
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -82,12 +81,8 @@ SearchExtension(const ChessBoard& pos, const MoveList& myMoves, int numExtension
     return 0;
   
   // If king is in check, add 1
-  if (myMoves.checkers > 0) {
-    Score threatsScore = Threats(pos) * side2move;
-    if (threatsScore < -2 * PawnValueMg) {
-      return 1;
-    }
-  }
+  if (myMoves.checkers > 0 and myMoves.size() < 3)
+    return 1;
 
   // if queen trapped and attacked by minor piece, add 1
   if (
