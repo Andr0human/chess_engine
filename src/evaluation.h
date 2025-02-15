@@ -64,12 +64,13 @@ class EvalData
 bool
 isTheoreticalDraw(const ChessBoard& pos);
 
-Score Evaluate(const ChessBoard& pos);
-
-Score EvalDump(const ChessBoard& pos);
-
+template <bool debug=false>
 Score
-EvaluateThreats(const ChessBoard& pos);
+Threats(const ChessBoard& pos);
+
+template <bool debug=false>
+Score
+Evaluate(const ChessBoard& pos);
 
 
 #endif
