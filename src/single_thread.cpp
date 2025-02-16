@@ -22,7 +22,8 @@ BulkCount(ChessBoard& _cb, Depth depth)
   return answer;
 }
 
-Score
+template <bool leafnode=false>
+static Score
 QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
   // Check if Time Left for Search
@@ -35,7 +36,10 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
     return pos.HandleScore(VALUE_DRAW);
 
-  info.AddQNode();
+  if (leafnode)
+    info.AddNode();
+  else
+    info.AddQNode();
 
   // Get a 'Stand Pat' Score
   Score stand_pat = Evaluate(pos);
@@ -137,7 +141,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // Depth 0, starting Quiensense Search
   if (depth <= 0)
-    return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);
+    return QuiescenceSearch<true>(pos, alpha, beta, ply, pvIndex);
 
   // check for theoretical drawn position
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
