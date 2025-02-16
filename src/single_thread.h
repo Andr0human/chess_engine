@@ -30,8 +30,6 @@ Search(
   std::ostream& ostream = std::cout
 );
 
-Score
-QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex);
 
 /**
  * @brief Returns the evaluation of a board at a given depth
