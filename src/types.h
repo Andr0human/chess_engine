@@ -74,6 +74,7 @@ enum class Endgames: uint32_t
   KPK,
   KNK,
   KBK,
+  KPBK,
   KBNK,
   KBBK,
   KNNK,
@@ -108,6 +109,7 @@ enum Board: Bitboard
 
   FileA = 0x101010101010101, FileB = FileA << 1, FileC = FileA << 2, FileD = FileA << 3,
   FileE = FileA << 4, FileF = FileA << 5, FileG = FileA << 6, FileH = FileA << 7,
+  FileAH = FileA | FileH,
 
   NoSquares = 0ULL,
   AllSquares = ~NoSquares,

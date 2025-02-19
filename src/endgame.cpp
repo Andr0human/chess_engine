@@ -53,6 +53,15 @@ isEndgame<Endgames::KBK>(const ChessBoard& pos)
 
 template <>
 inline bool
+isEndgame<Endgames::KPBK>(const ChessBoard& pos)
+{
+  return pos.count<ALL   >() == 2
+     and pos.count<PAWN  >() == 1
+     and pos.count<BISHOP>() == 1;
+}
+
+template <>
+inline bool
 isEndgame<Endgames::KBBK>(const ChessBoard& pos)
 { return pos.count<ALL>() == 2 and pos.count<BISHOP>() == 2; }
 
@@ -147,6 +156,68 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
 
 template <>
 inline bool
+Endgame<Endgames::KPBK>(const ChessBoard& pos)
+{
+  // Look from side who has bishop
+  const Color side2move = pos.color;
+  const Color side = pos.count<WHITE, BISHOP>() ? WHITE : BLACK;
+  const Color emySide = ~side;
+
+  const Bitboard occupied = pos.All();
+  const Bitboard bishop   = pos.get_piece(side, BISHOP);
+  const Square   bishopSq = SquareNo(bishop);
+
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    // Pawn and bishop are of different side
+    const Bitboard pawn = pos.get_piece(emySide, PAWN);
+    const Square pawnSq = SquareNo(pawn);
+
+    Bitboard pawnMask = plt::PassedPawnMasks[emySide][pawnSq] & plt::LineMasks[pawnSq];
+
+    if ((bishop | pos.get_piece(side, KING)) & pawnMask)
+      return true;
+
+    if (AttackSquares<BISHOP>(bishopSq, 0) & pawnMask)
+      return true;
+
+    if (side2move == emySide)
+      pawnMask ^= pawnMask & plt::PawnMasks[emySide][pawnSq];
+
+    while (pawnMask)
+    {
+      const Square sq = NextSquare(pawnMask);
+
+      const Bitboard bishopSquares = AttackSquares<BISHOP>(bishopSq, occupied) & AttackSquares<BISHOP>(sq, occupied);
+      const Square   emyKingSq = SquareNo(pos.get_piece(emySide, KING));
+
+      if (bishopSquares & ~plt::KingMasks[emyKingSq])
+        return true;
+    }
+
+    return false;
+  }
+
+  const Bitboard pawn = pos.get_piece(side, PAWN);
+  const Square pawnSq = SquareNo(pawn);
+
+  Bitboard pawnMask = plt::PassedPawnMasks[side][pawnSq] & plt::LineMasks[pawnSq];
+  Bitboard cornerMask = pawnMask & Rank18;
+
+  if (((cornerMask & WhiteSquares) and (bishop & WhiteSquares))
+   or ((cornerMask & BlackSquares) and (bishop & BlackSquares))) return false;
+
+  if (pawn & FileAH)
+  {
+    if ((pos.get_piece(emySide, KING) & pawnMask)
+    and (pos.get_piece(side, KING) & ~plt::LineMasks[pawnSq])) return true;
+  }
+
+  return false;
+}
+
+template <>
+inline bool
 Endgame<Endgames::KBBK>(const ChessBoard& pos)
 {
   if (pos.count<WHITE, BISHOP>() == 1)
@@ -215,6 +286,9 @@ isTheoreticalDraw(const ChessBoard& pos)
   {
     if (isEndgame<Endgames::KNNK>(pos))
       return true;
+
+    if (isEndgame<Endgames::KPBK>(pos))
+      return Endgame<Endgames::KPBK>(pos);
 
     if (isEndgame<Endgames::KBBK>(pos))
       return Endgame<Endgames::KBBK>(pos);
