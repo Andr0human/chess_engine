@@ -250,7 +250,8 @@ Level1(const vector<string>& args)
   OrderMoves(pos, myMoves, qs, true);
   PrintMovelist(myMoves, pos);
 
-  Evaluate<true>(pos);
+  Score eval = Evaluate<true>(pos);
+  cout << "Score = " << eval << endl;
 }
 
 
