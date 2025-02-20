@@ -659,9 +659,9 @@ Evaluate(const ChessBoard& pos)
   {
     if (pieceCount == 2
     and pos.count<PAWN  >() == 1
-    and pos.count<BISHOP>() == 1) return BishopPawnEndgame(pos) * side2move;
+    and pos.count<BISHOP>() == 1
+    and pos.count<WHITE, ALL>() == 1) return BishopPawnEndgame(pos) * side2move;
   }
-
 
   if (debug)
   {
