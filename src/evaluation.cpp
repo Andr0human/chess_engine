@@ -639,6 +639,12 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
 
 #endif
 
+Score BishopPawnEndgame(const ChessBoard& pos)
+{
+  const Square pawnSq = SquareNo(pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>());
+  const int row = pawnSq >> 3;
+  return pos.piece<WHITE, PAWN>() ? (20 * row) : -(20 * (7 - row));
+}
 
 template <bool debug>
 Score
@@ -647,6 +653,15 @@ Evaluate(const ChessBoard& pos)
   EvalData ed = EvalData(pos);
   int side2move = 2 * int(pos.color) - 1;
   float phase = ed.phase;
+  int pieceCount = pos.count<ALL>();
+
+  if (pieceCount < 3)
+  {
+    if (pieceCount == 2
+    and pos.count<PAWN  >() == 1
+    and pos.count<BISHOP>() == 1
+    and pos.count<WHITE, ALL>() == 1) return BishopPawnEndgame(pos) * side2move;
+  }
 
   if (debug)
   {

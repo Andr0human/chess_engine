@@ -254,7 +254,8 @@ Level1(const vector<string>& args)
   OrderMoves<Sorts::CAPTURES>(pos, movesArray);
   PrintMovelist(movesArray, pos);
 
-  Evaluate<true>(pos);
+  Score eval = Evaluate<true>(pos);
+  cout << "Score = " << eval << endl;
 }
 
 
