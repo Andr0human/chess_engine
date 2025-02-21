@@ -29,6 +29,8 @@ class MoveList
 
   Bitboard initSquares;
 
+  Bitboard myPawns;
+
   Bitboard enpassantPawns;
 
   // Array to store squares that give check to the enemy king
@@ -61,6 +63,9 @@ class MoveList
   void
   AddPawns(size_t index, Bitboard _destSquares)
   { pawnDestSquares[index] = _destSquares; }
+
+  size_t
+  countMoves() const noexcept;
 
   template<bool captures=true, bool quiet=true, bool checks=false>
   void

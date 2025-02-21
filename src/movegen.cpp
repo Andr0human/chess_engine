@@ -737,6 +737,7 @@ MoveGenerator(ChessBoard& pos, bool generateChecksData)
   if (!pos.EnemyAttackedSquaresGenerated())
     pos.enemyAttackedSquares = GenerateAttackedSquares<c_my>(pos);
 
+  myMoves.myPawns = pos.piece<c_my, PAWN>();
   myMoves.enemyAttackedSquares = pos.enemyAttackedSquares;
 
   if (!pos.AttackersFound())

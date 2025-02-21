@@ -41,7 +41,6 @@ int
 SearchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
-  const MoveArray& movesArray,
   int numExtensions
 );
 

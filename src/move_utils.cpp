@@ -132,7 +132,6 @@ MoveList::FillShiftPawns(
     movesArray.add(move);
   }
 }
-#include "types.h"
 
 template <MoveType mt, bool checks>
 void
@@ -207,6 +206,33 @@ MoveList::FillPawns(
   }
 }
 
+size_t
+MoveList::countMoves() const noexcept
+{
+  Bitboard pawnMask  = myPawns & initSquares;
+  Bitboard mask = initSquares ^ pawnMask;
+
+  size_t moveCount = 0;
+
+  if (checkers < 2)
+  {
+    moveCount += PopCount(pawnDestSquares[0]) + PopCount(pawnDestSquares[1])
+               + PopCount(pawnDestSquares[2]) + PopCount(pawnDestSquares[3])
+               + PopCount(enpassantPawns);
+
+    while (pawnMask)
+    {
+      Bitboard finalSquares = destSquares[NextSquare(pawnMask)];
+      moveCount += 4 * PopCount(finalSquares & Rank18) + PopCount(finalSquares & ~Rank18);
+    }
+  }
+
+  while (mask > 0)
+    moveCount += PopCount(destSquares[NextSquare(mask)]);
+
+  return moveCount;
+}
+
 template<bool captures, bool quiet, bool checks>
 void
 MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
@@ -215,7 +241,6 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
 
   // fix pawns
   Bitboard emyPieces = pos.get_piece(~color, ALL);
-  Bitboard myPawns   = pos.get_piece(color, PAWN);
   Bitboard kingMask  = pos.get_piece(color, KING) & initSquares;
   Bitboard pawnMask  = myPawns & initSquares;
   Bitboard pieceMask = initSquares ^ (pawnMask | kingMask);
@@ -408,7 +433,7 @@ PrintMove(Move move, ChessBoard _cb)
 
   if (pieces == 0)
     return piece_name + end_part;
-  
+
   bool row = true, col = true;
 
   while (pieces > 0)

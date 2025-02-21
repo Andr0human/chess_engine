@@ -10,10 +10,13 @@ BulkCount(ChessBoard& _cb, Depth depth)
   if (depth <= 0) return 1;
 
   const MoveList myMoves = GenerateMoves(_cb);
+
+  if (depth == 1)
+    return myMoves.countMoves();
+
   MoveArray movesArray;
   myMoves.getMoves(_cb, movesArray);
 
-  if (depth == 1) return movesArray.size();
   uint64_t answer = 0;
 
   for (const Move move : movesArray)
@@ -40,10 +43,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
     return pos.HandleScore(VALUE_DRAW);
 
-  if (leafnode)
-    info.AddNode();
-  else
-    info.AddQNode();
+  info.AddQNode();
 
   // Get a 'Stand Pat' Score
   Score stand_pat = Evaluate(pos);
@@ -186,43 +186,34 @@ PlayAllMoves(
   // Set pvArray, for storing the search_tree
   pvArray[pvIndex] = NULL_MOVE;
   size_t start = 0, end = 0;
-  int extensions, newDepth, newNumExtensions;
 
   MoveArray movesArray;
   myMoves.getMoves<true, false, true>(pos, movesArray);
 
-  extensions = SearchExtension(pos, myMoves, movesArray, numExtensions);
-  newDepth   = depth + extensions;
-  newNumExtensions = numExtensions + extensions;
-
   end = OrderMoves<Sorts::CAPTURES>(pos, movesArray, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
   if (hashf == Flag::HASH_BETA)
     return;
 
   myMoves.getMoves<false, true, true>(pos, movesArray);
 
-  extensions = SearchExtension(pos, myMoves, movesArray, numExtensions);
-  newDepth   = depth + extensions;
-  newNumExtensions = numExtensions + extensions;
-
   start = end;
   end = OrderMoves<Sorts::PROMOTIONS>(pos, movesArray, start);
   end = OrderMoves<Sorts::CHECKS>(pos, movesArray, end);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   start = end;
   end = OrderMoves<Sorts::PV>(pos, movesArray, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   start = end;
-  PlayPartialMoves<Reduction>(pos, movesArray, start, movesArray.size(), alpha, beta, newDepth, ply, pvIndex, newNumExtensions, hashf);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, movesArray.size(), alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 }
 
 Score
@@ -263,6 +254,10 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
   MoveList myMoves = GenerateMoves(pos, true);
+
+  int extensions = SearchExtension(pos, myMoves, numExtensions);
+  depth += extensions;
+  numExtensions += extensions;
 
   Flag hashf = Flag::HASH_ALPHA;
 
