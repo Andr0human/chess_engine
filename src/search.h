@@ -2,9 +2,7 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
-#include "move_utils.h"
 #include "perf.h"
-#include "types.h"
 #include "varray.h"
 #include "bitboard.h"
 #include "movegen.h"

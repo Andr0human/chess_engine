@@ -52,9 +52,4 @@ Square
 GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces);
 
 
-// TODO: Flags for moves
-// TODO: MoveGivesCheck
-// TODO: IsLegalMoveForPosition
-// TODO: Search extension - king in check
-
 #endif

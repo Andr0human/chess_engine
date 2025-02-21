@@ -2,12 +2,8 @@
 #ifndef MOVE_UTILS_H
 #define MOVE_UTILS_H
 
-#include <array>
 #include <iomanip>
-#include "attacks.h"
 #include "bitboard.h"
-#include "lookup_table.h"
-#include "types.h"
 #include "varray.h"
 
 
