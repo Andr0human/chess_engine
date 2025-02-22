@@ -220,39 +220,48 @@ class ChessBoard
   bool
   IntegrityCheck() const noexcept;
 
-  void
-  LoadPosition(int _board[64], Color c, string castling, string enpassant)
+  ChessBoard
+  inverse()
   {
-    Reset();
+    ChessBoard invPos;
+    invPos.color = ~color;
+    Bitboard initSquares = All();
 
-    for (int i = 0; i < 64; i++) {
-      board[i] = Piece(_board[i]);
-    }
-    
-    color = c;
+    while (initSquares)
+    {
+      Square sq = Square(__builtin_ctzll(initSquares));
+      initSquares &= initSquares - 1;
 
-    for (int sq = 0; sq < 64; sq++) {
-      if (board[sq] == 0) continue;
-      piece_bb[board[sq]] |= 1ULL << sq;
-      piece_bb[(board[sq] & 8) + 7] |= 1ULL << sq;
-      piece_ct[board[sq]]++;
-
-      if ((board[sq] & 7) == KING) continue;
-      piece_ct[(board[sq] & 8) + 7]++;
+      int row = sq >> 3, col = sq & 7;
+      const Square invSq = Square((7 - row) * 8 + col);
+      invPos.SetPiece(invSq, make_piece(~color_of(board[sq]), type_of(board[sq])));
     }
 
-    for (char ch : castling) {
-      if (ch == '-')
-        continue;
+    return invPos;
+  }
 
-      int v = static_cast<int>(ch);
-      csep |= 1 << (10 - (v % 5));
-    }
+  void SetPiece(Square sq, Piece p)
+  {
+    board[sq] = p;
 
-    if (enpassant == "-") csep |= 64;
-    else csep |= 28 + ((2 * color - 1) * 12) + (enpassant[0] - 'a');
+    piece_bb[p] |= 1ULL << sq;
+    piece_bb[(p & 8) + 7] |= 1ULL << sq;
+    piece_ct[p]++;
 
-    Hash_Value = GenerateHashkey();
+    if ((p & 7) != KING)
+      piece_ct[(p & 8) + 7]++;
+  }
+
+  void RemovePiece(Square sq, Piece p)
+  {
+    board[sq] = NO_PIECE;
+
+    piece_bb[p] &= AllSquares ^ (1ULL << sq);
+    piece_bb[(p & 8) + 7] &= AllSquares ^ (1ULL << sq);
+    piece_ct[p]--;
+
+    if ((p & 7) != KING)
+      piece_ct[(p & 8) + 7]--;
   }
 };
 
