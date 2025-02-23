@@ -196,9 +196,9 @@ PinsCheck(const ChessBoard& pos, MoveList& myMoves, int KA, Bitboard sliding_pie
     Bitboard dest_sq = capt_sq & second_piece;
 
     if ((eps != 64) and (maskTable[kpos] & capt_sq & (1ULL << eps)) != 0)
-      dest_sq |= 1ULL << eps;
-
-    myMoves.Add(index_f, dest_sq);
+      myMoves.enpassantPawns |= 1ULL << index_f;
+    else
+      myMoves.Add(index_f, dest_sq);
   }
 
   return pinned_pieces;

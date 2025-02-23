@@ -12,7 +12,7 @@ MoveList::FillMoves(
   Move baseMove
 ) const noexcept
 {
-  constexpr int typeBit = mt << 21;
+  constexpr int typeBit = mt << 20;
   PieceType ipt = PieceType((baseMove >> 12) & 7);
 
   while (endSquares > 0)
@@ -24,7 +24,7 @@ MoveList::FillMoves(
       move |= type_of(pos.PieceOnSquare(fp)) << 15;
 
     if (checks and ((1ULL << fp) & squaresThatCheckEnemyKing[ipt - 1]))
-      move |= CHECK << 21;
+      move |= 1 << 23;
 
     movesArray.add(move);
   }
@@ -39,7 +39,7 @@ MoveList::FillKingMoves(
   Move baseMove
 ) const noexcept
 {
-  constexpr int typeBit = mt << 21;
+  constexpr int typeBit = mt << 20;
   const Square ip = from_sq(baseMove);
 
   while (endSquares > 0)
@@ -51,7 +51,7 @@ MoveList::FillKingMoves(
       move |= type_of(pos.PieceOnSquare(fp)) << 15;
 
     if (checks and ((1ULL << ip) & discoverCheckSquares) and ((1ULL << fp) & (~discoverCheckMasks[ip])))
-      move |= CHECK << 21;
+      move |= 1 << 23;
 
     if (checks and (std::abs(fp - ip) == 2))
     {
@@ -59,7 +59,7 @@ MoveList::FillKingMoves(
         (fp > ip ? 32ULL : 8ULL) << (56 * (~color));
 
       if (rookBit & squaresThatCheckEnemyKing[ROOK - 1])
-        move |= CHECK << 21;
+        move |= 1 << 23;
     }
 
     movesArray.add(move);
@@ -70,8 +70,8 @@ template <bool checks>
 void
 MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept
 {
-  constexpr Move typeBit = CAPTURES << 21;
-  const int colorBit = color << 20;
+  constexpr Move typeBit = CAPTURES << 20;
+  const int colorBit = color << 22;
   Bitboard epPawns = enpassantPawns;
   Square fp = pos.EnPassantSquare();
 
@@ -83,7 +83,7 @@ MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const
     if (checks)
     {
       if ((1ULL << fp) & squaresThatCheckEnemyKing[0])
-        move |= CHECK << 21;
+        move |= 1 << 23;
 
       Square emyKingSq  = SquareNo(pos.get_piece(~color, KING));
       Bitboard occupied = pos.All() ^ (1ULL << ip) ^ (1ULL << fp) ^ (1ULL << (fp - 8 * (2 * color - 1)));
@@ -95,7 +95,7 @@ MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const
       Bitboard bq = pos.get_piece(color, BISHOP) | pos.get_piece(color, QUEEN);
 
       if ((attackBishop & bq) or (attackRook & rq))
-        move |= CHECK << 21;
+        move |= 1 << 23;
     }
 
     movesArray.add(move);
@@ -111,8 +111,8 @@ MoveList::FillShiftPawns(
   int shift
 ) const noexcept
 {
-  const int  colorBit = color << 20;
-  const Move baseMove = (mt << 21) | colorBit | (PAWN << 12);
+  const int  colorBit = color << 22;
+  const Move baseMove = (mt << 20) | colorBit | (PAWN << 12);
 
   while (endSquares > 0)
   {
@@ -124,7 +124,7 @@ MoveList::FillShiftPawns(
     if (checks
       and ((((1ULL << ip) & discoverCheckSquares) and ((1ULL << fp) & (~discoverCheckMasks[ip])))
        or ((1ULL << fp) & squaresThatCheckEnemyKing[0]))
-    ) move |= CHECK << 21;
+    ) move |= 1 << 23;
 
     if (mt == CAPTURES)
       move |= type_of(pos.PieceOnSquare(fp)) << 15;
@@ -142,8 +142,8 @@ MoveList::FillPawns(
   Move baseMove
 ) const noexcept
 {
-  constexpr int typeBit  = mt << 21;
-  constexpr int checkBit = CHECK << 21;
+  constexpr int typeBit  = mt << 20;
+  constexpr int checkBit = 1 << 23;
   const Square ip = from_sq(baseMove);
 
   while (endSquares > 0)
@@ -157,8 +157,7 @@ MoveList::FillPawns(
 
     if (fPos & Rank18)
     {
-      move = move & ((1 << 21) - 1);
-      move |= PROMOTION << 21;
+      move |= PROMOTION << 20;
       Move moveQ = move | 0xC0000;
       Move moveR = move | 0x80000;
       Move moveN = move | 0x40000;
@@ -199,7 +198,7 @@ MoveList::FillPawns(
       if (checks
         and ((((1ULL << ip) & discoverCheckSquares) and (fPos & (~discoverCheckMasks[ip])))
          or (fPos & squaresThatCheckEnemyKing[0]))
-      ) move |= CHECK << 21;
+      ) move |= 1 << 23;
 
       movesArray.add(move);
     }
@@ -237,7 +236,7 @@ template<bool captures, bool quiet, bool checks>
 void
 MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
 {
-  const int colorBit = color << 20;
+  const int colorBit = color << 22;
 
   // fix pawns
   Bitboard emyPieces = pos.get_piece(~color, ALL);
@@ -286,7 +285,7 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
     Move baseMove = colorBit | (ipt << 12) | ip;
 
     if (checks and ((1ULL << ip) & discoverCheckSquares))
-      baseMove |= CHECK << 21;
+      baseMove |= 1 << 23;
 
     Bitboard finalSquares = destSquares[ip];
     Bitboard  captSquares = finalSquares & emyPieces;
@@ -324,12 +323,11 @@ DecodeMove(Move move)
 
   PieceType pt  = PieceType((move >> 12) & 7);
   PieceType cpt = PieceType((move >> 15) & 7);
-  Color cl      = Color((move >> 20) & 1);
+  Color cl      = Color((move >> 22) & 1);
 
   int ppt          = (move >> 18) & 3;
-  int moveType     = (move >> 21) & 3;
+  int moveType     = (move >> 20) & 3;
   int givesCheck   = (move >> 23) & 1;
-  int moveStrength = move >> 24;
 
   cout << "startSquare : " << ip << '\n';
   cout << "endSquare : " << fp << '\n';
@@ -337,7 +335,6 @@ DecodeMove(Move move)
   cout << "captPieceType : " << cpt << '\n';
   cout << "pieceColor : " << (cl == 1 ? "White\n" : "Black\n");
   cout << "moveType: " << moveType << '\n';
-  cout << "moveStrength : " << moveStrength << '\n';
   cout << "givesCheck: " << givesCheck << '\n';
 
   if (pt == PAWN && ((1ULL << fp) & Rank18))
@@ -384,7 +381,7 @@ PrintMove(Move move, ChessBoard _cb)
   Bitboard Apieces = _cb.All();
 
   _cb.MakeMove(move);
-  bool check = (((move >> 20) & 1) == WHITE)
+  bool check = (((move >> 22) & 1) == WHITE)
     ? InCheck<BLACK>(_cb) : InCheck<WHITE>(_cb);
   string gives_check = check ? "+" : "";
   _cb.UnmakeMove();

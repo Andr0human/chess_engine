@@ -3,6 +3,7 @@
 #define TYPES_H
 
 #include <cstdint>
+#include <type_traits>
 
 using     Move = uint32_t;
 using    Score =  int32_t;
@@ -65,12 +66,12 @@ enum Search
 
 enum class Sorts
 {
-  CAPTURES,
-  PROMOTIONS,
-  CHECKS,
-  PV,
-  KILLER,
-  QUIET
+  CAPTURES   = 1,
+  PROMOTIONS = 1 << 1,
+  CHECKS     = 1 << 2,
+  PV         = 1 << 3,
+  KILLER     = 1 << 4,
+  QUIET      = 1 << 5
 };
 
 enum class Flag
@@ -161,10 +162,9 @@ enum Square : int
 enum MoveType
 {
   NORMAL,
-  CASTLING,
   CAPTURES,
   PROMOTION,
-  CHECK,
+  CHECK = 4,
 
   PV_MOVE = 1 << 29,
   // Quiescence Move
@@ -196,7 +196,7 @@ constexpr Square to_sq(Move m)
 { return Square((m >> 6) & 0x3f); }
 
 constexpr Move filter(Move m)
-{ return m & 0x1fffff;}
+{ return m & 0x7fffff;}
 
 
 constexpr Square operator+ (Square s, int d)
@@ -216,6 +216,18 @@ constexpr Square operator++ (Square& s)
 
 constexpr Square operator-- (Square& s)
 { return s = Square(int(s) - 1); }
+
+constexpr Sorts operator|(Sorts lhs, Sorts rhs) {
+  return static_cast<Sorts>(
+    static_cast<std::underlying_type_t<Sorts>>(lhs) |
+    static_cast<std::underlying_type_t<Sorts>>(rhs));
+}
+
+constexpr bool operator&(Sorts lhs, Sorts rhs) {
+  return static_cast<bool>(
+    static_cast<std::underlying_type_t<Sorts>>(lhs) &
+    static_cast<std::underlying_type_t<Sorts>>(rhs));
+}
 
 #endif
 

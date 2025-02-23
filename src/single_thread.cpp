@@ -187,7 +187,7 @@ PlayAllMoves(
   MoveArray movesArray;
   myMoves.getMoves<true, false, true>(pos, movesArray);
 
-  end = OrderMoves<Sorts::CAPTURES>(pos, movesArray, start);
+  end = OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(pos, movesArray, start);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
   if (hashf == Flag::HASH_BETA)
     return;
@@ -195,7 +195,6 @@ PlayAllMoves(
   myMoves.getMoves<false, true, true>(pos, movesArray);
 
   start = end;
-  end = OrderMoves<Sorts::PROMOTIONS>(pos, movesArray, start);
   end = OrderMoves<Sorts::CHECKS>(pos, movesArray, end);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
@@ -252,9 +251,11 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // Generate moves for current board
   MoveList myMoves = GenerateMoves(pos, true);
 
-  int extensions = SearchExtension(pos, myMoves, numExtensions);
-  depth += extensions;
-  numExtensions += extensions;
+  if constexpr (useExtensions) {
+    int extensions = SearchExtension(pos, myMoves, numExtensions);
+    depth += extensions;
+    numExtensions += extensions;
+  }
 
   Flag hashf = Flag::HASH_ALPHA;
 

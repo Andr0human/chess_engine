@@ -32,41 +32,39 @@ OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start)
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
 
-  if (sortType == Sorts::CAPTURES)
+  size_t prevS = start;
+  size_t end = movesArray.size();
+
+  if (sortType & Sorts::CAPTURES)
   {
-    const size_t end = PrioritizeMoves<CAPTURES>(movesArray, start);
-    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
-    return end;
+    end = PrioritizeMoves<CAPTURES>(movesArray, start);
+    start = end;
   }
 
-  if (sortType == Sorts::PROMOTIONS)
+  if (sortType & Sorts::PROMOTIONS)
   {
-    const size_t end = PrioritizeMoves<PROMOTION>(movesArray, start);
-    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
-    return end;
+    end = PrioritizeMoves<PROMOTION>(movesArray, start);
+    start = end;
   }
 
-  if (sortType == Sorts::CHECKS)
+  if (sortType & Sorts::CHECKS)
   {
-    const size_t end = PrioritizeMoves<CHECK>(movesArray, start);
-    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
-    return end;
+    end = PrioritizeMoves<CHECK>(movesArray, start);
+    start = end;
   }
 
-  if (sortType == Sorts::PV)
+  if (sortType & Sorts::PV)
   {
-    const size_t end = PrioritizeMoves<PV_MOVE>(movesArray, start);
-    std::sort(movesArray.begin() + start, movesArray.begin() + end, seeComparator);
-    return end;
+    end = PrioritizeMoves<PV_MOVE>(movesArray, start);
+    start = end;
   }
 
-  if (sortType == Sorts::QUIET)
-  {
-    std::sort(movesArray.begin() + start, movesArray.end(), seeComparator);
-    return movesArray.size();
-  }
+  if (sortType & Sorts::QUIET)
+    end = movesArray.size();
 
-  return 0;
+  std::sort(movesArray.begin() + prevS, movesArray.begin() + end, seeComparator);
+
+  return end;
 }
 
 Score
@@ -112,19 +110,17 @@ PrintMovelist(MoveArray myMoves, ChessBoard pos)
   using std::setw;
 
   cout << "MoveCount : " << myMoves.size() << '\n'
-       << " | No. |   Move   | Encode-Move | Priority | See-Score |" << endl;
+       << " | No. |   Move   | Encode-Move | See-Score |" << endl;
 
   for (size_t i = 0; i < myMoves.size(); i++)
   {
     Move move = myMoves[i];
     string moveString = PrintMove(move, pos);
     Score seeScore = SeeScore(pos, move);
-    int priority = move >> 24;
 
     cout << " | " << setw(3)  << (i + 1)
          << " | " << setw(8)  << moveString
          << " | " << setw(11) << move
-         << " | " << setw(8)  << priority
          << " | " << setw(9)  << seeScore
          << " |"  << endl;
   }
@@ -138,5 +134,8 @@ template size_t OrderMoves<Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, siz
 template size_t OrderMoves<Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
 template size_t OrderMoves<Sorts::PV>(const ChessBoard&, MoveArray&, size_t);
 template size_t OrderMoves<Sorts::QUIET>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS | Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::CAPTURES | Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
 
 #endif

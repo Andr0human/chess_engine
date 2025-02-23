@@ -22,7 +22,11 @@ inline bool is_type(Move m)
 {
   if constexpr (flag == CHECK)
     return (m >> 23) & 1;
-  return ((m >> 21) & 7) == flag;
+  
+  if constexpr (flag == NORMAL)
+    return ((m >> 20) & 7) == 0;
+
+  return (m >> 20) & flag;
 }
 
 int

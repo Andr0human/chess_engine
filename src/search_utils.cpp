@@ -33,12 +33,9 @@ LmrOk(Move move, Depth depth, size_t moveNo)
 bool
 InterestingMove(Move move)
 {
-  if (is_type<CAPTURES>(move) or is_type<CHECK>(move))
+  if (is_type<CAPTURES>(move) or is_type<PROMOTION>(move) or is_type<CHECK>(move))
     return true;
 
-  if (is_type<CASTLING>(move) or is_type<PROMOTION>(move))
-    return true;
-  
   return false;
 }
 
