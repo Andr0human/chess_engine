@@ -95,7 +95,7 @@ class SearchData
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
   // Stores <move, time> for each move in each iteration.
-  Varray<pair<Move, uint64_t> , MAX_MOVES> moveTimes;
+  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_MOVES> moveTimes;
 
   string
   ReadablePvLine(ChessBoard board) const noexcept
@@ -126,16 +126,18 @@ class SearchData
   SearchData()
   : startTime(perf::now()) {}
 
-  SearchData(ChessBoard& position, double _allotedTime)
-  : startTime(perf::now()), side(position.color), nodes(0), qNodes(0),
+  SearchData(ChessBoard& pos, double _allotedTime)
+  : startTime(perf::now()), side(pos.color), nodes(0), qNodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
-    const MoveList myMoves = GenerateMoves(position);
-    Move zeroMove = myMoves.pMoves[0];
+    const MoveList myMoves = GenerateMoves(pos);
+    MoveArray movesArray;
+    myMoves.getMoves(pos, movesArray);
+    Move zeroMove = movesArray[0];
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 
-    for (const Move move : myMoves)
-      moveTimes.add(make_pair(move, VALUE_ZERO));
+    for (const Move move : movesArray)
+      moveTimes.add(make_pair(move, make_pair(0, 0)));
   }
 
   bool
@@ -201,13 +203,24 @@ class SearchData
   pair<Move, Score> LastIterationResult() const noexcept
   { return moveEvals.back(); }
 
-  uint64_t
+  Nodes
   TotalNodes() const noexcept
   {
     return std::accumulate(
-      moveTimes.begin(), moveTimes.end(), uint64_t(0),
-      [](uint64_t sum, const pair<Move, uint64_t>& moveTime) {
-        return sum + moveTime.second;
+      moveTimes.begin(), moveTimes.end(), Nodes(0),
+      [](Nodes sum, const pair<Move, pair<Nodes, Nodes>>& moveTime) {
+        return sum + moveTime.second.first;
+      }
+    );
+  }
+
+  Nodes
+  TotalQNodes() const noexcept
+  {
+    return std::accumulate(
+      moveTimes.begin(), moveTimes.end(), Nodes(0),
+      [](uint64_t sum, const pair<Move, pair<Nodes, Nodes>>& moveTime) {
+        return sum + moveTime.second.second;
       }
     );
   }
@@ -226,6 +239,7 @@ class SearchData
            << " | " << setw(5) << right << fixed << dep
            << " | " << setw(7) << right << fixed << setprecision(2) << evalConv
            << " | " << setw(8) << right << fixed  << TotalNodes()
+           << " | " << setw(8) << right << fixed  << TotalQNodes()
            << " | " << ReadablePvLine(pos) << endl;
   }
 
@@ -236,6 +250,7 @@ class SearchData
            << " | " << setw(5) << "Depth"
            << " | " << setw(7) << "Score"
            << " | " << setw(8) << "Nodes"
+           << " | " << setw(8) << "QNodes"
            << " | " << "PV" << "\n";
   }
 
@@ -252,37 +267,51 @@ class SearchData
     }
 
     std::sort(moveTimes.begin() + 1, moveTimes.end(), [](const auto &a, const auto &b) {
-      return a.second > b.second;
+      Nodes n1 = 2 * a.second.first + a.second.second;
+      Nodes n2 = 2 * b.second.first + b.second.second;
+      return n1 > n2;
     });
   }
 
   void Print(ChessBoard pos)
   {
+    using std::setw, std::right, std::fixed;
+    cout << " | " << setw(6) << "moveNo"
+         << " | " << setw(5) << "Move"
+         << " | " << setw(8) << "Nodes"
+         << " | " << setw(10) << "QNodes |\n";
     int moveNo = 1;
     for (const auto& [move, tm] : moveTimes)
-      cout << moveNo++ << "\t| " << PrintMove(move, pos) << "\t| " << tm << endl;
+    {
+      cout << " | " << setw(6) << fixed << moveNo++
+           << " | " << setw(5) << fixed << PrintMove(move, pos)
+           << " | " << setw(8) << fixed << tm.first
+           << " | " << setw(7) << fixed << tm.second << " |\n";
+    }
   }
 
   void
   InsertMoveToList(size_t moveNo)
   {
-    moveTimes[moveNo].second = (2 * nodes + qNodes) >> 1;
+    moveTimes[moveNo].second = make_pair(nodes, qNodes);
     ResetNodeCount();
   }
 
-  MoveList
+  MoveArray
   getMoves () const
   {
-    MoveList myMoves(side, false);
+    MoveArray movesArray;
 
     for (const auto& moveTime : moveTimes)
-      myMoves.Add(moveTime.first);
+      movesArray.add(moveTime.first);
 
-    return myMoves;
+    return movesArray;
   }
 };
 
-void OrderMoves(const ChessBoard& pos, MoveList& myMoves, bool pv_moves, bool check_moves);
+template <Sorts sortType>
+size_t
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start = 0);
 
 Score
 SeeScore(const ChessBoard& pos, Move move);
@@ -294,7 +323,7 @@ SeeScore(const ChessBoard& pos, Move move);
  * @param pos board position
  */
 void
-PrintMovelist(MoveList myMoves, ChessBoard pos);
+PrintMovelist(MoveArray myMoves, ChessBoard pos);
 
 extern SearchData info;
 

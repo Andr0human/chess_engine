@@ -14,7 +14,7 @@ class Varray {
   Varray() : Nc(0) {}
 
   void add(T val) noexcept
-  { if (Nc < _array.size()) _array[Nc++] = val; }
+  { if (Nc < Nm) _array[Nc++] = val; }
 
   std::size_t
   size() const noexcept
@@ -22,7 +22,7 @@ class Varray {
 
   std::size_t
   capacity() const noexcept
-  { return _array.size(); }
+  { return Nm; }
 
   void
   clear() noexcept

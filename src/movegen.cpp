@@ -6,46 +6,6 @@
 
 #ifndef MOVEGEN_UTILS
 
-template <Color c_my>
-bool
-MoveGivesCheck(Move move, ChessBoard& pos, const MoveList& myMoves)
-{
-  Square ip = Square(move & 63);
-  Square fp = Square((move >> 6) & 63);
-
-  PieceType pt = PieceType((move >> 12) & 7);
-
-  // Direct Checks
-  if ((pt != KING) and (((1ULL << fp) & myMoves.squaresThatCheckEnemyKing[pt - 1]) != 0))
-    return true;
-
-  // Discover Checks
-  if ((pt != PAWN) and (((1ULL << ip) & myMoves.discoverCheckSquares) == 0))
-    return false;
-
-  if (pt == PAWN)
-  {
-    if ((1ULL << fp) & Rank18) {
-      const int ppt = 2 + ((move >> 18) & 3);
-      if (((1ULL << fp) & myMoves.squaresThatCheckEnemyKing[ppt - 1]))
-        return true;
-    }
-    else {
-      if (((1ULL << ip) & myMoves.discoverCheckSquares) == 0)
-        return false;
-    }
-  }
-
-  if (pt != PAWN and pt != KING)
-    return true;
-
-  // Last Resort
-  pos.MakeMove(move);
-  bool gives_check = InCheck< ~c_my>(pos);
-  pos.UnmakeMove();
-  return gives_check;
-}
-
 bool
 IsLegalMoveForPosition(Move move, ChessBoard& pos)
 {
@@ -67,92 +27,13 @@ IsLegalMoveForPosition(Move move, ChessBoard& pos)
     return false;
 
   MoveList myMoves = GenerateMoves(pos);
+  MoveArray movesArray;
+  myMoves.getMoves(pos, movesArray);
 
-  for (const Move legal_move : myMoves)
+  for (const Move legal_move : movesArray)
     if (filter(move) == filter(legal_move)) return true;
 
   return false;
-}
-
-template <Color color, int flag>
-static void
-AddPawnMoves(Square ip, Square fp, const ChessBoard& pos, MoveList& myMoves)
-{
-  if ((flag == NORMAL) and (myMoves.qsSearch))
-    return;
-
-  PieceType ipt = PAWN;
-  PieceType fpt = type_of(pos.PieceOnSquare(fp));
-
-  const int  flag_bit =  flag << 21;
-  const int color_bit = color << 20;
-
-  Move move = flag_bit | color_bit | (fpt << 15) | (ipt << 12) | (fp << 6) | ip;
-
-  if (flag == PROMOTION)
-  {
-    // Add promotion bit
-    myMoves.Add(move | 0xC0000);
-    myMoves.Add(move | 0x80000);
-    myMoves.Add(move | 0x40000);
-  }
-
-  myMoves.Add(move);
-}
-
-template<Color c_my, int shift, int flag>
-static void
-AddShiftPawnMoves(Bitboard endSquares, const ChessBoard& pos, MoveList& myMoves)
-{
-  if (endSquares == 0)
-    return;
-
-  const int color_bit = c_my << 20;
-  const int  flag_bit = flag << 21;
-
-  if (flag == NORMAL and myMoves.qsSearch)
-    return;
-
-  Move base_move = flag_bit | color_bit | (PAWN << 12);
-
-  while (endSquares != 0)
-  {
-    Square fp = NextSquare(endSquares);
-    Square ip = fp + shift;
-
-    PieceType fpt = type_of(pos.PieceOnSquare(fp));
-
-    Move move = base_move | (fpt << 15) | (fp << 6) | ip;
-    myMoves.Add(move);
-  }
-}
-
-template<Color c_my, int flag>
-static void
-AddMoves(Square ip, Bitboard endSquares, const ChessBoard& pos, MoveList& myMoves)
-{
-  if ((flag == NORMAL or flag == CASTLING) and myMoves.qsSearch)
-    return;
-
-  const int color_bit = c_my << 20;
-  const int  flag_bit = flag << 21;
-
-  PieceType ipt  = type_of(pos.PieceOnSquare(ip));
-  Move base_move = color_bit | (ipt << 12) | ip;
-
-  while (endSquares != 0)
-  {
-    Square fp = NextSquare(endSquares);
-    Move move = base_move | flag_bit | (fp << 6);
-
-    if (flag == CAPTURES)
-    {
-      PieceType fpt = type_of(pos.PieceOnSquare(fp));
-      move |= fpt << 15;
-    }
-
-    myMoves.Add(move);
-  }
 }
 
 
@@ -203,16 +84,15 @@ EnpassantPawns(const ChessBoard &_cb, MoveList &myMoves,
     return;
 
   if ((shift(l_pawns, 7 + (own >> 2)) & _ep) and EnpassantRecheck<c_my>(eps + (2 * emy - 9), _cb))
-    AddPawnMoves<c_my, CAPTURES>(eps + (2 * emy - 9), eps, _cb, myMoves);
+    myMoves.enpassantPawns |= 1ULL << (eps + (2 * emy - 9));
 
   if ((shift(r_pawns, 7 + (emy >> 2)) & _ep) and EnpassantRecheck<c_my>(eps + (2 * emy - 7), _cb))
-    AddPawnMoves<c_my, CAPTURES>(eps + (2 * emy - 7), eps, _cb, myMoves);
+    myMoves.enpassantPawns |= 1ULL << (eps + (2 * emy - 7));
 }
 
 template <Color c_my>
 static inline void
-PromotionPawns(const ChessBoard& pos, MoveList &myMoves,
-  Bitboard move_sq, Bitboard capt_sq, Bitboard pawns)
+PromotionPawns(MoveList &myMoves, Bitboard move_sq, Bitboard capt_sq, Bitboard pawns)
 {
   while (pawns != 0)
   {
@@ -220,15 +100,13 @@ PromotionPawns(const ChessBoard& pos, MoveList &myMoves,
     Bitboard endSquares = (plt::PawnMasks[c_my][ip] & move_sq)
                  | (plt::PawnCaptureMasks[c_my][ip] & capt_sq);
 
+    Bitboard destSquares = 0;
     while (endSquares != 0)
     {
       Square fp = NextSquare(endSquares);
-      PieceType fpt = type_of(pos.PieceOnSquare(fp));
-      if (fpt != NONE)
-        AddPawnMoves<c_my, PROMOTION>(ip, fp, pos, myMoves);
-      else
-        AddPawnMoves<c_my, PROMOTION>(ip, fp, pos, myMoves);
+      destSquares |= 1ULL << fp;
     }
+    myMoves.Add(ip, destSquares);
   }
 }
 
@@ -238,23 +116,16 @@ static inline void
 PawnMovement(const ChessBoard &_cb, MoveList &myMoves,
   Bitboard pin_pieces, int KA, Bitboard atk_area)
 {
-  constexpr Bitboard rank_7 = c_my == WHITE ? Rank7 : Rank2;
-  constexpr Bitboard rank_3 = c_my == WHITE ? Rank3 : Rank6;
-
-  constexpr int c = int(c_my);
-
-  constexpr int l_cap_sh = 7 - 16 * c;
-  constexpr int r_cap_sh = 9 - 16 * c;
-
-  constexpr int s_pawn_sh = 16 - 32 * c;
-  constexpr int ss_pawn_sh = 8 - 16 * c;
+  const Bitboard rank_3 = c_my == WHITE ? Rank3 : Rank6;
+  const Bitboard rank_7 = c_my == WHITE ? Rank7 : Rank2;
+  const int c = int(c_my);
 
   Bitboard pawns   = _cb.piece<c_my, PAWN>() & (~pin_pieces);
   Bitboard e_pawns = pawns & rank_7;
-  Bitboard n_pawns = pawns ^ e_pawns;
-  Bitboard l_pawns = n_pawns & RightAttkingPawns;
-  Bitboard r_pawns = n_pawns &  LeftAttkingPawns;
-  Bitboard s_pawns = (shift(n_pawns, 8) & (~_cb.All())) & rank_3;
+  pawns ^= e_pawns;
+  Bitboard l_pawns = pawns & RightAttkingPawns;
+  Bitboard r_pawns = pawns &  LeftAttkingPawns;
+  Bitboard s_pawns = (shift(pawns, 8) & (~_cb.All())) & rank_3;
 
   Bitboard free_sq = ~_cb.All();
   Bitboard enemyP  = _cb.piece< ~c_my, ALL>();
@@ -265,13 +136,13 @@ PawnMovement(const ChessBoard &_cb, MoveList &myMoves,
   Bitboard r_captures = shift(r_pawns, 7 + 2 * (1 - c)) & capt_sq;
 
   EnpassantPawns<c_my, shift>(_cb, myMoves, l_pawns, r_pawns, KA);
-  PromotionPawns<c_my>(_cb, myMoves, move_sq, capt_sq, e_pawns);
+  PromotionPawns<c_my>(myMoves, move_sq, capt_sq, e_pawns);
 
-  AddShiftPawnMoves<c_my, l_cap_sh, CAPTURES>(l_captures, _cb, myMoves);
-  AddShiftPawnMoves<c_my, r_cap_sh, CAPTURES>(r_captures, _cb, myMoves);
+  myMoves.AddPawns(0, l_captures);
+  myMoves.AddPawns(1, r_captures);
 
-  AddShiftPawnMoves<c_my,  s_pawn_sh, NORMAL>(shift(s_pawns, 8) & move_sq, _cb, myMoves);
-  AddShiftPawnMoves<c_my, ss_pawn_sh, NORMAL>(shift(n_pawns, 8) & move_sq, _cb, myMoves);
+  myMoves.AddPawns(2, shift(s_pawns, 8) & move_sq);
+  myMoves.AddPawns(3, shift(pawns  , 8) & move_sq);
 }
 
 #endif
@@ -300,14 +171,9 @@ PinsCheck(const ChessBoard& pos, MoveList& myMoves, int KA, Bitboard sliding_pie
 
   if ((first_piece & sliding_piece_my) != 0)
   {
-    Bitboard emy_pieces = pos.piece< ~c_my, ALL>();
     Bitboard dest_sq  = maskTable[kpos] ^ maskTable[index_s] ^ first_piece;
-    Bitboard capt_sq  = dest_sq & emy_pieces;
-    Bitboard quiet_sq = dest_sq ^ capt_sq;
 
-    AddMoves<c_my, CAPTURES>(index_f,  capt_sq, pos, myMoves);
-    AddMoves<c_my, NORMAL  >(index_f, quiet_sq, pos, myMoves);
-
+    myMoves.Add(index_f, dest_sq);
     return pinned_pieces;
   }
 
@@ -322,13 +188,7 @@ PinsCheck(const ChessBoard& pos, MoveList& myMoves, int KA, Bitboard sliding_pie
   Bitboard ss_pawn = shift(s_pawn & Rank63[c_my], 8) & free_sq;
 
   if ((pawn == 's') and (first_piece & pos.piece<c_my, PAWN>()))
-  {
-    if (s_pawn != 0)
-      AddPawnMoves<c_my, NORMAL>(index_f, SquareNo(s_pawn),  pos, myMoves);
-
-    if (ss_pawn != 0)
-      AddPawnMoves<c_my, NORMAL>(index_f, SquareNo(ss_pawn), pos, myMoves);
-  }
+    myMoves.Add(index_f, s_pawn | ss_pawn);
 
   if ((pawn == 'c') and (first_piece & pos.piece<c_my, PAWN>()))
   {
@@ -336,15 +196,9 @@ PinsCheck(const ChessBoard& pos, MoveList& myMoves, int KA, Bitboard sliding_pie
     Bitboard dest_sq = capt_sq & second_piece;
 
     if ((eps != 64) and (maskTable[kpos] & capt_sq & (1ULL << eps)) != 0)
-      dest_sq |= 1ULL << eps;
-
-    if (dest_sq == 0)
-      return pinned_pieces;
-
-    if ((dest_sq & Rank18) != 0)
-      AddPawnMoves<c_my, PROMOTION>(index_f, SquareNo(dest_sq), pos, myMoves);
+      myMoves.enpassantPawns |= 1ULL << index_f;
     else
-      AddPawnMoves<c_my,  CAPTURES>(index_f, SquareNo(dest_sq), pos, myMoves);
+      myMoves.Add(index_f, dest_sq);
   }
 
   return pinned_pieces;
@@ -392,7 +246,6 @@ static void
 AddLegalSquares(const ChessBoard& pos, MoveList& myMoves, Bitboard pinned_pieces, Bitboard valid_squares)
 {
   Bitboard own_pieces = pos.piece<  c_my, ALL>();
-  Bitboard emy_pieces = pos.piece< ~c_my, ALL>();
   Bitboard occupied   = pos.All();
   Bitboard piece_bb   = pos.piece<c_my, pt>() & (~pinned_pieces);
 
@@ -401,11 +254,7 @@ AddLegalSquares(const ChessBoard& pos, MoveList& myMoves, Bitboard pinned_pieces
     Square ip = NextSquare(piece_bb);
     Bitboard dest_squares  = LegalSquares<pt>(ip, own_pieces, occupied) & valid_squares;
 
-    Bitboard capt_squares  = dest_squares & emy_pieces;
-    Bitboard quiet_squares = dest_squares ^ capt_squares;
-
-    AddMoves<c_my, CAPTURES>(ip,  capt_squares, pos, myMoves);
-    AddMoves<c_my, NORMAL  >(ip, quiet_squares, pos, myMoves);
+    myMoves.Add(ip, dest_squares);
   }
 }
 
@@ -526,14 +375,9 @@ KingMoves(const ChessBoard& _cb, MoveList& myMoves, Bitboard attackedSq)
   constexpr Color c_emy = ~c_my;
   Square kpos = SquareNo(_cb.piece<c_my, KING>());
   Bitboard king_mask = plt::KingMasks[kpos];
-  Bitboard emy_pieces = _cb.piece<c_emy, ALL>();
-
   Bitboard dest_sq  = king_mask & (~(_cb.piece<c_my, ALL>() | attackedSq));
-  Bitboard capt_sq  = dest_sq & emy_pieces;
-  Bitboard quiet_sq = dest_sq ^ capt_sq;
 
-  AddMoves<c_my, CAPTURES>(kpos,  capt_sq, _cb, myMoves);
-  AddMoves<c_my,   NORMAL>(kpos, quiet_sq, _cb, myMoves);
+  myMoves.Add(kpos, dest_sq);
 
   if (!(_cb.csep & 1920) or ((1ULL << kpos) & attackedSq)) return;
 
@@ -550,11 +394,13 @@ KingMoves(const ChessBoard& _cb, MoveList& myMoves, Bitboard attackedSq)
 
   // Can castle king_side  and no pieces are in-between
   if ((_cb.csep & king_side) and !(r_sq & covered_squares))
-    AddMoves<c_my, CASTLING>(kpos, 1ULL << (shift + 6), _cb, myMoves);
+    dest_sq |= 1ULL << (shift + 6);
 
   // Can castle queen_side and no pieces are in-between
   if ((_cb.csep & queen_side) and !(Apieces & l_mid_sq) and !(l_sq & covered_squares))
-    AddMoves<c_my, CASTLING>(kpos, 1ULL << (shift + 2), _cb, myMoves);
+    dest_sq |= 1ULL << (shift + 2);
+
+  myMoves.Add(kpos, dest_sq);
 }
 
 
@@ -791,7 +637,7 @@ LegalKingMoves(const ChessBoard& _cb, Bitboard attacked_squares)
 **/
 template <Color c_my>
 static Bitboard
-SquaresForDiscoveredCheck(const ChessBoard& pos)
+SquaresForDiscoveredCheck(const ChessBoard& pos, MoveList& myMoves)
 {
   // Implementation to calculate and return the bitboard of squares.
   // These squares are the initial positions from which a piece could move
@@ -808,17 +654,17 @@ SquaresForDiscoveredCheck(const ChessBoard& pos)
   Bitboard occupied_my = pos.piece<c_my, ALL>();
   Bitboard calculatedBitboard = 0;
 
-  const auto checkSquare = [&] (const auto &__f, const MaskTable& atk_table, Bitboard my_piece)
+  const auto checkSquare = [&] (const auto &__f, const MaskTable& atable, Bitboard my_piece)
   {
-    Bitboard mask = atk_table[k_sq] & occupied;
+    Bitboard mask = atable[k_sq] & occupied;
     Bitboard first_piece  = __f(mask);
     Bitboard second_piece = __f(mask ^ first_piece);
 
-    if ((first_piece == 0) or (second_piece == 0))
-      return;
-
-    calculatedBitboard |=
-        (((first_piece & occupied_my) != 0) and ((second_piece & my_piece) != 0)) ? first_piece : 0;
+    if ((first_piece & occupied_my) and (second_piece & my_piece))
+    {
+      myMoves.discoverCheckMasks[SquareNo(first_piece)] = atable[k_sq] & ~atable[SquareNo(second_piece)];
+      calculatedBitboard |= first_piece;
+    }
   };
 
   if (rq)
@@ -884,13 +730,14 @@ LegalMovesPresent(ChessBoard& _cb)
 
 template <Color c_my, ShifterFunc shift>
 static inline MoveList
-MoveGenerator(ChessBoard& pos, bool qsSearch, bool checks)
+MoveGenerator(ChessBoard& pos, bool generateChecksData)
 {
-  MoveList myMoves(c_my, qsSearch);
+  MoveList myMoves(c_my);
 
   if (!pos.EnemyAttackedSquaresGenerated())
     pos.enemyAttackedSquares = GenerateAttackedSquares<c_my>(pos);
 
+  myMoves.myPawns = pos.piece<c_my, PAWN>();
   myMoves.enemyAttackedSquares = pos.enemyAttackedSquares;
 
   if (!pos.AttackersFound())
@@ -903,13 +750,10 @@ MoveGenerator(ChessBoard& pos, bool qsSearch, bool checks)
 
   KingMoves<c_my>(pos, myMoves, pos.enemyAttackedSquares);
 
-  if (checks)
+  if (generateChecksData)
   {
-    myMoves.discoverCheckSquares = SquaresForDiscoveredCheck<c_my>(pos);
+    myMoves.discoverCheckSquares = SquaresForDiscoveredCheck<c_my>(pos, myMoves);
     GenerateSquaresThatCheckEnemyKing<c_my>(pos, myMoves);
-
-    for (Move& move : myMoves)
-      if (MoveGivesCheck<c_my>(move, pos, myMoves)) move |= CHECK << 21;
   }
 
   pos.RemoveMovegenMetadata();
@@ -918,11 +762,11 @@ MoveGenerator(ChessBoard& pos, bool qsSearch, bool checks)
 
 
 MoveList
-GenerateMoves(ChessBoard& pos, bool qsSearch, bool findChecks)
+GenerateMoves(ChessBoard& pos, bool generateChecksData)
 {
   return pos.color == WHITE ?
-    MoveGenerator<WHITE,  LeftShift>(pos, qsSearch, findChecks)
-  : MoveGenerator<BLACK, RightShift>(pos, qsSearch, findChecks);
+    MoveGenerator<WHITE,  LeftShift>(pos, generateChecksData)
+  : MoveGenerator<BLACK, RightShift>(pos, generateChecksData);
 }
 
 bool
@@ -1011,7 +855,6 @@ GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitb
     ? SmallestAttacker<WHITE>(pos, square, removedPieces)
     : SmallestAttacker<BLACK>(pos, square, removedPieces);
 }
-
 
 #endif
 

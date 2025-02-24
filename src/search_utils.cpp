@@ -33,12 +33,9 @@ LmrOk(Move move, Depth depth, size_t moveNo)
 bool
 InterestingMove(Move move)
 {
-  if (is_type<CAPTURES>(move) or is_type<CHECK>(move))
+  if (is_type<CAPTURES>(move) or is_type<PROMOTION>(move) or is_type<CHECK>(move))
     return true;
 
-  if (is_type<CASTLING>(move) or is_type<PROMOTION>(move))
-    return true;
-  
   return false;
 }
 
@@ -73,13 +70,18 @@ Reduction (Depth depth, size_t moveNo)
 }
 
 int
-SearchExtension(const ChessBoard& pos, const MoveList& myMoves, int numExtensions)
+SearchExtension(
+  const ChessBoard& pos,
+  const MoveList& myMoves,
+  int numExtensions
+)
 {
+  const size_t moveCount = myMoves.countMoves();
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
-  
+
   // If king is in check, add 1
-  if (myMoves.checkers > 0 and myMoves.size() < 3)
+  if (myMoves.checkers > 0 and moveCount < 3)
     return 1;
 
   // if queen trapped and attacked by minor piece, add 1

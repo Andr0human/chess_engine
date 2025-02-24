@@ -2,28 +2,32 @@
 #ifndef MOVE_UTILS_H
 #define MOVE_UTILS_H
 
-#include <array>
 #include <iomanip>
 #include "bitboard.h"
-#include "lookup_table.h"
+#include "varray.h"
+
+
+using MoveArray = Varray<Move, MAX_MOVES>;
 
 
 class MoveList
 {
-  private:
-  size_t moveCount;
-
   public:
-  // Stores all moves for current position
-  array<Move, MAX_MOVES> pMoves;
+
+  array<Bitboard, 4> pawnDestSquares;
+  array<Bitboard, SQUARE_NB> destSquares;
+  array<Bitboard, SQUARE_NB> discoverCheckMasks;
 
   // Active side color
   Color color;
 
-  // Generate moves for Quisense Search
-  bool qsSearch;
-
   int checkers;
+
+  Bitboard initSquares;
+
+  Bitboard myPawns;
+
+  Bitboard enpassantPawns;
 
   // Array to store squares that give check to the enemy king
   // {Pawn, Bishop, Knight, Rook, Queen}
@@ -40,36 +44,70 @@ class MoveList
   // Bitboard representing squares under enemy attack
   Bitboard enemyAttackedSquares;
 
-  MoveList(Color c, bool qs = false)
-  : moveCount(0), color(c), qsSearch(qs), checkers(0) {}
+  MoveList(Color c)
+  : color(c), checkers(0), initSquares(0), enpassantPawns(0) {}
 
-  inline void
-  Add(Move move) noexcept
-  { pMoves[moveCount++] = move; }
+  void
+  Add(Square sq, Bitboard _destSquares)
+  {
+    if (_destSquares == 0)
+      return;
+    destSquares[sq] = _destSquares;
+    initSquares |= 1ULL << sq;
+  }
 
-  inline bool
-  empty() const noexcept
-  { return moveCount == 0; }
+  void
+  AddPawns(size_t index, Bitboard _destSquares)
+  { pawnDestSquares[index] = _destSquares; }
 
-  Move*
-  begin() noexcept
-  { return pMoves.begin(); }
+  size_t
+  countMoves() const noexcept;
 
-  Move*
-  end() noexcept
-  { return pMoves.begin() + moveCount; }
+  template<bool captures=true, bool quiet=true, bool checks=false>
+  void
+  getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept;
 
-  const Move*
-  begin() const noexcept
-  { return pMoves.begin(); }
+  private:
 
-  const Move*
-  end() const noexcept
-  { return pMoves.begin() + moveCount; }
+  template <MoveType mt, bool checks>
+  void
+  FillMoves(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    Move baseMove
+  ) const noexcept;
 
-  inline uint64_t
-  size() const noexcept
-  { return moveCount; }
+  template <bool checks>
+  void
+  FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
+
+  template <MoveType mt, bool checks>
+  void
+  FillShiftPawns(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    int shift
+  ) const noexcept;
+
+  template <MoveType mt, bool checks>
+  void
+  FillPawns(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    Move baseMove
+  ) const noexcept;
+
+  template <MoveType mt, bool checks>
+  void
+  FillKingMoves(
+    const ChessBoard& pos,
+    MoveArray& movesArray,
+    Bitboard endSquares,
+    Move baseMove
+  ) const noexcept;
 };
 
 
@@ -81,10 +119,10 @@ DecodeMove(Move encoded_move);
 /**
  * @brief Returns string readable move from encoded-move.
  * Invalid move leads to undefined behaviour.
- * 
+ *
  * @param move encoded-move
  * @param _cb board position
- * @return string 
+ * @return string
  */
 string
 PrintMove(Move move, ChessBoard _cb);

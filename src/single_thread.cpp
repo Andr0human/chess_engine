@@ -1,5 +1,4 @@
 
-
 #include "single_thread.h"
 
 uint64_t
@@ -9,10 +8,15 @@ BulkCount(ChessBoard& _cb, Depth depth)
 
   const MoveList myMoves = GenerateMoves(_cb);
 
-  if (depth == 1) return myMoves.size();
+  if (depth == 1)
+    return myMoves.countMoves();
+
+  MoveArray movesArray;
+  myMoves.getMoves(_cb, movesArray);
+
   uint64_t answer = 0;
 
-  for (const Move move : myMoves)
+  for (const Move move : movesArray)
   {
     _cb.MakeMove(move);
     answer += BulkCount(_cb, depth - 1);
@@ -22,7 +26,8 @@ BulkCount(ChessBoard& _cb, Depth depth)
   return answer;
 }
 
-Score
+template <bool leafnode = 0>
+static Score
 QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
   // Check if Time Left for Search
@@ -49,15 +54,20 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (stand_pat > alpha) alpha = stand_pat;
 
-  MoveList myMoves = GenerateMoves(pos, true);
+  const MoveList myMoves = GenerateMoves(pos);
+  MoveArray movesArray;
+  myMoves.getMoves<true, false>(pos, movesArray);
+
+  if (movesArray.size() == 0)
+    return alpha;
 
   if constexpr (useMoveOrder)
-    OrderMoves(pos, myMoves, false, false);
+    OrderMoves<Sorts::CAPTURES>(pos, movesArray, 0);
 
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-  for (const Move capture_move : myMoves)
+  for (const Move capture_move : movesArray)
   {
     pos.MakeMove(capture_move);
     Score score = -QuiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
@@ -119,11 +129,98 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
   return eval;
 }
 
+template <ReductionFunc reductionFunction>
+static void
+PlayPartialMoves(
+  ChessBoard& pos, MoveArray& movesArray,
+  size_t start, size_t end,
+  Score& alpha, Score& beta,
+  Depth depth, Ply ply,
+  int pvIndex, int numExtensions,
+  Flag& hashf
+)
+{
+  int pvNextIndex = pvIndex + MAX_PLY - ply;
+
+  for (size_t moveNo = start; moveNo < end; ++moveNo)
+  {
+    Move move = movesArray[moveNo];
+    Score eval = PlayMove<Reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
+
+    // No time left!
+    if (info.TimeOver())
+      return;
+
+    //! TODO: Why beta is not in root-search??
+    // beta-cut found
+    if (eval >= beta)
+    {
+      hashf = Flag::HASH_BETA;
+      alpha = beta;
+      break;
+    }
+
+    // Better move found, update the result
+    if (eval > alpha) {
+      hashf = Flag::HASH_EXACT, alpha = eval;
+      pvArray[pvIndex] = filter(move);
+      movcpy (pvArray + pvIndex + 1,
+              pvArray + pvNextIndex, MAX_PLY - ply - 1);
+    }
+  }
+}
+
+template <ReductionFunc reductionFunction>
+static void
+PlayAllMoves(
+  ChessBoard& pos, MoveList& myMoves,
+  Score& alpha, Score& beta,
+  Depth depth, Ply ply,
+  int pvIndex, int numExtensions,
+  Flag& hashf
+)
+{
+  // Set pvArray, for storing the search_tree
+  pvArray[pvIndex] = NULL_MOVE;
+  size_t start = 0, end = 0;
+
+  MoveArray movesArray;
+  myMoves.getMoves<true, false, true>(pos, movesArray);
+
+  end = OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(pos, movesArray, start);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  if (hashf == Flag::HASH_BETA)
+    return;
+
+  myMoves.getMoves<false, true, true>(pos, movesArray);
+
+  start = end;
+  end = OrderMoves<Sorts::CHECKS>(pos, movesArray, end);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+
+  if (hashf == Flag::HASH_BETA)
+    return;
+
+  start = end;
+  end = OrderMoves<Sorts::PV>(pos, movesArray, start);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+
+  if (hashf == Flag::HASH_BETA)
+    return;
+
+  start = end;
+  PlayPartialMoves<Reduction>(pos, movesArray, start, movesArray.size(), alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+}
+
 Score
 AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
 {
   if (info.TimeOver())
     return TIMEOUT;
+
+    // Depth 0, starting Quiensense Search
+  if (depth <= 0)
+    return QuiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
 
   {
     // check/stalemate check
@@ -134,10 +231,6 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw())
       return pos.HandleScore(VALUE_DRAW);
   }
-
-  // Depth 0, starting Quiensense Search
-  if (depth <= 0)
-    return QuiescenceSearch(pos, alpha, beta, ply, pvIndex);
 
   // check for theoretical drawn position
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
@@ -156,51 +249,17 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // TODO: Try with findChecks on and off [or on-off with different depth]
   // Generate moves for current board
-  MoveList myMoves = GenerateMoves(pos, false, true);
+  MoveList myMoves = GenerateMoves(pos, true);
 
-  // Order moves according to heuristics for faster alpha-beta search
-  if constexpr (useMoveOrder)
-    OrderMoves(pos, myMoves, true, true);
-
-  if constexpr (useExtensions)
-  {
-    // Search Extensions
+  if constexpr (useExtensions) {
     int extensions = SearchExtension(pos, myMoves, numExtensions);
-    depth         += extensions;
+    depth += extensions;
     numExtensions += extensions;
   }
 
-  // Set pvArray, for storing the search_tree
-  pvArray[pvIndex] = NULL_MOVE;
-  int pvNextIndex = pvIndex + MAX_PLY - ply;
   Flag hashf = Flag::HASH_ALPHA;
-  Move bestMove = NULL_MOVE;
 
-  for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
-  {
-    Move move = myMoves.pMoves[moveNo];
-    Score eval = PlayMove<Reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
-
-    // No time left!
-    if (info.TimeOver())
-      return TIMEOUT;
-
-    //! TODO: Why beta is not in root-search??
-    // beta-cut found
-    if (eval >= beta)
-    {
-      hashf = Flag::HASH_BETA, alpha = beta;
-      break;
-    }
-
-    // Better move found, update the result
-    if (eval > alpha) {
-      hashf = Flag::HASH_EXACT, bestMove = move, alpha = eval;
-      pvArray[pvIndex] = filter(bestMove);
-      movcpy (pvArray + pvIndex + 1,
-              pvArray + pvNextIndex, MAX_PLY - ply - 1);
-    }
-  }
+  PlayAllMoves<Reduction>(pos, myMoves, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if constexpr (useTT) {
     TT.RecordPosition(pos.Hash_Value, depth, alpha, hashf);
@@ -217,14 +276,14 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 
   int ply{0}, pvIndex{0}, pvNextIndex;
 
-  MoveList myMoves = info.getMoves();
+  MoveArray myMoves = info.getMoves();
 
   pvArray[pvIndex] = NULL_MOVE; // no pv yet
   pvNextIndex = pvIndex + MAX_PLY - ply;
 
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
-    Move move = myMoves.pMoves[moveNo];
+    Move move = myMoves[moveNo];
     startTime = perf::now();
 
     Score eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
