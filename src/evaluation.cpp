@@ -92,7 +92,7 @@ AttackDistanceScore(const ChessBoard& pos)
   distance_score += CalcDistanceScore<c_my, KNIGHT, 2>(pos);
   distance_score += CalcDistanceScore<c_my, BISHOP, 3>(pos);
   distance_score += CalcDistanceScore<c_my, ROOK  , 4>(pos);
-  distance_score += CalcDistanceScore<c_my, QUEEN , 7>(pos);
+  distance_score += CalcDistanceScore<c_my, QUEEN , 6>(pos);
 
   return distance_score;
 }
@@ -105,7 +105,7 @@ OpenFilesScore(const ChessBoard& pos)
   Bitboard column_bb = FileA;
 
   int king_col = SquareNo(pos.piece<c_my, KING>()) & 7;
-  Bitboard pawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
+  Bitboard pawns = pos.piece<c_my, PAWN>();
 
   for (int col = 0; col < 8; col++)
   {
@@ -212,8 +212,8 @@ Threats(const ChessBoard& pos)
   Score defendersCountWhite = DefendersCount<WHITE>(pos);
   Score defendersCountBlack = DefendersCount<BLACK>(pos);
 
-  Score lackOfSafetyWhite = (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
-  Score lackOfSafetyBlack = (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
+  Score lackOfSafetyWhite = 2 * (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
+  Score lackOfSafetyBlack = 2 * (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
 
   Score currentAttackWhite = attackValueWhite * lackOfSafetyBlack + (distanceScoreWhite / (defendersCountBlack + 1));
   Score currentAttackBlack = attackValueBlack * lackOfSafetyWhite + (distanceScoreBlack / (defendersCountWhite + 1));
