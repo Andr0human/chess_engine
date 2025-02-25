@@ -3,10 +3,6 @@
 
 //* TODO Search
 // Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
-// Delta Pruning
-// Check depth += 2 in Search
-// Alpha-Beta lmr code.
-// Test LMR condition is_passed_pawn(), castling
 
 //* TODO EndGame
 // Endgame tests fen
@@ -15,13 +11,8 @@
 // (Queen vs B/R/N) Endgame
 // Pawn Race (8/5ppk/7p/8/P7/8/1K6/8 w - - 0 1)
 
-//* TODO Evaluation
-// Fix AttackStrength (Should depend on opponent king safety) (rr3k2/ppq3pQ/2nb4/3p1RP1/P2P4/1N5P/1P4K1/R1B5 b - - 0 24)
-
 //* TODO Search Extension
 // If promotion is possible and no enemy piece can capture it. (3k4/8/5N2/nR6/3P4/p7/1p3PP1/6K1 w - - 0 51)
-// instead move_gives_check in LMR, use it as in SearchExtension.
-// Add depth 1, if opponent pawn attacks own piece
 // 8/pb1n3k/1p4pp/8/2q1PQ2/Pn3P1B/1B1r2PP/2R3K1 b - - 3 31      Critical-leaf-Node extension
 // 8/2K5/8/8/P3kp2/8/8/8 b - - 0 74                             (Pawn Race fix)
 
@@ -41,7 +32,6 @@ int main(int argc, char **argv)
   rn1qkbnr/4p1pp/2p2p2/pp2PbN1/2pP4/2N5/PP3PPP/R1BQKB1R w KQkq - 0 8       // Qf3 g4 Nf3
   rnb1kb1r/ppp2ppp/5n2/q7/5B2/2N5/PPP1NPPP/R2QKB1R w KQkq - 4 8            // Nd4 a3 Qd3
   2kr1b1r/pppn1ppp/4bn2/q7/3Q1B2/2N5/PPP1NPPP/1K1R1B1R w - - 10 11         // f3 Qa4
-  7R/1p1k2r1/3n4/p2p2B1/P2P2K1/6P1/8/8 w - - 15 49                         // Kf4
   2r1r1k1/pb1nqppp/1p6/3p4/1b2n3/PPN1P1PB/1BQ1NP1P/3RR1K1 b - - 0 1        // Nxf2
   2kr2nr/1pp1bppp/p1p2q2/4p3/P3P1b1/2NP1N2/1PP2PPP/R1BQ1RK1 w - - 0 1      // h3 Qe2              (horizon effect)
   r5k1/1p1n1ppp/pqr1p3/3p4/3PnB2/P1P1QN2/1P3PPP/2KRR3 w - - 3 16           // Nd2                 (horizon effect)
@@ -76,14 +66,10 @@ int main(int argc, char **argv)
   8/5P2/1p6/5k1p/1n1KN3/6P1/8/4r3 b - - 0 55              B.M Rd1+
   Extend Search if a pawn can promote and can't be captured.
 
-  rr4k1/1p3p2/p3pB1Q/3pP3/b1pP2PK/5P2/2P1n2P/4R3 b - - 0 27
-  r3k2r/1B3p2/p3p3/8/Pp1q4/1P6/R1QN1P1b/5R1K b kq - 2 23
-  4rrk1/3R1p2/p2Q2p1/q7/5B2/5b1P/1P3P1P/5RK1 b - - 3 26
   r3r1k1/1p3p2/p3p1n1/q2pP1BP/b1pP2P1/2P2Q2/2P2P2/R4RK1 b - - 0 21
   King Safety Understanding | King Mobility | Distance of pieces from the king
 
   3q3k/Pp3p1b/2p1p3/2PpP3/P7/2P3r1/3B4/R4QK1 w - - 0 26
-  Fix Pawn Structure
 
   8/8/8/6k1/1B2Kp2/8/2b1p3/8 w - - 2 84
   No clue whats fucking things up?
@@ -91,16 +77,8 @@ int main(int argc, char **argv)
   B7/7k/8/6KP/8/8/8/8 w - - 1 156
   Attention in regards to LoneKing function.
 
-
-  8/8/8/8/4B2k/5K2/4B3/8 w - - 45 207
-  2 same-color bishops is a theoretical draw.
-
   1r1q1rk1/3bppbp/p4np1/2pPp3/2P1P3/2N1QP2/P3N1PP/2KR1B1R b - - 0 15
   Excellent position to illustrate open_files and KingSafety in long term prospect.
-
-
-  8/8/6kP/8/5P2/8/4K3/8 w - - 1 62
-  Avoid the use of LoneKing in these cases.
 
   8/8/6kP/1p3N2/1npKB3/8/8/8 w - - 5 55
   2 minor piece vs 1 minor piece is draw
