@@ -41,6 +41,10 @@ class MoveList
   // Bitboard of squares that have pinned pieces on them
   Bitboard pinnedPiecesSquares;
 
+  // Bitboard representing squares that the pieces of active
+  // side can legally move to when the king is under check
+  Bitboard legalSquaresMaskInCheck;
+
   // Bitboard representing squares under enemy attack
   Bitboard enemyAttackedSquares;
 

@@ -585,9 +585,6 @@ ChessBoard::Reset()
   csep = 0;
   Hash_Value = 0;
   undoInfoStackCounter = 0;
-  checkers = -1;
-  legalSquaresMaskInCheck = 0;
-  enemyAttackedSquares = 0;
   color = Color::WHITE;
 
   halfmove = 0;
@@ -660,9 +657,6 @@ ChessBoard::Dump(std::ostream& writer)
   writer << "halfmove: " << halfmove << endl;
   writer << "fullmove: " << fullmove << endl;
   writer << "key: " << Hash_Value << endl;
-  writer << "Checkers: " << checkers << endl;
-  writer << "legaL_square_mask: " << legalSquaresMaskInCheck << endl;
-  writer << "enemy_attacked_squares: " << enemyAttackedSquares << endl;
 
   writer << "movenum: " << undoInfoStackCounter << endl;
   writer << "undoInfo: \n";
