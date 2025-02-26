@@ -97,16 +97,6 @@ class ChessBoard
   int csep;
   Key Hash_Value;
 
-  // No. of opponent pieces checking the active king
-  int checkers;
-
-  // Bitboard representing squares that the pieces of active
-  // side can legally move to when the king is under check
-  Bitboard legalSquaresMaskInCheck;
-
-  // Bitboard representing squares under enemy attack
-  Bitboard enemyAttackedSquares;
-
   ChessBoard();
 
   ChessBoard(const std::string& fen);
@@ -160,32 +150,6 @@ class ChessBoard
   inline Square
   EnPassantSquare() const
   { return Square(csep & 0x7f); }
-
-  inline bool
-  EnemyAttackedSquaresGenerated() const noexcept
-  { return enemyAttackedSquares != 0; }
-
-  inline bool
-  AttackersFound() const noexcept
-  { return checkers != -1;  }
-
-  inline void
-  RemoveMovegenMetadata() noexcept
-  {
-    checkers = -1;
-    legalSquaresMaskInCheck = 0;
-    enemyAttackedSquares = 0;
-  }
-
-  inline Score
-  HandleScore (Score score) noexcept {
-    RemoveMovegenMetadata();
-    return score;
-  }
-
-  constexpr bool
-  InCheck() const noexcept
-  { return checkers > 0; }
 
   constexpr Piece
   PieceOnSquare(Square sq) const noexcept

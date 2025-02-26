@@ -34,11 +34,13 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (info.TimeOver())
     return TIMEOUT;
 
-  if (!LegalMovesPresent(pos))
-    return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
+  const MoveList myMoves = GenerateMoves(pos);
+
+  if (myMoves.countMoves() == 0)
+    return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
 
   if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
-    return pos.HandleScore(VALUE_DRAW);
+    return VALUE_DRAW;
 
   info.AddQNode();
 
@@ -47,14 +49,13 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   // Checking for beta-cutoff, usually called at the end of move-generation.
   if (stand_pat >= beta)
-    return pos.HandleScore(beta);
+    return beta;
 
   // int BIG_DELTA = 925;
   // if (stand_pat < alpha - BIG_DELTA) return alpha;
 
   if (stand_pat > alpha) alpha = stand_pat;
 
-  const MoveList myMoves = GenerateMoves(pos);
   MoveArray movesArray;
   myMoves.getMoves<true, false>(pos, movesArray);
 
@@ -222,19 +223,22 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (depth <= 0)
     return QuiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
 
+  // Generate moves for current board position
+  MoveList myMoves = GenerateMoves(pos, true);
+
   {
     // check/stalemate check
-    if (!LegalMovesPresent(pos))
-      return pos.HandleScore(pos.InCheck() ? CheckmateScore(ply) : VALUE_ZERO);
+    if (myMoves.countMoves() == 0)
+      return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
 
     // 3-move repetition check or 50-move-rule-draw
     if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw())
-      return pos.HandleScore(VALUE_DRAW);
-  }
+      return VALUE_DRAW;
 
-  // check for theoretical drawn position
-  if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
-    return pos.HandleScore(VALUE_DRAW);
+    // check for theoretical drawn position
+    if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
+      return VALUE_DRAW;
+  }
 
   info.AddNode();
 
@@ -244,12 +248,8 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     Score tt_val = TT.LookupPosition(pos.Hash_Value, depth, alpha, beta);
 
     if (tt_val != VALUE_UNKNOWN)
-      return pos.HandleScore(tt_val);
+      return tt_val;
   }
-
-  // TODO: Try with findChecks on and off [or on-off with different depth]
-  // Generate moves for current board
-  MoveList myMoves = GenerateMoves(pos, true);
 
   if constexpr (useExtensions) {
     int extensions = SearchExtension(pos, myMoves, numExtensions);
@@ -310,7 +310,7 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
 {
   ResetPvLine();
 
-  if (LegalMovesPresent(board) == false)
+  if (GenerateMoves(board).countMoves() == 0)
   {
     writer << "Position has no legal moves! Discarding Search." << endl;
     return;
