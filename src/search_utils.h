@@ -5,6 +5,7 @@
 
 
 extern Move pvArray[MAX_PV_ARRAY_SIZE];
+extern array<Varray<Move, 12>, MAX_PLY> killerMoves;
 extern const string StartFen;
 
 

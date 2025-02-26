@@ -27,7 +27,7 @@ PrioritizeMoves(MoveArray& myMoves, size_t start)
 
 template <Sorts sortType>
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start)
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start, Ply ply)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
@@ -57,6 +57,14 @@ OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start)
   {
     end = PrioritizeMoves<PV_MOVE>(movesArray, start);
     start = end;
+  }
+
+  if (sortType & Sorts::KILLER)
+  {
+    for (size_t i = start; i < movesArray.size(); i++) {
+      if (killerMoves[ply].searchSorted(movesArray[i]))
+        std::swap(movesArray[i], movesArray[start++]);
+    }
   }
 
   if (sortType & Sorts::QUIET)
@@ -129,13 +137,14 @@ PrintMovelist(MoveArray myMoves, ChessBoard pos)
 }
 
 
-template size_t OrderMoves<Sorts::CAPTURES>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::PV>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::QUIET>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS | Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
-template size_t OrderMoves<Sorts::CAPTURES | Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t);
+template size_t OrderMoves<Sorts::CAPTURES>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::PV>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::PV | Sorts::KILLER>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::QUIET>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS | Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t, Ply);
+template size_t OrderMoves<Sorts::CAPTURES | Sorts::CHECKS>(const ChessBoard&, MoveArray&, size_t, Ply);
 
 #endif

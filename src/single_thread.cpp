@@ -63,7 +63,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     return alpha;
 
   if constexpr (useMoveOrder)
-    OrderMoves<Sorts::CAPTURES>(pos, movesArray, 0);
+    OrderMoves<Sorts::CAPTURES>(pos, movesArray, 0, ply);
 
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -165,8 +165,10 @@ PlayPartialMoves(
     if (eval > alpha) {
       hashf = Flag::HASH_EXACT, alpha = eval;
       pvArray[pvIndex] = filter(move);
-      movcpy (pvArray + pvIndex + 1,
-              pvArray + pvNextIndex, MAX_PLY - ply - 1);
+      movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
+
+      if (is_type<NORMAL>(move))
+        killerMoves[ply].addSorted(move);
     }
   }
 }
@@ -188,7 +190,7 @@ PlayAllMoves(
   MoveArray movesArray;
   myMoves.getMoves<true, false, true>(pos, movesArray);
 
-  end = OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(pos, movesArray, start);
+  end = OrderMoves<Sorts::CAPTURES | Sorts::PROMOTIONS>(pos, movesArray, start, ply);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
   if (hashf == Flag::HASH_BETA)
     return;
@@ -196,14 +198,14 @@ PlayAllMoves(
   myMoves.getMoves<false, true, true>(pos, movesArray);
 
   start = end;
-  end = OrderMoves<Sorts::CHECKS>(pos, movesArray, end);
+  end = OrderMoves<Sorts::CHECKS>(pos, movesArray, end, ply);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   start = end;
-  end = OrderMoves<Sorts::PV>(pos, movesArray, start);
+  end = OrderMoves<Sorts::PV | Sorts::KILLER>(pos, movesArray, start, ply);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)

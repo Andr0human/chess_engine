@@ -3,6 +3,7 @@
 #include "movegen.h"
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
+array<Varray<Move, 12>, MAX_PLY> killerMoves;
 const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 

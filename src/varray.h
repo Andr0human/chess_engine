@@ -74,20 +74,21 @@ class Varray {
     ++Nc;
   }
 
-  size_t searchSorted(T val)
+  bool searchSorted(T val)
   {
-    if (Nc == 0) return LLONG_MAX;
+    if (Nc == 0) return false;
+    if (val < _array.front()) return false;
 
     size_t s = 0, e = Nc - 1;
     while (s <= e)
     {
       size_t mid = s + (e - s) / 2;
-      if (_array[mid] == val) return mid;
+      if (_array[mid] == val) return true;
       if (_array[mid] < val) s = mid + 1;
       else e = mid - 1;
     }
 
-    return LLONG_MAX;
+    return false;
   }
 };
 

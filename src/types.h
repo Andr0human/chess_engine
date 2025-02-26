@@ -166,6 +166,7 @@ enum MoveType
   CAPTURES,
   PROMOTION,
   CHECK = 4,
+  KILLER_MOVE,
 
   PV_MOVE = 1 << 29,
   // Quiescence Move
