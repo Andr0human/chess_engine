@@ -63,6 +63,7 @@ ChessBoard::SetPositionWithFen(const string& fen) noexcept
 
         if ((__x & 7) == KING) continue;
         piece_ct[(__x & 8) + 7]++;
+        boardWeight += pieceValues[type_of(__x) - 1];
       }
     }
   }
@@ -245,6 +246,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     piece_bb[fpt] ^= fPos;
     piece_ct[(fpt & 8) + ALL]--;
     piece_bb[(fpt & 8) + ALL] ^= fPos;
+    boardWeight -= pieceValues[ft - 1];
 
     if constexpr (useTT) {
       Hash_Value ^= TT.HashkeyUpdate(fpt, fp);
@@ -320,6 +322,7 @@ ChessBoard::MakeMoveEnpassant(Square ip, Square ep) noexcept
   piece_ct[emy + PAWN]--;
   piece_ct[emy + ALL ]--;
   board[cap_pawn_fp] = NO_PIECE;
+  boardWeight -= pieceValues[PAWN - 1];
 
   // Shift own pawn in Pieces-table
   piece_bb[own + PAWN] ^= (1ULL << ip) ^ (1ULL << ep);
@@ -351,6 +354,9 @@ ChessBoard::MakeMovePawnPromotion(Move move) noexcept
   piece_bb[own + new_pt] ^= 1ULL << fp;
   piece_ct[own + new_pt]++;
   piece_bb[own + ALL   ] ^= (1ULL << ip) ^ (1ULL << fp);
+  boardWeight -= pieceValues[PAWN   - 1];
+  boardWeight += pieceValues[new_pt - 1];
+
   board[fp] = make_piece(color, new_pt);
 
   if (cpt > 0)
@@ -359,6 +365,7 @@ ChessBoard::MakeMovePawnPromotion(Move move) noexcept
     piece_bb[emy + ALL] ^= 1ULL << fp;
     piece_ct[emy + cpt]--;
     piece_ct[emy + ALL]--;
+    boardWeight -= pieceValues[cpt - 1];
 
     if constexpr (useTT) {
       Hash_Value ^= TT.HashkeyUpdate(emy + cpt, fp);
@@ -450,6 +457,7 @@ ChessBoard::UnmakeMove() noexcept
     piece_ct[(fpt & 8) + ALL]++;
     piece_bb[fpt] ^= fPos;
     piece_bb[(fpt & 8) + ALL] ^= fPos;
+    boardWeight += pieceValues[ft - 1];
   }
 
   piece_bb[ipt] ^= iPos ^ fPos;
@@ -464,15 +472,18 @@ ChessBoard::UnmakeMove() noexcept
       piece_bb[emy + ALL ] ^= 1ULL << (pawn_fp);
       piece_ct[emy + PAWN]++;
       piece_ct[emy + ALL ]++;
+      boardWeight += pieceValues[PAWN - 1];
       board[pawn_fp] = Piece(emy + PAWN);
     }
-    else if ((fPos & 0xFF000000000000FF) != 0)
+    else if ((fPos & Rank18) != 0)
     {
       ipt = Piece((((move >> 18) & 3) + 2) + own);
       piece_bb[own + PAWN] ^= fPos;
       piece_bb[ipt] ^= fPos;
       piece_ct[own + PAWN]++;
       piece_ct[ipt]--;
+      boardWeight += pieceValues[PAWN - 1];
+      boardWeight -= pieceValues[(ipt & 7)  - 1];
     }
   }
 
@@ -586,6 +597,7 @@ ChessBoard::Reset()
   Hash_Value = 0;
   undoInfoStackCounter = 0;
   color = Color::WHITE;
+  boardWeight = 0;
 
   halfmove = 0;
   fullmove = 2;
@@ -594,7 +606,7 @@ ChessBoard::Reset()
 string
 ChessBoard::VisualBoard() const noexcept
 {
-  const char _piece[16] = {
+  constexpr char _piece[16] = {
     '.', 'p', 'b', 'n', 'r', 'q', 'k', '.',
     '.', 'P', 'B', 'N', 'R', 'Q', 'K', '.'
   };
