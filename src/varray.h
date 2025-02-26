@@ -3,12 +3,14 @@
 #define VARRAY_H
 
 #include <array>
+#include <climits>
+#include <cstddef>
 
-template <typename T, std::size_t Nm>
+template <typename T, size_t Nm>
 class Varray {
-  std::size_t Nc;
+  size_t Nc;
   std::array<T, Nm> _array;
- 
+
   public:
 
   Varray() : Nc(0) {}
@@ -16,11 +18,11 @@ class Varray {
   void add(T val) noexcept
   { if (Nc < Nm) _array[Nc++] = val; }
 
-  std::size_t
+  size_t
   size() const noexcept
   { return Nc; }
 
-  std::size_t
+  size_t
   capacity() const noexcept
   { return Nm; }
 
@@ -29,11 +31,11 @@ class Varray {
   { Nc = 0; }
 
   T&
-  operator[](std::size_t index) noexcept
+  operator[](size_t index) noexcept
   { return _array[index]; }
 
   const T&
-  operator[](std::size_t index) const noexcept
+  operator[](size_t index) const noexcept
   { return _array[index]; }
 
   const T&
@@ -55,6 +57,38 @@ class Varray {
   const T*
   end() const noexcept
   { return _array.begin() + Nc; }
+
+  void addSorted(T val)
+  {
+    if (Nc >= Nm) return;
+
+    size_t start = 0;
+
+    while (start < Nc && _array[start] < val)
+      start++;
+
+    for (size_t i = Nc; i > start; --i)
+      _array[i] = _array[i - 1];
+
+    _array[start] = val;
+    ++Nc;
+  }
+
+  size_t searchSorted(T val)
+  {
+    if (Nc == 0) return LLONG_MAX;
+
+    size_t s = 0, e = Nc - 1;
+    while (s <= e)
+    {
+      size_t mid = s + (e - s) / 2;
+      if (_array[mid] == val) return mid;
+      if (_array[mid] < val) s = mid + 1;
+      else e = mid - 1;
+    }
+
+    return LLONG_MAX;
+  }
 };
 
 #endif
