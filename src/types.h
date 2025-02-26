@@ -12,6 +12,7 @@ using      Ply =  int32_t;
 using      Key = uint64_t;
 using Bitboard = uint64_t;
 using    Nodes = uint64_t;
+using   Weight =  int32_t;
 
 
 enum SearchTechnique: bool

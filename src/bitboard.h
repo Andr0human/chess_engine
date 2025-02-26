@@ -40,6 +40,10 @@ class ChessBoard
 {
   private:
 
+  constexpr static array<Weight, 5> pieceValues = {
+    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg
+  };
+
   array<UndoInfo, 256> undoInfo;
 
   int undoInfoStackCounter;
@@ -95,7 +99,10 @@ class ChessBoard
   Color color;
 
   int csep;
+
   Key Hash_Value;
+
+  Weight boardWeight;
 
   ChessBoard();
 
