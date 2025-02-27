@@ -309,9 +309,8 @@ class SearchData
   }
 };
 
-template <Sorts sortType>
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, size_t start = 0);
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, Sorts sortType, size_t start = 0);
 
 Score
 SeeScore(const ChessBoard& pos, Move move);
