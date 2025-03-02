@@ -245,7 +245,7 @@ LegalSquares(Square sq, Bitboard occupied_my, Bitboard occupied)
 { return ~occupied_my & AttackSquares<pt>(sq, occupied); }
 
 
-template <Color c_my, PieceType pt>
+template <Color c_my, PieceType pt, PieceType... rest>
 static void
 AddLegalSquares(const ChessBoard& pos, MoveList& myMoves)
 {
@@ -262,9 +262,10 @@ AddLegalSquares(const ChessBoard& pos, MoveList& myMoves)
 
     myMoves.Add(ip, destSquares);
   }
+
+  if constexpr (sizeof...(rest) > 0)
+    AddLegalSquares<c_my, rest...>(pos, myMoves);
 }
-
-
 
 template <Color c_my, ShifterFunc shift>
 static void
@@ -273,18 +274,14 @@ PieceMovement(ChessBoard& _cb, MoveList& myMoves)
   myMoves.pinnedPiecesSquares  = PinnedPiecesList<c_my>(_cb, myMoves);
 
   PawnMovement<c_my, shift>(_cb, myMoves);
-
-  AddLegalSquares<c_my, BISHOP>(_cb, myMoves);
-  AddLegalSquares<c_my, KNIGHT>(_cb, myMoves);
-  AddLegalSquares<c_my, ROOK  >(_cb, myMoves);
-  AddLegalSquares<c_my, QUEEN >(_cb, myMoves);
+  AddLegalSquares<c_my, BISHOP, KNIGHT, ROOK, QUEEN>(_cb, myMoves);
 }
 
 #endif
 
 #ifndef KING_MOVE_GENERATION
 
-template <Color c_my, PieceType pt>
+template <Color c_my, PieceType pt, PieceType... rest>
 Bitboard
 AttackedSquaresGen(const ChessBoard& pos, Bitboard occupied)
 {
@@ -294,6 +291,9 @@ AttackedSquaresGen(const ChessBoard& pos, Bitboard occupied)
   while (piece_bb != 0)
     squares |= AttackSquares<pt>(NextSquare(piece_bb), occupied);
 
+  if constexpr (sizeof...(rest) > 0)
+    squares |= AttackedSquaresGen<c_my, rest...>(pos, occupied);
+
   return squares;
 }
 
@@ -301,19 +301,10 @@ template <Color c_my>
 static Bitboard
 GenerateAttackedSquares(const ChessBoard& pos)
 {
-  constexpr Color c_emy = ~c_my;
-
-  Bitboard ans = 0;
   Bitboard occupied = pos.All() ^ pos.piece<c_my, KING>();
 
-  ans |= PawnAttackSquares<c_emy>(pos);
-  ans |= AttackedSquaresGen<c_emy, BISHOP>(pos, occupied);
-  ans |= AttackedSquaresGen<c_emy, KNIGHT>(pos, occupied);
-  ans |= AttackedSquaresGen<c_emy, ROOK  >(pos, occupied);
-  ans |= AttackedSquaresGen<c_emy, QUEEN >(pos, occupied);
-  ans |= AttackedSquaresGen<c_emy, KING  >(pos, occupied);
-
-  return ans;
+  return PawnAttackSquares<~c_my>(pos)
+      | AttackedSquaresGen<~c_my, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
 }
 
 
@@ -570,40 +561,38 @@ QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
   return false;
 }
 
-template<Color side>
+template<Color side, PieceType piece, PieceType... rest>
 Square
-SmallestAttacker(const ChessBoard& pos, const Square square, Bitboard removedPieces)
+SmallestAttacker(const ChessBoard& pos, const Square sq, Bitboard removedPieces)
 {
-  Bitboard occupied = pos.All() ^ removedPieces;
+  Bitboard piece_bb = pos.piece<side, piece>();
   Bitboard mask;
 
-  mask = AttackSquares<~side, PAWN>(square) & (pos.piece<side, PAWN>() ^ (pos.piece<side, PAWN>() & removedPieces));
+  if constexpr (piece == PAWN)
+    mask = AttackSquares<~side, PAWN>(sq);
+  else
+    mask = AttackSquares<piece>(sq, pos.All() ^ removedPieces);
+
+  mask &= piece_bb ^ (piece_bb & removedPieces);
   if (mask) return MsbIndex(mask);
 
-  mask = AttackSquares<KNIGHT>(square, occupied) & (pos.piece<side, KNIGHT>() ^ (pos.piece<side, KNIGHT>() & removedPieces));
-  if (mask) return MsbIndex(mask);
-
-  mask = AttackSquares<BISHOP>(square, occupied) & (pos.piece<side, BISHOP>() ^ (pos.piece<side, BISHOP>() & removedPieces));
-  if (mask) return MsbIndex(mask);
-
-  mask = AttackSquares<ROOK>(square, occupied) & (pos.piece<side, ROOK>() ^ (pos.piece<side, ROOK>() & removedPieces));
-  if (mask) return MsbIndex(mask);
-
-  mask = AttackSquares<QUEEN>(square, occupied) & (pos.piece<side, QUEEN>() ^ (pos.piece<side, QUEEN>() & removedPieces));
-  if (mask) return MsbIndex(mask);
-
-  mask = AttackSquares<KING>(square, occupied) & (pos.piece<side, KING>() ^ (pos.piece<side, KING>() & removedPieces));
-  if (mask) return MsbIndex(mask);
+  if constexpr (sizeof...(rest) > 0)
+    return SmallestAttacker<side, rest...>(pos, sq, removedPieces);
 
   return SQUARE_NB;
+}
+
+template <Color side>
+Square GetSmallestAttackerImpl(const ChessBoard& pos, const Square square, Bitboard removedPieces) {
+  return SmallestAttacker<side, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING>(pos, square, removedPieces);
 }
 
 Square
 GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces)
 {
   return side == WHITE
-    ? SmallestAttacker<WHITE>(pos, square, removedPieces)
-    : SmallestAttacker<BLACK>(pos, square, removedPieces);
+    ? GetSmallestAttackerImpl<WHITE>(pos, square, removedPieces)
+    : GetSmallestAttackerImpl<BLACK>(pos, square, removedPieces);
 }
 
 #endif
