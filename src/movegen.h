@@ -44,6 +44,9 @@ CapturesExistInPosition(const ChessBoard& pos);
 bool
 QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares);
 
+bool
+PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB);
+
 Square
 GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces);
 
