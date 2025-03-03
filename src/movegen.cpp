@@ -297,14 +297,12 @@ AttackedSquaresGen(const ChessBoard& pos, Bitboard occupied)
   return squares;
 }
 
-template <Color c_my>
+template <Color side>
 static Bitboard
-GenerateAttackedSquares(const ChessBoard& pos)
+GenerateAttackedSquares(const ChessBoard& pos, Bitboard occupied)
 {
-  Bitboard occupied = pos.All() ^ pos.piece<c_my, KING>();
-
-  return PawnAttackSquares<~c_my>(pos)
-      | AttackedSquaresGen<~c_my, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
+  return PawnAttackSquares<side>(pos)
+      | AttackedSquaresGen<side, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
 }
 
 
@@ -483,7 +481,7 @@ MoveGenerator(ChessBoard& pos, bool generateChecksData)
   MoveList myMoves(c_my);
 
   myMoves.myPawns = pos.piece<c_my, PAWN>();
-  myMoves.enemyAttackedSquares = GenerateAttackedSquares<c_my>(pos);
+  myMoves.enemyAttackedSquares = GenerateAttackedSquares<~c_my>(pos, pos.All() ^ pos.piece<c_my, KING>());
 
   KingAttackers<c_my>(pos, myMoves);
 
@@ -519,21 +517,12 @@ CapturesExistInPosition(const ChessBoard& pos)
   if (pos.color == WHITE)
   {
     attackMask |= PawnAttackSquares<WHITE>(pos);
-    attackMask |= AttackedSquaresGen<WHITE, BISHOP>(pos, occupied);
-    attackMask |= AttackedSquaresGen<WHITE, KNIGHT>(pos, occupied);
-    attackMask |= AttackedSquaresGen<WHITE, ROOK  >(pos, occupied);
-    attackMask |= AttackedSquaresGen<WHITE, QUEEN >(pos, occupied);
-    attackMask |= AttackedSquaresGen<WHITE, KING  >(pos, occupied);
-
+    attackMask |= AttackedSquaresGen<WHITE, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
     return (attackMask & pos.piece<BLACK, ALL>()) != 0;
   }
 
   attackMask |= PawnAttackSquares<BLACK>(pos);
-  attackMask |= AttackedSquaresGen<BLACK, BISHOP>(pos, occupied);
-  attackMask |= AttackedSquaresGen<BLACK, KNIGHT>(pos, occupied);
-  attackMask |= AttackedSquaresGen<BLACK, ROOK  >(pos, occupied);
-  attackMask |= AttackedSquaresGen<BLACK, QUEEN >(pos, occupied);
-  attackMask |= AttackedSquaresGen<BLACK, KING  >(pos, occupied);
+  attackMask |= AttackedSquaresGen<BLACK, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
 
   return (attackMask & pos.piece<WHITE, ALL>()) != 0;
 }
@@ -556,6 +545,63 @@ QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
       if (pt != QUEEN)
         return true;
     }
+  }
+
+  return false;
+}
+
+template<Color c_my, PieceType pt, PieceType... rest>
+Square
+isTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
+{
+  Bitboard piece = pos.piece<c_my, pt>();
+  while (piece)
+  {
+    Square pieceSq = NextSquare(piece);
+    Bitboard  mask = LegalSquares<pt>(pieceSq, pos.piece<c_my, ALL>(), pos.All());
+
+    if (((1ULL << pieceSq) & enemyAttackedSquares) and (mask & enemyAttackedSquares) == mask and !(mask & (1ULL << pieceSq)))
+      return pieceSq;
+  }
+
+  if constexpr (sizeof...(rest) > 0)
+    return isTrapped<c_my, rest...>(pos, enemyAttackedSquares);
+
+  return SQUARE_NB;
+}
+
+bool
+PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB)
+{
+  const Square square = pos.color == WHITE
+    ? isTrapped<WHITE, QUEEN, ROOK, BISHOP, KNIGHT>(pos, enemyAttackedBB)
+    : isTrapped<BLACK, QUEEN, ROOK, BISHOP, KNIGHT>(pos, enemyAttackedBB);
+
+  if (square != SQUARE_NB)
+  {
+    Bitboard myAttackedSquares = (pos.color == WHITE)
+    ? GenerateAttackedSquares<WHITE>(pos, pos.All()) : GenerateAttackedSquares<BLACK>(pos, pos.All());
+
+    Weight maxValueCapture = 0;
+
+    for (PieceType pt = PAWN; pt < KING; pt = PieceType(pt + 1))
+      if (pos.get_piece(~pos.color, pt) & myAttackedSquares)
+        maxValueCapture = pos.PieceValue(pt);
+
+    Weight trappedPieceValue = pos.PieceValue(type_of(pos.PieceOnSquare(square)));
+
+    if (maxValueCapture >= trappedPieceValue)
+      return false;
+
+    if ((1ULL << square) & myAttackedSquares)
+    {
+      Square  eptSq = GetSmallestAttacker(pos, square, ~pos.color, 0);
+      PieceType ept = type_of(pos.PieceOnSquare(eptSq));
+      if (((1ULL << eptSq) & myAttackedSquares) or (pos.PieceValue(ept) >= trappedPieceValue))
+        return false;
+    }
+
+    return true;
   }
 
   return false;

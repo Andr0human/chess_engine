@@ -73,7 +73,8 @@ int
 SearchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
-  int numExtensions
+  int numExtensions,
+  Depth depth
 )
 {
   const size_t moveCount = myMoves.countMoves();
@@ -86,10 +87,9 @@ SearchExtension(
 
   // if queen trapped and attacked by minor piece, add 1
   if (
+    (depth == 1) and
     (myMoves.checkers == 0) and
-    ((pos.get_piece(pos.color, QUEEN) & myMoves.pinnedPiecesSquares ) == 0) and
-    ((pos.get_piece(pos.color, QUEEN) & myMoves.enemyAttackedSquares) != 0) and
-    QueenTrapped(pos, myMoves.enemyAttackedSquares)
+    PieceTrapped(pos, myMoves.enemyAttackedSquares)
   ) return 1;
   
   return 0;
