@@ -593,7 +593,7 @@ ChessBoard::Reset()
 {
   for (Square i = SQ_A1; i < SQUARE_NB; ++i) board[i] = NO_PIECE;
   for (int i = 0; i < 16; i++) piece_bb[i] = 0, piece_ct[i] = 0;
-  csep = 0;
+  csep = 64;
   Hash_Value = 0;
   undoInfoStackCounter = 0;
   color = Color::WHITE;

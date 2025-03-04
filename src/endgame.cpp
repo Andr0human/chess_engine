@@ -5,7 +5,7 @@
 using plt::PassedPawnMasks;
 
 
-// TODO: KRRK, KRNK, KBPK
+// TODO: KRRK, KRNK
 
 static int
 ChebyshevDistance(Square s1, Square s2)
@@ -115,7 +115,7 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
 
   if ((side2move == emySide) and
       (pawn & Rank2to6[side]) and
-      (side == WHITE ? myKingR <= pawnR - incFactor : myKingR + 1 >= pawnR) and
+      (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
       (PassedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
@@ -127,7 +127,7 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
 
   if ((side2move == side) and
       (pawn & Rank3to5[side]) and
-      (side == WHITE ? myKingR <= pawnR - incFactor : myKingR + 1 >= pawnR) and
+      (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
       (PassedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
@@ -137,11 +137,13 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
     ) return true;
 
   if ((pawnSq + 8 * incFactor == emyKingSq) and
+      (pawn & (AllSquares ^ FileAH)) and
       ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
       ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
     ) return true;
 
-  if (((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
+  if ((pawn & (AllSquares ^ FileAH)) and
+      ((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
       ((pawnSq + 16 * incFactor == emyKingSq) and
       ((pos.color == emySide)))
     ) return true;
