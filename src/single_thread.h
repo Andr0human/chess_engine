@@ -7,6 +7,7 @@
 #include "movegen.h"
 #include "search.h"
 #include "evaluation.h"
+#include "endgame.h"
 
 
 typedef int (*ReductionFunc)(Depth depth, size_t move_no);

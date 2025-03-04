@@ -210,7 +210,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   if (pawn & FileAH)
   {
     if ((pos.get_piece(emySide, KING) & pawnMask)
-    and (pos.get_piece(side, KING) & ~plt::LineMasks[pawnSq])) return true;
+    and (pos.get_piece(side, KING) & ~pawnMask)) return true;
   }
 
   return false;

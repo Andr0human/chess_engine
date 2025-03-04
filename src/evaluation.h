@@ -55,9 +55,6 @@ class EvalData
 	{ return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
-bool
-isTheoreticalDraw(const ChessBoard& pos);
-
 template <bool debug=false>
 Score
 Threats(const ChessBoard& pos);
