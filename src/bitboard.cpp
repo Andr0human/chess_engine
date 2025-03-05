@@ -70,6 +70,7 @@ ChessBoard::SetPositionWithFen(const string& fen) noexcept
 
   // Extracting which color to play
   color = Color(int(elements[1][0]) & 1);
+  csep = 0;
 
   // Extracting castle-info
   for (char ch : elements[2])

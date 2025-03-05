@@ -9,13 +9,23 @@
 
 typedef Bitboard (*ShifterFunc)(Bitboard val, int shift);
 
+typedef Square (*NextSquareFunc)(Bitboard& __x);
+
 // Returns and removes the LsbIndex
 inline Square
-NextSquare(uint64_t& __x)
+NextSquare(Bitboard& __x)
 {
-    Square res = Square(__builtin_ctzll(__x));
+    int res = __builtin_ctzll(__x);
     __x &= __x - 1;
-    return res;
+    return Square(res);
+}
+
+inline Square
+NextSquareMsb(Bitboard& __x)
+{
+    int res = __builtin_clzll(__x);
+    __x &= (1ULL << (63 - res)) - 1;
+    return Square(63 - res);
 }
 
 
