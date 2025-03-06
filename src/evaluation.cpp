@@ -2,6 +2,7 @@
 #include "evaluation.h"
 #include "attacks.h"
 #include "base_utils.h"
+#include "types.h"
 
 using std::abs;
 using std::min;
@@ -528,9 +529,18 @@ LoneKingEndGame(const ChessBoard& pos)
 
   Score distanceScore = DistanceBetweenKingsScore(pos);
   Score parityScore   = BishopColorCornerScore<winningSide>(pos);
-  Score centreScore   = LoneKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor
-                      + LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
+  Score centreScore   = LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
   Score materialScore = MaterialDiffereceEndGame(pos);
+
+  if (pos.count<BISHOP>() == 1 and pos.count<KNIGHT>() == 1)
+  {
+    int isWhite = bool(pos.piece<winningSide, BISHOP>() & WhiteSquares);
+
+    Score a = 14 - Distance(lostKingSq, SQ_A1 + (7 * isWhite));
+    Score b = 14 - Distance(lostKingSq, SQ_H8 - (7 * isWhite));
+
+    centreScore += ((1 << a) + (1 << b)) >> 4;
+  }
 
   Score score = materialScore + distanceScore + parityScore + centreScore;
 
@@ -671,7 +681,7 @@ Evaluate(const ChessBoard& pos)
   }
 
   // Special Piece EndGames
-  if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
+  if ((pos.count<PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
   {
     Score score = (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE, debug>(pos) : LoneKingEndGame<BLACK, debug>(pos);
     return score * side2move;
