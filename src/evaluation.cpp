@@ -461,41 +461,6 @@ DistanceBetweenKingsScore(const ChessBoard& pos)
   return score;
 }
 
-template <Color winningSide>
-static Score
-BishopColorCornerScore(const ChessBoard& pos)
-{
-  Bitboard bishops   = pos.piece<  winningSide, BISHOP>();
-  Bitboard won_king  = pos.piece<  winningSide, KING  >();
-  Bitboard lost_king = pos.piece< ~winningSide, KING  >();
-
-  if (PopCount(bishops) != 1)
-    return VALUE_ZERO;
-
-  Score score = VALUE_ZERO;
-
-  Bitboard endSquares =
-    ((bishops & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
-  | ((bishops & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
-
-
-  Bitboard whiteEnd = (1ULL << SQ_A8) | (1ULL << SQ_H1);
-  Bitboard blackEnd = (1ULL << SQ_A1) | (1ULL << SQ_H8);
-
-  Bitboard whiteDangerSquare = (1ULL << SQ_C6) | (1ULL << SQ_F3);
-  Bitboard blackDangerSquare = (1ULL << SQ_C3) | (1ULL << SQ_F6);
-
-  Score correctSideForCheckmateScore = 520;
-
-  if ((endSquares & lost_king) != 0)
-    score += correctSideForCheckmateScore * (2 * winningSide - 1);
-
-  if ((((lost_king & whiteEnd) != 0) and ((won_king & whiteDangerSquare) != 0))
-   or (((lost_king & blackEnd) != 0) and ((won_king & blackDangerSquare) != 0))) score -= 372 * (2 * winningSide - 1);
-
-  return score;
-}
-
 template <Color winningSide, bool debug>
 static Score
 LoneKingEndGame(const ChessBoard& pos)
@@ -528,7 +493,6 @@ LoneKingEndGame(const ChessBoard& pos)
   Score  losingSideCorrectionFactor = 2 *  losingSide - 1;
 
   Score distanceScore = DistanceBetweenKingsScore(pos);
-  Score parityScore   = BishopColorCornerScore<winningSide>(pos);
   Score centreScore   = LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
   Score materialScore = MaterialDiffereceEndGame(pos);
 
@@ -539,10 +503,10 @@ LoneKingEndGame(const ChessBoard& pos)
     Score a = 14 - Distance(lostKingSq, SQ_A1 + (7 * isWhite));
     Score b = 14 - Distance(lostKingSq, SQ_H8 - (7 * isWhite));
 
-    centreScore += ((1 << a) + (1 << b)) >> 4;
+    centreScore += (((1 << a) + (1 << b)) >> 2) * winningSideCorrectionFactor;
   }
 
-  Score score = materialScore + distanceScore + parityScore + centreScore;
+  Score score = materialScore + distanceScore + centreScore;
 
   if (debug)
   {
@@ -550,12 +514,8 @@ LoneKingEndGame(const ChessBoard& pos)
     cout << "winningSideCorrectionFactor = " << winningSideCorrectionFactor << endl;
     cout << "losingSideCorrectionFactor  = " <<  losingSideCorrectionFactor << endl;
 
-    cout << "centreScoreWinning = " << (LoneKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor) << endl;
-    cout << "centreScoreLosing  = " << (LoneKingLosingEndGameTable[lostKingSq] *  losingSideCorrectionFactor) << endl;
-
     cout << "MaterialScore = " << materialScore << endl;
     cout << "DistanceScore = " << distanceScore << endl;
-    cout << "ParityScore   = " << parityScore   << endl;
     cout << "CentreScore   = " << centreScore   << endl;
     cout << "score         = " << score         << endl;
   }
