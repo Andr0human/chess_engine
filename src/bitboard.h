@@ -234,6 +234,9 @@ class ChessBoard
     if ((p & 7) != KING)
       piece_ct[(p & 8) + 7]--;
   }
+
+  Weight PieceValue(PieceType pt) const noexcept
+  { return pieceValues[pt - 1]; }
 };
 
 
