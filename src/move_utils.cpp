@@ -320,10 +320,10 @@ void
 MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
 {
   if (pos.color == WHITE)
-    getMovesImpl<captures, quiet, checks, NextSquare>(pos, myMoves);
-  else
     getMovesImpl<captures, quiet, checks, NextSquareMsb>(pos, myMoves);
-}
+  else
+    getMovesImpl<captures, quiet, checks, NextSquare>(pos, myMoves);
+} 
 
 void
 DecodeMove(Move move)
