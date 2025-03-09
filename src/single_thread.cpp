@@ -1,6 +1,5 @@
 
 #include "single_thread.h"
-#include "search.h"
 
 uint64_t
 BulkCount(ChessBoard& _cb, Depth depth)
