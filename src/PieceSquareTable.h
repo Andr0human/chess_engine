@@ -24,7 +24,6 @@ extern ScoreTable WhiteKingMidGameTable;
 extern ScoreTable BlackKingMidGameTable;
 extern ScoreTable      KingEndGameTable;
 
-extern ScoreTable LoneKingWinningEndGameTable;
 extern ScoreTable  LoneKingLosingEndGameTable;
 
 
