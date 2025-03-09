@@ -3,7 +3,7 @@
 #include "attacks.h"
 
 
-template <MoveType mt, bool checks>
+template <MoveType mt, bool checks, NextSquareFunc nextSquare>
 void
 MoveList::FillMoves(
   const ChessBoard& pos,
@@ -17,7 +17,7 @@ MoveList::FillMoves(
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Move move = baseMove | typeBit | (fp << 6);
 
     if (mt == CAPTURES)
@@ -30,7 +30,7 @@ MoveList::FillMoves(
   }
 }
 
-template <MoveType mt, bool checks>
+template <MoveType mt, bool checks, NextSquareFunc nextSquare>
 void
 MoveList::FillKingMoves(
   const ChessBoard& pos,
@@ -44,7 +44,7 @@ MoveList::FillKingMoves(
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Move move = baseMove | typeBit | (fp << 6);
 
     if (mt == CAPTURES)
@@ -66,7 +66,7 @@ MoveList::FillKingMoves(
   }
 }
 
-template <bool checks>
+template <bool checks, NextSquareFunc nextSquare>
 void
 MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept
 {
@@ -77,7 +77,7 @@ MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const
 
   while (epPawns > 0)
   {
-    Square ip = NextSquare(epPawns);
+    Square ip = nextSquare(epPawns);
     Move move = typeBit | (colorBit) | (PAWN << 12) | (fp << 6) | ip;
 
     if (checks)
@@ -102,7 +102,7 @@ MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const
   }
 }
 
-template <MoveType mt, bool checks>
+template <MoveType mt, bool checks, NextSquareFunc nextSquare>
 void
 MoveList::FillShiftPawns(
   const ChessBoard& pos,
@@ -116,7 +116,7 @@ MoveList::FillShiftPawns(
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Square ip = fp + shift;
 
     Move move = baseMove | (fp << 6) | ip;
@@ -133,7 +133,7 @@ MoveList::FillShiftPawns(
   }
 }
 
-template <MoveType mt, bool checks>
+template <MoveType mt, bool checks, NextSquareFunc nextSquare>
 void
 MoveList::FillPawns(
   const ChessBoard& pos,
@@ -148,7 +148,7 @@ MoveList::FillPawns(
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Move move = baseMove | typeBit | (fp << 6);
     Bitboard fPos = 1ULL << fp;
 
@@ -232,9 +232,9 @@ MoveList::countMoves() const noexcept
   return moveCount;
 }
 
-template<bool captures, bool quiet, bool checks>
+template<bool captures, bool quiet, bool checks, NextSquareFunc nextSquare>
 void
-MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
+MoveList::getMovesImpl(const ChessBoard& pos, MoveArray& myMoves) const noexcept
 {
   const int colorBit = color << 22;
 
@@ -248,18 +248,18 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
   {
     if (captures)
     {
-      FillShiftPawns<CAPTURES, checks>(pos, myMoves, pawnDestSquares[0], 7 - 16 * color);
-      FillShiftPawns<CAPTURES, checks>(pos, myMoves, pawnDestSquares[1], 9 - 16 * color);
+      FillShiftPawns<CAPTURES, checks, nextSquare>(pos, myMoves, pawnDestSquares[0], 7 - 16 * color);
+      FillShiftPawns<CAPTURES, checks, nextSquare>(pos, myMoves, pawnDestSquares[1], 9 - 16 * color);
     }
     if (quiet)
     {
-      FillShiftPawns<NORMAL, checks>(pos, myMoves, pawnDestSquares[2], 16 - 32 * color);
-      FillShiftPawns<NORMAL, checks>(pos, myMoves, pawnDestSquares[3],  8 - 16 * color);
+      FillShiftPawns<NORMAL, checks, nextSquare>(pos, myMoves, pawnDestSquares[2], 16 - 32 * color);
+      FillShiftPawns<NORMAL, checks, nextSquare>(pos, myMoves, pawnDestSquares[3],  8 - 16 * color);
     }
 
     while (pawnMask > 0)
     {
-      Square ip = NextSquare(pawnMask);
+      Square ip = nextSquare(pawnMask);
       PieceType ipt = type_of(pos.PieceOnSquare(ip));
       Move baseMove = colorBit | (ipt << 12) | ip;
 
@@ -268,19 +268,19 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
       Bitboard quietSquares = finalSquares ^ captSquares;
 
       if (captures)
-        FillPawns<CAPTURES, checks>(pos, myMoves,  captSquares, baseMove);
+        FillPawns<CAPTURES, checks, nextSquare>(pos, myMoves,  captSquares, baseMove);
 
       if (quiet)
-        FillPawns<NORMAL  , checks>(pos, myMoves, quietSquares, baseMove);
+        FillPawns<NORMAL  , checks, nextSquare>(pos, myMoves, quietSquares, baseMove);
     }
   }
 
   if (captures)
-    FillEnpassantPawns<checks>(pos, myMoves);
+    FillEnpassantPawns<checks, nextSquare>(pos, myMoves);
 
   while (pieceMask > 0)
   {
-    Square     ip = NextSquare(pieceMask);
+    Square     ip = nextSquare(pieceMask);
     PieceType ipt = type_of(pos.PieceOnSquare(ip));
     Move baseMove = colorBit | (ipt << 12) | ip;
 
@@ -292,10 +292,10 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
     Bitboard quietSquares = finalSquares ^ captSquares;
 
     if (captures)
-      FillMoves<CAPTURES, checks>(pos, myMoves, captSquares, baseMove);
+      FillMoves<CAPTURES, checks, nextSquare>(pos, myMoves, captSquares, baseMove);
 
     if (quiet)
-      FillMoves<NORMAL  , checks>(pos, myMoves, quietSquares, baseMove);
+      FillMoves<NORMAL  , checks, nextSquare>(pos, myMoves, quietSquares, baseMove);
   }
 
   if (kingMask)
@@ -308,12 +308,22 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
     Bitboard quietSquares = finalSquares ^ captSquares;
 
     if (captures)
-      FillKingMoves<CAPTURES, checks>(pos, myMoves, captSquares, baseMove);
+      FillKingMoves<CAPTURES, checks, nextSquare>(pos, myMoves, captSquares, baseMove);
 
     if (quiet)
-      FillKingMoves<NORMAL  , checks>(pos, myMoves, quietSquares, baseMove);
+      FillKingMoves<NORMAL  , checks, nextSquare>(pos, myMoves, quietSquares, baseMove);
   }
 }
+
+template<bool captures, bool quiet, bool checks>
+void
+MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
+{
+  if (pos.color == WHITE)
+    getMovesImpl<captures, quiet, checks, NextSquareMsb>(pos, myMoves);
+  else
+    getMovesImpl<captures, quiet, checks, NextSquare>(pos, myMoves);
+} 
 
 void
 DecodeMove(Move move)

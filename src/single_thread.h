@@ -28,7 +28,8 @@ Search(
   ChessBoard primary,
   Depth mDepth = MAX_DEPTH,
   double search_time = DEFAULT_SEARCH_TIME,
-  std::ostream& ostream = std::cout
+  std::ostream& ostream = std::cout,
+  bool debug = true
 );
 
 /**

@@ -3,6 +3,7 @@
 #include "move_utils.h"
 #include "search.h"
 #include "single_thread.h"
+#include "types.h"
 
 void
 Init()

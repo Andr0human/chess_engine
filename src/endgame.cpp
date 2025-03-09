@@ -5,7 +5,7 @@
 using plt::PassedPawnMasks;
 
 
-// TODO: KRRK, KRNK, KBPK
+// TODO: KRRK, KRNK
 
 static int
 ChebyshevDistance(Square s1, Square s2)

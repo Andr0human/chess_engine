@@ -306,13 +306,14 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
 }
 
 void
-Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
+Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer, bool debug)
 {
   ResetPvLine();
 
   if (GenerateMoves(board).countMoves() == 0)
   {
-    writer << "Position has no legal moves! Discarding Search." << endl;
+    if (debug)
+      writer << "Position has no legal moves! Discarding Search." << endl;
     return;
   }
 
@@ -322,7 +323,8 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
   Score alpha = -VALUE_INF, beta = VALUE_INF;
   int valWindowCnt = 0;
 
-  info.ShowHeader(writer);
+  if (debug)
+    info.ShowHeader(writer);
 
   for (Depth depth = 1; depth <= mDepth;)
   {
@@ -348,7 +350,8 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
       valWindowCnt = 0;
 
       info.AddResult(board, eval, pvArray);
-      info.ShowLastDepthResult(board, writer);
+      if (debug)
+        info.ShowLastDepthResult(board, writer);
       info.ResetNodeCount();
 
       depth++;
@@ -362,5 +365,6 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
   }
 
   info.SearchCompleted();
-  writer << "Search Done!" << endl;
+  if (debug)
+    writer << "Search Done!" << endl;
 }

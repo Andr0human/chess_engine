@@ -3,6 +3,7 @@
 #define MOVE_UTILS_H
 
 #include <iomanip>
+#include "attacks.h"
 #include "bitboard.h"
 #include "varray.h"
 
@@ -73,7 +74,7 @@ class MoveList
 
   private:
 
-  template <MoveType mt, bool checks>
+  template <MoveType mt, bool checks, NextSquareFunc nextSquare>
   void
   FillMoves(
     const ChessBoard& pos,
@@ -82,11 +83,11 @@ class MoveList
     Move baseMove
   ) const noexcept;
 
-  template <bool checks>
+  template <bool checks, NextSquareFunc nextSquare>
   void
   FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
 
-  template <MoveType mt, bool checks>
+  template <MoveType mt, bool checks, NextSquareFunc nextSquare>
   void
   FillShiftPawns(
     const ChessBoard& pos,
@@ -95,7 +96,7 @@ class MoveList
     int shift
   ) const noexcept;
 
-  template <MoveType mt, bool checks>
+  template <MoveType mt, bool checks, NextSquareFunc nextSquare>
   void
   FillPawns(
     const ChessBoard& pos,
@@ -104,7 +105,7 @@ class MoveList
     Move baseMove
   ) const noexcept;
 
-  template <MoveType mt, bool checks>
+  template <MoveType mt, bool checks, NextSquareFunc nextSquare>
   void
   FillKingMoves(
     const ChessBoard& pos,
@@ -112,6 +113,10 @@ class MoveList
     Bitboard endSquares,
     Move baseMove
   ) const noexcept;
+
+  template<bool captures, bool quiet, bool checks, NextSquareFunc nextSquare>
+  void
+  getMovesImpl(const ChessBoard& pos, MoveArray& myMoves) const noexcept;
 };
 
 
