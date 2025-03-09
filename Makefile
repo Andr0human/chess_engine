@@ -8,7 +8,7 @@ CXX = g++
 
 # define any compile-time flags
 ifeq ($(OS),Windows_NT)
-CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=1 -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
 else
 CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
 endif
