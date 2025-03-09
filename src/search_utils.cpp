@@ -31,6 +31,15 @@ LmrOk(Move move, Depth depth, size_t moveNo)
 }
 
 bool
+NmpOk(const MoveList& myMoves, Depth depth)
+{
+  if (depth < 3) return false;
+  if (myMoves.checkers > 0) return false;
+
+  return true;
+}
+
+bool
 InterestingMove(Move move)
 {
   if (is_type<CAPTURES>(move) or is_type<PROMOTION>(move) or is_type<CHECK>(move))

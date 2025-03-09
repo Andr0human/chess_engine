@@ -41,6 +41,9 @@ InterestingMove(Move move);
 bool
 LmrOk(Move move, Depth depth, size_t moveNo);
 
+bool
+NmpOk(const MoveList& myMoves, Depth depth);
+
 int
 SearchExtension(
   const ChessBoard& pos,

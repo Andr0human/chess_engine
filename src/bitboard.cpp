@@ -573,19 +573,23 @@ ChessBoard::GenerateHashkey() const
 void
 ChessBoard::MakeNullMove()
 {
+  UndoInfoPush(NONE, NONE, NULL_MOVE, true);
+
   csep = (csep & 1920) ^ 64;
-  // Hash_Value ^= TT.HashIndex[0];
+  ++halfmove;
+
+  if (useTT)
+    Hash_Value ^= TT.HashKey(0);
+
   color = ~color;
 }
 
 void
 ChessBoard::UnmakeNullMove()
 {
-  // Update to not use t_csep form external source
-  // csep = t_csep;
-  // Hash_Value ^= TT.HashIndex[0];
+  if (undoInfoStackCounter <= 0) return;
+  UndoInfoPop();
   color = ~color;
-  // moveInvert(0, t_csep, t_HashVal);
 }
 
 void
