@@ -54,14 +54,12 @@ OUTPUTMAIN	:= $(call FIXPATH,$(OUTPUT)/$(MAIN))
 
 default: help
 
-elsa: $(OUTPUT) $(MAIN)
-	@echo Executing 'elsa' complete!
-
 $(OUTPUT):
 	$(MD) $(OUTPUT)
 
-$(MAIN): $(OBJECTS) 
+$(MAIN): $(OUTPUT) $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(OUTPUTMAIN)
+	@echo Executing '$(MAIN)' complete!
 
 
 # this is a suffix replacement rule for building .o's from .c's
