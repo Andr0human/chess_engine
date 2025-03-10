@@ -502,7 +502,7 @@ LoneKingEndGame(const ChessBoard& pos)
     Score a = 14 - Distance(lostKingSq, SQ_A1 + (7 * isWhite));
     Score b = 14 - Distance(lostKingSq, SQ_H8 - (7 * isWhite));
 
-    centreScore += (((1 << a) + (1 << b)) >> 2) * winningSideCorrectionFactor;
+    centreScore += (((1 << a) + (1 << b)) / 3) * winningSideCorrectionFactor;
   }
 
   Score score = materialScore + distanceScore + centreScore;
