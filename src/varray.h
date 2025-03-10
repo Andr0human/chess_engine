@@ -3,6 +3,7 @@
 #define VARRAY_H
 
 #include <array>
+#include <cstddef>
 
 using std::array;
 
