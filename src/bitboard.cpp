@@ -237,7 +237,7 @@ ChessBoard::MakeMove(Move move, bool in_search) noexcept
     }
 
     if (IsCastling(ip, fp))
-      return MakeMoveCastling(ip, fp, 1);
+      return MakeMoveCastling<true>(ip, fp);
   }
 
   if (fpt != NO_PIECE)
@@ -381,8 +381,8 @@ ChessBoard::MakeMovePawnPromotion(Move move) noexcept
   }
 }
 
-void
-ChessBoard::MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexcept
+template <bool makeMoveCall>
+void ChessBoard::MakeMoveCastling(Square ip, Square fp) noexcept
 {
   int own = int(color) << 3;
 
@@ -392,7 +392,7 @@ ChessBoard::MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexc
   piece_bb[own + 4] ^= rooks_indexes;
   piece_bb[own + 7] ^= rooks_indexes;
 
-  int flask = (!call_from_makemove) * (own + 4);
+  const int flask = int(!makeMoveCall) * (own + 4);
 
   if (fp > ip)
   {
@@ -405,7 +405,7 @@ ChessBoard::MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexc
     board[ip - 1] = Piece((own + 4) ^ flask);
   }
 
-  if (call_from_makemove)
+  if constexpr (makeMoveCall)
   {
     piece_bb[own + 6] ^= (1ULL << ip) ^ (1ULL << fp);
     piece_bb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
@@ -488,7 +488,7 @@ ChessBoard::UnmakeMove() noexcept
   }
 
   if ((it == KING) and IsCastling(ip, fp))
-    return MakeMoveCastling(ip, fp, 0);
+    return MakeMoveCastling<false>(ip, fp);
 }
 
 
