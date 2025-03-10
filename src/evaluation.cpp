@@ -481,9 +481,7 @@ LoneKingEndGame(const ChessBoard& pos)
     * if the bishop is black, focus on bringing the losing side
     * king to black corner.
   **/
-  // Note : Failed so far
 
-  // Color winningSide = (pos.pieceCount<WHITE, PAWN>() + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
   constexpr Color losingSide  = ~winningSide;
 
   Square lostKingSq = SquareNo( pos.piece<losingSide , KING>() );
