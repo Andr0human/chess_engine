@@ -68,8 +68,14 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-  for (const Move capture_move : movesArray)
+  const size_t LMP_THRESHOLD = movesArray.size() < 4 ? 1 : 3;
+
+  for (size_t moveNo = 0; moveNo < movesArray.size(); ++moveNo)
   {
+    Move capture_move = movesArray[moveNo];
+    if (moveNo >= LMP_THRESHOLD and SeeScore(pos, capture_move) < 0)
+      continue;
+
     pos.MakeMove(capture_move);
     Score score = -QuiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
     pos.UnmakeMove();
