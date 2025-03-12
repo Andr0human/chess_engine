@@ -596,7 +596,7 @@ PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB)
     {
       Square  eptSq = GetSmallestAttacker(pos, square, ~pos.color, 0);
       PieceType ept = type_of(pos.PieceOnSquare(eptSq));
-      if (((1ULL << eptSq) & myAttackedSquares) or (pos.PieceValue(ept) >= trappedPieceValue))
+      if (((1ULL << eptSq) & myAttackedSquares) or (pos.PieceValue(ept) + PawnValueMg >= trappedPieceValue))
         return false;
     }
 
