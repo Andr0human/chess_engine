@@ -1,13 +1,12 @@
 
 #include "attacks.h"
-#include "base_utils.h"
 #include "movegen.h"
 
 
 #ifndef MOVEGEN_UTILS
 
 bool
-IsLegalMoveForPosition(Move move, ChessBoard& pos)
+IsLegalMoveForPosition(Move move, const ChessBoard& pos)
 {
   // TODO: Add pseudo checks and test it
   Square ip = Square(move & 63);
@@ -269,7 +268,7 @@ AddLegalSquares(const ChessBoard& pos, MoveList& myMoves)
 
 template <Color c_my, ShifterFunc shift>
 static void
-PieceMovement(ChessBoard& _cb, MoveList& myMoves)
+PieceMovement(const ChessBoard& _cb, MoveList& myMoves)
 {
   myMoves.pinnedPiecesSquares  = PinnedPiecesList<c_my>(_cb, myMoves);
 
@@ -332,7 +331,7 @@ AddAttacker(const ChessBoard& pos, int& attackerCount, Bitboard& attackedMask)
 
 template <Color c_my>
 static void
-KingAttackers(ChessBoard& _cb, MoveList& myMoves)
+KingAttackers(const ChessBoard& _cb, MoveList& myMoves)
 {
   Bitboard attacked_sq = myMoves.enemyAttackedSquares;
   constexpr Color c_emy = ~c_my;
@@ -478,7 +477,7 @@ GenerateSquaresThatCheckEnemyKing(const ChessBoard& pos, MoveList& myMoves)
 
 template <Color c_my, ShifterFunc shift>
 static inline MoveList
-MoveGenerator(ChessBoard& pos, bool generateChecksData)
+MoveGenerator(const ChessBoard& pos, bool generateChecksData)
 {
   MoveList myMoves(c_my);
 
@@ -503,7 +502,7 @@ MoveGenerator(ChessBoard& pos, bool generateChecksData)
 
 
 MoveList
-GenerateMoves(ChessBoard& pos, bool generateChecksData)
+GenerateMoves(const ChessBoard& pos, bool generateChecksData)
 {
   return pos.color == WHITE ?
     MoveGenerator<WHITE,  LeftShift>(pos, generateChecksData)

@@ -3,11 +3,14 @@
 #define VARRAY_H
 
 #include <array>
+#include <cstddef>
 
-template <typename T, std::size_t Nm>
+using std::array;
+
+template <typename T, size_t Nm>
 class Varray {
-  std::size_t Nc;
-  std::array<T, Nm> _array;
+  size_t Nc;
+  array<T, Nm> _array;
  
   public:
 
@@ -16,11 +19,11 @@ class Varray {
   void add(T val) noexcept
   { if (Nc < Nm) _array[Nc++] = val; }
 
-  std::size_t
+  size_t
   size() const noexcept
   { return Nc; }
 
-  std::size_t
+  size_t
   capacity() const noexcept
   { return Nm; }
 
@@ -29,11 +32,11 @@ class Varray {
   { Nc = 0; }
 
   T&
-  operator[](std::size_t index) noexcept
+  operator[](size_t index) noexcept
   { return _array[index]; }
 
   const T&
-  operator[](std::size_t index) const noexcept
+  operator[](size_t index) const noexcept
   { return _array[index]; }
 
   const T&
