@@ -263,6 +263,20 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     numExtensions += extensions;
   }
 
+  if constexpr (useNMP) {
+    if (NmpOk(myMoves, depth))
+    {
+      const int R = 3 + depth / 4;
+
+      pos.MakeNullMove();
+      Score nullEval = -AlphaBeta(pos, depth - R - 1, -beta, -beta + 1, ply + 1, pvIndex, numExtensions);
+      pos.UnmakeNullMove();
+  
+      if (nullEval >= beta)
+        return beta;
+    }
+  }
+
   Flag hashf = Flag::HASH_ALPHA;
 
   PlayAllMoves<Reduction>(pos, myMoves, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);

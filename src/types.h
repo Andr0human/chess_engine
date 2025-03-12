@@ -21,6 +21,7 @@ enum SearchTechnique: bool
   useLMR = true,
   useExtensions = true,
   useMoveOrder = true,
+  useNMP = true,
 };
 
 enum Color: int
