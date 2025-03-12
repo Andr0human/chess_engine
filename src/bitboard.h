@@ -90,8 +90,9 @@ class ChessBoard
   void
   MakeMovePawnPromotion(Move move) noexcept;
 
+  template <bool makeMoveCall>
   void
-  MakeMoveCastling(Square ip, Square fp, int call_from_makemove) noexcept;
+  MakeMoveCastling(Square ip, Square fp) noexcept;
 
   public:
 

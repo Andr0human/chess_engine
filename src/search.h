@@ -2,11 +2,13 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
+#include <iomanip>
 #include "perf.h"
 #include "varray.h"
 #include "bitboard.h"
 #include "movegen.h"
 #include "search_utils.h"
+#include "move_utils.h"
 
 using std::pair;
 using std::make_pair;

@@ -1,7 +1,7 @@
 #ifndef SEARCH_UTILS_H
 #define SEARCH_UTILS_H
 
-#include "move_utils.h"
+#include "movelist.h"
 
 
 extern Move pvArray[MAX_PV_ARRAY_SIZE];

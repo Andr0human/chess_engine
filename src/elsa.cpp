@@ -1,15 +1,11 @@
 #include "task.h"
 
 
-//* TODO Search
-// Prioritise Passed Pawns in Move Reordering ("5k2/R7/2p2N2/2P3P1/p7/3p2KP/P7/1r6 w - - 0 42")
-
 //* TODO EndGame
 // Endgame tests fen
 // Add insufficient material draw(Two minor piece vs one minor piece is a drawish)
-// (Bishop | Knight vs Pawn) if the piece can capture the pawn
+// (Knight vs Pawn) if the piece can capture the pawn
 // (Queen vs B/R/N) Endgame
-// Pawn Race (8/5ppk/7p/8/P7/8/1K6/8 w - - 0 1)
 
 //* TODO Search Extension
 // If promotion is possible and no enemy piece can capture it. (3k4/8/5N2/nR6/3P4/p7/1p3PP1/6K1 w - - 0 51)

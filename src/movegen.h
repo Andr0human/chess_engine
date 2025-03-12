@@ -5,7 +5,7 @@
 
 #include "bitboard.h"
 #include "lookup_table.h"
-#include "move_utils.h"
+#include "movelist.h"
 
 /*
 
@@ -27,7 +27,7 @@
 
 
 // Checks if move is valid for given position
-bool IsLegalMoveForPosition(Move move, ChessBoard& pos);
+bool IsLegalMoveForPosition(Move move, const ChessBoard& pos);
 
 /**
  * @brief Returns a list of all the legal moves in current position.
@@ -35,7 +35,7 @@ bool IsLegalMoveForPosition(Move move, ChessBoard& pos);
  * @param pos ChessBoard
  * @param generateChecksData bool
  */
-MoveList GenerateMoves(ChessBoard& pos, bool generateChecksData=false);
+MoveList GenerateMoves(const ChessBoard& pos, bool generateChecksData=false);
 
 
 bool

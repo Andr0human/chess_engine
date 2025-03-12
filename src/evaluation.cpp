@@ -2,6 +2,7 @@
 #include "evaluation.h"
 #include "attacks.h"
 #include "base_utils.h"
+#include "types.h"
 
 using std::abs;
 using std::min;
@@ -460,41 +461,6 @@ DistanceBetweenKingsScore(const ChessBoard& pos)
   return score;
 }
 
-template <Color winningSide>
-static Score
-BishopColorCornerScore(const ChessBoard& pos)
-{
-  Bitboard bishops   = pos.piece<  winningSide, BISHOP>();
-  Bitboard won_king  = pos.piece<  winningSide, KING  >();
-  Bitboard lost_king = pos.piece< ~winningSide, KING  >();
-
-  if (PopCount(bishops) != 1)
-    return VALUE_ZERO;
-
-  Score score = VALUE_ZERO;
-
-  Bitboard endSquares =
-    ((bishops & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
-  | ((bishops & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
-
-
-  Bitboard whiteEnd = (1ULL << SQ_A8) | (1ULL << SQ_H1);
-  Bitboard blackEnd = (1ULL << SQ_A1) | (1ULL << SQ_H8);
-
-  Bitboard whiteDangerSquare = (1ULL << SQ_C6) | (1ULL << SQ_F3);
-  Bitboard blackDangerSquare = (1ULL << SQ_C3) | (1ULL << SQ_F6);
-
-  Score correctSideForCheckmateScore = 520;
-
-  if ((endSquares & lost_king) != 0)
-    score += correctSideForCheckmateScore * (2 * winningSide - 1);
-
-  if ((((lost_king & whiteEnd) != 0) and ((won_king & whiteDangerSquare) != 0))
-   or (((lost_king & blackEnd) != 0) and ((won_king & blackDangerSquare) != 0))) score -= 372 * (2 * winningSide - 1);
-
-  return score;
-}
-
 template <Color winningSide, bool debug>
 static Score
 LoneKingEndGame(const ChessBoard& pos)
@@ -515,24 +481,29 @@ LoneKingEndGame(const ChessBoard& pos)
     * if the bishop is black, focus on bringing the losing side
     * king to black corner.
   **/
-  // Note : Failed so far
 
-  // Color winningSide = (pos.pieceCount<WHITE, PAWN>() + ed.pieces[WHITE] > 0) ? WHITE : BLACK;
   constexpr Color losingSide  = ~winningSide;
 
-  Square  wonKingSq = SquareNo( pos.piece<winningSide, KING>() );
   Square lostKingSq = SquareNo( pos.piece<losingSide , KING>() );
 
   Score winningSideCorrectionFactor = 2 * winningSide - 1;
   Score  losingSideCorrectionFactor = 2 *  losingSide - 1;
 
   Score distanceScore = DistanceBetweenKingsScore(pos);
-  Score parityScore   = BishopColorCornerScore<winningSide>(pos);
-  Score centreScore   = LoneKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor
-                      + LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
+  Score centreScore   = LoneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
   Score materialScore = MaterialDiffereceEndGame(pos);
 
-  Score score = materialScore + distanceScore + parityScore + centreScore;
+  if (pos.count<BISHOP>() == 1 and pos.count<KNIGHT>() == 1)
+  {
+    int isWhite = bool(pos.piece<winningSide, BISHOP>() & WhiteSquares);
+
+    Score a = 14 - Distance(lostKingSq, SQ_A1 + (7 * isWhite));
+    Score b = 14 - Distance(lostKingSq, SQ_H8 - (7 * isWhite));
+
+    centreScore += (((1 << a) + (1 << b)) / 3) * winningSideCorrectionFactor;
+  }
+
+  Score score = materialScore + distanceScore + centreScore;
 
   if (debug)
   {
@@ -540,12 +511,8 @@ LoneKingEndGame(const ChessBoard& pos)
     cout << "winningSideCorrectionFactor = " << winningSideCorrectionFactor << endl;
     cout << "losingSideCorrectionFactor  = " <<  losingSideCorrectionFactor << endl;
 
-    cout << "centreScoreWinning = " << (LoneKingWinningEndGameTable[wonKingSq] * winningSideCorrectionFactor) << endl;
-    cout << "centreScoreLosing  = " << (LoneKingLosingEndGameTable[lostKingSq] *  losingSideCorrectionFactor) << endl;
-
     cout << "MaterialScore = " << materialScore << endl;
     cout << "DistanceScore = " << distanceScore << endl;
-    cout << "ParityScore   = " << parityScore   << endl;
     cout << "CentreScore   = " << centreScore   << endl;
     cout << "score         = " << score         << endl;
   }
@@ -671,7 +638,7 @@ Evaluate(const ChessBoard& pos)
   }
 
   // Special Piece EndGames
-  if ((pos.piece<WHITE, PAWN>() + pos.piece<BLACK, PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
+  if ((pos.count<PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
   {
     Score score = (ed.pieces[WHITE] > 0) ? LoneKingEndGame<WHITE, debug>(pos) : LoneKingEndGame<BLACK, debug>(pos);
     return score * side2move;
