@@ -40,8 +40,8 @@ class ChessBoard
 {
   private:
 
-  constexpr static array<Weight, 5> pieceValues = {
-    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg
+  constexpr static array<Weight, 6> pieceValues = {
+    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg, 25200
   };
 
   array<UndoInfo, 256> undoInfo;
