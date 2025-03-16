@@ -40,10 +40,6 @@ class ChessBoard
 {
   private:
 
-  constexpr static array<Weight, 5> pieceValues = {
-    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg
-  };
-
   array<UndoInfo, 256> undoInfo;
 
   int undoInfoStackCounter;
@@ -95,6 +91,10 @@ class ChessBoard
   MakeMoveCastling(Square ip, Square fp) noexcept;
 
   public:
+
+  constexpr static array<Weight, 6> pieceValues = {
+    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg, 25200
+  };
 
   // White -> 1, Black -> 0
   Color color;

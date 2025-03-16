@@ -29,7 +29,23 @@ size_t
 OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, size_t start)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
-  { return SeeScore(pos, move1) > SeeScore(pos, move2); };
+  {
+    Score see1 = SeeScore(pos, move1);
+    Score see2 = SeeScore(pos, move2);
+
+    int ft1 = (move1 >> 15) & 7;
+    int ft2 = (move2 >> 15) & 7;
+
+    if ((see1 == see2) and ft2)
+    {
+      Weight w1 = (ft1 ? pos.pieceValues[((move1 >> 15) & 7) - 1] : 0) - pos.pieceValues[((move1 >> 12) & 7) - 1];
+      Weight w2 = (ft2 ? pos.pieceValues[((move2 >> 15) & 7) - 1] : 0) - pos.pieceValues[((move2 >> 12) & 7) - 1];
+
+      return w1 > w2;
+    }
+
+    return see1 > see2;
+  };
 
   size_t prevS = start;
 
