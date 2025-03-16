@@ -136,9 +136,8 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
   return eval;
 }
 
-template <ReductionFunc reductionFunction>
 static void
-PlayPartialMoves(
+PlaySubsetMoves(
   ChessBoard& pos, MoveArray& movesArray,
   size_t start, size_t end,
   Score& alpha, Score& beta,
@@ -177,10 +176,11 @@ PlayPartialMoves(
   }
 }
 
-template <ReductionFunc reductionFunction>
+template <int moveGen, MType orderType, MType... rest>
 static void
 PlayAllMoves(
   ChessBoard& pos, MoveList& myMoves,
+  MoveArray movesArray, size_t start,
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
@@ -188,41 +188,24 @@ PlayAllMoves(
 )
 {
   // Set pvArray, for storing the search_tree
-  pvArray[pvIndex] = NULL_MOVE;
-  size_t start = 0, end = 0;
+  if constexpr (moveGen == 0)
+  {
+    pvArray[pvIndex] = NULL_MOVE;
+    myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
+  }
 
-  MoveArray movesArray;
-  myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
+  if constexpr (moveGen == 1)
+    myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
-  end = OrderMoves(pos, movesArray, MType::CAPTURES, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
-  if (hashf == Flag::HASH_BETA)
-    return;
-
-  myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
-
-  start = end;
-  end = OrderMoves(pos, movesArray, MType::PROMOTION, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
-  if (hashf == Flag::HASH_BETA)
-    return;
-
-  start = end;
-  end = OrderMoves(pos, movesArray, MType::CHECK, end);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  size_t end = orderType == MType::QUIET ? movesArray.size() : OrderMoves(pos, movesArray, orderType, start);
+  PlaySubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
-  start = end;
-  end = OrderMoves(pos, movesArray, MType::PV, start);
-  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
-
-  if (hashf == Flag::HASH_BETA)
-    return;
-
-  start = end;
-  PlayPartialMoves<Reduction>(pos, movesArray, start, movesArray.size(), alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  if constexpr (sizeof...(rest) > 0)
+    PlayAllMoves<moveGen + 1, rest...>
+      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 }
 
 Score
@@ -238,19 +221,11 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // Generate moves for current board position
   MoveList myMoves = GenerateMoves(pos, true);
 
-  {
-    // check/stalemate check
-    if (myMoves.countMoves() == 0)
-      return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
+  if (myMoves.countMoves() == 0)
+    return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
 
-    // 3-move repetition check or 50-move-rule-draw
-    if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw())
-      return VALUE_DRAW;
-
-    // check for theoretical drawn position
-    if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
-      return VALUE_DRAW;
-  }
+  if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw() or (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos)))
+    return VALUE_DRAW;
 
   info.AddNode();
 
@@ -270,8 +245,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   }
 
   Flag hashf = Flag::HASH_ALPHA;
-
-  PlayAllMoves<Reduction>(pos, myMoves, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  MoveArray movesArray;
+  PlayAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::QUIET>
+    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if constexpr (useTT) {
     TT.RecordPosition(pos.Hash_Value, depth, alpha, hashf);
