@@ -3,6 +3,7 @@
 #define TYPES_H
 
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 using     Move = uint32_t;
@@ -23,18 +24,18 @@ enum SearchTechnique: bool
   useMoveOrder = true,
 };
 
-enum Color: int
+enum Color: uint8_t
 {
   BLACK, WHITE, COLOR_NB
 };
 
-enum PieceType: int
+enum PieceType: uint8_t
 {
   NONE, PAWN, BISHOP, KNIGHT,
   ROOK, QUEEN, KING, ALL
 };
 
-enum Piece: int
+enum Piece: uint8_t
 {
   NO_PIECE,
   W_PAWN = PAWN,     W_BISHOP, W_KNIGHT, W_ROOK, W_QUEEN, W_KING,
@@ -65,23 +66,13 @@ enum Search
   NULL_MOVE = 0,
 };
 
-enum class Sorts
-{
-  CAPTURES   = 1,
-  PROMOTIONS = 1 << 1,
-  CHECKS     = 1 << 2,
-  PV         = 1 << 3,
-  KILLER     = 1 << 4,
-  QUIET      = 1 << 5
-};
-
-enum class Flag
+enum class Flag: uint8_t
 {
   HASH_EMPTY = 0, HASH_EXACT = 1,
   HASH_ALPHA = 2, HASH_BETA  = 3,
 };
 
-enum class Endgames: uint32_t
+enum class Endgames: uint8_t
 {
   KPK,
   KNK,
@@ -144,7 +135,7 @@ enum Board: Bitboard
   BlackColorCorner = 0xF0E0C0800103070F,
 };
 
-enum Square : int
+enum Square: int8_t
 {
   SQ_A1, SQ_B1, SQ_C1, SQ_D1, SQ_E1, SQ_F1, SQ_G1, SQ_H1,
   SQ_A2, SQ_B2, SQ_C2, SQ_D2, SQ_E2, SQ_F2, SQ_G2, SQ_H2,
@@ -160,16 +151,14 @@ enum Square : int
   SQUARE_NB   = 64
 };
 
-enum MoveType
+enum class MType: uint8_t
 {
-  NORMAL,
-  CAPTURES,
-  PROMOTION,
-  CHECK = 4,
-
-  PV_MOVE = 1 << 29,
-  // Quiescence Move
-  QS_MOVE = 1 << 28,
+  QUIET     = 1,
+  CAPTURES  = 1 << 1,
+  CHECK     = 1 << 2,
+  PROMOTION = 1 << 3,
+  PV = 1 << 4,
+  KILLER = 1 << 5
 };
 
 
@@ -199,6 +188,8 @@ constexpr Square to_sq(Move m)
 constexpr Move filter(Move m)
 { return m & 0x7fffff;}
 
+constexpr Move quiescenceMove()
+{ return Move(1) << (std::numeric_limits<Move>::digits - 1); }
 
 constexpr Square operator+ (Square s, int d)
 { return Square(int(s) + d); }
@@ -218,17 +209,24 @@ constexpr Square operator++ (Square& s)
 constexpr Square operator-- (Square& s)
 { return s = Square(int(s) - 1); }
 
-constexpr Sorts operator|(Sorts lhs, Sorts rhs) {
-  return static_cast<Sorts>(
-    static_cast<std::underlying_type_t<Sorts>>(lhs) |
-    static_cast<std::underlying_type_t<Sorts>>(rhs));
+constexpr MType operator|(MType lhs, MType rhs)
+{
+  return static_cast<MType>(
+    static_cast<std::underlying_type_t<MType>>(lhs) |
+    static_cast<std::underlying_type_t<MType>>(rhs)
+  );
 }
 
-constexpr bool operator&(Sorts lhs, Sorts rhs) {
-  return static_cast<bool>(
-    static_cast<std::underlying_type_t<Sorts>>(lhs) &
-    static_cast<std::underlying_type_t<Sorts>>(rhs));
+constexpr MType operator&(MType lhs, MType rhs)
+{
+  return static_cast<MType>(
+    static_cast<std::underlying_type_t<MType>>(lhs) &
+    static_cast<std::underlying_type_t<MType>>(rhs)
+  );
 }
+
+constexpr bool hasFlag(MType value, MType flag)
+{ return static_cast<std::underlying_type_t<MType>>(value & flag) != 0; }
 
 #endif
 

@@ -1,6 +1,5 @@
 
 #include "task.h"
-#include "move_utils.h"
 #include "search.h"
 #include "single_thread.h"
 
@@ -251,7 +250,7 @@ Level1(const vector<string>& args)
   MoveList myMoves = GenerateMoves(pos);
   MoveArray movesArray;
   myMoves.getMoves(pos, movesArray);
-  OrderMoves(pos, movesArray, Sorts::CAPTURES);
+  OrderMoves(pos, movesArray, MType::CAPTURES);
   PrintMovelist(movesArray, pos);
 
   Score eval = Evaluate<true>(pos);

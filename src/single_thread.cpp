@@ -57,13 +57,13 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (stand_pat > alpha) alpha = stand_pat;
 
   MoveArray movesArray;
-  myMoves.getMoves<true, false>(pos, movesArray);
+  myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
 
   if (movesArray.size() == 0)
     return alpha;
 
   if constexpr (useMoveOrder)
-    OrderMoves(pos, movesArray, Sorts::CAPTURES, 0);
+    OrderMoves(pos, movesArray, MType::CAPTURES, 0);
 
   pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -92,7 +92,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
       if (ply < MAX_PLY)
       {
-        pvArray[pvIndex] = filter(capture_move) | QS_MOVE;
+        pvArray[pvIndex] = filter(capture_move) | quiescenceMove();
         movcpy (pvArray + pvIndex + 1,
                 pvArray + pvNextIndex, MAX_PLY - ply - 1);
       }
@@ -192,24 +192,30 @@ PlayAllMoves(
   size_t start = 0, end = 0;
 
   MoveArray movesArray;
-  myMoves.getMoves<true, false, true>(pos, movesArray);
+  myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
 
-  end = OrderMoves(pos, movesArray, Sorts::CAPTURES | Sorts::PROMOTIONS, start);
+  end = OrderMoves(pos, movesArray, MType::CAPTURES, start);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
   if (hashf == Flag::HASH_BETA)
     return;
 
-  myMoves.getMoves<false, true, true>(pos, movesArray);
+  myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
   start = end;
-  end = OrderMoves(pos, movesArray, Sorts::CHECKS, end);
+  end = OrderMoves(pos, movesArray, MType::PROMOTION, start);
+  PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  if (hashf == Flag::HASH_BETA)
+    return;
+
+  start = end;
+  end = OrderMoves(pos, movesArray, MType::CHECK, end);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   start = end;
-  end = OrderMoves(pos, movesArray, Sorts::PV, start);
+  end = OrderMoves(pos, movesArray, MType::PV, start);
   PlayPartialMoves<Reduction>(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)

@@ -5,7 +5,7 @@
 
 template <>
 bool
-is_type<PV_MOVE>(Move m)
+is_type<MType::PV>(Move m)
 { return info.IsPartOfPV(m); }
 
 SearchData info;
@@ -13,35 +13,35 @@ SearchData info;
 #ifndef MOVE_REORDERING
 
 
-template <int flag>
+template <MType mt>
 static size_t
 PrioritizeMoves(MoveArray& myMoves, size_t start)
 {
   for (size_t i = start; i < myMoves.size(); i++)
   {
-    if (is_type<flag>(myMoves[i]))
+    if (is_type<mt>(myMoves[i]))
       std::swap(myMoves[i], myMoves[start++]);
   }
   return start;
 }
 
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, Sorts sortType, size_t start)
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, size_t start)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
 
   size_t prevS = start;
 
-  if (sortType & Sorts::CAPTURES)   start = PrioritizeMoves<CAPTURES >(movesArray, start);
-  if (sortType & Sorts::PROMOTIONS) start = PrioritizeMoves<PROMOTION>(movesArray, start);
-  if (sortType & Sorts::CHECKS)     start = PrioritizeMoves<CHECK    >(movesArray, start);
-  if (sortType & Sorts::PV)         start = PrioritizeMoves<PV_MOVE  >(movesArray, start);
+  if (hasFlag(mTypes, MType::CAPTURES))  start = PrioritizeMoves<MType::CAPTURES>(movesArray, start);
+  if (hasFlag(mTypes, MType::PROMOTION)) start = PrioritizeMoves<MType::PROMOTION>(movesArray, start);
+  if (hasFlag(mTypes, MType::CHECK))     start = PrioritizeMoves<MType::CHECK   >(movesArray, start);
+  if (hasFlag(mTypes, MType::PV))        start = PrioritizeMoves<MType::PV      >(movesArray, start);
 
-  if (sortType != Sorts::QUIET)
+  if (mTypes != MType::QUIET)
     std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
 
-  return (sortType & Sorts::QUIET) ? movesArray.size() : start;
+  return (hasFlag(mTypes, MType::QUIET)) ? movesArray.size() : start;
 }
 
 Score
@@ -72,7 +72,7 @@ SeeScore(const ChessBoard& pos, Move move)
 
   const Color side = ~pos.color;
   const Score initialValue =
-    (is_type<CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
+    (is_type<MType::CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
 
   Bitboard removedPieces = 1ULL << ip;
   PieceType pieceOnSquare = type_of(pos.PieceOnSquare(ip));

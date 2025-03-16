@@ -64,12 +64,12 @@ public:
   size_t
   countMoves() const noexcept;
 
-  template<bool captures=true, bool quiet=true, bool checks=false>
+  template<MType mt1=MType::CAPTURES | MType::QUIET, MType mt2=MType(0)>
   void
   getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept;
 
 private:
-  template <MoveType mt, bool checks>
+  template <MType mt1, MType mt2>
   void
   FillMoves(
     const ChessBoard& pos,
@@ -78,11 +78,11 @@ private:
     Move baseMove
   ) const noexcept;
 
-  template <bool checks>
+  template <MType mt1, MType mt2>
   void
   FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
 
-  template <MoveType mt, bool checks>
+  template <MType mt1, MType mt2>
   void
   FillShiftPawns(
     const ChessBoard& pos,
@@ -91,7 +91,7 @@ private:
     int shift
   ) const noexcept;
 
-  template <MoveType mt, bool checks>
+  template <MType mt1, MType mt2>
   void
   FillPawns(
     const ChessBoard& pos,
@@ -100,7 +100,7 @@ private:
     Move baseMove
   ) const noexcept;
 
-  template <MoveType mt, bool checks>
+  template <MType mt1, MType mt2>
   void
   FillKingMoves(
     const ChessBoard& pos,
@@ -108,6 +108,10 @@ private:
     Bitboard endSquares,
     Move baseMove
   ) const noexcept;
+
+  template <MType mt>
+  static constexpr Move
+  GenerateTypeBit() noexcept;
 };
 
 #endif

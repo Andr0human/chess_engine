@@ -17,16 +17,22 @@ ResetPvLine();
 Score
 CheckmateScore(Ply ply);
 
-template <int flag>
+template <MType mt>
 inline bool is_type(Move m)
 {
-  if constexpr (flag == CHECK)
+  if constexpr (mt == MType::CHECK)
     return (m >> 23) & 1;
-  
-  if constexpr (flag == NORMAL)
+
+  if constexpr (mt == MType::QUIET)
     return ((m >> 20) & 7) == 0;
 
-  return (m >> 20) & flag;
+  if constexpr (mt == MType::CAPTURES)
+    return (m >> 20) & 1;
+
+  if constexpr (mt == MType::PROMOTION)
+    return (m >> 21) & 1;
+
+  return 0;
 }
 
 int

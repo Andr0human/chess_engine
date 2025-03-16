@@ -107,7 +107,7 @@ class SearchData
 
     for (const Move move : pvLine)
     {
-      if (((move & QS_MOVE) != 0) and !qmoves_found)
+      if ((move & quiescenceMove()) and !qmoves_found)
       {
         res += "(";
         qmoves_found = true;
@@ -312,7 +312,7 @@ class SearchData
 };
 
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, Sorts sortType, size_t start = 0);
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, size_t start = 0);
 
 Score
 SeeScore(const ChessBoard& pos, Move move);
