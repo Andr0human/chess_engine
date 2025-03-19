@@ -239,7 +239,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   }
 
   if constexpr (useExtensions) {
-    int extensions = SearchExtension(pos, myMoves, numExtensions);
+    int extensions = SearchExtension(pos, myMoves, numExtensions, depth);
     depth += extensions;
     numExtensions += extensions;
   }

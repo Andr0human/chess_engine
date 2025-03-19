@@ -40,8 +40,8 @@ class ChessBoard
 {
   private:
 
-  constexpr static array<Weight, 5> pieceValues = {
-    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg
+  constexpr static array<Weight, 6> pieceValues = {
+    PawnValueMg, BishopValueMg, KnightValueMg, RookValueMg, QueenValueMg, 25200
   };
 
   array<UndoInfo, 256> undoInfo;
@@ -235,6 +235,9 @@ class ChessBoard
     if ((p & 7) != KING)
       piece_ct[(p & 8) + 7]--;
   }
+
+  Weight PieceValue(PieceType pt) const noexcept
+  { return pieceValues[pt - 1]; }
 };
 
 

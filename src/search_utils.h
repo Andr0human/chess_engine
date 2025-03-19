@@ -51,7 +51,8 @@ int
 SearchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
-  int numExtensions
+  int numExtensions,
+  Depth depth
 );
 
 
