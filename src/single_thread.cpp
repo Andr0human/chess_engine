@@ -51,8 +51,9 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (stand_pat >= beta)
     return beta;
 
-  // int BIG_DELTA = 925;
-  // if (stand_pat < alpha - BIG_DELTA) return alpha;
+  // Delta pruning
+  Score BIG_DELTA = QueenValueMg;
+  if (stand_pat + BIG_DELTA < alpha) return alpha;
 
   if (stand_pat > alpha) alpha = stand_pat;
 
