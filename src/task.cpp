@@ -250,7 +250,7 @@ Level1(const vector<string>& args)
   MoveList myMoves = GenerateMoves(pos);
   MoveArray movesArray;
   myMoves.getMoves(pos, movesArray);
-  OrderMoves(pos, movesArray, MType::CAPTURES);
+  OrderMoves(pos, movesArray, MType::CAPTURES, 0);
   PrintMovelist(movesArray, pos);
 
   Score eval = Evaluate<true>(pos);
