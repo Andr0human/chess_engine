@@ -209,11 +209,8 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   if (((cornerMask & WhiteSquares) and (bishop & WhiteSquares))
    or ((cornerMask & BlackSquares) and (bishop & BlackSquares))) return false;
 
-  if (pawn & FileAH)
-  {
-    if ((pos.get_piece(emySide, KING) & pawnMask)
-    and (pos.get_piece(side, KING) & ~pawnMask)) return true;
-  }
+  if ((pawn & FileAH) and (pos.get_piece(emySide, KING) & pawnMask))
+    return true;
 
   return false;
 }

@@ -114,3 +114,9 @@ int main(int argc, char **argv)
 
   8/8/r7/4k1P1/1R6/6K1/8/8 b - - 0 69
 */
+
+
+/* 3-move repetition
+
+  4r3/1pk1PQ1R/p7/7p/2P1q2P/P5P1/KP6/8 w - - 9 53     D.M Qxe8
+*/
