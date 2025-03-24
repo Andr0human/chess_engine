@@ -23,6 +23,12 @@ CheckmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }
 
 bool
+FutilityOk(Move move)
+{
+  return !(is_type<CAPTURES>(move) or is_type<CHECK>(move) or is_type<PROMOTION>(move));
+}
+
+bool
 LmrOk(Move move, Depth depth, size_t moveNo)
 {
   if ((depth < 2) or (moveNo < LMR_LIMIT) or InterestingMove(move))

@@ -109,6 +109,15 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
 {
   Score eval = VALUE_ZERO;
 
+  if (depth == 1 and FutilityOk(move))
+  {
+    Score margin = 2 * PawnValueMg;
+    Score stand_pat = Evaluate(pos);
+
+    if (stand_pat + margin < alpha)
+      return alpha;
+  }
+
   if (useLMR and LmrOk(move, depth, moveNo))
   {
     int R = reductionFunction(depth, moveNo);
