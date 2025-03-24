@@ -58,6 +58,17 @@ class Varray {
   const T*
   end() const noexcept
   { return _array.begin() + Nc; }
+
+  void
+  addKillerMove(T val)
+  {
+    _array[1] = _array[0];
+    _array[0] = val;
+  }
+
+  bool
+  search(T val)
+  { return _array[0] == val || _array[1] == val; }
 };
 
 #endif

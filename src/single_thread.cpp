@@ -163,6 +163,9 @@ PlaySubsetMoves(
     {
       hashf = Flag::HASH_BETA;
       alpha = beta;
+
+      if (is_type<MType::QUIET>(move))
+        killerMoves[ply].addKillerMove(move);
       break;
     }
 
@@ -197,7 +200,7 @@ PlayAllMoves(
   if constexpr (moveGen == 1)
     myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
-  size_t end = orderType == MType::QUIET ? movesArray.size() : OrderMoves(pos, movesArray, orderType, start);
+  size_t end = orderType == MType::QUIET ? movesArray.size() : OrderMoves(pos, movesArray, orderType, ply, start);
   PlaySubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if (hashf == Flag::HASH_BETA)
@@ -246,7 +249,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   Flag hashf = Flag::HASH_ALPHA;
   MoveArray movesArray;
-  PlayAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::QUIET>
+  PlayAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
     (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
 
   if constexpr (useTT) {

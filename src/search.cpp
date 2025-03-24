@@ -26,7 +26,7 @@ PrioritizeMoves(MoveArray& myMoves, size_t start)
 }
 
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, size_t start)
+OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return SeeScore(pos, move1) > SeeScore(pos, move2); };
@@ -37,6 +37,13 @@ OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, size_t st
   if (hasFlag(mTypes, MType::PROMOTION)) start = PrioritizeMoves<MType::PROMOTION>(movesArray, start);
   if (hasFlag(mTypes, MType::CHECK))     start = PrioritizeMoves<MType::CHECK   >(movesArray, start);
   if (hasFlag(mTypes, MType::PV))        start = PrioritizeMoves<MType::PV      >(movesArray, start);
+  if (hasFlag(mTypes, MType::KILLER))
+  {
+    for (size_t i = start; i < movesArray.size(); i++) {
+      if (killerMoves[ply].search(movesArray[i]))
+        std::swap(movesArray[i], movesArray[start++]);
+    }
+  }
 
   if (mTypes != MType::QUIET)
     std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
