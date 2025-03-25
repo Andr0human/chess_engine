@@ -314,9 +314,6 @@ class SearchData
 size_t
 OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
 
-Score
-SeeScore(const ChessBoard& pos, Move move);
-
 /**
  * @brief Prints all encoded-moves in list to human-readable strings
  *
