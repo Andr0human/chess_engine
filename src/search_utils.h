@@ -42,6 +42,9 @@ RootReduction(Depth depth, size_t moveNo);
 int
 Reduction (Depth depth, size_t moveNo);
 
+int
+Reduction2(const ChessBoard& pos, Move move, Depth depth, size_t moveNo);
+
 bool
 InterestingMove(Move move);
 
@@ -57,6 +60,7 @@ SearchExtension(
 );
 
 
+Score
+SeeScore(const ChessBoard& pos, Move move);
+
 #endif
-
-

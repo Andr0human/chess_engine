@@ -51,43 +51,6 @@ OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   return (hasFlag(mTypes, MType::QUIET)) ? movesArray.size() : start;
 }
 
-Score
-See(const ChessBoard& pos, Square square, Color side, PieceType capturedPiece, Bitboard removedPieces)
-{
-  const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
-
-  Score value = 0;
-  Square sq = GetSmallestAttacker(pos, square, side, removedPieces);
-
-  if (sq == SQUARE_NB)
-    return value;
-
-  PieceType attacker = type_of(pos.PieceOnSquare(sq));
-  const auto seeScore = See(pos, square, ~side, attacker, removedPieces | (1ULL << sq));
-
-  value = std::max(0, pieceValues[capturedPiece] - seeScore);
-  return value;
-}
-
-Score
-SeeScore(const ChessBoard& pos, Move move)
-{
-  const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
-  const Square fp =   to_sq(move);
-  const Square ip = from_sq(move);
-  const PieceType fpt = PieceType((move >> 15) & 7);
-
-  const Color side = ~pos.color;
-  const Score initialValue =
-    (is_type<MType::CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
-
-  Bitboard removedPieces = 1ULL << ip;
-  PieceType pieceOnSquare = type_of(pos.PieceOnSquare(ip));
-
-  Score seeScore = initialValue - See(pos, fp, side, pieceOnSquare, removedPieces);
-  return seeScore;
-}
-
 void
 PrintMovelist(MoveArray myMoves, ChessBoard pos)
 {

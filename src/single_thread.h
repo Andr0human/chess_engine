@@ -10,7 +10,7 @@
 #include "endgame.h"
 
 
-typedef int (*ReductionFunc)(Depth depth, size_t move_no);
+typedef int (*ReductionFunc)(const ChessBoard& pos, Move move, Depth depth, size_t move_no);
 
 
 uint64_t

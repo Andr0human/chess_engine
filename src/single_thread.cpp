@@ -109,9 +109,9 @@ PlayMove(ChessBoard& pos, Move move, size_t moveNo,
 {
   Score eval = VALUE_ZERO;
 
-  if (useLMR and LmrOk(move, depth, moveNo))
+  if (useLMR /* and LmrOk(move, depth, moveNo) */)
   {
-    int R = reductionFunction(depth, moveNo);
+    int R = reductionFunction(pos, move, depth, moveNo);
 
     pos.MakeMove(move);
     eval = -AlphaBeta(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
@@ -151,7 +151,7 @@ PlaySubsetMoves(
   for (size_t moveNo = start; moveNo < end; ++moveNo)
   {
     Move move = movesArray[moveNo];
-    Score eval = PlayMove<Reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
+    Score eval = PlayMove<Reduction2>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
 
     // No time left!
     if (info.TimeOver())
@@ -277,7 +277,7 @@ RootAlphabeta(ChessBoard& _cb, Score alpha, Score beta, Depth depth)
     Move move = myMoves[moveNo];
     startTime = perf::now();
 
-    Score eval = PlayMove<RootReduction>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
+    Score eval = PlayMove<Reduction2>(_cb, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
 
     duration = perf::now() - startTime;
     info.InsertMoveToList(moveNo);

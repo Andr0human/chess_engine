@@ -73,6 +73,36 @@ Reduction (Depth depth, size_t moveNo)
 }
 
 int
+Reduction2(const ChessBoard& pos, Move move, Depth depth, size_t moveNo)
+{
+  int R = 0;
+
+  if ((depth < 2)
+   or (moveNo < LMR_LIMIT)
+   or is_type<MType::PROMOTION>(move)
+   or is_type<MType::CHECK>(move)
+  ) return R;
+
+  if (is_type<MType::CAPTURES>(move)) {
+    Score seeScore = SeeScore(pos, move);
+
+    if (seeScore >= -2 * PawnValueMg)
+      return 0;
+
+    return depth / 4;
+  }
+
+  if (depth < 4)
+    R = move < 9 ? 0 : 1; 
+  else if (depth < 7)
+    R = move < 9 ? 1 : 2;
+  else
+    R = (move < 12) ? (1) : ((moveNo < 24) ? 2 : 3);
+
+  return R;
+}
+
+int
 SearchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
@@ -98,3 +128,40 @@ SearchExtension(
   return 0;
 }
 
+
+Score
+See(const ChessBoard& pos, Square square, Color side, PieceType capturedPiece, Bitboard removedPieces)
+{
+  const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
+
+  Score value = 0;
+  Square sq = GetSmallestAttacker(pos, square, side, removedPieces);
+
+  if (sq == SQUARE_NB)
+    return value;
+
+  PieceType attacker = type_of(pos.PieceOnSquare(sq));
+  const auto seeScore = See(pos, square, ~side, attacker, removedPieces | (1ULL << sq));
+
+  value = std::max(0, pieceValues[capturedPiece] - seeScore);
+  return value;
+}
+
+Score
+SeeScore(const ChessBoard& pos, Move move)
+{
+  const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
+  const Square fp =   to_sq(move);
+  const Square ip = from_sq(move);
+  const PieceType fpt = PieceType((move >> 15) & 7);
+
+  const Color side = ~pos.color;
+  const Score initialValue =
+    (is_type<MType::CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
+
+  Bitboard removedPieces = 1ULL << ip;
+  PieceType pieceOnSquare = type_of(pos.PieceOnSquare(ip));
+
+  Score seeScore = initialValue - See(pos, fp, side, pieceOnSquare, removedPieces);
+  return seeScore;
+}
