@@ -536,34 +536,6 @@ PieceTableStrengthEndGame(const ChessBoard& pos)
   return king;
 }
 
-static Score
-ColorParityScore(const ChessBoard& pos)
-{
-  Bitboard w_king   = pos.piece<WHITE, KING  >();
-  Bitboard b_king   = pos.piece<BLACK, KING  >();
-  Bitboard w_bishop = pos.piece<WHITE, BISHOP>();
-  Bitboard b_bishop = pos.piece<BLACK, BISHOP>();
-
-  Bitboard endSquaresForWhite =
-    ((w_bishop & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
-  | ((w_bishop & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
-
-  Bitboard endSquaresForBlack =
-    ((b_bishop & WhiteSquares) != 0 ? WhiteColorCorner : NoSquares)
-  | ((b_bishop & BlackSquares) != 0 ? BlackColorCorner : NoSquares);
-
-  Score score = 0;
-  Score incForCorrectSide = 40;
-
-  if ((b_king & endSquaresForWhite) != 0)
-    score += incForCorrectSide;
-
-  if ((w_king & endSquaresForBlack) != 0)
-    score -= incForCorrectSide;
-
-  return score;
-}
-
 template<bool debug>
 static Score
 EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
@@ -580,7 +552,6 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   Score pieceTableScore = PieceTableStrengthEndGame(pos);
   Score pawnStructure   = ed.pawnStructureScore;
   Score distanceScore   = DistanceBetweenKingsScore(pos);
-  Score parityScore     = ColorParityScore(pos);
   // Score threatsScore    = ed.threatScore;
 
   if (debug)
@@ -590,7 +561,6 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
       << "\npieceTableScore    = " << pieceTableScore
       << "\npawnStructureScore = " << pawnStructure
       << "\ndistanceScore      = " << distanceScore
-      << "\nparityScore        = " << parityScore
       << "\n-------------------------------------------------" << endl;
   }
 
@@ -598,8 +568,7 @@ EndGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
       ed.materialWeight     * float(materialScore)
     + ed.pieceTableWeight   * float(pieceTableScore)
     + 0.7f                  * float(pawnStructure)
-    + float(distanceScore)
-    + float(parityScore);
+    + float(distanceScore);
 
   return Score(eval);
 }
