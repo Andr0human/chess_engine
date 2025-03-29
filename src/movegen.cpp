@@ -8,7 +8,6 @@
 bool
 IsLegalMoveForPosition(Move move, const ChessBoard& pos)
 {
-  // TODO: Add pseudo checks and test it
   Square ip = Square(move & 63);
   Square fp = Square((move >> 6) & 63);
 
@@ -25,7 +24,11 @@ IsLegalMoveForPosition(Move move, const ChessBoard& pos)
   if ((fpt != 0) and ((fpt >> 3) & 1) == side)
     return false;
 
-  MoveList myMoves = GenerateMoves(pos);
+  const MoveList myMoves = GenerateMoves(pos);
+
+  if ((type_of(ipt) != PAWN))
+    return ((1ULL << fp) & myMoves.destSquares[ip]) != 0;
+
   MoveArray movesArray;
   myMoves.getMoves(pos, movesArray);
 
