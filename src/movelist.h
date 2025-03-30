@@ -75,6 +75,9 @@ public:
   bool
   Exists(const ChessBoard& pos) const noexcept;
 
+  void
+  getCheckMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
+
 private:
   template <MType mt1, MType mt2>
   void
