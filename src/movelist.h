@@ -69,7 +69,7 @@ public:
 
   template<MType mt1=MType::CAPTURES | MType::QUIET, MType mt2=MType(0)>
   void
-  getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept;
+  getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
 
   template<MType mt>
   bool

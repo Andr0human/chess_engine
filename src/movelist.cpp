@@ -246,7 +246,7 @@ MoveList::countMoves() const noexcept
 
 template<MType mt1, MType mt2>
 void
-MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
+MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
 {
   const Move colorBit = Move(color) << 22;
 
@@ -260,13 +260,13 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
   {
     if (hasFlag(mt1, MType::CAPTURES))
     {
-      FillShiftPawns<MType::CAPTURES, mt2>(pos, myMoves, pawnDestSquares[0], 7 - 16 * color);
-      FillShiftPawns<MType::CAPTURES, mt2>(pos, myMoves, pawnDestSquares[1], 9 - 16 * color);
+      FillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[0], 7 - 16 * color);
+      FillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[1], 9 - 16 * color);
     }
     if (hasFlag(mt1, MType::QUIET))
     {
-      FillShiftPawns<MType::QUIET, mt2>(pos, myMoves, pawnDestSquares[2], 16 - 32 * color);
-      FillShiftPawns<MType::QUIET, mt2>(pos, myMoves, pawnDestSquares[3],  8 - 16 * color);
+      FillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[2], 16 - 32 * color);
+      FillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[3],  8 - 16 * color);
     }
 
     while (pawnMask > 0)
@@ -280,15 +280,15 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
       Bitboard quietSquares = finalSquares ^ captSquares;
 
       if (hasFlag(mt1, MType::CAPTURES))
-        FillPawns<MType::CAPTURES, mt2>(pos, myMoves,  captSquares, baseMove);
+        FillPawns<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
       if (hasFlag(mt1, MType::QUIET))
-        FillPawns<MType::QUIET, mt2>(pos, myMoves, quietSquares, baseMove);
+        FillPawns<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
     }
   }
 
   if (hasFlag(mt1, MType::CAPTURES))
-    FillEnpassantPawns<mt1, mt2>(pos, myMoves);
+    FillEnpassantPawns<mt1, mt2>(pos, movesArray);
 
   while (pieceMask > 0)
   {
@@ -304,10 +304,10 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
     Bitboard quietSquares = finalSquares ^ captSquares;
 
     if (hasFlag(mt1, MType::CAPTURES))
-      FillMoves<MType::CAPTURES, mt2>(pos, myMoves,  captSquares, baseMove);
+      FillMoves<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
     if (hasFlag(mt1, MType::QUIET))
-      FillMoves<MType::QUIET, mt2>(pos, myMoves, quietSquares, baseMove);
+      FillMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
   }
 
   if (kingMask)
@@ -320,10 +320,10 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept
     Bitboard quietSquares = finalSquares ^ captSquares;
 
     if (hasFlag(mt1, MType::CAPTURES))
-      FillKingMoves<MType::CAPTURES, mt2>(pos, myMoves,  captSquares, baseMove);
+      FillKingMoves<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
     if (hasFlag(mt1, MType::QUIET))
-      FillKingMoves<MType::QUIET, mt2>(pos, myMoves, quietSquares, baseMove);
+      FillKingMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
   }
 }
 
