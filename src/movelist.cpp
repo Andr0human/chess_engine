@@ -469,6 +469,20 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
   return false;
 }
 
+void
+MoveList::getCheckMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
+{
+  getMoves<MType::QUIET | MType::CAPTURES, MType::CHECK>(pos, movesArray);
+
+  size_t len = movesArray.size();
+  movesArray.clear();
+
+  for (size_t i = 0; i < len; i++){
+    if (movesArray[i] & GenerateTypeBit<MType::CHECK>())
+      movesArray.add(movesArray[i]);
+  }
+}
+
 
 template void MoveList::getMoves<MType(1), MType(0)>(const ChessBoard&, MoveArray&) const noexcept;
 template void MoveList::getMoves<MType(1), MType(4)>(const ChessBoard&, MoveArray&) const noexcept;

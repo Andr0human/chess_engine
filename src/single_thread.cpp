@@ -1,6 +1,8 @@
 
 #include "single_thread.h"
 
+constexpr Score MATE_THRESHOLD = VALUE_MATE - 2000;
+
 uint64_t
 BulkCount(ChessBoard& pos, Depth depth)
 {
@@ -34,13 +36,25 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (info.TimeOver())
     return TIMEOUT;
 
-  const MoveList myMoves = GenerateMoves(pos);
+  const MoveList myMoves = GenerateMoves(pos, true);
 
   if (myMoves.countMoves() == 0)
     return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
 
   if (!myMoves.Exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
     return VALUE_DRAW;
+  
+  if (leafnode and myMoves.Exists<MType::CHECK>(pos))
+  {
+    // cout << "Mate Search started!" << endl;
+    // cout << "fen = " << pos.Fen() << endl;
+    // std::cin.get();
+    Score mateScore = MateSearch<true>(pos, 4, -VALUE_INF, VALUE_INF, ply, pvIndex);
+    // cout << "Mate Search ended! " << mateScore << endl;
+
+    if (mateScore > MATE_THRESHOLD)
+      return mateScore;
+  }
 
   info.AddQNode();
 
@@ -98,6 +112,76 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
       }
     }
   }
+
+  return alpha;
+}
+
+template <bool side2Check>
+Score
+MateSearch(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex)
+{
+  if (info.TimeOver())
+    return TIMEOUT;
+
+  const MoveList myMoves = GenerateMoves(pos, true);
+
+  if (depth <= 0)
+    return alpha;
+
+  if (myMoves.countMoves() == 0)
+    return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
+
+  if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw() or (!myMoves.Exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos)))
+    return VALUE_DRAW;
+
+  MoveArray movesArray;
+
+  int pvNextIndex = pvIndex + MAX_PLY - ply;
+  pvArray[pvIndex] = NULL_MOVE;
+
+  if constexpr (side2Check) {
+    myMoves.getCheckMoves(pos, movesArray);
+    OrderMoves(pos, movesArray, MType::CHECK, ply, 0);
+  }
+  else {
+    myMoves.getMoves(pos, movesArray);
+    std::sort(movesArray.begin(), movesArray.end(), [&pos] (Move move1, Move move2)
+      { return SeeScore(pos, move1) > SeeScore(pos, move2); }
+    );
+  }
+
+  // cout << "fen = " << pos.Fen() << " | Hash = " << pos.Hash_Value << endl;
+  // PrintMovelist(movesArray, pos);
+  // cout << "--------------------------------------" << endl;
+  // std::cin.get();
+  // cout << "pos: " << pos.Hash_Value << " start! " << pos.Fen() << endl;
+
+
+  for (Move move : movesArray)
+  {
+    // cout << "Move selected: " << PrintMove(move, pos) << endl;
+    pos.MakeMove(move);
+    Score eval = -MateSearch<!side2Check>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex);
+    pos.UnmakeMove();
+    // cout << "Move done: " << PrintMove(move, pos) << " |  " <<  eval << endl;
+
+    if (!side2Check and (eval > -MATE_THRESHOLD))
+      return VALUE_DRAW;
+
+    if (eval > alpha) {
+      alpha = eval;
+      pvArray[pvIndex] = filter(move) | quiescenceMove();
+      movcpy (pvArray + pvIndex + 1,
+              pvArray + pvNextIndex, MAX_PLY - ply - 1);
+    }
+
+    if (alpha >= beta)
+      return beta;
+
+    if (side2Check and (eval == VALUE_MATE - 20))
+      return alpha;
+  }
+  // cout << "pos: " << pos.Hash_Value << " end! " << alpha << endl;
 
   return alpha;
 }
@@ -209,6 +293,17 @@ PlayAllMoves(
   if constexpr (sizeof...(rest) > 0)
     PlayAllMoves<moveGen + 1, rest...>
       (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+}
+
+bool
+isCriticalNode(ChessBoard& pos)
+{
+  const Score threatsScore = Threats(pos);
+
+  if ((threatsScore * (2 * pos.color - 1)) > RookValueMg)
+    return true;
+
+  return false;
 }
 
 Score
@@ -355,3 +450,9 @@ Search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
   info.SearchCompleted();
   writer << "Search Done!" << endl;
 }
+
+template Score
+MateSearch<false>(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex);
+
+template Score
+MateSearch<true>(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex);

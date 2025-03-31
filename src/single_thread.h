@@ -49,6 +49,9 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 Score
 RootAlphabeta(ChessBoard& pos, Score alpha, Score beta, Depth depth);
 
+template <bool side2Check>
+Score
+MateSearch(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex);
 
 #endif
 

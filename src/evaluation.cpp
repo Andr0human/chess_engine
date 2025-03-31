@@ -252,6 +252,24 @@ Threats(const ChessBoard& pos)
   return threatsScore;
 }
 
+template <Color side, bool debug>
+Score
+Threats(const ChessBoard& pos)
+{
+  Score attackValue   = AttackValue<side>(pos);
+  Score distanceScore = AttackDistanceScore<side>(pos);
+  Score attackersLeft = AttackersLeft<side>(pos);
+
+  Score kingMobilityOpp      = KingMobilityScore<~side>(pos);
+  Score openFileDeductionOpp = OpenFilesScore<~side>(pos);
+  Score defendersCountOpp    = DefendersCount<~side>(pos);
+  Score lackOfSafetyOpp      = 2 * (openFileDeductionOpp * (4 - kingMobilityOpp)) / (defendersCountOpp + 1);
+
+  Score current  = attackValue * lackOfSafetyOpp + (distanceScore / (defendersCountOpp + 1));
+  Score longTerm = ((attackersLeft * attackersLeft) + (openFileDeductionOpp * openFileDeductionOpp)) / (32 + defendersCountOpp);
+
+  return current + longTerm;
+}
 
 #endif
 
