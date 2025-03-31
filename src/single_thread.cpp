@@ -2,25 +2,25 @@
 #include "single_thread.h"
 
 uint64_t
-BulkCount(ChessBoard& _cb, Depth depth)
+BulkCount(ChessBoard& pos, Depth depth)
 {
   if (depth <= 0) return 1;
 
-  const MoveList myMoves = GenerateMoves(_cb);
+  const MoveList myMoves = GenerateMoves(pos, true);
 
   if (depth == 1)
     return myMoves.countMoves();
 
   MoveArray movesArray;
-  myMoves.getMoves(_cb, movesArray);
+  myMoves.getMoves(pos, movesArray);
 
   uint64_t answer = 0;
 
   for (const Move move : movesArray)
   {
-    _cb.MakeMove(move);
-    answer += BulkCount(_cb, depth - 1);
-    _cb.UnmakeMove();
+    pos.MakeMove(move);
+    answer += BulkCount(pos, depth - 1);
+    pos.UnmakeMove();
   }
 
   return answer;
@@ -39,7 +39,7 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (myMoves.countMoves() == 0)
     return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
 
-  if (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos))
+  if (!myMoves.Exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
     return VALUE_DRAW;
 
   info.AddQNode();
@@ -56,11 +56,11 @@ QuiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (stand_pat > alpha) alpha = stand_pat;
 
+  if (!myMoves.Exists<MType::CAPTURES>(pos))
+    return alpha;
+
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
-
-  if (movesArray.size() == 0)
-    return alpha;
 
   if constexpr (useMoveOrder)
     OrderMoves(pos, movesArray, MType::CAPTURES, 0);
@@ -227,7 +227,7 @@ AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (myMoves.countMoves() == 0)
     return myMoves.checkers ? CheckmateScore(ply) : VALUE_ZERO;
 
-  if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw() or (!CapturesExistInPosition(pos) and isTheoreticalDraw(pos)))
+  if (pos.ThreeMoveRepetition() or pos.FiftyMoveDraw() or (!myMoves.Exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos)))
     return VALUE_DRAW;
 
   info.AddNode();

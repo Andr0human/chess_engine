@@ -16,7 +16,7 @@
 
 * check (1 bit) (<< 23) - indicates whether the move places the opponent's king in check [0: No-check, 1: Check]
 * color (1 bit) (<< 22) - color of the piece making the move [0: Black, 1: White]
-* type (2 bits) (<< 20) - type of move [00: Quiet, 01: Castle, 10: Promotion]
+* type (2 bits) (<< 20) - type of move [00: Quiet, 01: Captures, 10: Promotion]
 * pp   (2 bits) (<< 18) - indicates the type of piece at pawn promotion [0: Bishop, 1: Knight, 2: Rook, 3: Queen]
 * ip   (6 bits) (<<  0) - initial square of the piece
 * fp   (6 bits) (<<  6) - destination square of the piece
@@ -37,12 +37,6 @@ bool IsLegalMoveForPosition(Move move, const ChessBoard& pos);
  */
 MoveList GenerateMoves(const ChessBoard& pos, bool generateChecksData=false);
 
-
-bool
-CapturesExistInPosition(const ChessBoard& pos);
-
-bool
-QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares);
 
 bool
 PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB);
