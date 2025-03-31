@@ -533,7 +533,7 @@ isTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
 }
 
 bool
-PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB)
+PieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB)
 {
   const Square square = pos.color == WHITE
     ? isTrapped<WHITE, QUEEN, ROOK, BISHOP, KNIGHT>(pos, enemyAttackedBB)
@@ -541,8 +541,7 @@ PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB)
 
   if (square != SQUARE_NB)
   {
-    Bitboard myAttackedSquares = (pos.color == WHITE)
-    ? GenerateAttackedSquares<WHITE>(pos, pos.All()) : GenerateAttackedSquares<BLACK>(pos, pos.All());
+    Bitboard myAttackedSquares = myAttackedBB;
 
     Weight maxValueCapture = 0;
 

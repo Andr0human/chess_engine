@@ -39,7 +39,7 @@ MoveList GenerateMoves(const ChessBoard& pos, bool generateChecksData=false);
 
 
 bool
-PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB);
+PieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB);
 
 Square
 GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces);
