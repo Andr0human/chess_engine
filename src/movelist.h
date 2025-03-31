@@ -42,6 +42,9 @@ public:
   // side can legally move to when the king is under check
   Bitboard legalSquaresMaskInCheck;
 
+  // Bitboard representing squares current side is attacking
+  Bitboard myAttackedSquares;
+
   // Bitboard representing squares under enemy attack
   Bitboard enemyAttackedSquares;
 
@@ -66,7 +69,11 @@ public:
 
   template<MType mt1=MType::CAPTURES | MType::QUIET, MType mt2=MType(0)>
   void
-  getMoves(const ChessBoard& pos, MoveArray& myMoves) const noexcept;
+  getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
+
+  template<MType mt>
+  bool
+  Exists(const ChessBoard& pos) const noexcept;
 
 private:
   template <MType mt1, MType mt2>
@@ -112,6 +119,9 @@ private:
   template <MType mt>
   static constexpr Move
   GenerateTypeBit() noexcept;
+
+  bool
+  pawnCheckExists(Bitboard endSquares, int shift) const noexcept;
 };
 
 #endif

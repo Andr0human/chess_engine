@@ -483,6 +483,7 @@ MoveGenerator(const ChessBoard& pos, bool generateChecksData)
   MoveList myMoves(c_my);
 
   myMoves.myPawns = pos.piece<c_my, PAWN>();
+  myMoves.myAttackedSquares = GenerateAttackedSquares<c_my>(pos, pos.All());
   myMoves.enemyAttackedSquares = GenerateAttackedSquares<~c_my>(pos, pos.All() ^ pos.piece<c_my, KING>());
 
   KingAttackers<c_my>(pos, myMoves);
@@ -510,47 +511,6 @@ GenerateMoves(const ChessBoard& pos, bool generateChecksData)
   : MoveGenerator<BLACK, RightShift>(pos, generateChecksData);
 }
 
-bool
-CapturesExistInPosition(const ChessBoard& pos)
-{
-  Bitboard attackMask = 0;
-  Bitboard occupied = pos.All();
-
-  if (pos.color == WHITE)
-  {
-    attackMask |= PawnAttackSquares<WHITE>(pos);
-    attackMask |= AttackedSquaresGen<WHITE, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
-    return (attackMask & pos.piece<BLACK, ALL>()) != 0;
-  }
-
-  attackMask |= PawnAttackSquares<BLACK>(pos);
-  attackMask |= AttackedSquaresGen<BLACK, BISHOP, KNIGHT, ROOK, QUEEN, KING>(pos, occupied);
-
-  return (attackMask & pos.piece<WHITE, ALL>()) != 0;
-}
-
-bool
-QueenTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
-{
-  Bitboard queens      = pos.get_piece(pos.color, QUEEN);
-  Bitboard occupied_my = pos.get_piece(pos.color,   ALL);
-  Bitboard occupied    = pos.All();
-
-  while (queens != 0)
-  {
-    Square queenSq = NextSquare(queens);
-    Bitboard  mask = LegalSquares<QUEEN>(queenSq, occupied_my, occupied);
-
-    if ((mask ^ (mask & enemyAttackedSquares)) == 0) {
-      // Return true if piece attacking the queen is not opponent queen
-      const PieceType pt = type_of(pos.PieceOnSquare(GetSmallestAttacker(pos, queenSq, ~pos.color, 0)));
-      if (pt != QUEEN)
-        return true;
-    }
-  }
-
-  return false;
-}
 
 template<Color c_my, PieceType pt, PieceType... rest>
 Square
@@ -573,7 +533,7 @@ isTrapped(const ChessBoard& pos, Bitboard enemyAttackedSquares)
 }
 
 bool
-PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB)
+PieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB)
 {
   const Square square = pos.color == WHITE
     ? isTrapped<WHITE, QUEEN, ROOK, BISHOP, KNIGHT>(pos, enemyAttackedBB)
@@ -581,8 +541,7 @@ PieceTrapped(const ChessBoard& pos, Bitboard enemyAttackedBB)
 
   if (square != SQUARE_NB)
   {
-    Bitboard myAttackedSquares = (pos.color == WHITE)
-    ? GenerateAttackedSquares<WHITE>(pos, pos.All()) : GenerateAttackedSquares<BLACK>(pos, pos.All());
+    Bitboard myAttackedSquares = myAttackedBB;
 
     Weight maxValueCapture = 0;
 

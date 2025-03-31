@@ -92,7 +92,7 @@ SearchExtension(
   if (
     (depth == 1) and
     (myMoves.checkers == 0) and
-    PieceTrapped(pos, myMoves.enemyAttackedSquares)
+    PieceTrapped(pos, myMoves.myAttackedSquares, myMoves.enemyAttackedSquares)
   ) return 1;
   
   return 0;

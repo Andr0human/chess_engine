@@ -15,12 +15,12 @@ SearchData info;
 
 template <MType mt>
 static size_t
-PrioritizeMoves(MoveArray& myMoves, size_t start)
+PrioritizeMoves(MoveArray& movesArray, size_t start)
 {
-  for (size_t i = start; i < myMoves.size(); i++)
+  for (size_t i = start; i < movesArray.size(); i++)
   {
-    if (is_type<mt>(myMoves[i]))
-      std::swap(myMoves[i], myMoves[start++]);
+    if (is_type<mt>(movesArray[i]))
+      std::swap(movesArray[i], movesArray[start++]);
   }
   return start;
 }
