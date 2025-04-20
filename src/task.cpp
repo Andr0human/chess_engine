@@ -1,7 +1,8 @@
-
 #include "task.h"
 #include "search.h"
 #include "single_thread.h"
+#include <unordered_map>
+#include <functional>
 
 void
 Init()
@@ -47,6 +48,8 @@ getTestPositions(string filename, string testType)
 void
 AccuracyTest()
 {
+  // Argument : elsa accuracy
+
   const auto runTests = [] (const vector<TestPosition>& positions)
   {
     int posNo = 1;
@@ -103,6 +106,8 @@ AccuracyTest()
 void
 Helper() 
 {
+  // Argument : elsa help
+
   puts("/****************   Command List   ****************/\n");
 
   puts("** For Elsa's movegenerator self-accuracy test, type:\n");
@@ -127,6 +132,8 @@ Helper()
 void
 SpeedTest()
 {
+  // Argument : elsa speed
+
   const auto positions = getTestPositions("suite_1", "speed");
   cout << "Positions Found : " << positions.size() << '\n';
   
@@ -154,6 +161,8 @@ SpeedTest()
 void
 DirectSearch(const vector<string> &_args)
 {
+  // Argument : elsa go <fen> <search_time>
+
   const size_t __n = _args.size();
   const string fen = __n > 1 ? _args[1] : StartFen;
 
@@ -169,6 +178,8 @@ DirectSearch(const vector<string> &_args)
 void
 NodeCount(const vector<string> &_args)
 {
+  // Argument : elsa count <fen> <depth>
+
   const size_t __n = _args.size();
   const string fen = __n > 1 ? _args[1] : StartFen;
   Depth depth  = __n > 2 ? stoi(_args[2]) : 6;
@@ -237,8 +248,9 @@ DebugMoveGenerator(const vector<string> &_args)
 
 
 static void
-Level1(const vector<string>& args)
+StaticEval(const vector<string>& args)
 {
+  // Argument : elsa static <fen>
   if (args.size() == 1)
   {
     puts("No fen provided!");
@@ -263,51 +275,32 @@ void Task(int argc, char *argv[])
   const vector<string> argument_list =
     base_utils::ExtractArgumentList(argc, argv);
 
-  string command = argument_list.empty() ? "" : argument_list[0];
-
   if (argument_list.empty())
   {
     puts("No Task Found!");
     puts("Type : \'elsa help\' to view command list.\n");
+    return;
   }
-  else if (command == "help")
-  {
-    Helper();
-  }
-  else if (command == "accuracy")
-  {
-    // Argument : elsa accuracy
-    AccuracyTest();
-  }
-  else if (command == "speed")
-  {
-    // Argument : elsa speed
-    SpeedTest();
-  }
-  else if (command == "go")
-  {
-    // Argument : elsa go "fen" allowed_search_time allowed_extra_time
-    DirectSearch(argument_list);
-  }
-  else if (command == "play")
-  {
-    Play(argument_list);
-  }
-  else if (command == "count")
-  {
-    // Argument : elsa count {fen} {depth}
-    NodeCount(argument_list);
-  }
-  else if (command == "debug")
-  {
-    DebugMoveGenerator(argument_list);
-  }
-  else if (command == "level1")
-  {
-    Level1(argument_list);
-  }
-  else
-  {
+
+  const string& command = argument_list[0];
+
+  // Command map that associates commands with their handler functions
+  const std::unordered_map<string, std::function<void(const vector<string>&)>> command_map = {
+    {"help",     [](const auto&){ Helper(); }},
+    {"accuracy", [](const auto&){ AccuracyTest(); }},
+    {"speed",    [](const auto&){ SpeedTest(); }},
+    {"go",       [](const auto& args){ DirectSearch(args); }},
+    {"play",     [](const auto& args){ Play(args); }},
+    {"count",    [](const auto& args){ NodeCount(args); }},
+    {"debug",    [](const auto& args){ DebugMoveGenerator(args); }},
+    {"static",   [](const auto& args){ StaticEval(args); }}
+  };
+
+  // Find and execute the command
+  const auto it = command_map.find(command);
+  if (it != command_map.end()) {
+    it->second(argument_list);
+  } else {
     puts("No Valid Task!");
   }
 }
