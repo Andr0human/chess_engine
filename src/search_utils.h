@@ -6,20 +6,20 @@
 
 extern Move pvArray[MAX_PV_ARRAY_SIZE];
 extern array<Varray<Move, 2>, MAX_PLY> killerMoves;
-extern const string StartFen;
 
 
 void
 movcpy(Move* pTarget, const Move* pSource, int n);
 
 void
-ResetPvLine();
+resetPvLine();
 
 Score
-CheckmateScore(Ply ply);
+checkmateScore(Ply ply);
 
 template <MType mt>
-inline bool is_type(Move m)
+inline bool
+is_type(Move m)
 {
   if constexpr (mt == MType::CHECK)
     return (m >> 23) & 1;
@@ -37,19 +37,19 @@ inline bool is_type(Move m)
 }
 
 int
-RootReduction(Depth depth, size_t moveNo);
+rootReduction(Depth depth, size_t moveNo);
 
 int
-Reduction (Depth depth, size_t moveNo);
+reduction (Depth depth, size_t moveNo);
 
 bool
-InterestingMove(Move move);
+interestingMove(Move move);
 
 bool
-LmrOk(Move move, Depth depth, size_t moveNo);
+lmrOk(Move move, Depth depth, size_t moveNo);
 
 int
-SearchExtension(
+searchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
   int numExtensions,

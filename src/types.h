@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <type_traits>
+#include <string>
 
 using     Move = uint32_t;
 using    Score =  int32_t;
@@ -15,13 +16,14 @@ using Bitboard = uint64_t;
 using    Nodes = uint64_t;
 using   Weight =  int32_t;
 
+const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-enum SearchTechnique: bool
+enum SearchFlag: bool
 {
-  useTT = true,
-  useLMR = true,
-  useExtensions = true,
-  useMoveOrder = true,
+  USE_TT = true,
+  USE_LMR = true,
+  USE_EXTENSIONS = true,
+  USE_MOVE_ORDER = true,
 };
 
 enum Color: uint8_t
@@ -42,7 +44,7 @@ enum Piece: uint8_t
   B_PAWN = PAWN + 8, B_BISHOP, B_KNIGHT, B_ROOK, B_QUEEN, B_KING,
 };
 
-enum Table: uint64_t
+enum TableSize: uint64_t
 {
   ROOK_LOOKUP_TABLE_SIZE = 106495,
   BISHOP_LOOKUP_TABLE_SIZE = 5248,

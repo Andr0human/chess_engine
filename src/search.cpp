@@ -6,7 +6,7 @@
 template <>
 bool
 is_type<MType::PV>(Move m)
-{ return info.IsPartOfPV(m); }
+{ return info.isPartOfPv(m); }
 
 SearchData info;
 
@@ -15,7 +15,7 @@ SearchData info;
 
 template <MType mt>
 static size_t
-PrioritizeMoves(MoveArray& movesArray, size_t start)
+prioritizeMoves(MoveArray& movesArray, size_t start)
 {
   for (size_t i = start; i < movesArray.size(); i++)
   {
@@ -26,17 +26,17 @@ PrioritizeMoves(MoveArray& movesArray, size_t start)
 }
 
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start)
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
-  { return SeeScore(pos, move1) > SeeScore(pos, move2); };
+  { return seeScore(pos, move1) > seeScore(pos, move2); };
 
   size_t prevS = start;
 
-  if (hasFlag(mTypes, MType::CAPTURES))  start = PrioritizeMoves<MType::CAPTURES>(movesArray, start);
-  if (hasFlag(mTypes, MType::PROMOTION)) start = PrioritizeMoves<MType::PROMOTION>(movesArray, start);
-  if (hasFlag(mTypes, MType::CHECK))     start = PrioritizeMoves<MType::CHECK   >(movesArray, start);
-  if (hasFlag(mTypes, MType::PV))        start = PrioritizeMoves<MType::PV      >(movesArray, start);
+  if (hasFlag(mTypes, MType::CAPTURES))  start = prioritizeMoves<MType::CAPTURES>(movesArray, start);
+  if (hasFlag(mTypes, MType::PROMOTION)) start = prioritizeMoves<MType::PROMOTION>(movesArray, start);
+  if (hasFlag(mTypes, MType::CHECK))     start = prioritizeMoves<MType::CHECK   >(movesArray, start);
+  if (hasFlag(mTypes, MType::PV))        start = prioritizeMoves<MType::PV      >(movesArray, start);
   if (hasFlag(mTypes, MType::KILLER))
   {
     for (size_t i = start; i < movesArray.size(); i++) {
@@ -52,25 +52,25 @@ OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
 }
 
 Score
-See(const ChessBoard& pos, Square square, Color side, PieceType capturedPiece, Bitboard removedPieces)
+see(const ChessBoard& pos, Square square, Color side, PieceType capturedPiece, Bitboard removedPieces)
 {
   const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
 
   Score value = 0;
-  Square sq = GetSmallestAttacker(pos, square, side, removedPieces);
+  Square sq = getSmallestAttacker(pos, square, side, removedPieces);
 
   if (sq == SQUARE_NB)
     return value;
 
-  PieceType attacker = type_of(pos.PieceOnSquare(sq));
-  const auto seeScore = See(pos, square, ~side, attacker, removedPieces | (1ULL << sq));
+  PieceType attacker = type_of(pos.pieceOnSquare(sq));
+  const auto seeScore = see(pos, square, ~side, attacker, removedPieces | (1ULL << sq));
 
   value = std::max(0, pieceValues[capturedPiece] - seeScore);
   return value;
 }
 
 Score
-SeeScore(const ChessBoard& pos, Move move)
+seeScore(const ChessBoard& pos, Move move)
 {
   const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
   const Square fp =   to_sq(move);
@@ -82,14 +82,14 @@ SeeScore(const ChessBoard& pos, Move move)
     (is_type<MType::CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
 
   Bitboard removedPieces = 1ULL << ip;
-  PieceType pieceOnSquare = type_of(pos.PieceOnSquare(ip));
+  PieceType pieceOnSquare = type_of(pos.pieceOnSquare(ip));
 
-  Score seeScore = initialValue - See(pos, fp, side, pieceOnSquare, removedPieces);
+  Score seeScore = initialValue - see(pos, fp, side, pieceOnSquare, removedPieces);
   return seeScore;
 }
 
 void
-PrintMovelist(MoveArray myMoves, ChessBoard pos)
+printMovelist(MoveArray myMoves, ChessBoard pos)
 {
   using std::setw;
 
@@ -99,13 +99,13 @@ PrintMovelist(MoveArray myMoves, ChessBoard pos)
   for (size_t i = 0; i < myMoves.size(); i++)
   {
     Move move = myMoves[i];
-    string moveString = PrintMove(move, pos);
-    Score seeScore = SeeScore(pos, move);
+    string moveString = printMove(move, pos);
+    Score score = seeScore(pos, move);
 
     cout << " | " << setw(3)  << (i + 1)
          << " | " << setw(8)  << moveString
          << " | " << setw(11) << move
-         << " | " << setw(9)  << seeScore
+         << " | " << setw(9)  << score
          << " |"  << endl;
   }
 

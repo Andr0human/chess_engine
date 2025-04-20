@@ -3,7 +3,7 @@
 #include "attacks.h"
 
 void
-DecodeMove(Move move)
+decodeMove(Move move)
 {
   Square ip = Square(move & 63);
   Square fp = Square((move >> 6) & 63);
@@ -37,120 +37,123 @@ DecodeMove(Move move)
 }
 
 string
-PrintMove(Move move, ChessBoard _cb)
+printMove(Move move, ChessBoard pos)
 {
   if (move == NULL_MOVE)
     return string("null");
 
-  const auto IndexToRow = [] (int row)
+  const auto indexToRow = [] (int row)
   { return string(1, char(row + 49)); };
 
-  const auto IndexToCol = [] (int col)
+  const auto indexToCol = [] (int col)
   { return string(1, char(col + 97)); };
 
-  const auto IndexToSquare = [&] (int row, int col)
-  { return IndexToCol(col) + IndexToRow(row); };
+  const auto indexToSquare = [&] (int row, int col)
+  { return indexToCol(col) + indexToRow(row); };
 
-  const char piece_names[4] = {'B', 'N', 'R', 'Q'};
+  const char pieceNames[4] = {'B', 'N', 'R', 'Q'};
 
   Square ip = Square(move & 63);
   Square fp = Square((move >> 6) & 63);
 
-  int ip_col = ip & 7;
-  int fp_col = fp & 7;
+  int ipCol = ip & 7;
+  int fpCol = fp & 7;
 
-  int ip_row = (ip - ip_col) >> 3;
-  int fp_row = (fp - fp_col) >> 3;
+  int ipRow = (ip - ipCol) >> 3;
+  int fpRow = (fp - fpCol) >> 3;
 
   PieceType  pt = PieceType((move >> 12) & 7);
   PieceType cpt = PieceType((move >> 15) & 7);
 
-  Bitboard Apieces = _cb.All();
+  Bitboard apieces = pos.all();
 
-  _cb.MakeMove(move);
+  pos.makeMove(move);
   bool check = (((move >> 22) & 1) == WHITE)
-    ? InCheck<BLACK>(_cb) : InCheck<WHITE>(_cb);
-  string gives_check = check ? "+" : "";
-  _cb.UnmakeMove();
+    ? inCheck<BLACK>(pos) : inCheck<WHITE>(pos);
+  string givesCheck = check ? "+" : "";
+  pos.unmakeMove();
 
   string captures = (cpt != 0) ? "x" : "";
 
   if (pt == PAWN)
   {
-    string pawn_captures
-      = (std::abs(ip_col - fp_col) == 1)
-      ? (IndexToCol(ip_col) + "x") : "";
+    string pawnCaptures
+      = (std::abs(ipCol - fpCol) == 1)
+      ? (indexToCol(ipCol) + "x") : "";
 
-    string dest_square = IndexToSquare(fp_row, fp_col);
+    string destSquare = indexToSquare(fpRow, fpCol);
 
     // No promotion
     if (((1ULL << fp) & Rank18) == 0)
-      return pawn_captures + dest_square + gives_check;
+      return pawnCaptures + destSquare + givesCheck;
 
     int ppt = (move >> 18) & 3;
-    string promoted_piece = string("=") + string(1, piece_names[ppt]);
+    string promotedPiece = string("=") + string(1, pieceNames[ppt]);
 
-    return pawn_captures + dest_square + promoted_piece + gives_check;
+    return pawnCaptures + destSquare + promotedPiece + givesCheck;
   }
 
   if (pt == KING)
   {
     Bitboard fpos = 1ULL << fp;
     // Castling
-    if (std::abs(ip_col - fp_col) == 2)
-      return string((fpos & FileG) ? "O-O" : "O-O-O") + gives_check;
+    if (std::abs(ipCol - fpCol) == 2)
+      return string((fpos & FileG) ? "O-O" : "O-O-O") + givesCheck;
 
-    return string("K") + captures + IndexToSquare(fp_row, fp_col) + gives_check;
+    return string("K") + captures + indexToSquare(fpRow, fpCol) + givesCheck;
   }
 
   // If piece is [BISHOP, KNIGHT, ROOK, QUEEN]
   Bitboard pieces =
-    (pt == BISHOP ? AttackSquares<BISHOP>(fp, Apieces) :
-    (pt == KNIGHT ? AttackSquares<KNIGHT>(fp, Apieces) :
-    (pt == ROOK   ? AttackSquares< ROOK >(fp, Apieces) :
-    AttackSquares<QUEEN>(fp, Apieces))));
+    (pt == BISHOP ? attackSquares<BISHOP>(fp, apieces) :
+    (pt == KNIGHT ? attackSquares<KNIGHT>(fp, apieces) :
+    (pt == ROOK   ? attackSquares< ROOK >(fp, apieces) :
+    attackSquares<QUEEN>(fp, apieces))));
 
-  pieces = (pieces & _cb.get_piece(_cb.color, pt)) ^ (1ULL << ip);
+  pieces = (pieces & pos.getPiece(pos.color, pt)) ^ (1ULL << ip);
 
-  string piece_name = string(1, piece_names[pt - 2]);
-  string end_part = captures + IndexToSquare(fp_row, fp_col) + gives_check;
+  string pieceName = string(1, pieceNames[pt - 2]);
+  string endPart = captures + indexToSquare(fpRow, fpCol) + givesCheck;
 
   if (pieces == 0)
-    return piece_name + end_part;
+    return pieceName + endPart;
 
   bool row = true, col = true;
 
   while (pieces > 0)
   {
-    Square __pos = NextSquare(pieces);
+    Square __pos = nextSquare(pieces);
 
-    int __pos_col = __pos & 7;
-    int __pos_row = (__pos - __pos_col) >> 3;
+    int posCol = __pos & 7;
+    int posRow = (__pos - posCol) >> 3;
 
-    if (__pos_col == ip_col) col = false;
-    if (__pos_row == ip_row) row = false;
+    if (posCol == ipCol) col = false;
+    if (posRow == ipRow) row = false;
   }
 
-  if (col) return piece_name + IndexToCol(ip_col) + end_part;
-  if (row) return piece_name + IndexToRow(ip_row) + end_part;
+  if (col) return pieceName + indexToCol(ipCol) + endPart;
+  if (row) return pieceName + indexToRow(ipRow) + endPart;
 
-  return piece_name + IndexToSquare(ip_row, ip_col) + end_part;
+  return pieceName + indexToSquare(ipRow, ipCol) + endPart;
 }
 
-template <Color c_my>
+template <Color cMy>
 bool
-InCheck(const ChessBoard& _cb)
+inCheck(const ChessBoard& pos)
 {
-  constexpr Color c_emy = ~c_my;
+  constexpr Color cEmy = ~cMy;
 
-  Square k_sq = SquareNo( _cb.piece<c_my, KING>() );
-  Bitboard occupied = _cb.All();
+  Square kSq = squareNo( pos.piece<cMy, KING>() );
+  Bitboard occupied = pos.all();
 
-  return (AttackSquares<ROOK>(k_sq, occupied) & (_cb.piece<c_emy, ROOK  >() | _cb.piece<c_emy, QUEEN>()))
-    or (AttackSquares<BISHOP>(k_sq, occupied) & (_cb.piece<c_emy, BISHOP>() | _cb.piece<c_emy, QUEEN>()))
-    or (AttackSquares<KNIGHT>(k_sq, occupied) &  _cb.piece<c_emy, KNIGHT>())
-    or (AttackSquares<c_my, PAWN>(k_sq)       &  _cb.piece<c_emy, PAWN  >());
+  return (attackSquares<ROOK>(  kSq, occupied) & (pos.piece<cEmy, ROOK  >() | pos.piece<cEmy, QUEEN>()))
+      or (attackSquares<BISHOP>(kSq, occupied) & (pos.piece<cEmy, BISHOP>() | pos.piece<cEmy, QUEEN>()))
+      or (attackSquares<KNIGHT>(kSq, occupied) &  pos.piece<cEmy, KNIGHT>())
+      or (attackSquares<cMy, PAWN>(kSq)        &  pos.piece<cEmy, PAWN  >());
 }
 
-template bool InCheck<WHITE>(const ChessBoard& pos);
-template bool InCheck<BLACK>(const ChessBoard& pos);
+template bool
+inCheck<WHITE>(const ChessBoard& pos);
+
+template bool
+inCheck<BLACK>(const ChessBoard& pos);

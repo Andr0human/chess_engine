@@ -8,17 +8,17 @@
 
 class EvalData
 {
-	private:
+    private:
 
-	template <Color c_my>
-	void MaterialCount(const ChessBoard& pos)
-	{
-		pieces[c_my] =
-				pos.count<c_my, BISHOP>()
-			+ pos.count<c_my, KNIGHT>()
-			+ pos.count<c_my, ROOK  >()
-			+ pos.count<c_my, QUEEN >();
-	}
+    template <Color cMy>
+    void materialCount(const ChessBoard& pos)
+    {
+        pieces[cMy] =
+        pos.count<cMy, BISHOP>()
+            + pos.count<cMy, KNIGHT>()
+            + pos.count<cMy, ROOK  >()
+            + pos.count<cMy, QUEEN >();
+    }
 
 
 	public:
@@ -39,29 +39,29 @@ class EvalData
 
 	EvalData(const ChessBoard& pos)
 	{
-		MaterialCount<WHITE>(pos);
-		MaterialCount<BLACK>(pos);
+		materialCount<WHITE>(pos);
+		materialCount<BLACK>(pos);
 
 		boardWeight = pos.boardWeight;
 		phase = float(boardWeight) / float(GamePhaseLimit);
 	}
 
 	bool
-	NoWhitePiecesOnBoard(const ChessBoard& pos) const noexcept
+	noWhitePiecesOnBoard(const ChessBoard& pos) const noexcept
 	{ return pos.count<WHITE, PAWN>() + pieces[WHITE] == 0; }
 
 	bool
-	NoBlackPiecesOnBoard(const ChessBoard& pos) const noexcept
+	noBlackPiecesOnBoard(const ChessBoard& pos) const noexcept
 	{ return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
 template <bool debug=false>
 Score
-Threats(const ChessBoard& pos);
+threats(const ChessBoard& pos);
 
 template <bool debug=false>
 Score
-Evaluate(const ChessBoard& pos);
+evaluate(const ChessBoard& pos);
 
 
 #endif

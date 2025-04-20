@@ -4,37 +4,37 @@
 namespace plt
 {
 
-MaskTable    UpMasks;
-MaskTable  DownMasks;
-MaskTable  LeftMasks;
-MaskTable RightMasks;
+MaskTable    upMasks;
+MaskTable  downMasks;
+MaskTable  leftMasks;
+MaskTable rightMasks;
 
-MaskTable   UpRightMasks;
-MaskTable    UpLeftMasks;
-MaskTable DownRightMasks;
-MaskTable  DownLeftMasks;
+MaskTable   upRightMasks;
+MaskTable    upLeftMasks;
+MaskTable downRightMasks;
+MaskTable  downLeftMasks;
 
-MaskTable     LineMasks;
-MaskTable DiagonalMasks;
+MaskTable     lineMasks;
+MaskTable diagonalMasks;
 
-MaskTable      RookMasks;
-MaskTable    BishopMasks;
-MaskTable    KnightMasks;
-MaskTable      KingMasks;
-MaskTable KingOuterMasks;
+MaskTable      rookMasks;
+MaskTable    bishopMasks;
+MaskTable    knightMasks;
+MaskTable      kingMasks;
+MaskTable kingOuterMasks;
 
-array<MaskTable, COLOR_NB>        PawnMasks;
-array<MaskTable, COLOR_NB> PawnCaptureMasks;
-array<MaskTable, COLOR_NB>  PassedPawnMasks;
+array<MaskTable, COLOR_NB>        pawnMasks;
+array<MaskTable, COLOR_NB> pawnCaptureMasks;
+array<MaskTable, COLOR_NB>  passedPawnMasks;
 
-MaskTable   RookStartIndex;
-MaskTable BishopStartIndex;
+MaskTable   rookStartIndex;
+MaskTable bishopStartIndex;
 
-Bitboard*   RookMovesLookUp = new Bitboard[ROOK_LOOKUP_TABLE_SIZE  ];
-Bitboard* BishopMovesLookUp = new Bitboard[BISHOP_LOOKUP_TABLE_SIZE];
+Bitboard*   rookMovesLookUp = new Bitboard[ROOK_LOOKUP_TABLE_SIZE  ];
+Bitboard* bishopMovesLookUp = new Bitboard[BISHOP_LOOKUP_TABLE_SIZE];
 
 
-MaskTable RookMagics = {
+MaskTable rookMagics = {
    0x68000814008B4A0, 0x8600114481020020, 0x1F000AC0F1002001, 0x1600020063144099, 0xCE1E254B3BA3A1E2, 0x61000C00A1002812, 0x1E00080200331AA4, 0x5E000102004BA584,
   0x5DF88002400A8927, 0x1D2700210186C007,  0x27A0025F20081C1, 0x1676002040A8B200, 0xA7AE00044A002150, 0x24AE002912006410, 0x552A000528243200, 0xD7A1002346009500,
   0x18B189800BE14003, 0x35D5C1C000E01001,   0x79B20042006082, 0x402E420010E02A01, 0x14B501000800910C, 0x9F1B0100189A0400, 0x72AEC40012087330, 0xA0A46A000A91410C,
@@ -45,7 +45,7 @@ MaskTable RookMagics = {
   0x93D60083630254C2, 0x5218204001910381, 0xD13C6832008260C2, 0xE59E00C238522012, 0x701200AC50982006, 0xE6B600348308101E, 0x3E9D78060690091C, 0xFA315A8C0F38A902
 };
 
-ShiftTable RookShifts = {
+ShiftTable rookShifts = {
   52, 53, 53, 52, 52, 53, 53, 52,
   53, 54, 54, 54, 54, 54, 54, 53,
   53, 54, 54, 54, 54, 54, 54, 53,
@@ -56,7 +56,7 @@ ShiftTable RookShifts = {
   52, 53, 53, 53, 53, 53, 53, 52
 };
 
-MaskTable BishopMagics = {
+MaskTable bishopMagics = {
   0xC17820058E05C10A, 0xD64E4C58028F0605, 0x2884780208C84BD4, 0x17DC4C0980A3E81E, 0x807C04209FE149EC, 0x9CF4F3E16786090D, 0xED0A5A0620A03652, 0xC124818808051430,
   0xB51458CE5C081A17, 0xC9A4780AD80366ED, 0x488578184B04A6F3, 0xD36D882081ABFD8B, 0xA3EA63F35E48A68C, 0xD5A8920190A81095, 0x7C731BEBD6EBAF4A, 0x7E7F28340CC8A7C3,
   0xF816947223301C03, 0xC89456D02C180DDD, 0xF59C13E80A4C0008, 0xC248033C2041F1AA, 0xFD6087D400A012D5, 0x6CC6802348200804, 0xA50C9F012B4EF288, 0x1520457F07480C1E,
@@ -67,7 +67,7 @@ MaskTable BishopMagics = {
   0x165AF40B080A103E, 0x2DD4D902839058AD, 0xFE4FCD7B12231075, 0xB265FF1781840C0B, 0x50E49B7311A6020E, 0x1F1AF5200A161606, 0x7A0F700C07542C00, 0x839CB842080E0010
 };
 
-ShiftTable BishopShifts = {
+ShiftTable bishopShifts = {
   58, 59, 59, 59, 59, 59, 59, 58,
   59, 59, 59, 59, 59, 59, 59, 59,
   59, 59, 57, 57, 57, 57, 59, 59,
@@ -80,12 +80,12 @@ ShiftTable BishopShifts = {
 
 
 static bool
-InRange(int __x, int __y)
+inRange(int __x, int __y)
 { return (__x >= 0) & (__x < 8) & (__y >= 0) & (__y < 8); }
 
 
 static Bitboard
-RookMaskGen(Square sq)
+rookMaskGen(Square sq)
 {
 	int col = sq & 7, row = (sq - col) >> 3;
 	Bitboard res = 0;
@@ -106,7 +106,7 @@ RookMaskGen(Square sq)
 }
 
 static Bitboard
-BishopMaskGen(Square sq)
+bishopMaskGen(Square sq)
 {
 	int col = sq & 7, row = (sq - col) >> 3;
   Bitboard res = 0;
@@ -127,115 +127,115 @@ BishopMaskGen(Square sq)
 }
 
 static int
-GenerateBlockers(Bitboard mask, Bitboard* blockers)
+generateBlockers(Bitboard mask, Bitboard* blockers)
 {
   // Any sq can have a max of 12 sq available for a rook piece
   Bitboard list[12]{};
-  int __n = 0;
+  int n = 0;
 
   while (mask != 0)
   {
-    list[__n++] = mask ^ (mask & (mask - 1));
+    list[n++] = mask ^ (mask & (mask - 1));
     mask &= mask - 1;
   }
 
-  int __cn = 0;
+  int cn = 0;
 
-  for (int i = 0; i < (1 << __n); i++)
+  for (int i = 0; i < (1 << n); i++)
   {
     Bitboard res = 0;
 
-    for (int j = 0; j < __n; j++)
+    for (int j = 0; j < n; j++)
       if ((1 << j) & i) res |= list[j];
 
-    blockers[__cn++] = res;
+    blockers[cn++] = res;
   }
 
-  return __cn;
+  return cn;
 }
 
 static void
-BuildRookBishopMasks()
+buildRookBishopMasks()
 {
   for (Square sq = SQUARE_ZERO; sq < SQUARE_NB; ++sq) {
-    RookMasks[sq] = RookMaskGen(sq);
-    BishopMasks[sq] = BishopMaskGen(sq);
+    rookMasks[sq]   = rookMaskGen(sq);
+    bishopMasks[sq] = bishopMaskGen(sq);
   }
 }
 
 static Bitboard
-LoopResult(Square sq, int ix, int iy, Bitboard blocker)
+loopResult(Square sq, int ix, int iy, Bitboard blocker)
 {
 	Bitboard res = 0;
 	int col = (sq & 7), row = (sq - col) >> 3;
 
-	for (int i = row + ix, j = col + iy; InRange(i, j); i += ix, j += iy)
+	for (int i = row + ix, j = col + iy; inRange(i, j); i += ix, j += iy)
 	{
-		Bitboard __x = 1ULL << (8 * i + j);
+		Bitboard x = 1ULL << (8 * i + j);
 		res |= 1ULL << (8 * i + j);
-		if (__x & blocker) break;
+		if (x & blocker) break;
 	}
 
 	return res;
 }
 
 static Bitboard
-RookSquaresBasic(Square sq, Bitboard blocker)
+rookSquaresBasic(Square sq, Bitboard blocker)
 {
-	return LoopResult(sq, 1, 0, blocker) | LoopResult(sq, -1, 0, blocker)
-		   | LoopResult(sq, 0, 1, blocker) | LoopResult(sq, 0, -1, blocker);
+	return loopResult(sq, 1, 0, blocker) | loopResult(sq, -1, 0, blocker)
+		   | loopResult(sq, 0, 1, blocker) | loopResult(sq, 0, -1, blocker);
 }
 
 static Bitboard
-BishopSquaresBasic(Square sq, Bitboard blocker)
+bishopSquaresBasic(Square sq, Bitboard blocker)
 {
-	return LoopResult(sq, 1, 1, blocker) | LoopResult(sq, -1, -1, blocker)
-		   | LoopResult(sq, 1, -1, blocker) | LoopResult(sq, -1, 1, blocker);
+	return loopResult(sq, 1, 1, blocker) | loopResult(sq, -1, -1, blocker)
+		   | loopResult(sq, 1, -1, blocker) | loopResult(sq, -1, 1, blocker);
 }
 
 static void
-BuildLookUpTable(MaskTable& masks, MaskTable& magic_table, ShiftTable& shift_table, MaskTable& start_index,
-                 Bitboard* lookup_table, Bitboard (*atk_square_gen)(Square, Bitboard))
+buildLookUpTable(MaskTable& masks, MaskTable& magicTable, ShiftTable& shiftTable, MaskTable& startIndex,
+                 Bitboard* lookupTable, Bitboard (*atkSquareGen)(Square, Bitboard))
 {
 	Bitboard blockers[4096];
-  start_index[0] = 0;
+  startIndex[0] = 0;
 
   for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
 	{
-		int __n = GenerateBlockers(masks[sq], blockers);
+		int n = generateBlockers(masks[sq], blockers);
 
-		int bits = shift_table[sq];
-		Bitboard magic = magic_table[sq];
-		uint64_t m_index = 0;
+		int bits = shiftTable[sq];
+		Bitboard magic = magicTable[sq];
+		uint64_t mIndex = 0;
 
-		for (int i = 0; i < __n; i++)
+		for (int i = 0; i < n; i++)
 		{
-			Bitboard occupancy = start_index[sq] + ((blockers[i] * magic) >> bits);
+			Bitboard occupancy = startIndex[sq] + ((blockers[i] * magic) >> bits);
 
-      if (occupancy > m_index)
-        m_index = occupancy;
+      if (occupancy > mIndex)
+        mIndex = occupancy;
 
-      Bitboard result = atk_square_gen(sq, blockers[i]);
-			lookup_table[occupancy] = result;
+      Bitboard result = atkSquareGen(sq, blockers[i]);
+			lookupTable[occupancy] = result;
 		}
 
     if (sq < 63)
-      start_index[sq + 1] = m_index + 1;
+      startIndex[sq + 1] = mIndex + 1;
 	}
 }
 
 
 static void
-BuildSlidingTable(MaskTable& _arr, int index, int index_inc, int inc_x, int inc_y)
+buildSlidingTable(MaskTable& arr, int index, int indexInc, int incX, int incY)
 {
-  for (int idx = index;; idx += index_inc)
+  for (int idx = index;; idx += indexInc)
   {
-    if (idx < 0 || idx >= 64) break;
+    if (idx < 0 || idx >= SQUARE_NB) break;
     int x = (idx & 7), y = (idx - x) >> 3;
     Bitboard val = 0;
-    for (int i = x, j = y; InRange(i, j); i += inc_x, j += inc_y)
+    for (int i = x, j = y; inRange(i, j); i += incX, j += incY)
     {
-      _arr[8 * j + i] = val;
+      arr[8 * j + i] = val;
       val |= 1ULL << (8 * j + i);
     }
   }
@@ -243,7 +243,7 @@ BuildSlidingTable(MaskTable& _arr, int index, int index_inc, int inc_x, int inc_
 
 
 static void
-BuildKnightTable(MaskTable& _arr)
+buildKnightTable(MaskTable& arr)
 {
   const int inc_x[2] = {2, -2};
   const int inc_y[2] = {1, -1};
@@ -258,21 +258,21 @@ BuildKnightTable(MaskTable& _arr)
     {
       for (int j = 0; j < 2; j++)
       {
-        if (InRange(row + inc_x[i], col + inc_y[j]))
+        if (inRange(row + inc_x[i], col + inc_y[j]))
           value |= 1ULL << (8 * (row + inc_x[i]) + (col + inc_y[j]));
 
-        if (InRange(row + inc_y[j], col + inc_x[i]))
+        if (inRange(row + inc_y[j], col + inc_x[i]))
           value |= 1ULL << (8 * (row + inc_y[j]) + (col + inc_x[i]));
       }
     }
 
-    _arr[square] = value;
+    arr[square] = value;
   }
 }
 
 
 static void
-BuildKingTable(MaskTable& _arr)
+buildKingTable(MaskTable& arr)
 {
   const int inc[SQUARE_NB] = {1, -1};
 
@@ -286,24 +286,24 @@ BuildKingTable(MaskTable& _arr)
     {
       for (int j = 0; j < 2; j++)
       {
-        if (InRange(row + inc[i], col + inc[j]))
+        if (inRange(row + inc[i], col + inc[j]))
           value |= 1ULL << (8 * (row + inc[i]) + (col + inc[j]));
       }
 
-      if (InRange(row + inc[i], col))
+      if (inRange(row + inc[i], col))
         value |= 1ULL << (8 * (row + inc[i]) + (col));
 
-      if (InRange(row, col + inc[i]))
+      if (inRange(row, col + inc[i]))
         value |= 1ULL << (8 * (row) + (col + inc[i]));
     }
 
-    _arr[square] = value;
+    arr[square] = value;
   }
 }
 
 
 static void
-BuildKingOuterTable(MaskTable& table)
+buildKingOuterTable(MaskTable& table)
 {
   for (Square square = SQ_A1; square < SQUARE_NB; ++square)
   {
@@ -312,20 +312,20 @@ BuildKingOuterTable(MaskTable& table)
 
     Bitboard value = VALUE_ZERO;
 
-    if (InRange(row + 1, col + 1)) value |= KingMasks[square + 9];
-    if (InRange(row + 1, col - 1)) value |= KingMasks[square + 7];
-    if (InRange(row - 1, col + 1)) value |= KingMasks[square - 7];
-    if (InRange(row - 1, col - 1)) value |= KingMasks[square - 9];
+    if (inRange(row + 1, col + 1)) value |= kingMasks[square + 9];
+    if (inRange(row + 1, col - 1)) value |= kingMasks[square + 7];
+    if (inRange(row - 1, col + 1)) value |= kingMasks[square - 7];
+    if (inRange(row - 1, col - 1)) value |= kingMasks[square - 9];
 
-    table[square] = value ^ (value & (KingMasks[square] | (1ULL << square)));
+    table[square] = value ^ (value & (kingMasks[square] | (1ULL << square)));
   }
 }
 
 
 static void
-BuildPawnTable(MaskTable& _arr, int dir, bool captures)
+buildPawnTable(MaskTable& arr, int dir, bool captures)
 {
-  for (int i = 0; i < 64; i++)
+  for (int i = 0; i < SQUARE_NB; i++)
   {
     int x = i & 7, y = (i - x) >> 3, up = i + 8 * dir;
     Bitboard val = 0;
@@ -334,86 +334,86 @@ BuildPawnTable(MaskTable& _arr, int dir, bool captures)
       if (x - 1 >= 0) val |= 1ULL << (x - 1 + 8 * (y + dir));
       if (x + 1 < 8)  val |= 1ULL << (x + 1 + 8 * (y + dir));
     }
-    else if (0 <= up && up < 64)
+    else if (0 <= up && up < SQUARE_NB)
     {
       val |= 1ULL << up;
     }
-    _arr[i] = val;
+    arr[i] = val;
   }
 }
 
 
 static void
-BuildPassedPawnTable(MaskTable& _arr, MaskTable& gen_table)
+buildPassedPawnTable(MaskTable& arr, MaskTable& genTable)
 {
   for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
   {
-    Bitboard val = gen_table[sq];
+    Bitboard val = genTable[sq];
 
-    if ((sq & 7) < 7) val |= gen_table[sq + 1];
-    if ((sq & 7) > 0) val |= gen_table[sq - 1];
-    _arr[sq] = val;
+    if ((sq & 7) < 7) val |= genTable[sq + 1];
+    if ((sq & 7) > 0) val |= genTable[sq - 1];
+    arr[sq] = val;
   }
 }
 
 
 static void
-MergeTable(MaskTable& to_table, MaskTable& from_table1, MaskTable& from_table2)
+mergeTable(MaskTable& toTable, MaskTable& fromTable1, MaskTable& fromTable2)
 {
-  for (int i = 0; i < 64; i++)
-    to_table[i] |= from_table1[i] | from_table2[i];
+  for (int i = 0; i < SQUARE_NB; i++)
+    toTable[i] |= fromTable1[i] | fromTable2[i];
 }
 
 
 static void
-SetZero(MaskTable& table)
+setZero(MaskTable& table)
 {
-  for (int i = 0; i < 64; i++)
+  for (int i = 0; i < SQUARE_NB; i++)
     table[i] = 0;
 }
 
 
 void
-Init()
+init()
 {
-  BuildSlidingTable(   UpMasks, 56,  1,  0, -1);
-  BuildSlidingTable( DownMasks,  7, -1,  0,  1);
-  BuildSlidingTable(RightMasks,  7,  8, -1,  0);
-  BuildSlidingTable( LeftMasks,  0,  8,  1,  0);
+  buildSlidingTable(   upMasks, 56,  1,  0, -1);
+  buildSlidingTable( downMasks,  7, -1,  0,  1);
+  buildSlidingTable(rightMasks,  7,  8, -1,  0);
+  buildSlidingTable( leftMasks,  0,  8,  1,  0);
 
-  BuildSlidingTable(  UpRightMasks, 63, -8, -1, -1);
-  BuildSlidingTable(  UpRightMasks, 56,  1, -1, -1);
-  BuildSlidingTable( DownLeftMasks,  0,  8,  1,  1);
-  BuildSlidingTable( DownLeftMasks,  7, -1,  1,  1);
-  BuildSlidingTable(   UpLeftMasks, 56,  1,  1, -1);
-  BuildSlidingTable(   UpLeftMasks, 56, -8,  1, -1);
-  BuildSlidingTable(DownRightMasks,  7,  8, -1,  1);
-  BuildSlidingTable(DownRightMasks,  7, -1, -1,  1);
+  buildSlidingTable(  upRightMasks, 63, -8, -1, -1);
+  buildSlidingTable(  upRightMasks, 56,  1, -1, -1);
+  buildSlidingTable( downLeftMasks,  0,  8,  1,  1);
+  buildSlidingTable( downLeftMasks,  7, -1,  1,  1);
+  buildSlidingTable(   upLeftMasks, 56,  1,  1, -1);
+  buildSlidingTable(   upLeftMasks, 56, -8,  1, -1);
+  buildSlidingTable(downRightMasks,  7,  8, -1,  1);
+  buildSlidingTable(downRightMasks,  7, -1, -1,  1);
 
-  BuildKnightTable(KnightMasks);
-  BuildKingTable(KingMasks);
-  BuildKingOuterTable(KingOuterMasks);
+  buildKnightTable(knightMasks);
+  buildKingTable(kingMasks);
+  buildKingOuterTable(kingOuterMasks);
 
-  BuildPawnTable( PawnMasks[1],  1, false);
-  BuildPawnTable( PawnMasks[0], -1, false);
-  BuildPawnTable(PawnCaptureMasks[1],  1,  true);
-  BuildPawnTable(PawnCaptureMasks[0], -1,  true);
+  buildPawnTable(pawnMasks[1],  1, false);
+  buildPawnTable(pawnMasks[0], -1, false);
+  buildPawnTable(pawnCaptureMasks[1],  1,  true);
+  buildPawnTable(pawnCaptureMasks[0], -1,  true);
 
-  BuildPassedPawnTable(PassedPawnMasks[1],   UpMasks);
-  BuildPassedPawnTable(PassedPawnMasks[0], DownMasks);
+  buildPassedPawnTable(passedPawnMasks[1],   upMasks);
+  buildPassedPawnTable(passedPawnMasks[0], downMasks);
 
-  SetZero(DiagonalMasks);
-  SetZero(LineMasks);
+  setZero(diagonalMasks);
+  setZero(lineMasks);
 
-  MergeTable(DiagonalMasks,   UpRightMasks,   UpLeftMasks);
-  MergeTable(DiagonalMasks, DownRightMasks, DownLeftMasks);
+  mergeTable(diagonalMasks,   upRightMasks,   upLeftMasks);
+  mergeTable(diagonalMasks, downRightMasks, downLeftMasks);
 
-  MergeTable(LineMasks,   UpMasks,  DownMasks);
-  MergeTable(LineMasks, LeftMasks, RightMasks);
+  mergeTable(lineMasks,   upMasks,  downMasks);
+  mergeTable(lineMasks, leftMasks, rightMasks);
 
-  BuildRookBishopMasks();
-  BuildLookUpTable(  RookMasks,   RookMagics,   RookShifts,   RookStartIndex,   RookMovesLookUp,   RookSquaresBasic);
-  BuildLookUpTable(BishopMasks, BishopMagics, BishopShifts, BishopStartIndex, BishopMovesLookUp, BishopSquaresBasic);
+  buildRookBishopMasks();
+  buildLookUpTable( rookMasks,    rookMagics,   rookShifts,   rookStartIndex,   rookMovesLookUp,   rookSquaresBasic);
+  buildLookUpTable(bishopMasks, bishopMagics, bishopShifts, bishopStartIndex, bishopMovesLookUp, bishopSquaresBasic);
 }
 
 }

@@ -10,51 +10,46 @@ using std::array;
 using MaskTable  = array<Bitboard, SQUARE_NB>;
 using ShiftTable = array<int     , SQUARE_NB>;
 
-
 #define __abs(x) ((x >= 0) ? (x) : -(x))
 
 namespace plt
 {
+  extern MaskTable upMasks;
+  extern MaskTable downMasks;
+  extern MaskTable leftMasks;
+  extern MaskTable rightMasks;
 
-extern MaskTable    UpMasks;
-extern MaskTable  DownMasks;
-extern MaskTable  LeftMasks;
-extern MaskTable RightMasks;
+  extern MaskTable upRightMasks;
+  extern MaskTable upLeftMasks;
+  extern MaskTable downRightMasks;
+  extern MaskTable downLeftMasks;
 
-extern MaskTable   UpRightMasks;
-extern MaskTable    UpLeftMasks;
-extern MaskTable DownRightMasks;
-extern MaskTable  DownLeftMasks;
+  extern MaskTable lineMasks;     // (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
+  extern MaskTable diagonalMasks; // (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
 
-extern MaskTable     LineMasks;             // (	 UpMask | 	DownMask | 		LeftMask | 	  RightMask)
-extern MaskTable DiagonalMasks;             // (UpRightMask | UpLeftMask | DownRightMask | DownLeftMask)
+  extern MaskTable rookMasks;
+  extern MaskTable bishopMasks;
+  extern MaskTable knightMasks;
+  extern MaskTable kingMasks;
+  extern MaskTable kingOuterMasks;
 
-extern MaskTable      RookMasks;
-extern MaskTable    BishopMasks;
-extern MaskTable    KnightMasks;
-extern MaskTable      KingMasks;
-extern MaskTable KingOuterMasks;
+  extern array<MaskTable, COLOR_NB> pawnMasks;
+  extern array<MaskTable, COLOR_NB> pawnCaptureMasks;
+  extern array<MaskTable, COLOR_NB> passedPawnMasks;
 
-extern array<MaskTable, COLOR_NB>        PawnMasks;
-extern array<MaskTable, COLOR_NB> PawnCaptureMasks;
-extern array<MaskTable, COLOR_NB>  PassedPawnMasks;
+  extern MaskTable rookStartIndex;
+  extern MaskTable bishopStartIndex;
 
-extern MaskTable   RookStartIndex;
-extern MaskTable BishopStartIndex;
+  extern Bitboard *rookMovesLookUp;
+  extern Bitboard *bishopMovesLookUp;
 
-extern Bitboard*   RookMovesLookUp;
-extern Bitboard* BishopMovesLookUp;
+  extern MaskTable rookMagics;
+  extern ShiftTable rookShifts;
+  extern MaskTable bishopMagics;
+  extern ShiftTable bishopShifts;
 
-extern  MaskTable   RookMagics;
-extern ShiftTable   RookShifts;
-extern  MaskTable BishopMagics;
-extern ShiftTable BishopShifts;
-
-void
-Init();
-
+  void
+  init();
 }
 
-
 #endif
-

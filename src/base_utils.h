@@ -14,70 +14,59 @@ using std::string;
 using std::cout;
 using std::endl;
 
-
-#ifndef BIT_MANIPULATION
-
 // Define the type for the Lsb and Msb function pointers
 typedef uint64_t (*BitboardFunc)(uint64_t);
 
 inline int
-PopCount(Bitboard __x) 
+popCount(Bitboard __x) 
 { return __builtin_popcountll(__x); }
 
 inline Square
-SquareNo(Bitboard __x)
+squareNo(Bitboard __x)
 { return Square(__builtin_popcountll(__x - 1)) ; }
 
 inline Square
-LsbIndex(Bitboard __x)
+lsbIndex(Bitboard __x)
 { return Square(__builtin_ctzll(__x | (1ULL << 63))); }
 
 inline Square
-MsbIndex(Bitboard __x)
+msbIndex(Bitboard __x)
 { return Square(__builtin_clzll(__x | 1) ^ 63); }
 
 inline Bitboard
-Lsb(Bitboard __x)
+lsb(Bitboard __x)
 { return __x ^ (__x & (__x - 1)); }
 
 inline Bitboard
-Msb(Bitboard __x)
+msb(Bitboard __x)
 { return (__x != 0) ? (1ULL << (__builtin_clzll(__x) ^ 63)) : (0); }
 
 inline Bitboard
-LeftShift(Bitboard val, int shift)
+leftShift(Bitboard val, int shift)
 { return val << shift; }
 
 inline Bitboard
-RightShift(Bitboard val, int shift)
+rightShift(Bitboard val, int shift)
 { return val >> shift; }
 
-#endif
-
-namespace base_utils
+namespace utils
 {
+  // Splits the string using separator.
+  vector<string>
+  split(const string& s, char sep);
 
-vector<string>
-Split(const string& __s, char sep);
+  // Strips the string of leading and trailing separators.
+  string
+  strip(string s, char sep = ' ');
 
+  // Extracts the argument list from the command line.
+  vector<string>
+  extractArgumentList(int argc, char *argv[]);
 
-
-string
-Strip(string __s, char sep = ' ');
-
-
-
-vector<string>
-ExtractArgumentList(int argc, char *argv[]);
-
-
-
-string
-BitsOnBoard(Bitboard value);
-
-
+  // Returns the string representation of the bitboard.
+  string
+  bitsOnBoard(Bitboard value);
 }
 
 
 #endif
-

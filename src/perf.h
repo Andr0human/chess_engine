@@ -16,89 +16,83 @@ using perf_ns_time = std::chrono::duration<int64_t, std::nano>;
 
 namespace perf
 {
+  inline perf_clock
+  now()
+  { return std::chrono::high_resolution_clock::now(); }
 
-inline perf_clock
-now()
-{ return std::chrono::high_resolution_clock::now(); }
-
-struct Timer
-{
+  struct Timer
+  {
     perf_clock _start, _end;
     perf_time duration;
     std::string func_name;
 
     Timer()
     { 
-        func_name = "Timer";
-        _start = now();
+      func_name = "Timer";
+      _start = now();
     }
 
     Timer(std::string function_name)
     {
-        func_name = function_name;
-        _start = now();
+      func_name = function_name;
+      _start = now();
     }
 
     ~Timer()
     {
-        _end = now();
-        duration = _end - _start;
-        std::cout << func_name << " took " << duration.count()
-                  << " sec." << std::endl;
+      _end = now();
+      duration = _end - _start;
+      std::cout << func_name << " took " << duration.count()
+                << " sec." << std::endl;
     }
-};
+  };
 
 
-/**
- * @brief Returns the time_elpased by a function
- * 
- * Not applicable for template or non-static member functions.
- * 
- * @tparam _Callable 
- * @tparam _Args 
- * @param __f function
- * @param __args arguments of the functions
- * @return func_time (in sec.)
- */
-template <typename _Callable, typename... _Args> double
-Time(const _Callable &__f, _Args&&... __args)
-{
+  /**
+   * @brief Returns the time_elpased by a function
+   * 
+   * Not applicable for template or non-static member functions.
+   * 
+   * @tparam _Callable 
+   * @tparam _Args 
+   * @param __f function
+   * @param __args arguments of the functions
+   * @return func_time (in sec.)
+   */
+  template <typename _Callable, typename... _Args> double
+  time(const _Callable &__f, _Args&&... __args)
+  {
     const perf_clock start = now();
 
     __f(std::forward<_Args>(__args)...);
     
     const perf_time dur = now() - start;
     return dur.count();
-}
+  }
 
 
-/**
- * @brief Returns the value & time_elapsed by func. as a pair.
- * 
- * Not applicable for void, template or non-static member functions. (use perf::Time instead for voids)
- * 
- * @tparam _Callable 
- * @tparam _Args 
- * @param __f function
- * @param __args arguments of the functions
- * @return pair( func_return_value, func_time(in sec.) )
- */
-template <typename _Callable, typename... _Args> const auto
-run_algo(const _Callable &__f, _Args&&... __args)
-{
+  /**
+   * @brief Returns the value & time_elapsed by func. as a pair.
+   * 
+   * Not applicable for void, template or non-static member functions. (use perf::Time instead for voids)
+   * 
+   * @tparam _Callable 
+   * @tparam _Args 
+   * @param __f function
+   * @param __args arguments of the functions
+   * @return pair( func_return_value, func_time(in sec.) )
+   */
+  template <typename _Callable, typename... _Args> const auto
+  run_algo(const _Callable &__f, _Args&&... __args)
+  {
     const perf_clock start = now();
 
-    const auto ret_val = __f(std::forward<_Args>(__args)...);
+    const auto returnValue = __f(std::forward<_Args>(__args)...);
     
     const perf_time dur = now() - start;
-    return std::make_pair(ret_val, dur.count());
-}
-
-
+    return std::make_pair(returnValue, dur.count());
+  }
 }
 
 
 #endif
-
-
-

@@ -4,7 +4,7 @@
 
 template <MType mt>
 constexpr Move
-MoveList::GenerateTypeBit() noexcept
+MoveList::generateTypeBit() noexcept
 {
   if constexpr (hasFlag(mt, MType::CAPTURES )) return Move(1) << 20;
   if constexpr (hasFlag(mt, MType::PROMOTION)) return Move(1) << 21;
@@ -15,26 +15,26 @@ MoveList::GenerateTypeBit() noexcept
 
 template <MType mt1, MType mt2>
 void
-MoveList::FillMoves(
+MoveList::fillMoves(
   const ChessBoard& pos,
   MoveArray& movesArray,
   Bitboard endSquares,
   Move baseMove
 ) const noexcept
 {
-  constexpr Move typeBit = GenerateTypeBit<mt1>();
+  constexpr Move typeBit = generateTypeBit<mt1>();
   PieceType ipt = PieceType((baseMove >> 12) & 7);
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Move move = baseMove | typeBit | (Move(fp) << 6);
 
     if (hasFlag(mt1, MType::CAPTURES))
-      move |= Move(type_of(pos.PieceOnSquare(fp))) << 15;
+      move |= Move(type_of(pos.pieceOnSquare(fp))) << 15;
 
     if (hasFlag(mt2, MType::CHECK) and ((1ULL << fp) & squaresThatCheckEnemyKing[ipt - 1]))
-      move |= GenerateTypeBit<MType::CHECK>();
+      move |= generateTypeBit<MType::CHECK>();
 
     movesArray.add(move);
   }
@@ -42,28 +42,28 @@ MoveList::FillMoves(
 
 template <MType mt1, MType mt2>
 void
-MoveList::FillKingMoves(
+MoveList::fillKingMoves(
   const ChessBoard& pos,
   MoveArray& movesArray,
   Bitboard endSquares,
   Move baseMove
 ) const noexcept
 {
-  constexpr Move typeBit = GenerateTypeBit<mt1>();
+  constexpr Move typeBit = generateTypeBit<mt1>();
   const Square ip = from_sq(baseMove);
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Move move = baseMove | typeBit | (Move(fp) << 6);
 
     if (hasFlag(mt1, MType::CAPTURES))
-      move |= Move(type_of(pos.PieceOnSquare(fp))) << 15;
+      move |= Move(type_of(pos.pieceOnSquare(fp))) << 15;
 
     if (hasFlag(mt2, MType::CHECK)
       and ((1ULL << ip) & discoverCheckSquares)
       and ((1ULL << fp) & (~discoverCheckMasks[ip]))
-    ) move |= GenerateTypeBit<MType::CHECK>();
+    ) move |= generateTypeBit<MType::CHECK>();
 
     if (hasFlag(mt2, MType::CHECK) and (std::abs(fp - ip) == 2))
     {
@@ -71,7 +71,7 @@ MoveList::FillKingMoves(
         (fp > ip ? 32ULL : 8ULL) << (56 * (~color));
 
       if (rookBit & squaresThatCheckEnemyKing[ROOK - 1])
-        move |= GenerateTypeBit<MType::CHECK>();
+        move |= generateTypeBit<MType::CHECK>();
     }
 
     movesArray.add(move);
@@ -80,34 +80,34 @@ MoveList::FillKingMoves(
 
 template <MType mt1, MType mt2>
 void
-MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept
+MoveList::fillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept
 {
-  const Move  typeBit = GenerateTypeBit<mt1>();
+  const Move  typeBit = generateTypeBit<mt1>();
   const Move colorBit = Move(color) << 22;
   Bitboard epPawns = enpassantPawns;
-  Square fp = pos.EnPassantSquare();
+  Square fp = pos.enPassantSquare();
 
   while (epPawns > 0)
   {
-    Square ip = NextSquare(epPawns);
+    Square ip = nextSquare(epPawns);
     Move move = typeBit | colorBit | (Move(PAWN) << 12) | (Move(fp) << 6) | ip;
 
     if (hasFlag(mt2, MType::CHECK))
     {
       if ((1ULL << fp) & squaresThatCheckEnemyKing[0])
-        move |= GenerateTypeBit<MType::CHECK>();
+        move |= generateTypeBit<MType::CHECK>();
 
-      Square emyKingSq  = SquareNo(pos.get_piece(~color, KING));
-      Bitboard occupied = pos.All() ^ (1ULL << ip) ^ (1ULL << fp) ^ (1ULL << (fp - 8 * (2 * color - 1)));
+      Square emyKingSq  = squareNo(pos.getPiece(~color, KING));
+      Bitboard occupied = pos.all() ^ (1ULL << ip) ^ (1ULL << fp) ^ (1ULL << (fp - 8 * (2 * color - 1)));
 
-      Bitboard attackBishop = AttackSquares<BISHOP>(emyKingSq, occupied);
-      Bitboard attackRook   = AttackSquares<ROOK  >(emyKingSq, occupied);
+      Bitboard attackBishop = attackSquares<BISHOP>(emyKingSq, occupied);
+      Bitboard attackRook   = attackSquares<ROOK  >(emyKingSq, occupied);
 
-      Bitboard rq = pos.get_piece(color, ROOK  ) | pos.get_piece(color, QUEEN);
-      Bitboard bq = pos.get_piece(color, BISHOP) | pos.get_piece(color, QUEEN);
+      Bitboard rq = pos.getPiece(color, ROOK  ) | pos.getPiece(color, QUEEN);
+      Bitboard bq = pos.getPiece(color, BISHOP) | pos.getPiece(color, QUEEN);
 
       if ((attackBishop & bq) or (attackRook & rq))
-        move |= GenerateTypeBit<MType::CHECK>();
+        move |= generateTypeBit<MType::CHECK>();
     }
 
     movesArray.add(move);
@@ -116,7 +116,7 @@ MoveList::FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const
 
 template <MType mt1, MType mt2>
 void
-MoveList::FillShiftPawns(
+MoveList::fillShiftPawns(
   const ChessBoard& pos,
   MoveArray& movesArray,
   Bitboard endSquares,
@@ -124,11 +124,11 @@ MoveList::FillShiftPawns(
 ) const noexcept
 {
   const Move colorBit = Move(color) << 22;
-  const Move baseMove = GenerateTypeBit<mt1>() | colorBit | (Move(PAWN) << 12);
+  const Move baseMove = generateTypeBit<mt1>() | colorBit | (Move(PAWN) << 12);
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Square ip = fp + shift;
 
     Move move = baseMove | (Move(fp) << 6) | ip;
@@ -136,10 +136,10 @@ MoveList::FillShiftPawns(
     if (hasFlag(mt2, MType::CHECK)
       and ((((1ULL << ip) & discoverCheckSquares) and ((1ULL << fp) & (~discoverCheckMasks[ip])))
        or ((1ULL << fp) & squaresThatCheckEnemyKing[0]))
-    ) move |= GenerateTypeBit<MType::CHECK>();
+    ) move |= generateTypeBit<MType::CHECK>();
 
     if (hasFlag(mt1, MType::CAPTURES))
-      move |= Move(type_of(pos.PieceOnSquare(fp))) << 15;
+      move |= Move(type_of(pos.pieceOnSquare(fp))) << 15;
 
     movesArray.add(move);
   }
@@ -147,28 +147,28 @@ MoveList::FillShiftPawns(
 
 template <MType mt1, MType mt2>
 void
-MoveList::FillPawns(
+MoveList::fillPawns(
   const ChessBoard& pos,
   MoveArray& movesArray,
   Bitboard endSquares,
   Move baseMove
 ) const noexcept
 {
-  constexpr Move typeBit = GenerateTypeBit<mt1>();
+  constexpr Move typeBit = generateTypeBit<mt1>();
   const Square ip = from_sq(baseMove);
 
   while (endSquares > 0)
   {
-    Square fp = NextSquare(endSquares);
+    Square fp = nextSquare(endSquares);
     Move move = baseMove | typeBit | (Move(fp) << 6);
     Bitboard fPos = 1ULL << fp;
 
     if (hasFlag(mt1, MType::CAPTURES))
-      move |= Move(type_of(pos.PieceOnSquare(fp))) << 15;
+      move |= Move(type_of(pos.pieceOnSquare(fp))) << 15;
 
     if (fPos & Rank18)
     {
-      move |= GenerateTypeBit<MType::PROMOTION>();
+      move |= generateTypeBit<MType::PROMOTION>();
       Move moveQ = move | 0xC0000;
       Move moveR = move | 0x80000;
       Move moveN = move | 0x40000;
@@ -176,7 +176,7 @@ MoveList::FillPawns(
 
       if (hasFlag(mt2, MType::CHECK))
       {
-        constexpr Move checkBit = GenerateTypeBit<MType::CHECK>();
+        constexpr Move checkBit = generateTypeBit<MType::CHECK>();
         if (((1ULL << ip) & discoverCheckSquares) and (fPos & (~discoverCheckMasks[ip])))
         {
           moveQ |= checkBit;
@@ -186,11 +186,11 @@ MoveList::FillPawns(
         }
         else
         {
-          Bitboard emyKing = pos.get_piece(~color, KING);
-          Bitboard occupied = pos.All() ^ (1ULL << ip);
+          Bitboard emyKing = pos.getPiece(~color, KING);
+          Bitboard occupied = pos.all() ^ (1ULL << ip);
 
-          Bitboard attackSqBishop = AttackSquares<BISHOP>(fp, occupied);
-          Bitboard attackSqRook   = AttackSquares<ROOK  >(fp, occupied);
+          Bitboard attackSqBishop = attackSquares<BISHOP>(fp, occupied);
+          Bitboard attackSqRook   = attackSquares<ROOK  >(fp, occupied);
           Bitboard attackSqQueen  = attackSqBishop | attackSqRook;
 
           if (attackSqQueen  & emyKing) moveQ |= checkBit;
@@ -210,7 +210,7 @@ MoveList::FillPawns(
       if (hasFlag(mt2, MType::CHECK)
         and ((((1ULL << ip) & discoverCheckSquares) and (fPos & (~discoverCheckMasks[ip])))
          or (fPos & squaresThatCheckEnemyKing[0]))
-      ) move |= GenerateTypeBit<MType::CHECK>();
+      ) move |= generateTypeBit<MType::CHECK>();
 
       movesArray.add(move);
     }
@@ -227,19 +227,19 @@ MoveList::countMoves() const noexcept
 
   if (checkers < 2)
   {
-    moveCount += PopCount(pawnDestSquares[0]) + PopCount(pawnDestSquares[1])
-               + PopCount(pawnDestSquares[2]) + PopCount(pawnDestSquares[3])
-               + PopCount(enpassantPawns);
+    moveCount += popCount(pawnDestSquares[0]) + popCount(pawnDestSquares[1])
+               + popCount(pawnDestSquares[2]) + popCount(pawnDestSquares[3])
+               + popCount(enpassantPawns);
 
     while (pawnMask)
     {
-      Bitboard finalSquares = destSquares[NextSquare(pawnMask)];
-      moveCount += 4 * PopCount(finalSquares & Rank18) + PopCount(finalSquares & ~Rank18);
+      Bitboard finalSquares = destSquares[nextSquare(pawnMask)];
+      moveCount += 4 * popCount(finalSquares & Rank18) + popCount(finalSquares & ~Rank18);
     }
   }
 
   while (mask > 0)
-    moveCount += PopCount(destSquares[NextSquare(mask)]);
+    moveCount += popCount(destSquares[nextSquare(mask)]);
 
   return moveCount;
 }
@@ -251,8 +251,8 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
   const Move colorBit = Move(color) << 22;
 
   // fix pawns
-  Bitboard emyPieces = pos.get_piece(~color, ALL);
-  Bitboard kingMask  = pos.get_piece(color, KING) & initSquares;
+  Bitboard emyPieces = pos.getPiece(~color, ALL);
+  Bitboard kingMask  = pos.getPiece(color, KING) & initSquares;
   Bitboard pawnMask  = myPawns & initSquares;
   Bitboard pieceMask = initSquares ^ (pawnMask | kingMask);
 
@@ -260,19 +260,19 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
   {
     if (hasFlag(mt1, MType::CAPTURES))
     {
-      FillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[0], 7 - 16 * color);
-      FillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[1], 9 - 16 * color);
+      fillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[0], 7 - 16 * color);
+      fillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[1], 9 - 16 * color);
     }
     if (hasFlag(mt1, MType::QUIET))
     {
-      FillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[2], 16 - 32 * color);
-      FillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[3],  8 - 16 * color);
+      fillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[2], 16 - 32 * color);
+      fillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[3],  8 - 16 * color);
     }
 
     while (pawnMask > 0)
     {
-      Square ip = NextSquare(pawnMask);
-      PieceType ipt = type_of(pos.PieceOnSquare(ip));
+      Square ip = nextSquare(pawnMask);
+      PieceType ipt = type_of(pos.pieceOnSquare(ip));
       Move baseMove = colorBit | (Move(ipt) << 12) | ip;
 
       Bitboard finalSquares = destSquares[ip];
@@ -280,39 +280,39 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
       Bitboard quietSquares = finalSquares ^ captSquares;
 
       if (hasFlag(mt1, MType::CAPTURES))
-        FillPawns<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
+        fillPawns<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
       if (hasFlag(mt1, MType::QUIET))
-        FillPawns<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
+        fillPawns<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
     }
   }
 
   if (hasFlag(mt1, MType::CAPTURES))
-    FillEnpassantPawns<mt1, mt2>(pos, movesArray);
+    fillEnpassantPawns<mt1, mt2>(pos, movesArray);
 
   while (pieceMask > 0)
   {
-    Square     ip = NextSquare(pieceMask);
-    PieceType ipt = type_of(pos.PieceOnSquare(ip));
+    Square     ip = nextSquare(pieceMask);
+    PieceType ipt = type_of(pos.pieceOnSquare(ip));
     Move baseMove = colorBit | (Move(ipt) << 12) | Move(ip);
 
     if (hasFlag(mt2, MType::CHECK) and ((1ULL << ip) & discoverCheckSquares))
-      baseMove |= GenerateTypeBit<MType::CHECK>();
+      baseMove |= generateTypeBit<MType::CHECK>();
 
     Bitboard finalSquares = destSquares[ip];
     Bitboard  captSquares = finalSquares & emyPieces;
     Bitboard quietSquares = finalSquares ^ captSquares;
 
     if (hasFlag(mt1, MType::CAPTURES))
-      FillMoves<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
+      fillMoves<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
     if (hasFlag(mt1, MType::QUIET))
-      FillMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
+      fillMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
   }
 
   if (kingMask)
   {
-    Square     ip = SquareNo(kingMask);
+    Square     ip = squareNo(kingMask);
     Move baseMove = colorBit | (Move(KING) << 12) | ip;
 
     Bitboard finalSquares = destSquares[ip];
@@ -320,10 +320,10 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
     Bitboard quietSquares = finalSquares ^ captSquares;
 
     if (hasFlag(mt1, MType::CAPTURES))
-      FillKingMoves<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
+      fillKingMoves<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
     if (hasFlag(mt1, MType::QUIET))
-      FillKingMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
+      fillKingMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
   }
 }
 
@@ -337,7 +337,7 @@ MoveList::pawnCheckExists(Bitboard endSquares, int shift) const noexcept
 
   while (mask)
   {
-    Square ip = NextSquare(mask);
+    Square ip = nextSquare(mask);
     Square fp = ip - shift;
 
     if ((1ULL << fp) & (~discoverCheckMasks[ip]))
@@ -349,17 +349,17 @@ MoveList::pawnCheckExists(Bitboard endSquares, int shift) const noexcept
 
 template <>
 bool
-MoveList::Exists<MType::CAPTURES>(const ChessBoard& pos) const noexcept
+MoveList::exists<MType::CAPTURES>(const ChessBoard& pos) const noexcept
 {
-  Bitboard emyPieces = pos.get_piece(~color, ALL);
+  Bitboard emyPieces = pos.getPiece(~color, ALL);
   return (myAttackedSquares & emyPieces) or enpassantPawns;
 }
 
 template <>
 bool
-MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
+MoveList::exists<MType::CHECK>(const ChessBoard& pos) const noexcept
 {
-  Bitboard kingMask  = pos.get_piece(color, KING) & initSquares;
+  Bitboard kingMask  = pos.getPiece(color, KING) & initSquares;
   Bitboard pawnMask  = myPawns & initSquares;
   Bitboard pieceMask = initSquares ^ (pawnMask | kingMask);
 
@@ -367,8 +367,8 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
   {
     while (pieceMask > 0)
     {
-      Square     ip = NextSquare(pieceMask);
-      PieceType ipt = type_of(pos.PieceOnSquare(ip));
+      Square     ip = nextSquare(pieceMask);
+      PieceType ipt = type_of(pos.pieceOnSquare(ip));
 
       if (((1ULL << ip) & discoverCheckSquares) or (destSquares[ip] & squaresThatCheckEnemyKing[ipt - 1]))
         return true;
@@ -382,12 +382,12 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
 
     while (pawnMask > 0)
     {
-      Square ip = NextSquare(pawnMask);
+      Square ip = nextSquare(pawnMask);
       Bitboard finalSquares = destSquares[ip];
 
       while (finalSquares > 0)
       {
-        Square fp = NextSquare(finalSquares);
+        Square fp = nextSquare(finalSquares);
         Bitboard fPos = 1ULL << fp;
 
         if (fPos & Rank18)
@@ -396,11 +396,11 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
             return true;
           else
           {
-            Bitboard emyKing = pos.get_piece(~color, KING);
-            Bitboard occupied = pos.All() ^ (1ULL << ip);
+            Bitboard emyKing = pos.getPiece(~color, KING);
+            Bitboard occupied = pos.all() ^ (1ULL << ip);
 
-            Bitboard attackSqBishop = AttackSquares<BISHOP>(fp, occupied);
-            Bitboard attackSqRook   = AttackSquares<ROOK  >(fp, occupied);
+            Bitboard attackSqBishop = attackSquares<BISHOP>(fp, occupied);
+            Bitboard attackSqRook   = attackSquares<ROOK  >(fp, occupied);
             Bitboard attackSqQueen  = attackSqBishop | attackSqRook;
 
             if ((attackSqQueen  & emyKing)
@@ -421,22 +421,22 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
 
     if (enpassantPawns)
     {
-      Square fp = pos.EnPassantSquare();
+      Square fp = pos.enPassantSquare();
       if ((1ULL << fp) & squaresThatCheckEnemyKing[0])
         return true;
 
       Bitboard epPawns = enpassantPawns;
       while (epPawns > 0)
       {
-        Square ip = NextSquare(epPawns);
-        Square emyKingSq  = SquareNo(pos.get_piece(~color, KING));
-        Bitboard occupied = pos.All() ^ (1ULL << ip) ^ (1ULL << fp) ^ (1ULL << (fp - 8 * (2 * color - 1)));
+        Square ip = nextSquare(epPawns);
+        Square emyKingSq  = squareNo(pos.getPiece(~color, KING));
+        Bitboard occupied = pos.all() ^ (1ULL << ip) ^ (1ULL << fp) ^ (1ULL << (fp - 8 * (2 * color - 1)));
 
-        Bitboard attackBishop = AttackSquares<BISHOP>(emyKingSq, occupied);
-        Bitboard attackRook   = AttackSquares<ROOK  >(emyKingSq, occupied);
+        Bitboard attackBishop = attackSquares<BISHOP>(emyKingSq, occupied);
+        Bitboard attackRook   = attackSquares<ROOK  >(emyKingSq, occupied);
 
-        Bitboard rq = pos.get_piece(color, ROOK  ) | pos.get_piece(color, QUEEN);
-        Bitboard bq = pos.get_piece(color, BISHOP) | pos.get_piece(color, QUEEN);
+        Bitboard rq = pos.getPiece(color, ROOK  ) | pos.getPiece(color, QUEEN);
+        Bitboard bq = pos.getPiece(color, BISHOP) | pos.getPiece(color, QUEEN);
 
         if ((attackBishop & bq) or (attackRook & rq))
           return true;
@@ -446,7 +446,7 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
 
   if (kingMask)
   {
-    Square ip = SquareNo(kingMask);
+    Square ip = squareNo(kingMask);
     Bitboard finalSquares = destSquares[ip];
 
     if (((1ULL << ip) & discoverCheckSquares) and (finalSquares & (~discoverCheckMasks[ip])))
@@ -454,7 +454,7 @@ MoveList::Exists<MType::CHECK>(const ChessBoard& pos) const noexcept
 
     while (finalSquares > 0)
     {
-      Square fp = NextSquare(finalSquares);
+      Square fp = nextSquare(finalSquares);
 
       if (std::abs(fp - ip) == 2)
       {

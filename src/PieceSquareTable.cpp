@@ -81,7 +81,7 @@ ScoreTable bRBoard {
 };
 
 
-ScoreTable WhiteKingMidGameTable = {
+ScoreTable whiteKingMidGameTable = {
     35,   40,   35,    0,    0,    0,   35,   35,
     35,   35,   -2,   -2,   -2,   -2,   -2,   35,
    -10,  -10,  -10,  -10,  -10,  -10,  -10,  -10,
@@ -93,7 +93,7 @@ ScoreTable WhiteKingMidGameTable = {
 };
 
 
-ScoreTable BlackKingMidGameTable = {
+ScoreTable blackKingMidGameTable = {
   -200, -200, -200, -200, -200, -200, -200, -200,
   -150, -165, -165, -165, -165, -165, -165, -150,
    -90,  -90, -115, -115, -115, -115,  -90,  -90,
@@ -105,7 +105,7 @@ ScoreTable BlackKingMidGameTable = {
 };
 
 
-ScoreTable KingEndGameTable = {
+ScoreTable kingEndGameTable = {
   -10,  -8,  -4,   1,   1,  -4,  -8, -10,
    -8,   4,   8,  14,  14,   8,   4,  -8,
    -4,   8,  18,  24,  24,  18,   8,  -4,
@@ -116,7 +116,7 @@ ScoreTable KingEndGameTable = {
   -10,  -8,  -4,   1,   1,  -4,  -8, -10,
 };
 
-ScoreTable LoneKingLosingEndGameTable = {
+ScoreTable loneKingLosingEndGameTable = {
   -296, -216, -144, -96, -96, -144, -216, -296,
   -216,    0,    0,   0,   0,    0,    0, -216,
   -144,    0,    0,   0,   0,    0,    0, -144,

@@ -14,7 +14,7 @@ typedef int (*ReductionFunc)(Depth depth, size_t move_no);
 
 
 uint64_t
-BulkCount(ChessBoard& pos, Depth depth);
+bulkCount(ChessBoard& pos, Depth depth);
 
 /**
  * @brief Iterative Search to search a board postion.
@@ -24,10 +24,10 @@ BulkCount(ChessBoard& pos, Depth depth);
  * @param use_timer Run a time-based search.
  */
 void
-Search(
+search(
   ChessBoard primary,
   Depth mDepth = MAX_DEPTH,
-  double search_time = DEFAULT_SEARCH_TIME,
+  double searchTime = DEFAULT_SEARCH_TIME,
   std::ostream& ostream = std::cout
 );
 
@@ -43,11 +43,11 @@ Search(
  * @return Score 
  */
 Score
-AlphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions);
+alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions);
 
 
 Score
-RootAlphabeta(ChessBoard& pos, Score alpha, Score beta, Depth depth);
+rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth);
 
 
 #endif

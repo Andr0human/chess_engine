@@ -24,11 +24,11 @@ class TestPosition
 
   TestPosition(const string str, const string testType)
   {
-    const vector<string> values = base_utils::Split(str, '|');
+    const vector<string> values = utils::split(str, '|');
     fen = values[0].substr(0, values[0].length() - 1);
     if (testType == "accuracy") {
       depth = 0;
-      const auto nodesStr = base_utils::Split(values[1], ' ');
+      const auto nodesStr = utils::split(values[1], ' ');
       nodes.resize(nodesStr.size());
       std::transform(begin(nodesStr), end(nodesStr), begin(nodes),
         [] (const string& __s) { return std::stoull(__s); }
@@ -103,21 +103,21 @@ class SearchData
   ReadablePvLine(ChessBoard board) const noexcept
   {
     string res;
-    bool qmoves_found = false;
+    bool qmovesFound = false;
 
     for (const Move move : pvLine)
     {
-      if ((move & quiescenceMove()) and !qmoves_found)
+      if ((move & quiescenceMove()) and !qmovesFound)
       {
         res += "(";
-        qmoves_found = true;
+        qmovesFound = true;
       }
 
-      res += PrintMove(move, board) + string(" ");
-      board.MakeMove(move);
+      res += printMove(move, board) + string(" ");
+      board.makeMove(move);
     }
 
-    if (qmoves_found)
+    if (qmovesFound)
       res[res.size() - 1] = ')';
 
     return res;
@@ -132,7 +132,7 @@ class SearchData
   : startTime(perf::now()), side(pos.color), nodes(0), qNodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
-    const MoveList myMoves = GenerateMoves(pos);
+    const MoveList myMoves = generateMoves(pos);
     MoveArray movesArray;
     myMoves.getMoves(pos, movesArray);
     Move zeroMove = movesArray[0];
@@ -143,7 +143,7 @@ class SearchData
   }
 
   bool
-  IsPartOfPV(const Move m) const noexcept
+  isPartOfPv(const Move m) const noexcept
   {
     const Move filteredMove = filter(m);
 
@@ -155,58 +155,58 @@ class SearchData
   }
 
   bool
-  TimeOver() const noexcept
+  timeOver() const noexcept
   {
     nanoseconds duration = perf::now() - startTime;
     return duration >= allotedTime;
   }
 
   double
-  TimeSpent() const noexcept
+  timeSpent() const noexcept
   {
     nanoseconds duration = perf::now() - startTime;
     return double(duration.count()) / 1e9;
   }
 
   void
-  AddResult(ChessBoard pos, Score eval, Move pv[])
+  addResult(ChessBoard pos, Score eval, Move pv[])
   {
     pvLine.clear();
 
     for (int i = 0; i < MAX_PV_ARRAY_SIZE; i++)
     {
-      if (!IsLegalMoveForPosition(pv[i], pos))
+      if (!isLegalMoveForPosition(pv[i], pos))
         break;
       pvLine.add(pv[i]);
-      pos.MakeMove(pv[i]);
+      pos.makeMove(pv[i]);
     }
     moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
   }
 
   void
-  SearchCompleted() noexcept
+  searchCompleted() noexcept
   {
     perf_time duration = perf::now() - startTime;
     timeForSearch = duration.count();
   }
 
   void
-  AddNode() noexcept
+  addNode() noexcept
   { nodes++; }
 
   void
-  AddQNode() noexcept
+  addQNode() noexcept
   { qNodes++; }
 
   void
-  ResetNodeCount() noexcept
+  resetNodeCount() noexcept
   { nodes = 0; qNodes = 0; }
 
-  pair<Move, Score> LastIterationResult() const noexcept
+  pair<Move, Score> lastIterationResult() const noexcept
   { return moveEvals.back(); }
 
   Nodes
-  TotalNodes() const noexcept
+  totalNodes() const noexcept
   {
     return std::accumulate(
       moveTimes.begin(), moveTimes.end(), Nodes(0),
@@ -217,7 +217,7 @@ class SearchData
   }
 
   Nodes
-  TotalQNodes() const noexcept
+  totalQNodes() const noexcept
   {
     return std::accumulate(
       moveTimes.begin(), moveTimes.end(), Nodes(0),
@@ -229,7 +229,7 @@ class SearchData
 
   // Prints the results of last searched depth
   void
-  ShowLastDepthResult(ChessBoard pos, std::ostream& writer) const noexcept
+  showLastDepthResult(ChessBoard pos, std::ostream& writer) const noexcept
   {
     using std::setw, std::right, std::fixed, std::setprecision;
 
@@ -237,15 +237,16 @@ class SearchData
     const Score eval = moveEvals.back().second;
     double evalConv  = double(eval) / 100.0;
 
-    writer << " | " << setw(6) << right << fixed << setprecision(2) << TimeSpent()
+    writer << " | " << setw(6) << right << fixed << setprecision(2) << timeSpent()
            << " | " << setw(5) << right << fixed << dep
            << " | " << setw(7) << right << fixed << setprecision(2) << evalConv
-           << " | " << setw(8) << right << fixed  << TotalNodes()
-           << " | " << setw(8) << right << fixed  << TotalQNodes()
+           << " | " << setw(8) << right << fixed  << totalNodes()
+           << " | " << setw(8) << right << fixed  << totalQNodes()
            << " | " << ReadablePvLine(pos) << endl;
   }
 
-  void ShowHeader(std::ostream& writer) const noexcept
+  void
+  showHeader(std::ostream& writer) const noexcept
   {
     using std::setw;
     writer << " | " << setw(6) << "Time"
@@ -257,7 +258,7 @@ class SearchData
   }
 
   void
-  SortMovesOnTime(Move bestMove)
+  sortMovesOnTime(Move bestMove)
   {
     for (size_t i = 0; i < moveTimes.size(); i++)
     {
@@ -275,7 +276,8 @@ class SearchData
     });
   }
 
-  void Print(ChessBoard pos)
+  void
+  print(ChessBoard pos)
   {
     using std::setw, std::right, std::fixed;
     cout << " | " << setw(6) << "moveNo"
@@ -286,17 +288,17 @@ class SearchData
     for (const auto& [move, tm] : moveTimes)
     {
       cout << " | " << setw(6) << fixed << moveNo++
-           << " | " << setw(5) << fixed << PrintMove(move, pos)
+           << " | " << setw(5) << fixed << printMove(move, pos)
            << " | " << setw(8) << fixed << tm.first
            << " | " << setw(7) << fixed << tm.second << " |\n";
     }
   }
 
   void
-  InsertMoveToList(size_t moveNo)
+  insertMoveToList(size_t moveNo)
   {
     moveTimes[moveNo].second = make_pair(nodes, qNodes);
-    ResetNodeCount();
+    resetNodeCount();
   }
 
   MoveArray
@@ -312,10 +314,10 @@ class SearchData
 };
 
 size_t
-OrderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
 
 Score
-SeeScore(const ChessBoard& pos, Move move);
+seeScore(const ChessBoard& pos, Move move);
 
 /**
  * @brief Prints all encoded-moves in list to human-readable strings
@@ -324,7 +326,7 @@ SeeScore(const ChessBoard& pos, Move move);
  * @param pos board position
  */
 void
-PrintMovelist(MoveArray myMoves, ChessBoard pos);
+printMovelist(MoveArray myMoves, ChessBoard pos);
 
 extern SearchData info;
 

@@ -20,11 +20,11 @@ extern ScoreTable  bBoard;
 extern ScoreTable wRBoard;
 extern ScoreTable bRBoard;
 
-extern ScoreTable WhiteKingMidGameTable;
-extern ScoreTable BlackKingMidGameTable;
-extern ScoreTable      KingEndGameTable;
+extern ScoreTable whiteKingMidGameTable;
+extern ScoreTable blackKingMidGameTable;
+extern ScoreTable      kingEndGameTable;
 
-extern ScoreTable  LoneKingLosingEndGameTable;
+extern ScoreTable  loneKingLosingEndGameTable;
 
 
 #endif

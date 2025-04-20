@@ -2,13 +2,13 @@
 #include "endgame.h"
 #include "attacks.h"
 
-using plt::PassedPawnMasks;
+using plt::passedPawnMasks;
 
 
 // TODO: KRRK, KRNK
 
 static int
-ChebyshevDistance(Square s1, Square s2)
+chebyshevDistance(Square s1, Square s2)
 {
   int rank1 = s1 >> 3, file1 = s1 & 7;
   int rank2 = s2 >> 3, file2 = s2 & 7;
@@ -16,17 +16,17 @@ ChebyshevDistance(Square s1, Square s2)
 }
 
 
-constexpr Bitboard Rank2to6[COLOR_NB] = {
+constexpr Bitboard rank2to6[COLOR_NB] = {
   AllSquares ^ (Rank18 | Rank2),
   AllSquares ^ (Rank18 | Rank7)
 };
 
-constexpr Bitboard Rank3to5[COLOR_NB] = {
+constexpr Bitboard rank3to5[COLOR_NB] = {
   Rank4 | Rank5 | Rank6,
   Rank3 | Rank4 | Rank5
 };
 
-constexpr Bitboard Rank4to7[COLOR_NB] = {
+constexpr Bitboard rank4to7[COLOR_NB] = {
   Rank4 | Rank5 | Rank6 | Rank7,
   Rank2 | Rank3 | Rank4 | Rank5
 };
@@ -99,36 +99,36 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
   const Color side = pos.count<WHITE, PAWN>() ? WHITE : BLACK;
   const Color emySide = ~side;
 
-  const Bitboard    pawn = pos.get_piece(side, PAWN);
-  const Bitboard  myKing = pos.get_piece(side, KING);
-  const Bitboard emyKing = pos.get_piece(emySide, KING);
+  const Bitboard    pawn = pos.getPiece(side, PAWN);
+  const Bitboard  myKing = pos.getPiece(side, KING);
+  const Bitboard emyKing = pos.getPiece(emySide, KING);
 
   const int side2move = pos.color;
   const int incFactor = 2 * side - 1;
 
-  const Square pawnSq    = SquareNo(pawn   );
-  const Square myKingSq  = SquareNo(myKing );
-  const Square emyKingSq = SquareNo(emyKing);
+  const Square pawnSq    = squareNo(pawn   );
+  const Square myKingSq  = squareNo(myKing );
+  const Square emyKingSq = squareNo(emyKing);
 
   const int pawnR   = pawnSq   >> 3;
   const int myKingR = myKingSq >> 3;
 
   if ((side2move == emySide) and
-      (pawn & Rank2to6[side]) and
+      (pawn & rank2to6[side]) and
       (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
-      (PassedPawnMasks[side][pawnSq] & emyKing)
+      (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
   if ((side2move == emySide) and
-      (pawn & Rank4to7[side]) and
-      (PassedPawnMasks[side][pawnSq] & emyKing) and
-     !((PassedPawnMasks[WHITE][pawnSq - 8] | PassedPawnMasks[BLACK][pawnSq]) & myKing)
+      (pawn & rank4to7[side]) and
+      (passedPawnMasks[side][pawnSq] & emyKing) and
+     !((passedPawnMasks[WHITE][pawnSq - 8] | passedPawnMasks[BLACK][pawnSq]) & myKing)
   ) return true;
 
   if ((side2move == side) and
-      (pawn & Rank3to5[side]) and
+      (pawn & rank3to5[side]) and
       (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
-      (PassedPawnMasks[side][pawnSq] & emyKing)
+      (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
   if ((pawnSq + 8 * incFactor == emyKingSq) and
@@ -165,51 +165,51 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   const Color side = pos.count<WHITE, BISHOP>() ? WHITE : BLACK;
   const Color emySide = ~side;
 
-  const Bitboard occupied = pos.All();
-  const Bitboard bishop   = pos.get_piece(side, BISHOP);
-  const Square   bishopSq = SquareNo(bishop);
+  const Bitboard occupied = pos.all();
+  const Bitboard bishop   = pos.getPiece(side, BISHOP);
+  const Square   bishopSq = squareNo(bishop);
 
   if (pos.count<WHITE, ALL>() == 1)
   {
     // Pawn and bishop are of different side
-    const Bitboard pawn = pos.get_piece(emySide, PAWN);
-    const Square pawnSq = SquareNo(pawn);
+    const Bitboard pawn = pos.getPiece(emySide, PAWN);
+    const Square pawnSq = squareNo(pawn);
 
-    Bitboard pawnMask = plt::PassedPawnMasks[emySide][pawnSq] & plt::LineMasks[pawnSq];
+    Bitboard pawnMask = passedPawnMasks[emySide][pawnSq] & plt::lineMasks[pawnSq];
 
-    if ((bishop | pos.get_piece(side, KING)) & pawnMask)
+    if ((bishop | pos.getPiece(side, KING)) & pawnMask)
       return true;
 
-    if (AttackSquares<BISHOP>(bishopSq, 0) & pawnMask)
+    if (attackSquares<BISHOP>(bishopSq, 0) & pawnMask)
       return true;
 
     if (side2move == emySide)
-      pawnMask ^= pawnMask & plt::PawnMasks[emySide][pawnSq];
+      pawnMask ^= pawnMask & plt::pawnMasks[emySide][pawnSq];
 
     while (pawnMask)
     {
-      const Square sq = NextSquare(pawnMask);
+      const Square sq = nextSquare(pawnMask);
 
-      const Bitboard bishopSquares = AttackSquares<BISHOP>(bishopSq, occupied) & AttackSquares<BISHOP>(sq, occupied);
-      const Square   emyKingSq = SquareNo(pos.get_piece(emySide, KING));
+      const Bitboard bishopSquares = attackSquares<BISHOP>(bishopSq, occupied) & attackSquares<BISHOP>(sq, occupied);
+      const Square   emyKingSq = squareNo(pos.getPiece(emySide, KING));
 
-      if (bishopSquares & ~plt::KingMasks[emyKingSq])
+      if (bishopSquares & ~plt::kingMasks[emyKingSq])
         return true;
     }
 
     return false;
   }
 
-  const Bitboard pawn = pos.get_piece(side, PAWN);
-  const Square pawnSq = SquareNo(pawn);
+  const Bitboard pawn = pos.getPiece(side, PAWN);
+  const Square pawnSq = squareNo(pawn);
 
-  Bitboard pawnMask = plt::PassedPawnMasks[side][pawnSq] & plt::LineMasks[pawnSq];
+  Bitboard pawnMask = passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq];
   Bitboard cornerMask = pawnMask & Rank18;
 
   if (((cornerMask & WhiteSquares) and (bishop & WhiteSquares))
    or ((cornerMask & BlackSquares) and (bishop & BlackSquares))) return false;
 
-  if ((pawn & FileAH) and (pos.get_piece(emySide, KING) & pawnMask))
+  if ((pawn & FileAH) and (pos.getPiece(emySide, KING) & pawnMask))
     return true;
 
   return false;
@@ -242,18 +242,18 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   const Color side = pos.count<WHITE, ROOK>() ? WHITE : BLACK;
   const Color emySide = ~side;
 
-  const Bitboard emyKing = pos.get_piece(emySide, KING  );
-  const Bitboard bishop  = pos.get_piece(emySide, BISHOP);
+  const Bitboard emyKing = pos.getPiece(emySide, KING  );
+  const Bitboard bishop  = pos.getPiece(emySide, BISHOP);
 
-  const Square    kingSq = SquareNo(pos.get_piece(side, KING));
-  const Square emyKingSq = SquareNo(emyKing);
+  const Square    kingSq = squareNo(pos.getPiece(side, KING));
+  const Square emyKingSq = squareNo(emyKing);
 
-  if ((AttackSquares<ROOK>(emyKingSq, 0) & bishop) == 0)
+  if ((attackSquares<ROOK>(emyKingSq, 0) & bishop) == 0)
   {
     if (!(emyKing & (Rank18 | FileA | FileH)))
       return true;
 
-    if (ChebyshevDistance(kingSq, emyKingSq) >= 4)
+    if (chebyshevDistance(kingSq, emyKingSq) >= 4)
       return true;
   }
 

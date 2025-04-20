@@ -52,7 +52,7 @@ public:
   : color(c), checkers(0), initSquares(0), enpassantPawns(0) {}
 
   void
-  Add(Square sq, Bitboard _destSquares)
+  add(Square sq, Bitboard _destSquares)
   {
     if (_destSquares == 0)
       return;
@@ -61,7 +61,7 @@ public:
   }
 
   void
-  AddPawns(size_t index, Bitboard _destSquares)
+  addPawns(size_t index, Bitboard _destSquares)
   { pawnDestSquares[index] = _destSquares; }
 
   size_t
@@ -73,12 +73,12 @@ public:
 
   template<MType mt>
   bool
-  Exists(const ChessBoard& pos) const noexcept;
+  exists(const ChessBoard& pos) const noexcept;
 
 private:
   template <MType mt1, MType mt2>
   void
-  FillMoves(
+  fillMoves(
     const ChessBoard& pos,
     MoveArray& movesArray,
     Bitboard endSquares,
@@ -87,11 +87,11 @@ private:
 
   template <MType mt1, MType mt2>
   void
-  FillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
+  fillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const noexcept;
 
   template <MType mt1, MType mt2>
   void
-  FillShiftPawns(
+  fillShiftPawns(
     const ChessBoard& pos,
     MoveArray& movesArray,
     Bitboard endSquares,
@@ -100,7 +100,7 @@ private:
 
   template <MType mt1, MType mt2>
   void
-  FillPawns(
+  fillPawns(
     const ChessBoard& pos,
     MoveArray& movesArray,
     Bitboard endSquares,
@@ -109,7 +109,7 @@ private:
 
   template <MType mt1, MType mt2>
   void
-  FillKingMoves(
+  fillKingMoves(
     const ChessBoard& pos,
     MoveArray& movesArray,
     Bitboard endSquares,
@@ -118,7 +118,7 @@ private:
 
   template <MType mt>
   static constexpr Move
-  GenerateTypeBit() noexcept;
+  generateTypeBit() noexcept;
 
   bool
   pawnCheckExists(Bitboard endSquares, int shift) const noexcept;

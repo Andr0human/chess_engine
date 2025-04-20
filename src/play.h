@@ -40,146 +40,147 @@ using std::ofstream;
 
 class PlayBoard : public ChessBoard
 {
-    private:
-    // Max threas to use for search
-    size_t threads;
+  private:
+  // Max threas to use for search
+  size_t threads;
 
-    // Max depth to search
-    size_t mDepth;
-    double movetime;
-    bool go_receive;
-    bool to_quit;
+  // Max depth to search
+  size_t mDepth;
+  double movetime;
+  bool goReceive;
+  bool toQuit;
 
-    int queryNumber;
+  int queryNumber;
 
-    // Moves to be played on PlayBoard before starting Search
-    vector<Move> pre_moves;
-    vector<uint64_t> prev_keys;
+  // Moves to be played on PlayBoard before starting Search
+  vector<Move    > preMoves;
+  vector<uint64_t> prevKeys;
 
-    bool IsNumeric(const std::string& s)
+  bool
+  isNumeric(const std::string& s)
+  {
+    std::string::const_iterator it = s.begin();
+    while (it != s.end() && std::isdigit(*it)) ++it;
+    return !s.empty() && it == s.end();
+  }
+
+  public:
+  // Init
+  PlayBoard() :
+  threads(1), mDepth(MAX_DEPTH), movetime(DEFAULT_SEARCH_TIME),
+  goReceive(false), toQuit(false), queryNumber(1) {}
+
+  void
+  setThreads(size_t __tc) noexcept
+  { threads = __tc; }
+
+  void
+  setDepth(size_t __dep) noexcept
+  { mDepth = __dep; }
+
+  void
+  setMoveTime(double __mt) noexcept
+  { movetime = __mt; }
+
+  double
+  getMoveTime() const noexcept
+  { return movetime; }
+
+  void
+  readySearch() noexcept
+  { goReceive = true; }
+
+  void
+  searchDone() noexcept
+  { goReceive = false; }
+
+  bool
+  doSearch() const noexcept
+  { return goReceive; }
+
+  void
+  readyQuit() noexcept
+  { toQuit = true; }
+
+  bool
+  doQuit() const noexcept
+  { return toQuit; }
+
+  void
+  setNewPosition(const string& fen) noexcept
+  {
+    prevKeys.clear();
+    setPositionWithFen(fen);
+  }
+
+  void
+  addPremoves(const vector<string>& list, size_t index) noexcept
+  {
+    while (index < list.size() and isNumeric(list[index]))
     {
-        std::string::const_iterator it = s.begin();
-        while (it != s.end() && std::isdigit(*it)) ++it;
-        return !s.empty() && it == s.end();
+      int move = std::stoi( list[index++] );
+      preMoves.push_back(move);
+    }
+  }
+
+  void
+  addPremoves(const Move move)
+  {
+    preMoves.push_back(move);
+    playPreMoves();
+  }
+
+  bool
+  preMovesExist() const noexcept
+  { return !preMoves.empty(); }
+
+  void
+  playPreMoves() noexcept
+  {
+    const auto pawnMove = [] (Move move)
+    { return ((move >> 12) & 7) == 1; };
+
+    const auto captures = [] (Move move)
+    { return ((move >> 15) & 7) > 0; };
+
+    for (const Move move : preMoves)
+    {
+      if (pawnMove(move) or captures(move))
+        prevKeys.clear();
+
+      makeMove(move, false);
+      prevKeys.push_back(hashValue);
     }
 
-    public:
-    // Init
-    PlayBoard() :
-    threads(1), mDepth(MAX_DEPTH), movetime(DEFAULT_SEARCH_TIME),
-    go_receive(false), to_quit(false), queryNumber(1) {}
+    preMoves.clear();
+  }
 
-    void
-    SetThreads(size_t __tc) noexcept
-    { threads = __tc; }
+  vector<uint64_t>
+  getPreviousHashkeys() const noexcept
+  { return prevKeys; }
 
-    void
-    SetDepth(size_t __dep) noexcept
-    { mDepth = __dep; }
+  bool
+  integrityCheck() const noexcept
+  {
+    if (prevKeys.empty())
+      return true;
 
-    void
-    SetMoveTime(double __mt) noexcept
-    { movetime = __mt; }
+    uint64_t lastKey = prevKeys.back();
+    return generateHashkey() == lastKey;
+  }
 
-    double
-    GetMoveTime() const noexcept
-    { return movetime; }
+  inline int
+  query() const noexcept
+  { return queryNumber; }
 
-    void
-    ReadySearch() noexcept
-    { go_receive = true; }
-
-    void
-    SearchDone() noexcept
-    { go_receive = false; }
-
-    bool
-    DoSearch() const noexcept
-    { return go_receive; }
-
-    void
-    ReadyQuit() noexcept
-    { to_quit = true; }
-
-    bool
-    DoQuit() const noexcept
-    { return to_quit; }
-
-    void
-    SetNewPosition(const string& fen) noexcept
-    {
-        prev_keys.clear();
-        SetPositionWithFen(fen);
-    }
-
-    void
-    AddPremoves(const vector<string>& list, size_t index) noexcept
-    {
-        while (index < list.size() and IsNumeric(list[index]))
-        {
-            int move = std::stoi( list[index++] );
-            pre_moves.push_back(move);
-        }
-    }
-
-    void
-    AddPremoves(const Move move)
-    {
-        pre_moves.push_back(move);
-        PlayPreMoves();
-    }
-
-    bool
-    PremovesExist() const noexcept
-    { return !pre_moves.empty(); }
-
-    void
-    PlayPreMoves() noexcept
-    {
-        const auto pawn_move = [] (Move move)
-        { return ((move >> 12) & 7) == 1; };
-
-        const auto captures = [] (Move move)
-        { return ((move >> 15) & 7) > 0; };
-
-        for (const Move move : pre_moves)
-        {
-            if (pawn_move(move) or captures(move))
-                prev_keys.clear();
-
-            MakeMove(move, false);
-            prev_keys.push_back(Hash_Value);
-        }
-
-        pre_moves.clear();
-    }
-
-    vector<uint64_t>
-    GetPreviousHashkeys() const noexcept
-    { return prev_keys; }
-
-    bool
-    IntegrityCheck() const noexcept
-    {
-        if (prev_keys.empty())
-            return true;
-
-        uint64_t last_key = prev_keys.back();
-        return GenerateHashkey() == last_key;
-    }
-
-    inline int
-    Query() const noexcept
-    { return queryNumber; }
-
-    inline void
-    UpdateQuery() noexcept
-    { queryNumber++; }
+  inline void
+  updateQuery() noexcept
+  { queryNumber++; }
 };
 
 
 void
-Play(const vector<string>& args);
+play(const vector<string>& args);
 
 
 #endif

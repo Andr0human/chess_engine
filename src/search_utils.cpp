@@ -4,35 +4,33 @@
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
 array<Varray<Move, 2>, MAX_PLY> killerMoves;
-const string StartFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
 
 void
 movcpy(Move* pTarget, const Move* pSource, int n)
 { while (n-- && (*pTarget++ = *pSource++)); }
 
 void
-ResetPvLine()
+resetPvLine()
 {
   for (size_t i = 0; i < MAX_PV_ARRAY_SIZE; i++)
     pvArray[i] = NULL_MOVE;
 }
 
 Score
-CheckmateScore(Ply ply)
+checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }
 
 bool
-LmrOk(Move move, Depth depth, size_t moveNo)
+lmrOk(Move move, Depth depth, size_t moveNo)
 {
-  if ((depth < 2) or (moveNo < LMR_LIMIT) or InterestingMove(move))
+  if ((depth < 2) or (moveNo < LMR_LIMIT) or interestingMove(move))
     return false;
 
   return true;
 }
 
 bool
-InterestingMove(Move move)
+interestingMove(Move move)
 {
   if (is_type<MType::CAPTURES >(move)
    or is_type<MType::PROMOTION>(move)
@@ -43,7 +41,7 @@ InterestingMove(Move move)
 }
 
 int
-RootReduction(Depth depth, size_t moveNo)
+rootReduction(Depth depth, size_t moveNo)
 {
   if (depth < 3) return 0;
   if (depth < 6) {
@@ -57,7 +55,7 @@ RootReduction(Depth depth, size_t moveNo)
 }
 
 int
-Reduction (Depth depth, size_t moveNo)
+reduction (Depth depth, size_t moveNo)
 {
   if (depth < 2) return 0;
   if ((depth < 4) and (moveNo > 9)) return 1; 
@@ -73,7 +71,7 @@ Reduction (Depth depth, size_t moveNo)
 }
 
 int
-SearchExtension(
+searchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
   int numExtensions,
@@ -92,7 +90,7 @@ SearchExtension(
   if (
     (depth == 1) and
     (myMoves.checkers == 0) and
-    PieceTrapped(pos, myMoves.myAttackedSquares, myMoves.enemyAttackedSquares)
+    pieceTrapped(pos, myMoves.myAttackedSquares, myMoves.enemyAttackedSquares)
   ) return 1;
   
   return 0;

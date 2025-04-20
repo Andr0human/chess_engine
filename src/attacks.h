@@ -11,26 +11,24 @@ typedef Bitboard (*ShifterFunc)(Bitboard val, int shift);
 
 // Returns and removes the LsbIndex
 inline Square
-NextSquare(uint64_t& __x)
+nextSquare(uint64_t& x)
 {
-  Square res = Square(__builtin_ctzll(__x));
-  __x &= __x - 1;
+  Square res = Square(__builtin_ctzll(x));
+  x &= x - 1;
   return res;
 }
 
-
 template <PieceType pt>
 Bitboard
-AttackSquares(Square sq, Bitboard occupied);
+attackSquares(Square sq, Bitboard occupied);
 
 template <Color c, PieceType pt>
 Bitboard
-AttackSquares(Square sq);
+attackSquares(Square sq);
 
-
-template <Color c_my>
+template <Color cMy>
 Bitboard
-PawnAttackSquares(const ChessBoard& _cb);
+pawnAttackSquares(const ChessBoard& pos);
 
 #endif
 

@@ -8,8 +8,8 @@
 #include "tt.h"
 
 
-extern uint64_t tmp_total_counter;
-extern uint64_t tmp_this_counter;
+extern uint64_t tmpTotalCounter;
+extern uint64_t tmpThisCounter;
 
 using std::array;
 
@@ -52,10 +52,10 @@ class ChessBoard
   array<Piece, SQUARE_NB> board;
 
   // Stores bitboard location of a piece
-  array<Bitboard, 16> piece_bb;
+  array<Bitboard, 16> pieceBb;
 
   // Stores count of each piece
-  array<int, 16> piece_ct;
+  array<int, 16> pieceCt;
 
   // Halfmove and Fullmove
   int halfmove, fullmove;
@@ -63,36 +63,36 @@ class ChessBoard
   // MakeMove-Subparts
 
   bool
-  IsEnpassant(Square fp, Square ep) const noexcept
+  isEnpassant(Square fp, Square ep) const noexcept
   { return fp == ep; }
 
   bool
-  IsDoublePawnPush(Square ip, Square fp) const noexcept
+  isDoublePawnPush(Square ip, Square fp) const noexcept
   { return std::abs(ip - fp) == 16; }
 
   bool
-  IsPawnPromotion(Square fp) const noexcept
+  isPawnPromotion(Square fp) const noexcept
   { return (1ULL << fp) & Rank18; }
 
   bool
-  IsCastling(Square ip, Square fp) const noexcept
+  isCastling(Square ip, Square fp) const noexcept
   { return (ip - fp == 2) | (fp - ip == 2);}
 
   void
-  MakeMoveCastleCheck(PieceType p, Square sq) noexcept;
+  makeMoveCastleCheck(PieceType p, Square sq) noexcept;
 
   void
-  MakeMoveEnpassant(Square ip, Square fp) noexcept;
+  makeMoveEnpassant(Square ip, Square fp) noexcept;
 
   void
-  MakeMoveDoublePawnPush(Square ip, Square fp) noexcept;
+  makeMoveDoublePawnPush(Square ip, Square fp) noexcept;
 
   void
-  MakeMovePawnPromotion(Move move) noexcept;
+  makeMovePawnPromotion(Move move) noexcept;
 
   template <bool makeMoveCall>
   void
-  MakeMoveCastling(Square ip, Square fp) noexcept;
+  makeMoveCastling(Square ip, Square fp) noexcept;
 
   public:
 
@@ -101,7 +101,7 @@ class ChessBoard
 
   int csep;
 
-  Key Hash_Value;
+  Key hashValue;
 
   Weight boardWeight;
 
@@ -110,68 +110,68 @@ class ChessBoard
   ChessBoard(const std::string& fen);
 
   void
-  SetPositionWithFen(const string& fen) noexcept;
+  setPositionWithFen(const string& fen) noexcept;
 
   string
-  VisualBoard() const noexcept;
+  visualBoard() const noexcept;
 
   void
-  MakeMove(Move move, bool in_search = true) noexcept;
+  makeMove(Move move, bool inSearch = true) noexcept;
 
   void
-  UnmakeMove() noexcept;
+  unmakeMove() noexcept;
 
   void
-  UndoInfoPush(PieceType it, PieceType ft, Move move, bool in_search);
+  undoInfoPush(PieceType it, PieceType ft, Move move, bool inSearch);
 
   Move
-  UndoInfoPop();
+  undoInfoPop();
 
   const string
-  Fen() const;
+  fen() const;
 
   bool
-  ThreeMoveRepetition() const noexcept;
+  threeMoveRepetition() const noexcept;
 
   bool
-  FiftyMoveDraw() const noexcept;
+  fiftyMoveDraw() const noexcept;
 
   void
-  AddPreviousBoardPositions(const vector<uint64_t>& prev_keys) noexcept;
+  addPreviousBoardPositions(const vector<uint64_t>& prevKeys) noexcept;
 
   uint64_t
-  GenerateHashkey() const;
+  generateHashkey() const;
 
   void
-  MakeNullMove();
+  makeNullMove();
 
   void
-  UnmakeNullMove();
+  unmakeNullMove();
 
   void
-  Reset();
+  reset();
 
   bool operator== (const ChessBoard& other);
 
   bool operator!= (const ChessBoard& other);
 
   inline Square
-  EnPassantSquare() const
+  enPassantSquare() const
   { return Square(csep & 0x7f); }
 
   constexpr Piece
-  PieceOnSquare(Square sq) const noexcept
+  pieceOnSquare(Square sq) const noexcept
   { return board[sq]; }
 
   template <Color c, PieceType pt>
   Bitboard
   piece() const noexcept
-  { return piece_bb[make_piece(c, pt)]; }
+  { return pieceBb[make_piece(c, pt)]; }
 
   template <Color c, PieceType pt>
   int
   count() const noexcept
-  { return piece_ct[make_piece(c, pt)]; }
+  { return pieceCt[make_piece(c, pt)]; }
 
   template <PieceType pt>
   int
@@ -179,25 +179,25 @@ class ChessBoard
   { return count<WHITE, pt>() + count<BLACK, pt>(); }
 
   Bitboard
-  get_piece(Color c, PieceType pt) const noexcept
-  { return piece_bb[make_piece(c, pt)]; }
+  getPiece(Color c, PieceType pt) const noexcept
+  { return pieceBb[make_piece(c, pt)]; }
 
   constexpr Bitboard
-  All() const noexcept
-  { return piece_bb[make_piece(WHITE, ALL)] | piece_bb[make_piece(BLACK, ALL)]; }
+  all() const noexcept
+  { return pieceBb[make_piece(WHITE, ALL)] | pieceBb[make_piece(BLACK, ALL)]; }
 
   void
-  Dump(std::ostream& writer = std::cout);
+  dump(std::ostream& writer = std::cout);
 
   bool
-  IntegrityCheck() const noexcept;
+  integrityCheck() const noexcept;
 
   ChessBoard
   inverse()
   {
     ChessBoard invPos;
     invPos.color = ~color;
-    Bitboard initSquares = All();
+    Bitboard initSquares = all();
 
     while (initSquares)
     {
@@ -206,37 +206,40 @@ class ChessBoard
 
       int row = sq >> 3, col = sq & 7;
       const Square invSq = Square((7 - row) * 8 + col);
-      invPos.SetPiece(invSq, make_piece(~color_of(board[sq]), type_of(board[sq])));
+      invPos.setPiece(invSq, make_piece(~color_of(board[sq]), type_of(board[sq])));
     }
 
     return invPos;
   }
 
-  void SetPiece(Square sq, Piece p)
+  void
+  setPiece(Square sq, Piece p)
   {
     board[sq] = p;
 
-    piece_bb[p] |= 1ULL << sq;
-    piece_bb[(p & 8) + 7] |= 1ULL << sq;
-    piece_ct[p]++;
+    pieceBb[p] |= 1ULL << sq;
+    pieceBb[(p & 8) + 7] |= 1ULL << sq;
+    pieceCt[p]++;
 
     if ((p & 7) != KING)
-      piece_ct[(p & 8) + 7]++;
+      pieceCt[(p & 8) + 7]++;
   }
 
-  void RemovePiece(Square sq, Piece p)
+  void
+  removePiece(Square sq, Piece p)
   {
     board[sq] = NO_PIECE;
 
-    piece_bb[p] &= AllSquares ^ (1ULL << sq);
-    piece_bb[(p & 8) + 7] &= AllSquares ^ (1ULL << sq);
-    piece_ct[p]--;
+    pieceBb[p] &= AllSquares ^ (1ULL << sq);
+    pieceBb[(p & 8) + 7] &= AllSquares ^ (1ULL << sq);
+    pieceCt[p]--;
 
     if ((p & 7) != KING)
-      piece_ct[(p & 8) + 7]--;
+      pieceCt[(p & 8) + 7]--;
   }
 
-  Weight PieceValue(PieceType pt) const noexcept
+  Weight
+  pieceValue(PieceType pt) const noexcept
   { return pieceValues[pt - 1]; }
 };
 

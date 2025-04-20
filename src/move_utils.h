@@ -7,29 +7,27 @@
 
 // Prints all the info on the encoded-move
 void
-DecodeMove(Move encoded_move);
-
+decodeMove(Move encodedMove);
 
 /**
  * @brief Returns string readable move from encoded-move.
  * Invalid move leads to undefined behaviour.
  *
  * @param move encoded-move
- * @param _cb board position
+ * @param pos board position
  * @return string
  */
 string
-PrintMove(Move move, ChessBoard _cb);
-
+printMove(Move move, ChessBoard pos);
 
 /**
  * @brief Checks if the king of the active side is in check.
  * 
  * @param ChessBoard position
 **/
-template <Color c_my>
+template <Color cMy>
 bool
-InCheck(const ChessBoard& _cb);
+inCheck(const ChessBoard& pos);
 
 #endif
 

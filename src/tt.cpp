@@ -2,7 +2,7 @@
 
 #include "tt.h"
 
-TranspositionTable TT;
+TranspositionTable tt;
 
 //* TODO xorshift for Random HashKey Generation
 uint64_t
@@ -17,15 +17,15 @@ xorshift64star(void)
 }
 
 void
-TranspositionTable::GetRandomKeys() noexcept
+TranspositionTable::getRandomKeys() noexcept
 {
   std::mt19937_64 rng(VALUE_TRANSPOSITION_TABLE_SEED);
   for (int i = 0; i < HASH_INDEXES_SIZE; i++)
-    HashIndex[i] = rng();
+    hashIndex[i] = rng();
 }
 
 void
-TranspositionTable::FreeTables()
+TranspositionTable::freeTables()
 {
   if (TT_SIZE == 0)
     return;
@@ -35,7 +35,7 @@ TranspositionTable::FreeTables()
 }
 
 void
-TranspositionTable::AllocateTables()
+TranspositionTable::allocateTables()
 {
   ttPrimary   = new ZobristHashKey[TT_SIZE]();
   ttSecondary = new ZobristHashKey[TT_SIZE]();
@@ -44,42 +44,42 @@ TranspositionTable::AllocateTables()
 void
 TranspositionTable::resize(int preset)
 {
-  GetRandomKeys();
-  FreeTables();
-  TT_SIZE = tt_sizes[preset];
-  AllocateTables();
+  getRandomKeys();
+  freeTables();
+  TT_SIZE = ttSizes[preset];
+  allocateTables();
 }
 
 std::string
 TranspositionTable::size() const noexcept
 {
-  uint64_t table_size = sizeof(ZobristHashKey) * TT_SIZE * 2;
+  uint64_t tableSize = sizeof(ZobristHashKey) * TT_SIZE * 2;
 
   uint64_t KB = 1024, MB = KB * KB, GB = MB * KB;
 
-  if (table_size < MB)
-    return std::to_string(table_size / KB) + std::string(" KB.");
+  if (tableSize < MB)
+    return std::to_string(tableSize / KB) + std::string(" KB.");
 
-  if (table_size < GB)
-    return std::to_string(table_size / MB) + std::string(" MB.");
+  if (tableSize < GB)
+    return std::to_string(tableSize / MB) + std::string(" MB.");
 
-  return std::to_string(static_cast<float>(table_size) / static_cast<float>(GB)) + std::string(" GB.");
+  return std::to_string(static_cast<float>(tableSize) / static_cast<float>(GB)) + std::string(" GB.");
 }
 
 uint64_t
-TranspositionTable::HashkeyUpdate
-  (int piece, int __pos) const noexcept
+TranspositionTable::hashKeyUpdate
+  (int piece, int pos) const noexcept
 {
   int offset = 85;
   int color = piece >> 3;
   piece = (piece & 7) - 1;
 
-  return HashIndex[ offset + __pos
+  return hashIndex[ offset + pos
       + 64 * (piece + (6 * color)) ];
 }
 
 void
-TranspositionTable::RecordPosition
+TranspositionTable::recordPosition
     (uint64_t hashValue, Depth depth, Score eval, Flag flag) noexcept
 {
   const auto addEntry = [&] (ZobristHashKey& key)
@@ -97,9 +97,8 @@ TranspositionTable::RecordPosition
   addEntry(ttSecondary[index]);
 }
 
-
 int
-TranspositionTable::LookupPosition
+TranspositionTable::lookupPosition
   (uint64_t hashValue, Depth depth, Score alpha, Score beta) const noexcept
 {
   const auto lookup = [&] (const ZobristHashKey &key)
@@ -123,11 +122,9 @@ TranspositionTable::LookupPosition
   return lookup(ttSecondary[index]);
 }
 
-
 void
-TranspositionTable::Clear() noexcept
+TranspositionTable::clear() noexcept
 {
   for (size_t i = 0; i < TT_SIZE; i++)
     ttPrimary[i].hashValue = ttSecondary[i].hashValue = 0;
 }
-

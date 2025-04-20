@@ -5,13 +5,13 @@
 #include <functional>
 
 void
-Init()
+init()
 {
   perf_clock start = perf::now();
-  plt::Init();
+  plt::init();
 
-  if constexpr (useTT) {
-    TT.resize(0);
+  if constexpr (USE_TT) {
+    tt.resize(0);
   }
   perf_time dur = perf::now() - start;
   const auto it = dur.count();
@@ -20,14 +20,14 @@ Init()
   cout << "Table Gen. took " << (sec ? it : it * 1000)
         << (sec ? " s.\n" : " ms.") << endl;
 
-  if constexpr (useTT) {
-    cout << "Transposition Table Size = " << TT.size()
+  if constexpr (USE_TT) {
+    cout << "Transposition Table Size = " << tt.size()
         << "\n\n" << std::flush;
   }
 }
 
-vector<TestPosition>
-getTestPositions(string filename, string testType)
+static vector<TestPosition>
+getTestPositions(const std::string& filename, const std::string& testType)
 {
   std::ifstream infile;
   infile.open("../Utility/" + filename);
@@ -45,8 +45,8 @@ getTestPositions(string filename, string testType)
   return testPositions;
 }
 
-void
-AccuracyTest()
+static void
+accuracyTest()
 {
   // Argument : elsa accuracy
 
@@ -57,7 +57,7 @@ AccuracyTest()
     for (const auto& pos : positions)
     {
       const auto depth = pos.maxDepth();
-      if (!pos.test(BulkCount, depth))
+      if (!pos.test(bulkCount, depth))
         return false;
       
       cout << "Position " << (posNo++) << " passed!" << endl;
@@ -76,7 +76,7 @@ AccuracyTest()
       Depth depth = pos.maxDepth();
       for (Depth dep = 1; dep <= depth; dep++)
       {
-        if (pos.test(BulkCount, dep))
+        if (pos.test(bulkCount, dep))
           continue;
         
         if (dep < minDepth)
@@ -103,8 +103,8 @@ AccuracyTest()
   cout << "Fen = " << bestCase.getFen() << endl;
 }
 
-void
-Helper() 
+static void
+helper() 
 {
   // Argument : elsa help
 
@@ -128,9 +128,8 @@ Helper()
   puts("/**************************************************/\n\n");
 }
 
-
-void
-SpeedTest()
+static void
+speedTest()
 {
   // Argument : elsa speed
 
@@ -138,57 +137,57 @@ SpeedTest()
   cout << "Positions Found : " << positions.size() << '\n';
   
   int64_t totalTime = 0;
-  Nodes  totalNodes = 0;
-  const int    loop = 3;
-  int positionNo    = 1;
+  Nodes totalNodes = 0;
+  const int loop = 3;
+  int positionNo = 1;
 
   for (auto pos : positions)
   {
-    Nodes  currentNodes = pos.nodeCount(1) * loop;
-    uint64_t currentTime = pos.time(BulkCount, loop);
+    Nodes currentNodes = pos.nodeCount(1) * loop;
+    uint64_t currentTime = pos.time(bulkCount, loop);
 
     totalNodes += currentNodes;
     totalTime  += currentTime;
 
-    const uint64_t current_speed = currentNodes / currentTime;
-    cout << "position-" << positionNo++ << "\t: " << current_speed << " M nodes/sec." << endl;
+    const uint64_t currentSpeed = currentNodes / currentTime;
+    cout << "position-" << positionNo++ << "\t: " << currentSpeed << " M nodes/sec." << endl;
   }
 
   const uint64_t speed = totalNodes / totalTime;
   cout << "Single Thread Speed : " << speed << " M nodes/sec." << endl;
 }
 
-void
-DirectSearch(const vector<string> &_args)
+static void
+directSearch(const vector<string> &args)
 {
   // Argument : elsa go <fen> <search_time>
 
-  const size_t __n = _args.size();
-  const string fen = __n > 1 ? _args[1] : StartFen;
+  const size_t n = args.size();
+  const string fen = n > 1 ? args[1] : START_FEN;
 
-  const double search_time = (__n >= 3) ?
-    std::stod(_args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
+  const double searchTime = (n >= 3) ?
+    std::stod(args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
 
   ChessBoard primary = fen;
-  cout << primary.VisualBoard() << endl;
+  cout << primary.visualBoard() << endl;
 
-  Search(primary, MAX_DEPTH, search_time);
+  search(primary, MAX_DEPTH, searchTime);
 }
 
-void
-NodeCount(const vector<string> &_args)
+static void
+nodeCount(const vector<string> &args)
 {
   // Argument : elsa count <fen> <depth>
 
-  const size_t __n = _args.size();
-  const string fen = __n > 1 ? _args[1] : StartFen;
-  Depth depth  = __n > 2 ? stoi(_args[2]) : 6;
-  ChessBoard _cb   = fen;
+  const size_t n = args.size();
+  const string fen = n > 1 ? args[1] : START_FEN;
+  Depth depth = n > 2 ? stoi(args[2]) : 6;
+  ChessBoard pos(fen);
 
   cout << "Fen = " << fen << '\n';
   cout << "Depth = " << depth << "\n" << endl;
 
-  const auto &[nodes, t] = perf::run_algo(BulkCount, _cb, depth);
+  const auto &[nodes, t] = perf::run_algo(bulkCount, pos, depth);
 
   cout << "Nodes(single-thread) = " << nodes << '\n';
   cout << "Time (single-thread) = " << t << " sec.\n";
@@ -203,8 +202,8 @@ NodeCount(const vector<string> &_args)
   // cout << "Threads Used = " << threadCount << endl;
 }
 
-void
-DebugMoveGenerator(const vector<string> &_args)
+static void
+debugMoveGenerator(const vector<string> &args)
 {
   // Argument : elsa debug <fen> <depth> <output_file_name>
 
@@ -224,31 +223,30 @@ DebugMoveGenerator(const vector<string> &_args)
     return string({a1, a2, b1, b2});
   };
 
-  const auto __n = _args.size();
-  const auto fen = __n > 1 ? _args[1] : StartFen;
-  const auto dep = __n > 2 ? stoi(_args[2]) : 2;
-  const auto _fn = __n > 3 ? _args[3] : string("inp.txt");
+  const auto n = args.size();
+  const auto fen = n > 1 ? args[1] : START_FEN;
+  const auto dep = n > 2 ? stoi(args[2]) : 2;
+  const auto fn = n > 3 ? args[3] : string("inp.txt");
   
-  std::ofstream out(_fn);
-  ChessBoard _cb = fen;
-  MoveList myMoves = GenerateMoves(_cb);
+  std::ofstream out(fn);
+  ChessBoard pos(fen);
+  MoveList myMoves = generateMoves(pos);
   MoveArray movesArray;
-  myMoves.getMoves(_cb, movesArray);
+  myMoves.getMoves(pos, movesArray);
 
   for (const auto move : movesArray)
   {
-    _cb.MakeMove(move);
-    const auto current = BulkCount(_cb, dep - 1);
+    pos.makeMove(move);
+    const auto current = bulkCount(pos, dep - 1);
     out << moveName(move) << " : " << current << '\n';
-    _cb.UnmakeMove();
+    pos.unmakeMove();
   }
 
   out.close();
 }
 
-
 static void
-StaticEval(const vector<string>& args)
+staticEval(const vector<string>& args)
 {
   // Argument : elsa static <fen>
   if (args.size() == 1)
@@ -259,47 +257,47 @@ StaticEval(const vector<string>& args)
 
   ChessBoard pos(args[1]);
 
-  MoveList myMoves = GenerateMoves(pos);
+  MoveList myMoves = generateMoves(pos);
   MoveArray movesArray;
   myMoves.getMoves(pos, movesArray);
-  OrderMoves(pos, movesArray, MType::CAPTURES, 0);
-  PrintMovelist(movesArray, pos);
+  orderMoves(pos, movesArray, MType::CAPTURES, 0);
+  printMovelist(movesArray, pos);
 
-  Score eval = Evaluate<true>(pos);
+  Score eval = evaluate<true>(pos);
   cout << "Score = " << eval << endl;
 }
 
-
-void Task(int argc, char *argv[])
+void
+task(int argc, char *argv[])
 {
-  const vector<string> argument_list =
-    base_utils::ExtractArgumentList(argc, argv);
+  const vector<string> argumentList =
+    utils::extractArgumentList(argc, argv);
 
-  if (argument_list.empty())
+  if (argumentList.empty())
   {
     puts("No Task Found!");
     puts("Type : \'elsa help\' to view command list.\n");
     return;
   }
 
-  const string& command = argument_list[0];
+  const string& command = argumentList[0];
 
   // Command map that associates commands with their handler functions
-  const std::unordered_map<string, std::function<void(const vector<string>&)>> command_map = {
-    {"help",     [](const auto&){ Helper(); }},
-    {"accuracy", [](const auto&){ AccuracyTest(); }},
-    {"speed",    [](const auto&){ SpeedTest(); }},
-    {"go",       [](const auto& args){ DirectSearch(args); }},
-    {"play",     [](const auto& args){ Play(args); }},
-    {"count",    [](const auto& args){ NodeCount(args); }},
-    {"debug",    [](const auto& args){ DebugMoveGenerator(args); }},
-    {"static",   [](const auto& args){ StaticEval(args); }}
+  const std::unordered_map<string, std::function<void(const vector<string>&)>> commandMap = {
+    {"help",     [](const auto&){ helper(); }},
+    {"accuracy", [](const auto&){ accuracyTest(); }},
+    {"speed",    [](const auto&){ speedTest(); }},
+    {"go",       [](const auto& args){ directSearch(args); }},
+    {"play",     [](const auto& args){ play(args); }},
+    {"count",    [](const auto& args){ nodeCount(args); }},
+    {"debug",    [](const auto& args){ debugMoveGenerator(args); }},
+    {"static",   [](const auto& args){ staticEval(args); }}
   };
 
   // Find and execute the command
-  const auto it = command_map.find(command);
-  if (it != command_map.end()) {
-    it->second(argument_list);
+  const auto it = commandMap.find(command);
+  if (it != commandMap.end()) {
+    it->second(argumentList);
   } else {
     puts("No Valid Task!");
   }

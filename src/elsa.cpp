@@ -15,8 +15,8 @@
 int main(int argc, char **argv)
 {
   FAST_IO();
-  Init();
-  Task(argc, argv);
+  init();
+  task(argc, argv);
 }
 
 

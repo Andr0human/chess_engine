@@ -27,7 +27,8 @@
 
 
 // Checks if move is valid for given position
-bool IsLegalMoveForPosition(Move move, const ChessBoard& pos);
+bool
+isLegalMoveForPosition(Move move, const ChessBoard& pos);
 
 /**
  * @brief Returns a list of all the legal moves in current position.
@@ -35,14 +36,15 @@ bool IsLegalMoveForPosition(Move move, const ChessBoard& pos);
  * @param pos ChessBoard
  * @param generateChecksData bool
  */
-MoveList GenerateMoves(const ChessBoard& pos, bool generateChecksData=false);
+MoveList
+generateMoves(const ChessBoard& pos, bool generateChecksData=false);
 
 
 bool
-PieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB);
+pieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB);
 
 Square
-GetSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces);
+getSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitboard removedPieces);
 
 
 #endif
