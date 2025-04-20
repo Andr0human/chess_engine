@@ -267,6 +267,18 @@ staticEval(const vector<string>& args)
   cout << "Score = " << eval << endl;
 }
 
+static void
+readyOk()
+{
+  // Argument : elsa readyOk
+  ChessBoard pos(START_FEN);
+
+  if (bulkCount(pos, 3) == 8902)
+    puts("Ready Ok!");
+  else
+    puts("Ready Not Ok!");
+}
+
 void
 task(int argc, char *argv[])
 {
@@ -291,7 +303,8 @@ task(int argc, char *argv[])
     {"play",     [](const auto& args){ play(args); }},
     {"count",    [](const auto& args){ nodeCount(args); }},
     {"debug",    [](const auto& args){ debugMoveGenerator(args); }},
-    {"static",   [](const auto& args){ staticEval(args); }}
+    {"static",   [](const auto& args){ staticEval(args); }},
+    {"readyOk",  [](const auto&){ readyOk(); }}
   };
 
   // Find and execute the command
