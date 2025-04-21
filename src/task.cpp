@@ -194,6 +194,9 @@ bestMoveSearch(const vector<string> &args)
   search(pos, depth, searchTime, std::cout, false);
   const auto bestMove = info.lastIterationResult();
   cout << printMove(bestMove.first, pos) << endl;
+
+  pos.makeMove(bestMove.first);
+  cout << pos.fen() << endl;
 }
 
 static void
