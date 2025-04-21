@@ -19,16 +19,19 @@ bulkCount(ChessBoard& pos, Depth depth);
 /**
  * @brief Iterative Search to search a board postion.
  * 
- * @param primary board position
+ * @param pos board position
  * @param mDepth maxDepth to which Iterartive search should to run
- * @param use_timer Run a time-based search.
+ * @param searchTime time to run the search
+ * @param ostream ostream to write the search results
+ * @param debug debug mode
  */
 void
 search(
-  ChessBoard primary,
+  ChessBoard pos,
   Depth mDepth = MAX_DEPTH,
   double searchTime = DEFAULT_SEARCH_TIME,
-  std::ostream& ostream = std::cout
+  std::ostream& ostream = std::cout,
+  bool debug = false
 );
 
 /**

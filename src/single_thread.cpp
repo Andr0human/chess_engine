@@ -297,7 +297,7 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 }
 
 void
-search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
+search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer, bool debug)
 {
   resetPvLine();
 
@@ -313,7 +313,8 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
   Score alpha = -VALUE_INF, beta = VALUE_INF;
   int valWindowCnt = 0;
 
-  info.showHeader(writer);
+  if (debug)
+    info.showHeader(writer);
 
   for (Depth depth = 1; depth <= mDepth;)
   {
@@ -339,7 +340,8 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
       valWindowCnt = 0;
 
       info.addResult(board, eval, pvArray);
-      info.showLastDepthResult(board, writer);
+      if (debug)
+        info.showLastDepthResult(board, writer);
       info.resetNodeCount();
 
       depth++;
@@ -353,5 +355,6 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer)
   }
 
   info.searchCompleted();
-  writer << "Search Done!" << endl;
+  if (debug)
+    writer << "Search Done!" << endl;
 }

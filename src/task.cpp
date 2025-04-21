@@ -19,7 +19,7 @@ init(const vector<string>& args)
 
   bool sec = (it >= 1);
 
-  if (utils::hasArg(args, "init"))
+  if (utils::hasArg(args, "debug"))
   {
     cout << "Table Gen. took " << (sec ? it : it * 1000)
          << (sec ? " s.\n" : " ms.") << endl;
@@ -171,15 +171,29 @@ speedTest()
 static void
 directSearch(const vector<string> &args)
 {
-  // Argument can be in any order
-  // e.g.: elsa depth 10 fen <fen> debug go
+  // elsa [depth <depth>] [fen <fen>] [debug] [time <search_time>] go
 
   const string fen = utils::getFen(args, START_FEN);
   const double searchTime = utils::getTime(args, DEFAULT_SEARCH_TIME);
   const Depth searchDepth = utils::getDepth(args, MAX_DEPTH);
 
-  ChessBoard primary = fen;
-  search(primary, searchDepth, searchTime);
+  ChessBoard pos(fen);
+  search(pos, searchDepth, searchTime, std::cout, true);
+}
+
+static void
+bestMoveSearch(const vector<string> &args)
+{
+  // elsa bestmove [fen <fen>] [depth <depth>] [time <search_time>]
+
+  const string fen = utils::getFen(args, START_FEN);
+  const Depth depth = utils::getDepth(args, MAX_DEPTH);
+  const double searchTime = utils::getTime(args, DEFAULT_SEARCH_TIME);
+
+  ChessBoard pos(fen);
+  search(pos, depth, searchTime, std::cout, false);
+  const auto bestMove = info.lastIterationResult();
+  cout << printMove(bestMove.first, pos) << endl;
 }
 
 static void
@@ -206,7 +220,7 @@ nodeCount(const vector<string> &args)
 static void
 debugMoveGenerator(const vector<string> &args)
 {
-  // elsa [fen <fen>] [depth <depth>] [output <filename>] [debug]
+  // elsa [fen <fen>] [depth <depth>] [output <filename>] [movegen]
 
   const auto moveName = [] (int move)
   {
@@ -293,8 +307,9 @@ task(const vector<string>& args)
     {"go",       [](const auto& arguments){ directSearch(arguments); }},
     {"play",     [](const auto& arguments){ play(arguments); }},
     {"count",    [](const auto& arguments){ nodeCount(arguments); }},
-    {"debug",    [](const auto& arguments){ debugMoveGenerator(arguments); }},
+    {"movegen",  [](const auto& arguments){ debugMoveGenerator(arguments); }},
     {"static",   [](const auto& arguments){ staticEval(arguments); }},
+    {"bestmove", [](const auto& arguments){ bestMoveSearch(arguments); }},
     {"readyOk",  [](const auto&){ readyOk(); }}
   };
 
