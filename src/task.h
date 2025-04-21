@@ -9,9 +9,9 @@
 #include <fstream>
 #include <iomanip>  // for setprecision
 
-void init();
+void init(const vector<string>& args);
 
-void task(int argc, char *argv[]);
+void task(const vector<string>& args);
 
 
 #endif

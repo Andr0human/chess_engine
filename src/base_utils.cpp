@@ -81,4 +81,61 @@ namespace utils
 
     return res;
   }
+
+  bool
+  hasArg(const vector<string>& args, const string& flag)
+  { return std::find(begin(args), end(args), flag) != end(args); }
+
+  string
+  argValue(const vector<string>& args, const string& flag) 
+  {
+    auto it = std::find(begin(args), end(args), flag);
+    if (it != end(args) and ++it != end(args)) {
+      return *it;
+    }
+    return "";
+  }
+
+  string
+  getFen(const vector<string>& args, string defaultFen)
+  {
+    if (hasArg(args, "fen") and !argValue(args, "fen").empty())
+      return argValue(args, "fen");
+    return defaultFen;
+  }
+
+  Depth
+  getDepth(const vector<string>& args, Depth defaultDepth)
+  {
+    if (hasArg(args, "depth") and !argValue(args, "depth").empty()) {
+      try {
+        return std::stoi(argValue(args, "depth"));
+      } catch (...) {
+        return defaultDepth;
+      }
+    }
+    return defaultDepth;
+  }
+
+  double
+  getTime(const vector<string>& args, double defaultTime)
+  {
+    if (hasArg(args, "time") and !argValue(args, "time").empty()) {
+      try {
+        return std::stod(argValue(args, "time"));
+      } catch (...) {
+        return defaultTime;
+      }
+    }
+    return defaultTime;
+  }
+
+  string
+  getOutputFile(const vector<string>& args, string defaultOutputFile)
+  {
+    if (hasArg(args, "output") and !argValue(args, "output").empty()) {
+      return argValue(args, "output");
+    }
+    return defaultOutputFile;
+  }
 }

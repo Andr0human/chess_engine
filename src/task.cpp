@@ -1,11 +1,12 @@
+
+#include <unordered_map>
+#include <functional>
 #include "task.h"
 #include "search.h"
 #include "single_thread.h"
-#include <unordered_map>
-#include <functional>
 
 void
-init()
+init(const vector<string>& args)
 {
   perf_clock start = perf::now();
   plt::init();
@@ -17,12 +18,16 @@ init()
   const auto it = dur.count();
 
   bool sec = (it >= 1);
-  cout << "Table Gen. took " << (sec ? it : it * 1000)
-        << (sec ? " s.\n" : " ms.") << endl;
 
-  if constexpr (USE_TT) {
-    cout << "Transposition Table Size = " << tt.size()
-        << "\n\n" << std::flush;
+  if (utils::hasArg(args, "init"))
+  {
+    cout << "Table Gen. took " << (sec ? it : it * 1000)
+         << (sec ? " s.\n" : " ms.") << endl;
+
+    if constexpr (USE_TT) {
+      cout << "Transposition Table Size = " << tt.size()
+          << "\n\n" << std::flush;
+    }
   }
 }
 
@@ -117,13 +122,19 @@ helper()
   puts("** elsa speed\n");
 
   puts("** For Bulk-Counting, type:\n");
-  puts("** elsa count <fen> <depth>\n");
+  puts("** elsa count [fen <fen>] [depth <depth>]\n");
 
   puts("** For Evaluating a position, type:\n");
-  puts("** elsa go <fen> <search_time>\n");
+  puts("** elsa go [fen <fen>] [time <search_time>] [depth <depth>] [debug]\n");
 
   puts("** For debugging movegenerator, type:\n");
-  puts("** elsa debug <fen> <depth> <output_file_name>\n");
+  puts("** elsa debug [fen <fen>] [depth <depth>] [output <filename>]\n");
+  
+  puts("** For static evaluation of a position, type:\n");
+  puts("** elsa static [fen <fen>]\n");
+
+  puts("** Note: Commands and flags can be in any order\n");
+  puts("         (e.g. 'elsa debug depth 3 fen <fen>' or 'elsa fen <fen> go')\n");
 
   puts("/**************************************************/\n\n");
 }
@@ -160,28 +171,25 @@ speedTest()
 static void
 directSearch(const vector<string> &args)
 {
-  // Argument : elsa go <fen> <search_time>
+  // Argument can be in any order
+  // e.g.: elsa depth 10 fen <fen> debug go
 
-  const size_t n = args.size();
-  const string fen = n > 1 ? args[1] : START_FEN;
-
-  const double searchTime = (n >= 3) ?
-    std::stod(args[2]) : static_cast<double>(DEFAULT_SEARCH_TIME);
+  const string fen = utils::getFen(args, START_FEN);
+  const double searchTime = utils::getTime(args, DEFAULT_SEARCH_TIME);
+  const Depth searchDepth = utils::getDepth(args, MAX_DEPTH);
 
   ChessBoard primary = fen;
-  cout << primary.visualBoard() << endl;
-
-  search(primary, MAX_DEPTH, searchTime);
+  search(primary, searchDepth, searchTime);
 }
 
 static void
 nodeCount(const vector<string> &args)
 {
-  // Argument : elsa count <fen> <depth>
+  // elsa [depth <depth>] [fen <fen>] count
 
-  const size_t n = args.size();
-  const string fen = n > 1 ? args[1] : START_FEN;
-  Depth depth = n > 2 ? stoi(args[2]) : 6;
+  const string fen = utils::getFen(args, START_FEN);
+  const Depth depth = utils::getDepth(args, 6);
+
   ChessBoard pos(fen);
 
   cout << "Fen = " << fen << '\n';
@@ -193,19 +201,12 @@ nodeCount(const vector<string> &args)
   cout << "Time (single-thread) = " << t << " sec.\n";
   cout << "Speed(single-thread) = " << static_cast<double>(nodes) / (t * 1e6)
         << " M nodes/sec.\n" << endl;
-
-  // const auto &[nodes2, t2] = perf::run_algo(bulk_MultiCount, board, depth);
-
-  // cout << "Nodes(multi- thread) = " << nodes2 << endl;
-  // cout << "Speed(multi- thread) = " << nodes2 / (t2 * 1'000'000)
-  //      << " M nodes/sec." << endl;
-  // cout << "Threads Used = " << threadCount << endl;
 }
 
 static void
 debugMoveGenerator(const vector<string> &args)
 {
-  // Argument : elsa debug <fen> <depth> <output_file_name>
+  // elsa [fen <fen>] [depth <depth>] [output <filename>] [debug]
 
   const auto moveName = [] (int move)
   {
@@ -223,12 +224,11 @@ debugMoveGenerator(const vector<string> &args)
     return string({a1, a2, b1, b2});
   };
 
-  const auto n = args.size();
-  const auto fen = n > 1 ? args[1] : START_FEN;
-  const auto dep = n > 2 ? stoi(args[2]) : 2;
-  const auto fn = n > 3 ? args[3] : string("inp.txt");
+  const string fen = utils::getFen(args, START_FEN);
+  const Depth depth = utils::getDepth(args, 2);
+  const string outputFile = utils::getOutputFile(args, "inp.txt");
   
-  std::ofstream out(fn);
+  std::ofstream out(outputFile);
   ChessBoard pos(fen);
   MoveList myMoves = generateMoves(pos);
   MoveArray movesArray;
@@ -237,7 +237,7 @@ debugMoveGenerator(const vector<string> &args)
   for (const auto move : movesArray)
   {
     pos.makeMove(move);
-    const auto current = bulkCount(pos, dep - 1);
+    const auto current = bulkCount(pos, depth - 1);
     out << moveName(move) << " : " << current << '\n';
     pos.unmakeMove();
   }
@@ -248,14 +248,10 @@ debugMoveGenerator(const vector<string> &args)
 static void
 staticEval(const vector<string>& args)
 {
-  // Argument : elsa static <fen>
-  if (args.size() == 1)
-  {
-    puts("No fen provided!");
-    return;
-  }
+  // elsa fen <fen> static
 
-  ChessBoard pos(args[1]);
+  const string fen = utils::getFen(args, START_FEN);
+  ChessBoard pos(fen);
 
   MoveList myMoves = generateMoves(pos);
   MoveArray movesArray;
@@ -280,39 +276,43 @@ readyOk()
 }
 
 void
-task(int argc, char *argv[])
+task(const vector<string>& args)
 {
-  const vector<string> argumentList =
-    utils::extractArgumentList(argc, argv);
-
-  if (argumentList.empty())
+  if (args.empty())
   {
     puts("No Task Found!");
     puts("Type : \'elsa help\' to view command list.\n");
     return;
   }
 
-  const string& command = argumentList[0];
-
   // Command map that associates commands with their handler functions
   const std::unordered_map<string, std::function<void(const vector<string>&)>> commandMap = {
     {"help",     [](const auto&){ helper(); }},
     {"accuracy", [](const auto&){ accuracyTest(); }},
     {"speed",    [](const auto&){ speedTest(); }},
-    {"go",       [](const auto& args){ directSearch(args); }},
-    {"play",     [](const auto& args){ play(args); }},
-    {"count",    [](const auto& args){ nodeCount(args); }},
-    {"debug",    [](const auto& args){ debugMoveGenerator(args); }},
-    {"static",   [](const auto& args){ staticEval(args); }},
+    {"go",       [](const auto& arguments){ directSearch(arguments); }},
+    {"play",     [](const auto& arguments){ play(arguments); }},
+    {"count",    [](const auto& arguments){ nodeCount(arguments); }},
+    {"debug",    [](const auto& arguments){ debugMoveGenerator(arguments); }},
+    {"static",   [](const auto& arguments){ staticEval(arguments); }},
     {"readyOk",  [](const auto&){ readyOk(); }}
   };
 
-  // Find and execute the command
-  const auto it = commandMap.find(command);
-  if (it != commandMap.end()) {
-    it->second(argumentList);
+  // Search for any command in the args
+  string foundCommand;
+  for (const auto& arg : args) {
+    if (commandMap.find(arg) != commandMap.end()) {
+      foundCommand = arg;
+      break;
+    }
+  }
+
+  if (!foundCommand.empty()) {
+    const auto it = commandMap.find(foundCommand);
+    it->second(args);
   } else {
     puts("No Valid Task!");
+    puts("Type : \'elsa help\' to view command list.\n");
   }
 }
 

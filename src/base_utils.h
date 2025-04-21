@@ -1,4 +1,3 @@
-
 #ifndef BASE_UTILS_H
 #define BASE_UTILS_H
 
@@ -66,6 +65,31 @@ namespace utils
   // Returns the string representation of the bitboard.
   string
   bitsOnBoard(Bitboard value);
+
+  // Checks if a command line flag exists in the argument list.
+  bool
+  hasArg(const vector<string>& args, const string& flag);
+
+  // Retrieves the value associated with a command line flag.
+  // Returns empty string if flag not found or has no value.
+  string
+  argValue(const vector<string>& args, const string& flag);
+
+  // Retrieves the FEN string from the command line arguments.
+  string
+  getFen(const vector<string>& args, string defaultFen);
+
+  // Retrieves the depth from the command line arguments.
+  Depth
+  getDepth(const vector<string>& args, Depth defaultDepth);
+
+  // Retrieves the time from the command line arguments.
+  double
+  getTime(const vector<string>& args, double defaultTime);
+
+  // Retrieves the output file from the command line arguments.
+  string
+  getOutputFile(const vector<string>& args, string defaultOutputFile);
 }
 
 

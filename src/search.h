@@ -240,8 +240,8 @@ class SearchData
     writer << " | " << setw(6) << right << fixed << setprecision(2) << timeSpent()
            << " | " << setw(5) << right << fixed << dep
            << " | " << setw(7) << right << fixed << setprecision(2) << evalConv
-           << " | " << setw(8) << right << fixed  << totalNodes()
-           << " | " << setw(8) << right << fixed  << totalQNodes()
+           << " | " << setw(8) << right << fixed << totalNodes()
+           << " | " << setw(8) << right << fixed << totalQNodes()
            << " | " << ReadablePvLine(pos) << endl;
   }
 
@@ -280,9 +280,9 @@ class SearchData
   print(ChessBoard pos)
   {
     using std::setw, std::right, std::fixed;
-    cout << " | " << setw(6) << "moveNo"
-         << " | " << setw(5) << "Move"
-         << " | " << setw(8) << "Nodes"
+    cout << " | " << setw( 6) << "moveNo"
+         << " | " << setw( 5) << "Move"
+         << " | " << setw( 8) << "Nodes"
          << " | " << setw(10) << "QNodes |\n";
     int moveNo = 1;
     for (const auto& [move, tm] : moveTimes)

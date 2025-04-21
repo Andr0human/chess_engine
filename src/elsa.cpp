@@ -15,8 +15,10 @@
 int main(int argc, char **argv)
 {
   FAST_IO();
-  init();
-  task(argc, argv);
+
+  const auto args = utils::extractArgumentList(argc, argv);
+  init(args);
+  task(args);
 }
 
 
