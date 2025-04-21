@@ -169,6 +169,27 @@ speedTest()
 }
 
 static void
+setParamswithDifficulty(string difficulty, double& searchTime, Depth& searchDepth)
+{
+  if (difficulty == "beginner") {
+    searchTime = 0.001;
+    searchDepth = 1;
+  } else if (difficulty == "easy") {
+    searchTime = 0.005;
+    searchDepth = 3;
+  } else if (difficulty == "medium") {
+    searchTime = 0.1;
+    searchDepth = 5;
+  } else if (difficulty == "hard") {
+    searchTime = 1;
+    searchDepth = 8;
+  } else if (difficulty == "expert") {
+    searchTime = 1.5;
+    searchDepth = MAX_DEPTH;
+  }
+}
+
+static void
 directSearch(const vector<string> &args)
 {
   // elsa [depth <depth>] [fen <fen>] [debug] [time <search_time>] go
@@ -184,11 +205,14 @@ directSearch(const vector<string> &args)
 static void
 bestMoveSearch(const vector<string> &args)
 {
-  // elsa bestmove [fen <fen>] [depth <depth>] [time <search_time>]
+  // elsa bestmove [fen <fen>] [difficulty <difficulty>] [depth <depth>] [time <search_time>]
 
   const string fen = utils::getFen(args, START_FEN);
-  const Depth depth = utils::getDepth(args, MAX_DEPTH);
-  const double searchTime = utils::getTime(args, DEFAULT_SEARCH_TIME);
+  const string difficulty = utils::getDifficulty(args, "expert");
+  Depth depth = utils::getDepth(args, MAX_DEPTH);
+  double searchTime = utils::getTime(args, DEFAULT_SEARCH_TIME);
+
+  setParamswithDifficulty(difficulty, searchTime, depth);
 
   ChessBoard pos(fen);
   search(pos, depth, searchTime, std::cout, false);

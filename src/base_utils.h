@@ -90,6 +90,10 @@ namespace utils
   // Retrieves the output file from the command line arguments.
   string
   getOutputFile(const vector<string>& args, string defaultOutputFile);
+
+  // Retrieves the difficulty from the command line arguments.
+  string
+  getDifficulty(const vector<string>& args, string defaultDifficulty);
 }
 
 

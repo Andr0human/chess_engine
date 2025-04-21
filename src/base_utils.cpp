@@ -138,4 +138,13 @@ namespace utils
     }
     return defaultOutputFile;
   }
+
+  string
+  getDifficulty(const vector<string>& args, string defaultDifficulty)
+  {
+    if (hasArg(args, "difficulty") and !argValue(args, "difficulty").empty()) {
+      return argValue(args, "difficulty");
+    }
+    return defaultDifficulty;
+  }
 }
