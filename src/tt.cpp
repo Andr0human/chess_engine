@@ -2,6 +2,9 @@
 
 #include "tt.h"
 
+using std::string;
+using std::to_string;
+
 TranspositionTable tt;
 
 //* TODO xorshift for Random HashKey Generation
@@ -50,7 +53,7 @@ TranspositionTable::resize(int preset)
   allocateTables();
 }
 
-std::string
+string
 TranspositionTable::size() const noexcept
 {
   uint64_t tableSize = sizeof(ZobristHashKey) * TT_SIZE * 2;
@@ -58,12 +61,12 @@ TranspositionTable::size() const noexcept
   uint64_t KB = 1024, MB = KB * KB, GB = MB * KB;
 
   if (tableSize < MB)
-    return std::to_string(tableSize / KB) + std::string(" KB.");
+    return to_string(tableSize / KB) + string(" KB.");
 
   if (tableSize < GB)
-    return std::to_string(tableSize / MB) + std::string(" MB.");
+    return to_string(tableSize / MB) + string(" MB.");
 
-  return std::to_string(static_cast<float>(tableSize) / static_cast<float>(GB)) + std::string(" GB.");
+  return to_string(static_cast<float>(tableSize) / static_cast<float>(GB)) + string(" GB.");
 }
 
 uint64_t

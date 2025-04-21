@@ -32,7 +32,7 @@ init(const vector<string>& args)
 }
 
 static vector<TestPosition>
-getTestPositions(const std::string& filename, const std::string& testType)
+getTestPositions(const string& filename, const string& testType)
 {
   std::ifstream infile;
   infile.open("../Utility/" + filename);

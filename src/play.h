@@ -57,9 +57,9 @@ class PlayBoard : public ChessBoard
   vector<uint64_t> prevKeys;
 
   bool
-  isNumeric(const std::string& s)
+  isNumeric(const string& s)
   {
-    std::string::const_iterator it = s.begin();
+    string::const_iterator it = s.begin();
     while (it != s.end() && std::isdigit(*it)) ++it;
     return !s.empty() && it == s.end();
   }

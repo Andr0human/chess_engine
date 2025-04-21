@@ -107,7 +107,7 @@ class ChessBoard
 
   ChessBoard();
 
-  ChessBoard(const std::string& fen);
+  ChessBoard(const string& fen);
 
   void
   setPositionWithFen(const string& fen) noexcept;
