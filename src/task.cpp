@@ -4,6 +4,7 @@
 #include "task.h"
 #include "search.h"
 #include "single_thread.h"
+#include "test_positions.h"
 
 void
 init(const vector<string>& args)
@@ -32,21 +33,13 @@ init(const vector<string>& args)
 }
 
 static vector<TestPosition>
-getTestPositions(const string& filename, const string& testType)
+getTestPositions(const std::vector<std::string>& suite, const std::string& testType)
 {
-  std::ifstream infile;
-  infile.open("../Utility/" + filename);
-
-  string str;
   vector<TestPosition> testPositions;
 
-  while (getline(infile, str))
-  {
-    if (str == "") break;
-    testPositions.emplace_back(TestPosition(str, testType));
-  }
+  for (const auto& testData : suite)
+    testPositions.emplace_back(TestPosition(testData, testType));
 
-  infile.close();
   return testPositions;
 }
 
@@ -94,7 +87,7 @@ accuracyTest()
     return bestCase;
   };
 
-  const auto positions = getTestPositions("suite_2", "accuracy");
+  const auto positions = getTestPositions(test_data::accuracy::suite1, "accuracy");
   const auto testSuccess = runTests(positions);
 
   if (testSuccess) return;
@@ -144,7 +137,7 @@ speedTest()
 {
   // Argument : elsa speed
 
-  const auto positions = getTestPositions("suite_1", "speed");
+  const auto positions = getTestPositions(test_data::speed::suite1, "speed");
   cout << "Positions Found : " << positions.size() << '\n';
   
   int64_t totalTime = 0;
