@@ -107,27 +107,15 @@ static Score
 playMove(ChessBoard& pos, Move move, size_t moveNo,
   Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
 {
-  Score eval = VALUE_ZERO;
+  const int R = USE_LMR and lmrOk(move, depth, moveNo) ? reductionFunction(depth, moveNo) : 0;
 
-  if (USE_LMR and lmrOk(move, depth, moveNo))
+  pos.makeMove(move);
+  Score eval = -alphaBeta(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+  pos.unmakeMove();
+
+  // if timed-out, eval will be highly negative thus following code won't execute
+  if ((eval > alpha) and (R > 0))
   {
-    int R = reductionFunction(depth, moveNo);
-
-    pos.makeMove(move);
-    eval = -alphaBeta(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-    pos.unmakeMove();
-
-    // if timed-out, eval will be highly negative thus following code won't execute
-    if ((eval > alpha) and (R > 0))
-    {
-      pos.makeMove(move);
-      eval = -alphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-      pos.unmakeMove();
-    }
-  }
-  else
-  {
-    // No Reduction
     pos.makeMove(move);
     eval = -alphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
     pos.unmakeMove();
