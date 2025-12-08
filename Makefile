@@ -6,11 +6,33 @@
 # define the Cpp compiler to use
 CXX = g++
 
+# detect OS
+UNAME_S := $(shell uname -s)
+
+# detect compiler type (check if clang or Apple clang)
+CXX_VERSION := $(shell $(CXX) --version 2>/dev/null | head -n 1)
+ifeq ($(findstring clang,$(CXX_VERSION)),clang)
+IS_CLANG := 1
+else
+IS_CLANG := 0
+endif
+
 # define any compile-time flags
 ifeq ($(OS),Windows_NT)
-CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+  ifeq ($(IS_CLANG),1)
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
+  else
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+  endif
 else
-CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
+  # macOS (Darwin) doesn't support static linking, so remove those flags
+  ifeq ($(UNAME_S),Darwin)
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+  else ifeq ($(IS_CLANG),1)
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+  else
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
+  endif
 endif
 
 # define output directory
