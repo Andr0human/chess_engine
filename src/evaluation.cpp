@@ -318,7 +318,7 @@ mobilityStrength(const ChessBoard& pos)
   Score rooks   = addMobilityScore<WHITE, ROOK  >(pos) - addMobilityScore<BLACK, ROOK  >(pos);
   Score queens  = addMobilityScore<WHITE, QUEEN >(pos) - addMobilityScore<BLACK, QUEEN >(pos);
 
-  return bishops + (2 * knights) + rooks + queens;
+  return (2 * bishops) + (2 * knights) + (2 * rooks) + queens;
 }
 
 template <Color cMy>
@@ -356,11 +356,22 @@ pawnStructureScore(const ChessBoard& pos, const EvalData& ed)
   Bitboard   column = FileA;
   Score score = 0;
 
-  // Punish Double Pawns on same column
+  // Punish Double Pawns on same column and Isolated Pawns
   for (int i = 0; i < 8; i++)
   {
     int p = popCount(column & pawns);
-    score -= 36 * p * (p - 1);
+    score -= 36 * p * (p - 1); // Doubled pawns
+
+    // Isolated pawn: no friendly pawns on adjacent files
+    if (p > 0)
+    {
+      Bitboard adjacentFiles = 0;
+      if (i > 0) adjacentFiles |= (column >> 1);
+      if (i < 7) adjacentFiles |= (column << 1);
+      
+      if ((adjacentFiles & pawns) == 0)
+        score -= 20 * p; // Isolated pawn penalty
+    }
     column <<= 1;
   }
 
@@ -396,6 +407,74 @@ pawnStructureScore(const ChessBoard& pos, const EvalData& ed)
   return score;
 }
 
+template <Color cMy>
+static Score
+bishopPairBonus(const ChessBoard& pos)
+{
+  return (pos.count<cMy, BISHOP>() >= 2) ? 50 : 0;
+}
+
+template <Color cMy>
+static Score
+rookOnOpenFile(const ChessBoard& pos)
+{
+  Bitboard rooks = pos.piece<cMy, ROOK>();
+  Bitboard allPawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
+  Bitboard myPawns = pos.piece<cMy, PAWN>();
+  Score score = 0;
+  
+  while (rooks != 0)
+  {
+    Square rookSq = nextSquare(rooks);
+    Bitboard file = FileA << (rookSq & 7);
+    
+    if ((file & allPawns) == 0)
+      score += 30; // Open file (no pawns)
+    else if ((file & myPawns) == 0)
+      score += 15; // Semi-open file (only enemy pawns)
+  }
+  
+  return score;
+}
+
+template <Color cMy>
+static Score
+rookOn7thRank(const ChessBoard& pos)
+{
+  constexpr Bitboard seventhRank = (cMy == WHITE) ? Rank7 : Rank2;
+  Bitboard rooks = pos.piece<cMy, ROOK>() & seventhRank;
+  return 25 * popCount(rooks);
+}
+
+template <Color cMy>
+static Score
+knightOutposts(const ChessBoard& pos)
+{
+  constexpr Color cEmy = ~cMy;
+  constexpr Bitboard outpostRanks = (cMy == WHITE) ? (Rank4 | Rank5 | Rank6) : (Rank3 | Rank4 | Rank5);
+  
+  Bitboard knights = pos.piece<cMy, KNIGHT>() & outpostRanks;
+  Bitboard myPawnAttacks = pawnAttackSquares<cMy>(pos);
+  Score score = 0;
+  
+  while (knights != 0)
+  {
+    Square knightSq = nextSquare(knights);
+    // Check if knight is defended by own pawn
+    if ((1ULL << knightSq) & myPawnAttacks)
+    {
+      // Check if enemy pawns can't easily attack this square
+      Bitboard emyPawns = pos.piece<cEmy, PAWN>();
+      if ((plt::passedPawnMasks[cEmy][knightSq] & emyPawns) == 0)
+        score += 30; // Strong outpost
+      else
+        score += 15; // Decent outpost
+    }
+  }
+  
+  return score;
+}
+
 template<bool debug>
 static Score
 midGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
@@ -408,6 +487,12 @@ midGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   Score mobilityScore   = mobilityStrength(pos);
   Score pawnStructure   = ed.pawnStructureScore;
   Score threatsScore    = threats<debug>(pos);
+  
+  // New evaluation terms
+  Score bishopPair = bishopPairBonus<WHITE>(pos) - bishopPairBonus<BLACK>(pos);
+  Score rookOpen   = rookOnOpenFile<WHITE>(pos) - rookOnOpenFile<BLACK>(pos);
+  Score rook7th    = rookOn7thRank<WHITE>(pos) - rookOn7thRank<BLACK>(pos);
+  Score knightOut  = knightOutposts<WHITE>(pos) - knightOutposts<BLACK>(pos);
 
   if (debug)
   {
@@ -416,6 +501,10 @@ midGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
       << "\npieceTableScore = " << pieceTableScore
       << "\nmobilityScore   = " << mobilityScore
       << "\nthreatsScore    = " << threatsScore
+      << "\nbishopPair      = " << bishopPair
+      << "\nrookOpen        = " << rookOpen
+      << "\nrook7th         = " << rook7th
+      << "\nknightOut       = " << knightOut
       << "\n-------------------------------------------------" << endl;
   }
 
@@ -424,7 +513,11 @@ midGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
     + ed.pieceTableWeight   * float(pieceTableScore)
     + ed.mobilityWeight     * float(mobilityScore)
     + ed.pawnSructureWeight * float(pawnStructure)
-    + ed.threatsWeight      * float(threatsScore);
+    + ed.threatsWeight      * float(threatsScore)
+    + float(bishopPair)
+    + float(rookOpen)
+    + float(rook7th)
+    + float(knightOut);
 
   return Score(eval);
 }
@@ -552,7 +645,11 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   Score pieceTableScore = pieceTableStrengthEndGame(pos);
   Score pawnStructure   = ed.pawnStructureScore;
   Score distanceScore   = distanceBetweenKingsScore(pos);
-  // Score threatsScore    = ed.threatScore;
+  
+  // Bishop pair is also valuable in endgame
+  Score bishopPair = bishopPairBonus<WHITE>(pos) - bishopPairBonus<BLACK>(pos);
+  Score rookOpen   = rookOnOpenFile<WHITE>(pos) - rookOnOpenFile<BLACK>(pos);
+  Score rook7th    = rookOn7thRank<WHITE>(pos) - rookOn7thRank<BLACK>(pos);
 
   if (debug)
   {
@@ -561,6 +658,9 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
       << "\npieceTableScore    = " << pieceTableScore
       << "\npawnStructureScore = " << pawnStructure
       << "\ndistanceScore      = " << distanceScore
+      << "\nbishopPair         = " << bishopPair
+      << "\nrookOpen           = " << rookOpen
+      << "\nrook7th            = " << rook7th
       << "\n-------------------------------------------------" << endl;
   }
 
@@ -568,7 +668,10 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
       ed.materialWeight     * float(materialScore)
     + ed.pieceTableWeight   * float(pieceTableScore)
     + 0.7f                  * float(pawnStructure)
-    + float(distanceScore);
+    + float(distanceScore)
+    + float(bishopPair)
+    + 0.5f * float(rookOpen)  // Less important in endgame
+    + float(rook7th);
 
   return Score(eval);
 }
