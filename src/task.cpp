@@ -325,7 +325,6 @@ task(const vector<string>& args)
     {"accuracy", [](const auto&){ accuracyTest(); }},
     {"speed",    [](const auto&){ speedTest(); }},
     {"go",       [](const auto& arguments){ directSearch(arguments); }},
-    {"play",     [](const auto& arguments){ play(arguments); }},
     {"count",    [](const auto& arguments){ nodeCount(arguments); }},
     {"movegen",  [](const auto& arguments){ debugMoveGenerator(arguments); }},
     {"static",   [](const auto& arguments){ staticEval(arguments); }},

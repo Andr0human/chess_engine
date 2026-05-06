@@ -1,5 +1,7 @@
 
 #include "single_thread.h"
+#include "move_utils.h"
+#include <iostream>
 
 uint64_t
 bulkCount(ChessBoard& pos, Depth depth)
@@ -297,7 +299,7 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 }
 
 void
-search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer, bool debug)
+search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer, bool debug, bool emitUciInfo)
 {
   resetPvLine();
 
@@ -342,6 +344,24 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
       info.addResult(board, eval, pvArray);
       if (debug)
         info.showLastDepthResult(board, writer);
+
+      if (emitUciInfo)
+      {
+        long long timeMs = static_cast<long long>(info.timeSpent() * 1000.0);
+        std::cout << "info depth " << int(depth)
+                  << " score cp " << int(eval)
+                  << " nodes " << info.totalNodes()
+                  << " time " << timeMs
+                  << " pv";
+        for (int i = 0; i < MAX_PV_ARRAY_SIZE; ++i)
+        {
+          if (pvArray[i] == NULL_MOVE) break;
+          if (pvArray[i] & quiescenceMove()) break;
+          std::cout << " " << moveToUci(pvArray[i]);
+        }
+        std::cout << std::endl;
+      }
+
       info.resetNodeCount();
 
       depth++;

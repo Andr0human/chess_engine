@@ -31,7 +31,8 @@ search(
   Depth mDepth = MAX_DEPTH,
   double searchTime = DEFAULT_SEARCH_TIME,
   std::ostream& ostream = std::cout,
-  bool debug = false
+  bool debug = false,
+  bool emitUciInfo = false
 );
 
 /**

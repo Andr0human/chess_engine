@@ -1,6 +1,7 @@
 
 #include "move_utils.h"
 #include "attacks.h"
+#include "movegen.h"
 
 void
 decodeMove(Move move)
@@ -135,6 +136,98 @@ printMove(Move move, ChessBoard pos)
   if (row) return pieceName + indexToRow(ipRow) + endPart;
 
   return pieceName + indexToSquare(ipRow, ipCol) + endPart;
+}
+
+string
+moveToUci(Move move)
+{
+  if (move == NULL_MOVE)
+    return string("0000");
+
+  Square ip = Square(move & 63);
+  Square fp = Square((move >> 6) & 63);
+
+  int ipCol = ip & 7;
+  int ipRow = (ip - ipCol) >> 3;
+  int fpCol = fp & 7;
+  int fpRow = (fp - fpCol) >> 3;
+
+  string out;
+  out += static_cast<char>('a' + ipCol);
+  out += static_cast<char>('1' + ipRow);
+  out += static_cast<char>('a' + fpCol);
+  out += static_cast<char>('1' + fpRow);
+
+  PieceType pt = PieceType((move >> 12) & 7);
+  if (pt == PAWN && ((1ULL << fp) & Rank18))
+  {
+    // pp: 0=Bishop, 1=Knight, 2=Rook, 3=Queen
+    int ppt = (move >> 18) & 3;
+    const char promoChars[4] = {'b', 'n', 'r', 'q'};
+    out += promoChars[ppt];
+  }
+
+  return out;
+}
+
+Move
+moveFromUci(const string& uci, const ChessBoard& pos)
+{
+  if (uci.size() < 4)
+    return NULL_MOVE;
+
+  int ipCol = uci[0] - 'a';
+  int ipRow = uci[1] - '1';
+  int fpCol = uci[2] - 'a';
+  int fpRow = uci[3] - '1';
+
+  if (ipCol < 0 || ipCol > 7 || ipRow < 0 || ipRow > 7
+   || fpCol < 0 || fpCol > 7 || fpRow < 0 || fpRow > 7)
+    return NULL_MOVE;
+
+  Square fromSq = Square(ipRow * 8 + ipCol);
+  Square toSq   = Square(fpRow * 8 + fpCol);
+
+  int wantedPpt = -1;
+  if (uci.size() >= 5)
+  {
+    char p = uci[4];
+    if (p == 'b') wantedPpt = 0;
+    else if (p == 'n') wantedPpt = 1;
+    else if (p == 'r') wantedPpt = 2;
+    else if (p == 'q') wantedPpt = 3;
+  }
+
+  const MoveList myMoves = generateMoves(pos);
+  MoveArray movesArray;
+  myMoves.getMoves(pos, movesArray);
+
+  for (const Move m : movesArray)
+  {
+    if (Square(m & 63) != fromSq) continue;
+    if (Square((m >> 6) & 63) != toSq) continue;
+
+    PieceType pt = PieceType((m >> 12) & 7);
+    bool isPromotion = (pt == PAWN) && ((1ULL << toSq) & Rank18);
+
+    if (isPromotion)
+    {
+      int ppt = (m >> 18) & 3;
+      if (wantedPpt < 0)
+      {
+        // No promotion piece given; default to queen.
+        if (ppt != 3) continue;
+      }
+      else if (ppt != wantedPpt)
+      {
+        continue;
+      }
+    }
+
+    return filter(m);
+  }
+
+  return NULL_MOVE;
 }
 
 template <Color cMy>

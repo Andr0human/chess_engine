@@ -5,7 +5,6 @@
 
 #include "perf.h"
 #include "single_thread.h"
-#include "play.h"
 #include <fstream>
 #include <iomanip>  // for setprecision
 
