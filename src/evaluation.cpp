@@ -373,13 +373,13 @@ pawnStructureScore(const ChessBoard& pos, const EvalData& ed)
     if (isPassedPawn<cMy>(pos, pawnSq))
     {
       // Reward for passed pawn
-      Score distToPromotion = (7 * (cMy ^ 1)) + (pawnSq >> 3) * (2 * cMy - 1);
-      score += 3 * distToPromotion * distToPromotion;
+      Score rankProgress = (7 * (cMy ^ 1)) + (pawnSq >> 3) * (2 * cMy - 1);
+      score += 3 * rankProgress * rankProgress;
 
       if (canSafelyPromote<cMy>(pos, pawnSq))
       {
         Score reward = ed.pieces[cEmy] == 0 ? QueenValueEg : PawnValueEg >> 2;
-        score += reward + 3 * distToPromotion * distToPromotion;
+        score += reward + 3 * rankProgress * rankProgress;
       }
     }
 
