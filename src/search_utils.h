@@ -14,6 +14,9 @@ movcpy(Move* pTarget, const Move* pSource, int n);
 void
 resetPvLine();
 
+void
+clearKillers();
+
 Score
 checkmateScore(Ply ply);
 

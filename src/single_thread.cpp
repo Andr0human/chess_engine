@@ -302,6 +302,7 @@ void
 search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer, bool debug, bool emitUciInfo)
 {
   resetPvLine();
+  clearKillers();
 
   if (generateMoves(board).countMoves() == 0)
   {

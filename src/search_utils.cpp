@@ -16,6 +16,13 @@ resetPvLine()
     pvArray[i] = NULL_MOVE;
 }
 
+void
+clearKillers()
+{
+  for (auto& slot : killerMoves)
+    slot.clearKillerMoves();
+}
+
 Score
 checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }

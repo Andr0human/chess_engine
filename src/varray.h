@@ -10,8 +10,8 @@ using std::array;
 template <typename T, size_t Nm>
 class Varray {
   size_t Nc;
-  array<T, Nm> _array;
- 
+  array<T, Nm> _array{};
+
   public:
 
   Varray() : Nc(0) {}
@@ -60,14 +60,19 @@ class Varray {
   { return _array.begin() + Nc; }
 
   void
-  addKillerMove(T val)
+  addKillerMove(T val) noexcept
   {
+    if (_array[0] == val) return;
     _array[1] = _array[0];
     _array[0] = val;
   }
 
+  void
+  clearKillerMoves() noexcept
+  { _array[0] = T{}; _array[1] = T{}; }
+
   bool
-  search(T val)
+  search(T val) const noexcept
   { return _array[0] == val || _array[1] == val; }
 };
 

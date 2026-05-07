@@ -37,6 +37,13 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   if (hasFlag(mTypes, MType::PROMOTION)) start = prioritizeMoves<MType::PROMOTION>(movesArray, start);
   if (hasFlag(mTypes, MType::CHECK))     start = prioritizeMoves<MType::CHECK   >(movesArray, start);
   if (hasFlag(mTypes, MType::PV))        start = prioritizeMoves<MType::PV      >(movesArray, start);
+
+  // SEE-sort the tactical band (captures/promotions/checks/PV) before placing
+  // killers, so quiet killer moves don't get scrambled by a SEE comparison
+  // that doesn't apply to them.
+  if (mTypes != MType::QUIET)
+    std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
+
   if (hasFlag(mTypes, MType::KILLER))
   {
     for (size_t i = start; i < movesArray.size(); i++) {
@@ -44,9 +51,6 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
         std::swap(movesArray[i], movesArray[start++]);
     }
   }
-
-  if (mTypes != MType::QUIET)
-    std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
 
   return (hasFlag(mTypes, MType::QUIET)) ? movesArray.size() : start;
 }
