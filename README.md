@@ -43,24 +43,38 @@ make clean_ob   # Clean object files only
 
 ## Usage
 
-Elsa provides several commands for different use cases:
+### UCI mode (default)
 
-- `elsa help` - View the command list
-- `elsa accuracy` - Run accuracy tests
-- `elsa speed` - Benchmark the engine's speed
-- `elsa go <fen> <search_time>` - Evaluate a position
-- `elsa count <fen> <depth>` - Count nodes at a given depth
-- `elsa debug <fen> <depth> <output_file_name>` - Debug move generation
-- `elsa static <fen>` - Get static evaluation of a position
-- `elsa play` - Play a game using UCI protocol
-
-### Example:
+Running the binary with no arguments — or with the explicit `uci` argument — starts a UCI session on stdin/stdout, so any UCI-compatible chess GUI (Cute Chess, Arena, Banksia, etc.) can drive Elsa as an engine:
 
 ```bash
-./output/elsa go "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" 5
+./output/elsa          # drops into UCI loop
+./output/elsa uci      # same, explicit
 ```
 
-This evaluates the starting position with 5 seconds of search time.
+Elsa supports the standard UCI commands: `uci`, `isready`, `ucinewgame`, `position [startpos | fen <fen>] [moves ...]`, `go [movetime | wtime/btime/winc/binc | depth | infinite]`, `stop`, and `quit`.
+
+### CLI subcommands
+
+For benchmarking, debugging, and scripted use, Elsa also exposes a CLI. Arguments are order-independent and use named flags (`fen`, `depth`, `time`, ...):
+
+- `elsa help` — view the command list
+- `elsa accuracy` — run perft accuracy tests against the baked-in suite
+- `elsa speed` — benchmark perft node throughput
+- `elsa go [fen <fen>] [time <seconds>] [depth <d>] [debug]` — search a position with iterative-deepening output
+- `elsa bestmove [fen <fen>] [difficulty <beginner|easy|medium|hard|expert>]` — print best move + resulting FEN (used by Chessmate)
+- `elsa count [fen <fen>] [depth <d>]` — perft node count with timing
+- `elsa movegen [fen <fen>] [depth <d>] [output <file>]` — dump per-root-move perft breakdown
+- `elsa static [fen <fen>]` — print ordered moves and static evaluation
+- `elsa readyOk` — quick smoke test (perft 3 from startpos = 8902)
+
+### Example
+
+```bash
+./output/elsa go fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" time 5
+```
+
+Searches the starting position for 5 seconds.
 
 ## Code Structure
 

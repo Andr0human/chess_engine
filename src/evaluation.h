@@ -35,7 +35,7 @@ class EvalData
 	constexpr static float pieceTableWeight = 1.8f;
 	constexpr static float threatsWeight = 0.5f;
 	constexpr static float mobilityWeight = 1.2f;
-	constexpr static float pawnSructureWeight = 0.4f;
+	constexpr static float pawnStructureWeight = 0.4f;
 
 	EvalData(const ChessBoard& pos)
 	{

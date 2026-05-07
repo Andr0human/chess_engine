@@ -423,7 +423,7 @@ midGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
       ed.materialWeight     * float(materialScore)
     + ed.pieceTableWeight   * float(pieceTableScore)
     + ed.mobilityWeight     * float(mobilityScore)
-    + ed.pawnSructureWeight * float(pawnStructure)
+    + ed.pawnStructureWeight * float(pawnStructure)
     + ed.threatsWeight      * float(threatsScore);
 
   return Score(eval);
