@@ -10,31 +10,62 @@
 
 using std::array;
 
+/**
+ * Packed TT entry — 16 bytes total.
+ *
+ * `data` layout (uint64_t):
+ *   bits  0..23 → bestMove   (24 bits, matches Move encoding width)
+ *   bits 24..31 → depth      (8 bits, unsigned)
+ *   bits 32..33 → flag       (2 bits)
+ *   bits 34..49 → eval       (16-bit signed, fits VALUE_INF = 16001)
+ *   bits 50..63 → reserved   (14 bits — aging, etc.)
+ */
 class ZobristHashKey
 {
   public:
   Bitboard hashValue;
-  Score         eval;
-  uint32_t depthFlag;
+  uint64_t data;
 
-  ZobristHashKey() : hashValue(0) {}
+  ZobristHashKey() : hashValue(0), data(0) {}
+
+  inline Move
+  bestMove() const noexcept
+  { return Move(data & 0xFFFFFFULL); }
 
   inline Depth
   depth() const noexcept
-  { return depthFlag >> 2; }
+  { return Depth((data >> 24) & 0xFFULL); }
 
   inline Flag
   flag() const noexcept
-  { return Flag(depthFlag & 3); }
+  { return Flag((data >> 32) & 0x3ULL); }
+
+  inline Score
+  eval() const noexcept
+  {
+    // sign-extend the 16-bit eval field
+    int16_t v = int16_t((data >> 34) & 0xFFFFULL);
+    return Score(v);
+  }
+
+  inline void
+  pack(Score eval, Depth depth, Flag flag, Move bestMove) noexcept
+  {
+    data = (uint64_t(bestMove) & 0xFFFFFFULL)
+         | ((uint64_t(depth) & 0xFFULL) << 24)
+         | ((uint64_t(flag)  & 0x3ULL) << 32)
+         | ((uint64_t(uint16_t(int16_t(eval))) & 0xFFFFULL) << 34);
+  }
 
   void
   show() const noexcept
   {
-    std::cout 
+    std::cout
       << "Key = " << hashValue << '\n'
       << "Depth = " << depth() << '\n'
-      << "Eval = " << eval << '\n'
-      << "Flag = " << int(flag()) << std::endl;
+      << "Eval = " << eval() << '\n'
+      << "Flag = " << int(flag()) << '\n'
+      << "BestMove = " << bestMove() << std::endl;
   }
 };
 
@@ -42,7 +73,7 @@ class TranspositionTable
 {
   /**
    * 0 ->  66 MB tableSize
-   * 1 -> 686 MB tableSize 
+   * 1 -> 686 MB tableSize
   */
   array<uint64_t, 2> ttSizes = { 2189477ULL, 22508861ULL };
 
@@ -83,10 +114,10 @@ class TranspositionTable
   hashKeyUpdate(int piece, int pos) const noexcept;
 
   void
-  recordPosition(uint64_t hashValue, Depth depth, Score eval, Flag flag) noexcept;
-  
+  recordPosition(uint64_t hashValue, Depth depth, Score eval, Flag flag, Move bestMove) noexcept;
+
   int
-  lookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta) const noexcept;
+  lookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove) const noexcept;
 };
 
 

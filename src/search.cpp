@@ -26,10 +26,23 @@ prioritizeMoves(MoveArray& movesArray, size_t start)
 }
 
 size_t
-orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start)
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start, Move hashMove)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return seeScore(pos, move1) > seeScore(pos, move2); };
+
+  // Hash move first — match by filter() (low 23 bits) since the CHECK bit
+  // (bit 23) may differ between the stored move and the freshly-generated one.
+  if (hasFlag(mTypes, MType::HASH_MOVE) and hashMove != NULL_MOVE)
+  {
+    Move target = filter(hashMove);
+    for (size_t i = start; i < movesArray.size(); i++) {
+      if (filter(movesArray[i]) == target) {
+        std::swap(movesArray[i], movesArray[start++]);
+        break;
+      }
+    }
+  }
 
   size_t prevS = start;
 

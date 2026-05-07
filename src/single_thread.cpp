@@ -145,7 +145,7 @@ playSubsetMoves(
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
-  Flag& hashf
+  Flag& hashf, Move& bestMoveOut
 )
 {
   int pvNextIndex = pvIndex + MAX_PLY - ply;
@@ -153,6 +153,12 @@ playSubsetMoves(
   for (size_t moveNo = start; moveNo < end; ++moveNo)
   {
     Move move = movesArray[moveNo];
+
+    // HASH_ALPHA fallback: remember the first searched move at this node so
+    // the TT entry has *something* to suggest on a fail-low revisit.
+    if (bestMoveOut == NULL_MOVE)
+      bestMoveOut = filter(move);
+
     Score eval = playMove<reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
 
     // No time left!
@@ -165,6 +171,7 @@ playSubsetMoves(
     {
       hashf = Flag::HASH_BETA;
       alpha = beta;
+      bestMoveOut = filter(move);
 
       if (is_type<MType::QUIET>(move))
         killerMoves[ply].addKillerMove(move);
@@ -174,6 +181,7 @@ playSubsetMoves(
     // Better move found, update the result
     if (eval > alpha) {
       hashf = Flag::HASH_EXACT, alpha = eval;
+      bestMoveOut = filter(move);
       pvArray[pvIndex] = filter(move);
       movcpy (pvArray + pvIndex + 1,
               pvArray + pvNextIndex, MAX_PLY - ply - 1);
@@ -189,28 +197,38 @@ playAllMoves(
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
-  Flag& hashf
+  Flag& hashf, Move& bestMoveOut, Move hashMove
 )
 {
   // Set pvArray, for storing the search_tree
   if constexpr (moveGen == 0)
   {
     pvArray[pvIndex] = NULL_MOVE;
-    myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
+
+    // If a hash move is the lead stage, materialize all moves up-front so
+    // a quiet hash move can be matched before the staged QUIET phase.
+    // Otherwise stick with captures-first staging.
+    if constexpr (orderType == MType::HASH_MOVE)
+      myMoves.getMoves<MType::CAPTURES | MType::QUIET, MType::CHECK>(pos, movesArray);
+    else
+      myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
   }
 
   if constexpr (moveGen == 1)
-    myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
+  {
+    if constexpr (orderType != MType::CAPTURES)
+      myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
+  }
 
-  size_t end = orderType == MType::QUIET ? movesArray.size() : orderMoves(pos, movesArray, orderType, ply, start);
-  playSubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  size_t end = orderType == MType::QUIET ? movesArray.size() : orderMoves(pos, movesArray, orderType, ply, start, hashMove);
+  playSubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   if constexpr (sizeof...(rest) > 0)
     playAllMoves<moveGen + 1, rest...>
-      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut, hashMove);
 }
 
 Score
@@ -234,10 +252,12 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   info.addNode();
 
+  Move hashMove = NULL_MOVE;
+
   if constexpr (USE_TT) {
     // TT_lookup (Check if given board is already in transpostion table)
     // check/stale-mate check needed before TT_lookup, else can lead to search failures.
-    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta);
+    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta, hashMove);
 
     if (ttValue != VALUE_UNKNOWN)
       return ttValue;
@@ -250,12 +270,13 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   }
 
   Flag hashf = Flag::HASH_ALPHA;
+  Move bestMoveOut = NULL_MOVE;
   MoveArray movesArray;
-  playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
-    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+  playAllMoves<0, MType::HASH_MOVE, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
+    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut, hashMove);
 
   if constexpr (USE_TT) {
-    tt.recordPosition(pos.hashValue, depth, alpha, hashf);
+    tt.recordPosition(pos.hashValue, depth, alpha, hashf, bestMoveOut);
   }
 
   return alpha;
