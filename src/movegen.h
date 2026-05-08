@@ -30,6 +30,12 @@
 bool
 isLegalMoveForPosition(Move move, const ChessBoard& pos);
 
+// Same contract as isLegalMoveForPosition, but skips full move generation:
+// only computes the work needed for the moving piece (geometric reachability
+// + post-move king-safety via super-piece scan from king square).
+bool
+isLegalMoveForPosition_V2(Move move, const ChessBoard& pos);
+
 /**
  * @brief Returns a list of all the legal moves in current position.
  *

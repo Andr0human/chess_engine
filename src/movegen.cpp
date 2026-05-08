@@ -39,6 +39,216 @@ isLegalMoveForPosition(Move move, const ChessBoard& pos)
 }
 
 
+template <Color cMy>
+static bool
+isLegalMoveForPosition_V2_impl(Move move, const ChessBoard& pos)
+{
+  constexpr Color cEmy = ~cMy;
+
+  Square ip = Square(move & 0x3f);
+  Square fp = Square((move >> 6) & 0x3f);
+
+  if (ip == fp)
+    return false;
+
+  Piece movingPc = pos.pieceOnSquare(ip);
+  if (movingPc == NO_PIECE || color_of(movingPc) != cMy)
+    return false;
+
+  Piece capturedPc = pos.pieceOnSquare(fp);
+  if (capturedPc != NO_PIECE && (color_of(capturedPc) == cMy || type_of(capturedPc) == KING))
+    return false;
+
+  PieceType pt = type_of(movingPc);
+
+  Bitboard fromBb = 1ULL << ip;
+  Bitboard toBb   = 1ULL << fp;
+  Bitboard occ    = pos.all();
+  Bitboard occAfter = (occ ^ fromBb) | toBb;
+
+  // Enemy piece bitboards (mutated for capture/EP before king-safety scan)
+  Bitboard ePawn   = pos.piece<cEmy, PAWN  >();
+  Bitboard eKnight = pos.piece<cEmy, KNIGHT>();
+  Bitboard eBishop = pos.piece<cEmy, BISHOP>();
+  Bitboard eRook   = pos.piece<cEmy, ROOK  >();
+  Bitboard eQueen  = pos.piece<cEmy, QUEEN >();
+  Bitboard eKing   = pos.piece<cEmy, KING  >();
+
+  // Lambda: is `sq` attacked by enemy under occupancy `o`?
+  // Used only for castling king-transit checks.
+  const auto squareAttacked = [&] (Square sq, Bitboard o) -> bool
+  {
+    if (attackSquares<KNIGHT>(sq, o) & eKnight) return true;
+    if (attackSquares< ROOK >(sq, o) & (eRook   | eQueen)) return true;
+    if (attackSquares<BISHOP>(sq, o) & (eBishop | eQueen)) return true;
+    if (attackSquares<cMy, PAWN>(sq) &  ePawn)  return true;
+    if (plt::kingMasks[sq]           &  eKing)  return true;
+    return false;
+  };
+
+  // ----- Geometric reachability + per-piece-type validation -----
+
+  Square epCapturedSq = SQUARE_NB; // sentinel: no EP
+
+  if (pt == KNIGHT)
+  {
+    if ((plt::knightMasks[ip] & toBb) == 0) return false;
+  }
+  else if (pt == BISHOP)
+  {
+    if ((attackSquares<BISHOP>(ip, occ) & toBb) == 0) return false;
+  }
+  else if (pt == ROOK)
+  {
+    if ((attackSquares<ROOK>(ip, occ) & toBb) == 0) return false;
+  }
+  else if (pt == QUEEN)
+  {
+    if ((attackSquares<QUEEN>(ip, occ) & toBb) == 0) return false;
+  }
+  else if (pt == PAWN)
+  {
+    constexpr int      forward    = (cMy == WHITE) ? 8 : -8;
+    constexpr Bitboard startRank  = (cMy == WHITE) ? Rank2 : Rank7;
+
+    int delta    = int(fp) - int(ip);
+    int fileDiff = std::abs((ip & 7) - (fp & 7));
+    bool isCapture = (capturedPc != NO_PIECE);
+
+    if (delta == forward + 1 || delta == forward - 1)
+    {
+      // Diagonal: capture or EP
+      if (fileDiff != 1) return false;
+
+      if (!isCapture)
+      {
+        // Must be EP
+        Square eps = pos.enPassantSquare();
+        if (eps == SQUARE_NB || fp != eps) return false;
+        epCapturedSq = Square(int(fp) - forward);
+        // Pawn we EP-capture must actually be an enemy pawn there
+        if (!(ePawn & (1ULL << epCapturedSq))) return false;
+        occAfter ^= 1ULL << epCapturedSq;
+        ePawn   ^= 1ULL << epCapturedSq;
+      }
+    }
+    else if (delta == forward)
+    {
+      if (isCapture) return false;
+    }
+    else if (delta == 2 * forward)
+    {
+      if ((fromBb & startRank) == 0) return false;
+      if (isCapture) return false;
+      Square between = Square(int(ip) + forward);
+      if (occ & (1ULL << between)) return false;
+    }
+    else
+    {
+      return false;
+    }
+  }
+  else if (pt == KING)
+  {
+    int fileDiff = std::abs((ip & 7) - (fp & 7));
+    int rankDiff = std::abs((ip >> 3) - (fp >> 3));
+
+    if (fileDiff <= 1 && rankDiff <= 1)
+    {
+      if ((plt::kingMasks[ip] & toBb) == 0) return false;
+      // King-safety handled by super-piece scan below (from fp, with king removed from ip).
+    }
+    else if (rankDiff == 0 && fileDiff == 2)
+    {
+      // Castling
+      constexpr int      shift     = 56 * cEmy;       // 0 (white) / 56 (black)
+      constexpr Bitboard rGap      = 96ULL << shift;  // f1,g1 transit+empty
+      constexpr Bitboard lGap      = 12ULL << shift;  // c1,d1 transit+empty
+      constexpr Bitboard lExtra    =  2ULL << shift;  // b1 must be empty (not transited)
+      constexpr int      kingSide  = 256 << (2 * cMy);
+      constexpr int      queenSide = 128 << (2 * cMy);
+      constexpr Square   kingHome  = Square(shift + 4);
+
+      if (ip != kingHome) return false;
+
+      // Cannot castle while in check
+      if (squareAttacked(ip, occ)) return false;
+
+      bool isKingside  = (fp == Square(shift + 6));
+      bool isQueenside = (fp == Square(shift + 2));
+      if (!isKingside && !isQueenside) return false;
+
+      Bitboard transit;
+      if (isKingside)
+      {
+        if (!(pos.csep & kingSide)) return false;
+        if (rGap & occ) return false;
+        transit = rGap;
+      }
+      else
+      {
+        if (!(pos.csep & queenSide)) return false;
+        if ((lGap | lExtra) & occ) return false;
+        transit = lGap;
+      }
+
+      while (transit)
+      {
+        Square s = nextSquare(transit);
+        if (squareAttacked(s, occ)) return false;
+      }
+
+      // Castling: dest-square attack already covered by transit check.
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+  else
+  {
+    return false;
+  }
+
+  // ----- Adjust enemy bitboards for normal capture (non-EP) -----
+
+  if (capturedPc != NO_PIECE && epCapturedSq == SQUARE_NB)
+  {
+    Bitboard cMask = ~toBb;
+    switch (type_of(capturedPc))
+    {
+      case PAWN:   ePawn   &= cMask; break;
+      case KNIGHT: eKnight &= cMask; break;
+      case BISHOP: eBishop &= cMask; break;
+      case ROOK:   eRook   &= cMask; break;
+      case QUEEN:  eQueen  &= cMask; break;
+      default: break;
+    }
+  }
+
+  // ----- King-safety: super-piece scan from king's post-move square -----
+
+  Square kSq = (pt == KING) ? fp : squareNo(pos.piece<cMy, KING>());
+
+  if (attackSquares<KNIGHT>(kSq, occAfter) & eKnight) return false;
+  if (attackSquares< ROOK >(kSq, occAfter) & (eRook   | eQueen)) return false;
+  if (attackSquares<BISHOP>(kSq, occAfter) & (eBishop | eQueen)) return false;
+  if (attackSquares<cMy, PAWN>(kSq)        &  ePawn)  return false;
+  if (pt == KING && (plt::kingMasks[kSq]   &  eKing)) return false;
+
+  return true;
+}
+
+bool
+isLegalMoveForPosition_V2(Move move, const ChessBoard& pos)
+{
+  return pos.color == WHITE
+    ? isLegalMoveForPosition_V2_impl<WHITE>(move, pos)
+    : isLegalMoveForPosition_V2_impl<BLACK>(move, pos);
+}
+
+
 #endif
 
 #ifndef Piece_Movement

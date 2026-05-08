@@ -162,6 +162,99 @@ speedTest()
 }
 
 static void
+movegenSpeedSuite(
+  const std::vector<std::string>& rawSuite,
+  const std::string& suiteType,
+  const std::string& suiteLabel,
+  int iterations
+) {
+  const auto positions = getTestPositions(rawSuite, suiteType);
+  cout << "\n=== " << suiteLabel << " (" << positions.size()
+       << " positions, " << iterations << " iter/pos) ===\n";
+
+  uint64_t totalP1Ns = 0, totalP12Ns = 0;
+
+  int positionNo = 1;
+  for (const auto& tp : positions)
+  {
+    ChessBoard pos(tp.getFen());
+
+    // Phase 1 only — accumulate countMoves() so the compiler can't elide.
+    uint64_t p1Sink = 0;
+    const auto p1Start = perf::now();
+    for (int i = 0; i < iterations; ++i)
+    {
+      MoveList ml = generateMoves(pos);
+      p1Sink += ml.countMoves();
+    }
+    const auto p1Ns = std::chrono::duration_cast<perf_ns_time>(
+      perf::now() - p1Start
+    ).count();
+
+    // Phase 1 + Phase 2 — also materialize into MoveArray.
+    uint64_t p12Sink = 0;
+    const auto p12Start = perf::now();
+    for (int i = 0; i < iterations; ++i)
+    {
+      MoveList ml = generateMoves(pos);
+      MoveArray arr;
+      ml.getMoves(pos, arr);
+      p12Sink += arr.size();
+    }
+    const auto p12Ns = std::chrono::duration_cast<perf_ns_time>(
+      perf::now() - p12Start
+    ).count();
+
+    totalP1Ns  += static_cast<uint64_t>(p1Ns);
+    totalP12Ns += static_cast<uint64_t>(p12Ns);
+
+    const double p1NsPerCall  = static_cast<double>(p1Ns)  / iterations;
+    const double p12NsPerCall = static_cast<double>(p12Ns) / iterations;
+    const double ratio        = p12NsPerCall / p1NsPerCall;
+
+    cout << "position-" << positionNo++ << "\t"
+         << "phase1: "  << std::fixed << std::setprecision(1) << p1NsPerCall << " ns/call"
+         << "\tphase1+2: " << p12NsPerCall << " ns/call"
+         << "\toverhead: "       << (p12NsPerCall - p1NsPerCall) << " ns"
+         << "\toverhead ratio: " << std::setprecision(2) << ratio
+         << '\n';
+
+    if (p1Sink != p12Sink)
+      cout << "  WARN: countMoves (" << p1Sink << ") != materialized ("
+           << p12Sink << ")\n";
+  }
+
+  const double avgP1  = static_cast<double>(totalP1Ns)
+                      / static_cast<double>(positions.size() * iterations);
+  const double avgP12 = static_cast<double>(totalP12Ns)
+                      / static_cast<double>(positions.size() * iterations);
+  const double avgRatio = avgP12 / avgP1;
+
+  cout << "Overall (" << suiteLabel << "):\n"
+       << "  Phase 1 only     : " << std::fixed << std::setprecision(1)
+       << avgP1  << " ns/call  (" << (1000.0 / avgP1)  << " M calls/sec)\n"
+       << "  Phase 1 + Phase 2: " << avgP12 << " ns/call  ("
+       << (1000.0 / avgP12) << " M calls/sec)\n"
+       << "  Phase 2 overhead : " << (avgP12 - avgP1) << " ns/call\n"
+       << "  Overhead ratio   : " << std::setprecision(2) << avgRatio << '\n';
+}
+
+static void
+movegenSpeedTest()
+{
+  // Argument : elsa movegenspeed
+  //
+  // Benchmarks two regimes:
+  //   (1) phase 1 only        — generateMoves(pos)
+  //   (2) phase 1 + phase 2   — generateMoves(pos) + getMoves(pos, arr)
+  // Run over both the speed suite (handpicked piece-density positions) and
+  // the accuracy suite (perft positions — broader mix of game states).
+
+  movegenSpeedSuite(test_data::speed::suite1,    "speed",    "speed::suite1",    2'000'000);
+  movegenSpeedSuite(test_data::accuracy::suite1, "accuracy", "accuracy::suite1", 1'000'000);
+}
+
+static void
 setParamswithDifficulty(string difficulty, double& searchTime, Depth& searchDepth)
 {
   if (difficulty == "beginner") {
@@ -324,6 +417,7 @@ task(const vector<string>& args)
     {"help",     [](const auto&){ helper(); }},
     {"accuracy", [](const auto&){ accuracyTest(); }},
     {"speed",    [](const auto&){ speedTest(); }},
+    {"movegenspeed", [](const auto&){ movegenSpeedTest(); }},
     {"go",       [](const auto& arguments){ directSearch(arguments); }},
     {"count",    [](const auto& arguments){ nodeCount(arguments); }},
     {"movegen",  [](const auto& arguments){ debugMoveGenerator(arguments); }},
