@@ -97,7 +97,7 @@ class SearchData
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
   // Stores <move, time> for each move in each iteration.
-  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_MOVES> moveTimes;
+  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_LEGAL_MOVES> moveTimes;
 
   string
   ReadablePvLine(ChessBoard board) const noexcept

@@ -5,7 +5,7 @@
 #include "varray.h"
 #include "bitboard.h"
 
-using MoveArray = Varray<Move, MAX_MOVES>;
+using MoveArray = Varray<Move, MAX_LEGAL_MOVES>;
 
 
 class MoveList

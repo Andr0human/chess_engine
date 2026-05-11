@@ -54,7 +54,7 @@ enum Search
 {
   HASH_INDEXES_SIZE = 855,
 
-  MAX_MOVES = 256,
+  MAX_LEGAL_MOVES = 218,
   MAX_PLY = 40,
   MAX_DEPTH = 36,
   LMR_LIMIT = 4,
