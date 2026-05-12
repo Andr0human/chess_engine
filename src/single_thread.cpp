@@ -221,10 +221,18 @@ playAllMoves(
   }
 
   size_t end = orderType == MType::QUIET ? movesArray.size() : orderMoves(pos, movesArray, orderType, ply, start, hashMove);
+
+  if constexpr (orderType == MType::HASH_MOVE)
+    if (end > start) info.hashMoveInList++;
+
   playSubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 
   if (hashf == Flag::HASH_BETA)
+  {
+    if constexpr (orderType == MType::HASH_MOVE)
+      info.hashMoveCutoffs++;
     return;
+  }
 
   if constexpr (sizeof...(rest) > 0)
     playAllMoves<moveGen + 1, rest...>
@@ -247,8 +255,10 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (myMoves.countMoves() == 0)
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  if (pos.threeMoveRepetition() or pos.fiftyMoveDraw() or (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos)))
-    return VALUE_DRAW;
+  if (pos.threeMoveRepetition()
+   or pos.fiftyMoveDraw()
+   or (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
+  ) return VALUE_DRAW;
 
   info.addNode();
 
@@ -257,10 +267,19 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if constexpr (USE_TT) {
     // TT_lookup (Check if given board is already in transpostion table)
     // check/stale-mate check needed before TT_lookup, else can lead to search failures.
-    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta, hashMove);
+    bool ttHit = false;
+    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta, hashMove, ttHit);
 
-    if (ttValue != VALUE_UNKNOWN)
+    info.ttProbes++;
+    if (ttHit) info.ttHits++;
+
+    if (ttValue != VALUE_UNKNOWN) {
+      info.ttCutoffs++;
       return ttValue;
+    }
+
+    if (hashMove != NULL_MOVE)
+      info.ttMoveProvided++;
   }
 
   if constexpr (USE_EXTENSIONS) {
@@ -398,5 +417,22 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
 
   info.searchCompleted();
   if (debug)
+  {
+    double hitRate = info.ttProbes
+      ? 100.0 * double(info.ttHits) / double(info.ttProbes) : 0.0;
+    double ttCutRate = info.ttHits
+      ? 100.0 * double(info.ttCutoffs) / double(info.ttHits) : 0.0;
+    writer << "TT: probes=" << info.ttProbes
+           << " hits=" << info.ttHits << " (" << std::fixed << std::setprecision(1) << hitRate << "%)"
+           << " cutoffs=" << info.ttCutoffs << " (" << ttCutRate << "% of hits)" << endl;
+
+    double cutoffRate = info.hashMoveInList
+      ? 100.0 * double(info.hashMoveCutoffs) / double(info.hashMoveInList) : 0.0;
+    double availRate = info.ttMoveProvided
+      ? 100.0 * double(info.hashMoveInList) / double(info.ttMoveProvided) : 0.0;
+    writer << "Hash move: ttProvided=" << info.ttMoveProvided
+           << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
+           << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
     writer << "Search Done!" << endl;
+  }
 }

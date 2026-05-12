@@ -101,12 +101,14 @@ TranspositionTable::recordPosition
 
 int
 TranspositionTable::lookupPosition
-  (uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove) const noexcept
+  (uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept
 {
   const auto probe = [&] (const ZobristHashKey &key) -> int
   {
     if (key.hashValue != hashValue)
       return VALUE_UNKNOWN;
+
+    ttHit = true;
 
     // Hash match — surface the stored move for ordering, even when the
     // entry's depth is too shallow to produce a cutoff.
@@ -126,6 +128,7 @@ TranspositionTable::lookupPosition
   };
 
   outMove = NULL_MOVE;
+  ttHit = false;
 
   size_t index = hashValue % TT_SIZE;
 
