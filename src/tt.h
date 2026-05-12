@@ -117,7 +117,7 @@ class TranspositionTable
   recordPosition(uint64_t hashValue, Depth depth, Score eval, Flag flag, Move bestMove) noexcept;
 
   int
-  lookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove) const noexcept;
+  lookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
 };
 
 

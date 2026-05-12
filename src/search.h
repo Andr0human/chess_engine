@@ -91,6 +91,22 @@ class SearchData
   // Time spend on searching for move in position (in secs.)
   double timeForSearch = 0;
 
+  public:
+
+  // Transposition-table instrumentation, accumulated over the whole search:
+  //   ttProbes   — nodes that probed the TT
+  //   ttHits     — of those, the position was found (hash match)
+  //   ttCutoffs  — of those hits, the entry was deep enough to return a bound
+  uint64_t ttProbes = 0, ttHits = 0, ttCutoffs = 0;
+
+  // Hash-move (TT best move) instrumentation, accumulated over the whole search:
+  //   ttMoveProvided   — nodes where the TT handed back a usable best move
+  //   hashMoveInList   — of those, the move was legal here and tried first
+  //   hashMoveCutoffs  — of those, the hash move alone produced a beta cutoff
+  uint64_t ttMoveProvided = 0, hashMoveInList = 0, hashMoveCutoffs = 0;
+
+  private:
+
   Varray<Move, MAX_PLY> pvLine;
 
   // Stores the <best_move, eval> for each depth during search.
