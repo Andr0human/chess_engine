@@ -26,8 +26,10 @@ isLegalMoveForPosition(Move move, const ChessBoard& pos)
 
   const MoveList myMoves = generateMoves(pos);
 
-  if ((type_of(ipt) != PAWN))
-    return ((1ULL << fp) & myMoves.destSquares[ip]) != 0;
+  if ((type_of(ipt) != PAWN)) {
+    return ((1ULL << ip) & myMoves.initSquares)
+        && ((1ULL << fp) & myMoves.destSquares[ip]) != 0;
+  }
 
   MoveArray movesArray;
   myMoves.getMoves(pos, movesArray);
@@ -373,7 +375,10 @@ kingMoves(const ChessBoard& pos, MoveList& myMoves)
 
   myMoves.add(kpos, destSq);
 
-  if (!(pos.csep & 1920) or ((1ULL << kpos) & attackedSq)) return;
+  if (!(pos.csep & 1920) or ((1ULL << kpos) & attackedSq)) {
+    // no castling move available, thus early exit
+    return;
+  }
 
   Bitboard apieces = pos.all();
   Bitboard coveredSquares = apieces | attackedSq;

@@ -51,17 +51,36 @@ accuracyTest()
   const auto runTests = [] (const vector<TestPosition>& positions)
   {
     int posNo = 1;
+    uint64_t totalNs = 0;
 
     for (const auto& pos : positions)
     {
       const auto depth = pos.maxDepth();
-      if (!pos.test(bulkCount, depth))
-        return false;
-      
-      cout << "Position " << (posNo++) << " passed!" << endl;
+
+      const auto start = perf::now();
+      const bool passed = pos.test(bulkCount, depth);
+      const auto ns = std::chrono::duration_cast<perf_ns_time>(
+        perf::now() - start
+      ).count();
+
+      totalNs += static_cast<uint64_t>(ns);
+
+      if (!passed)
+        return std::make_pair(false, totalNs);
+
+      cout << "Position " << (posNo++) << " passed!"
+           << "  (" << std::fixed << std::setprecision(1)
+           << static_cast<double>(ns) / 1e6 << " ms)" << std::endl;
     }
 
-    return true;
+    const double avgMs = static_cast<double>(totalNs)
+                       / (static_cast<double>(positions.size()) * 1e6);
+    cout << "\nOverall accuracy timing:\n"
+         << "  Total   : " << std::fixed << std::setprecision(1)
+         << static_cast<double>(totalNs) / 1e6 << " ms\n"
+         << "  Avg/pos : " << avgMs << " ms\n";
+
+    return std::make_pair(true, totalNs);
   };
 
   const auto failedTests = [] (const vector<TestPosition>& positions)
@@ -76,7 +95,7 @@ accuracyTest()
       {
         if (pos.test(bulkCount, dep))
           continue;
-        
+
         if (dep < minDepth)
         {
           bestCase = pos, minDepth = dep;
@@ -88,11 +107,11 @@ accuracyTest()
   };
 
   const auto positions = getTestPositions(test_data::accuracy::suite1, "accuracy");
-  const auto testSuccess = runTests(positions);
+  const auto [testSuccess, _] = runTests(positions);
 
   if (testSuccess) return;
 
-  cout << "Accuracy Test Failed!!\n" <<
+  cout << "Accuracy Test Failed!!\n" 
           "Looking for best_case:\n\n" << std::flush;
 
   const auto bestCase = failedTests(positions);
