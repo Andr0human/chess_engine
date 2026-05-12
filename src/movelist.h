@@ -48,6 +48,9 @@ public:
   // Bitboard representing squares under enemy attack
   Bitboard enemyAttackedSquares;
 
+  MoveList()
+  : checkers(0), initSquares(0), enpassantPawns(0) {}
+
   MoveList(Color c)
   : color(c), checkers(0), initSquares(0), enpassantPawns(0) {}
 
@@ -66,6 +69,12 @@ public:
 
   size_t
   countMoves() const noexcept;
+
+  // Short-circuiting "does at least one move exist?" — same semantics as
+  // countMoves() != 0 but stops at the first move found. Used for the
+  // mate/stalemate terminal test where the count itself is irrelevant.
+  bool
+  anyMove() const noexcept;
 
   template<MType mt1=MType::CAPTURES | MType::QUIET, MType mt2=MType(0)>
   void

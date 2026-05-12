@@ -481,39 +481,62 @@ generateSquaresThatCheckEnemyKing(const ChessBoard& pos, MoveList& myMoves)
     myMoves.squaresThatCheckEnemyKing[1] | myMoves.squaresThatCheckEnemyKing[3];
 }
 
-template <Color cMy, ShifterFunc shift>
-static inline MoveList
-moveGenerator(const ChessBoard& pos, bool generateChecksData)
+template <MoveGenStage stage, Color cMy>
+static inline void
+stagedGenerateMovesImpl(const ChessBoard& pos, MoveList& myMoves)
 {
-  MoveList myMoves(cMy);
+  if constexpr (stage == GEN_METADATA)
+  {
+    myMoves.color = cMy;
+    myMoves.myPawns = pos.piece<cMy, PAWN>();
+    myMoves.myAttackedSquares = generateAttackedSquares<cMy>(pos, pos.all());
+    myMoves.enemyAttackedSquares = generateAttackedSquares<~cMy>(pos, pos.all() ^ pos.piece<cMy, KING>());
 
-  myMoves.myPawns = pos.piece<cMy, PAWN>();
-  myMoves.myAttackedSquares = generateAttackedSquares<cMy>(pos, pos.all());
-  myMoves.enemyAttackedSquares = generateAttackedSquares<~cMy>(pos, pos.all() ^ pos.piece<cMy, KING>());
+    kingAttackers<cMy>(pos, myMoves);
+  }
+  else if constexpr (stage == GEN_MOVES)
+  {
+    constexpr ShifterFunc shift = (cMy == WHITE) ? leftShift : rightShift;
 
-  kingAttackers<cMy>(pos, myMoves);
+    if (myMoves.checkers < 2)
+      pieceMovement<cMy, shift>(pos, myMoves);
 
-  if (myMoves.checkers < 2)
-    pieceMovement<cMy, shift>(pos, myMoves);
-
-  kingMoves<cMy>(pos, myMoves);
-
-  if (generateChecksData)
+    kingMoves<cMy>(pos, myMoves);
+  }
+  else if constexpr (stage == GEN_CHECKS)
   {
     myMoves.discoverCheckSquares = squaresForDiscoveredCheck<cMy>(pos, myMoves);
     generateSquaresThatCheckEnemyKing<cMy>(pos, myMoves);
   }
-
-  return myMoves;
 }
+
+
+template <MoveGenStage stage>
+void
+stagedGenerateMoves(const ChessBoard& pos, MoveList& myMoves)
+{
+  pos.color == WHITE
+    ? stagedGenerateMovesImpl<stage, WHITE>(pos, myMoves)
+    : stagedGenerateMovesImpl<stage, BLACK>(pos, myMoves);
+}
+
+template void stagedGenerateMoves<GEN_METADATA>(const ChessBoard&, MoveList&);
+template void stagedGenerateMoves<GEN_MOVES   >(const ChessBoard&, MoveList&);
+template void stagedGenerateMoves<GEN_CHECKS  >(const ChessBoard&, MoveList&);
 
 
 MoveList
 generateMoves(const ChessBoard& pos, bool generateChecksData)
 {
-  return pos.color == WHITE ?
-    moveGenerator<WHITE,  leftShift>(pos, generateChecksData)
-  : moveGenerator<BLACK, rightShift>(pos, generateChecksData);
+  MoveList myMoves;
+
+  stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
+  stagedGenerateMoves<GEN_MOVES>(pos, myMoves);
+
+  if (generateChecksData)
+    stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
+
+  return myMoves;
 }
 
 

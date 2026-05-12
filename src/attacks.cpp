@@ -8,7 +8,7 @@ pawnAttackSquares(const ChessBoard& pos)
 {
   Bitboard pawns = pos.piece<cMy, PAWN>();
   const int inc  = 2 * int(cMy) - 1;
-  const ShifterFunc shift = cMy == WHITE ? leftShift : rightShift;
+  constexpr ShifterFunc shift = cMy == WHITE ? leftShift : rightShift;
 
   return shift(pawns & RightAttkingPawns, 8 + inc) |
          shift(pawns & LeftAttkingPawns , 8 - inc);

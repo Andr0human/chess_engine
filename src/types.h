@@ -163,6 +163,19 @@ enum class MType: uint8_t
   KILLER = 1 << 5
 };
 
+/**
+ * @brief Stages of the move-generation pipeline.
+ *
+ * GEN_METADATA - attacked-square bitboards, checkers count, in-check mask
+ *                (and stamps the active color onto the MoveList).
+ * GEN_MOVES    - the actual moves (pins, pawns, sliders/knights, king + castling).
+ * GEN_CHECKS   - discovered-check / check-giving-square data (search-only).
+ *
+ * GEN_METADATA must run first; GEN_MOVES depends on it. GEN_CHECKS is independent
+ * of GEN_MOVES and only reads the board.
+ */
+enum MoveGenStage { GEN_METADATA, GEN_MOVES, GEN_CHECKS };
+
 
 // Toggle color
 constexpr Color

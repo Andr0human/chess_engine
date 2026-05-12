@@ -244,6 +244,30 @@ MoveList::countMoves() const noexcept
   return moveCount;
 }
 
+bool
+MoveList::anyMove() const noexcept
+{
+  Bitboard pawnMask = myPawns & initSquares;
+  Bitboard mask = initSquares ^ pawnMask;
+
+  if (checkers < 2)
+  {
+    if (pawnDestSquares[0] | pawnDestSquares[1] | pawnDestSquares[2]
+      | pawnDestSquares[3] | enpassantPawns)
+      return true;
+
+    while (pawnMask)
+      if (destSquares[nextSquare(pawnMask)])
+        return true;
+  }
+
+  while (mask)
+    if (destSquares[nextSquare(mask)])
+      return true;
+
+  return false;
+}
+
 template<MType mt1, MType mt2>
 void
 MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept

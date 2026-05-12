@@ -8,7 +8,7 @@ bulkCount(ChessBoard& pos, Depth depth)
 {
   if (depth <= 0) return 1;
 
-  const MoveList myMoves = generateMoves(pos, true);
+  const MoveList myMoves = generateMoves(pos);
 
   if (depth == 1)
     return myMoves.countMoves();
