@@ -138,6 +138,20 @@ TranspositionTable::lookupPosition
   return probe(ttSecondary[index]);
 }
 
+Move
+TranspositionTable::probeMove(uint64_t hashValue) const noexcept
+{
+  size_t index = hashValue % TT_SIZE;
+
+  if (ttPrimary[index].hashValue == hashValue)
+    return ttPrimary[index].bestMove();
+
+  if (ttSecondary[index].hashValue == hashValue)
+    return ttSecondary[index].bestMove();
+
+  return NULL_MOVE;
+}
+
 void
 TranspositionTable::clear() noexcept
 {

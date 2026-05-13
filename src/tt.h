@@ -118,6 +118,11 @@ class TranspositionTable
 
   int
   lookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
+
+  // Fetch just the stored best move for a position — no flag/eval/depth logic,
+  // no terminal dependency. Used to try the hash move before full move generation.
+  Move
+  probeMove(uint64_t hashValue) const noexcept;
 };
 
 
