@@ -31,31 +31,11 @@
 bool
 isLegalMoveForPosition(Move move, const ChessBoard& pos);
 
-/**
- * @brief Cheap legality check for a candidate move (e.g. a transposition-table
- * best move) against a position whose metadata has already been computed.
- *
- * @param move  24-bit packed move (only bits 0..19 — ip/fp/pIp/pFp/promo — are
- *              consulted; the type/colour/check bits are ignored).
- * @param pos   the position the move would be played in.
- * @param meta  a MoveList already filled by stagedGenerateMoves<GEN_METADATA>
- *              (needs checkers / enemyAttackedSquares / legalSquaresMaskInCheck).
- *
- * Deliberately biased toward returning false: a false negative just costs the
- * caller its fast path, a false positive would feed an illegal move to makeMove.
- */
+// Same contract as isLegalMoveForPosition, but skips full move generation:
+// only computes the work needed for the moving piece (geometric reachability
+// + post-move king-safety via super-piece scan from king square).
 bool
-isHashMoveLegal(Move move, const ChessBoard& pos, const MoveList& meta);
-
-/**
- * @brief Micro-benchmark hook: times the legacy 8-direction pinnedRayDest vs.
- * the rayDirection-dispatched pinnedRayDest_fast on every non-king own-side
- * piece in `pos`, repeated `iters` times. Returns {slow_seconds, fast_seconds}.
- *
- * Single-position numbers are noisy; callers should sum across many positions.
- */
-std::pair<double, double>
-benchmarkPinnedRayDest(const ChessBoard& pos, int iters);
+isLegalMoveForPosition_V2(Move move, const ChessBoard& pos);
 
 /**
  * @brief Runs one stage of move generation on the given MoveList.
@@ -77,7 +57,6 @@ stagedGenerateMoves(const ChessBoard& pos, MoveList& myMoves);
  */
 MoveList
 generateMoves(const ChessBoard& pos, bool generateChecksData=false);
-
 
 bool
 pieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB);
