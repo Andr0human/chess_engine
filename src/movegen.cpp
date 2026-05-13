@@ -1,4 +1,7 @@
 
+#include <array>
+#include <chrono>
+#include <utility>
 #include "attacks.h"
 #include "movegen.h"
 
@@ -628,6 +631,356 @@ getSmallestAttacker(const ChessBoard& pos, const Square square, Color side, Bitb
   return side == WHITE
     ? getSmallestAttackerImpl<WHITE>(pos, square, removedPieces)
     : getSmallestAttackerImpl<BLACK>(pos, square, removedPieces);
+}
+
+#endif
+
+
+#ifndef HASH_MOVE_LEGAL
+
+// ----- King-ray dispatch table used by pinnedRayDest_fast ---------------------
+// Each square is on at most one of the eight king-aligned rays. rayDirection()
+// computes which one (or DIR_NONE) in pure arithmetic, then we look the ray
+// up in RAY_DISPATCH instead of trying all eight in sequence.
+
+namespace {
+
+constexpr int DIR_NONE = 8;
+
+// 15x15 lookup keyed on (dr+7, df+7), dr/df in [-7, 7]. One IMUL, one ADD,
+// one byte load -- no branches. Built once at program load via constexpr.
+//   0 right  1 left   2 up        3 down
+//   4 upRt   5 upLft  6 dnRt      7 dnLft   8 not on any ray
+constexpr auto RAY_DIR_LUT = []() {
+  std::array<uint8_t, 15 * 15> t{};
+  for (auto& v : t) v = uint8_t(DIR_NONE);
+  for (int dr = -7; dr <= 7; ++dr)
+    for (int df = -7; df <= 7; ++df)
+    {
+      int code = DIR_NONE;
+      if (dr == 0 && df == 0)             code = DIR_NONE;
+      else if (dr == 0)                   code = df > 0 ? 0 : 1;
+      else if (df == 0)                   code = dr > 0 ? 2 : 3;
+      else if (dr ==  df)                 code = dr > 0 ? 4 : 7;
+      else if (dr == -df)                 code = dr > 0 ? 5 : 6;
+      t[size_t((dr + 7) * 15 + (df + 7))] = uint8_t(code);
+    }
+  return t;
+}();
+
+static inline int
+rayDirection(Square from, Square to) noexcept
+{
+  const int dr = (int(to) >> 3) - (int(from) >> 3);
+  const int df = (int(to) &  7) - (int(from) &  7);
+  return RAY_DIR_LUT[size_t((dr + 7) * 15 + (df + 7))];
+}
+
+struct RayDispatch
+{
+  const MaskTable* table;
+  BitboardFunc     closestToKing;   // lsb for rays toward higher squares, msb otherwise
+  bool             diagonal;        // false: pinner must be R/Q; true: B/Q
+};
+
+static constexpr RayDispatch RAY_DISPATCH[8] = {
+  { &plt::rightMasks    , lsb, false },           // 0 right
+  { &plt::leftMasks     , msb, false },           // 1 left
+  { &plt::upMasks       , lsb, false },           // 2 up
+  { &plt::downMasks     , msb, false },           // 3 down
+  { &plt::upRightMasks  , lsb, true  },           // 4 upRight
+  { &plt::upLeftMasks   , lsb, true  },           // 5 upLeft
+  { &plt::downRightMasks, msb, true  },           // 6 downRight
+  { &plt::downLeftMasks , msb, true  },           // 7 downLeft
+};
+
+} // namespace
+
+// Like pinnedRayDest below, but uses rayDirection(kpos, ip) to jump straight
+// to the one ray that could contain `ip`, avoiding up to seven masked-load +
+// AND tests on the common "ip not on any king ray" path.
+template <Color cMy>
+static bool
+pinnedRayDest_fast(const ChessBoard& pos, Square ip, Square kpos, Bitboard& destSq) noexcept
+{
+  const int dir = rayDirection(kpos, ip);
+  if (dir == DIR_NONE) return false;
+
+  constexpr Color cEmy = ~cMy;
+  const RayDispatch& d = RAY_DISPATCH[dir];
+  const Bitboard sliders = d.diagonal
+    ? (pos.piece<cEmy, QUEEN>() | pos.piece<cEmy, BISHOP>())
+    : (pos.piece<cEmy, QUEEN>() | pos.piece<cEmy, ROOK  >());
+
+  const MaskTable& table = *d.table;
+  const Bitboard ray   = table[kpos];
+  const Bitboard ipBit = 1ULL << ip;
+  const Bitboard pieces = ray & pos.all();
+
+  const Bitboard first = d.closestToKing(pieces);
+  if (first != ipBit) return false;               // a blocker sits between king and ip
+
+  const Bitboard second = d.closestToKing(pieces ^ first);
+  if (!(second & sliders)) return false;          // no pinner behind ip
+
+  destSq = ray ^ table[squareNo(second)] ^ ipBit;
+  return true;
+}
+
+// If the piece on `ip` is pinned against our king, fills `destSq` with the
+// squares it may legally move to (the squares between king and pinner, plus the
+// pinner's square, minus `ip`) and returns true. Otherwise leaves `destSq`
+// untouched and returns false. Only the single ray that could contain `ip` is
+// ever examined.
+//
+// Superseded by pinnedRayDest_fast (which uses rayDirection() to skip the
+// per-direction `ray & ipBit` probes). Kept here as a reference / fallback.
+template <Color cMy>
+[[maybe_unused]] static bool
+pinnedRayDest(const ChessBoard& pos, Square ip, Square kpos, Bitboard& destSq) noexcept
+{
+  constexpr Color cEmy = ~cMy;
+  const Bitboard ipBit = 1ULL << ip;
+  const Bitboard occupied = pos.all();
+  const Bitboard erq = pos.piece<cEmy, QUEEN>() | pos.piece<cEmy, ROOK  >();
+  const Bitboard ebq = pos.piece<cEmy, QUEEN>() | pos.piece<cEmy, BISHOP>();
+
+  // -1 -> ip not on this ray; 0 -> on ray but not pinned; 1 -> pinned (destSq set)
+  const auto scan = [&] (const MaskTable& table, BitboardFunc closest, Bitboard sliders) -> int
+  {
+    const Bitboard ray = table[kpos];
+    if (!(ray & ipBit)) return -1;
+
+    const Bitboard pieces = ray & occupied;
+    const Bitboard first  = closest(pieces);
+    if (first != ipBit) return 0;                 // a blocker sits between king and ip
+
+    const Bitboard second = closest(pieces ^ first);
+    if (!(second & sliders)) return 0;            // nothing pinning behind ip
+
+    destSq = ray ^ table[squareNo(second)] ^ ipBit;
+    return 1;
+  };
+
+  int r;
+  if ((r = scan(plt::rightMasks    , lsb, erq)) != -1) return r == 1;
+  if ((r = scan(plt::leftMasks     , msb, erq)) != -1) return r == 1;
+  if ((r = scan(plt::upMasks       , lsb, erq)) != -1) return r == 1;
+  if ((r = scan(plt::downMasks     , msb, erq)) != -1) return r == 1;
+  if ((r = scan(plt::upRightMasks  , lsb, ebq)) != -1) return r == 1;
+  if ((r = scan(plt::upLeftMasks   , lsb, ebq)) != -1) return r == 1;
+  if ((r = scan(plt::downRightMasks, msb, ebq)) != -1) return r == 1;
+  if ((r = scan(plt::downLeftMasks , msb, ebq)) != -1) return r == 1;
+  return false;
+}
+
+// ----- micro-benchmark: pinnedRayDest vs pinnedRayDest_fast --------------------
+// Runs each function `iters` times over every non-king own-side piece in `pos`
+// (`pos.color`) and returns the total wall time in seconds. The accumulator
+// (`sink`) is XORed into a volatile to keep the compiler from folding the loops
+// away. Both variants get the same input set and are timed back-to-back; for a
+// single position the absolute numbers are noisy, so the caller should sum them
+// over many positions before drawing conclusions.
+template <Color cMy>
+static std::pair<double, double>
+benchmarkPinnedRayDestImpl(const ChessBoard& pos, int iters) noexcept
+{
+  const Square kpos = squareNo(pos.piece<cMy, KING>());
+
+  Square pieces[16];
+  int    pieceCount = 0;
+  Bitboard own = pos.piece<cMy, PAWN>()  | pos.piece<cMy, BISHOP>()
+               | pos.piece<cMy, KNIGHT>()| pos.piece<cMy, ROOK>()
+               | pos.piece<cMy, QUEEN>();
+  while (own && pieceCount < 16)
+  {
+    const Bitboard b = own & -own;
+    pieces[pieceCount++] = squareNo(b);
+    own ^= b;
+  }
+
+  volatile Bitboard volSink = 0;
+  Bitboard sinkSlow = 0, sinkFast = 0;
+
+  using clock = std::chrono::high_resolution_clock;
+
+  const auto t0 = clock::now();
+  for (int it = 0; it < iters; ++it)
+    for (int i = 0; i < pieceCount; ++i)
+    {
+      Bitboard dst = AllSquares;
+      pinnedRayDest<cMy>(pos, pieces[i], kpos, dst);
+      sinkSlow ^= dst;
+    }
+  const auto t1 = clock::now();
+  for (int it = 0; it < iters; ++it)
+    for (int i = 0; i < pieceCount; ++i)
+    {
+      Bitboard dst = AllSquares;
+      pinnedRayDest_fast<cMy>(pos, pieces[i], kpos, dst);
+      sinkFast ^= dst;
+    }
+  const auto t2 = clock::now();
+
+  volSink = sinkSlow ^ sinkFast;
+  (void) volSink;
+
+  return {
+    std::chrono::duration<double>(t1 - t0).count(),
+    std::chrono::duration<double>(t2 - t1).count()
+  };
+}
+
+std::pair<double, double>
+benchmarkPinnedRayDest(const ChessBoard& pos, int iters)
+{
+  return (pos.color == WHITE)
+    ? benchmarkPinnedRayDestImpl<WHITE>(pos, iters)
+    : benchmarkPinnedRayDestImpl<BLACK>(pos, iters);
+}
+
+template <Color cMy>
+static bool
+isHashMoveLegalImpl(Move move, const ChessBoard& pos, const MoveList& meta) noexcept
+{
+  constexpr Color    cEmy      = ~cMy;
+  constexpr int      pawnPush  = (cMy == WHITE) ? 8 : -8;
+  constexpr Bitboard startRank = (cMy == WHITE) ? Rank2 : Rank7;
+
+  const Square ip = from_sq(move);
+  const Square fp = to_sq(move);
+  if (ip == fp) return false;
+
+  const Piece ipPiece = pos.pieceOnSquare(ip);
+  if (ipPiece == NO_PIECE || color_of(ipPiece) != cMy) return false;
+
+  const PieceType ipt = type_of(ipPiece);
+  if (PieceType((move >> 12) & 7) != ipt) return false;                 // pIp field
+
+  const Piece fpPiece = pos.pieceOnSquare(fp);
+  if (fpPiece != NO_PIECE && color_of(fpPiece) == cMy) return false;    // can't capture own
+  if (PieceType((move >> 15) & 7) != type_of(fpPiece)) return false;    // pFp field (NONE on empty / e.p. target)
+
+  const Bitboard ipBit = 1ULL << ip;
+  const Bitboard fpBit = 1ULL << fp;
+  const Bitboard occupied = pos.all();
+  const Square kpos = squareNo(pos.piece<cMy, KING>());
+
+  // --------------------------------------------------------------------- King
+  if (ipt == KING)
+  {
+    const int diff = int(fp) - int(ip);
+
+    if (diff == 2 || diff == -2)                                        // castling
+    {
+      if (meta.checkers != 0) return false;                            // never out of check
+      const Bitboard attacked = meta.enemyAttackedSquares;
+      if (ipBit & attacked) return false;                              // (king-square attacked => in check)
+
+      constexpr int shift = 56 * int(cEmy);
+      if (int(ip) != shift + 4) return false;                          // king must be on its home square
+
+      const Bitboard covered = occupied | attacked;
+      if (diff == 2)                                                   // king side
+      {
+        constexpr int      kingSide = 256 << (2 * int(cMy));
+        constexpr Bitboard rSq      = 96ULL << shift;                  // f1/g1 (or f8/g8)
+        if (!(pos.csep & kingSide)) return false;
+        if (rSq & covered) return false;
+        return true;
+      }
+      // queen side
+      constexpr int      queenSide = 128 << (2 * int(cMy));
+      constexpr Bitboard lMidSq    = 2ULL  << shift;                   // b1 (or b8)
+      constexpr Bitboard lSq       = 12ULL << shift;                   // c1/d1 (or c8/d8)
+      if (!(pos.csep & queenSide)) return false;
+      if (occupied & lMidSq) return false;
+      if (lSq & covered) return false;
+      return true;
+    }
+
+    // ordinary king step
+    if (!(plt::kingMasks[ip] & fpBit)) return false;
+    if (fpBit & meta.enemyAttackedSquares) return false;
+    return true;
+  }
+
+  // any non-king move is impossible under double check
+  if (meta.checkers >= 2) return false;
+
+  // pin ray + (when in check) the squares that block / capture the checker
+  Bitboard pinMask = AllSquares;
+  // Old: pinnedRayDest<cMy>(pos, ip, kpos, pinMask) — 8-direction scan, kept above for reference.
+  const bool pinned = pinnedRayDest_fast<cMy>(pos, ip, kpos, pinMask);  // pinMask unchanged if not pinned
+  const Bitboard checkMask = (meta.checkers == 1) ? meta.legalSquaresMaskInCheck : AllSquares;
+
+  // --------------------------------------------------------------------- Pawn
+  if (ipt == PAWN)
+  {
+    const Square ep = pos.enPassantSquare();
+
+    if (fpBit & plt::pawnCaptureMasks[cMy][ip])                        // diagonal -> capture or e.p.
+    {
+      if (ep != SQUARE_NB && fp == ep)                                // en passant
+      {
+        const Square capSq = fp - pawnPush;                           // the pawn we remove
+        if (pos.pieceOnSquare(capSq) != make_piece(cEmy, PAWN)) return false;
+        if (meta.checkers == 1
+          && !(plt::pawnCaptureMasks[cMy][kpos] & pos.piece<cEmy, PAWN>())) return false;
+        if (!(fpBit & pinMask)) return false;
+        // When the pawn is pinned along its capture diagonal, the pin already
+        // guarantees safety w.r.t. that slider — generation's pinsCheck branch
+        // skips enpassantRecheck for exactly this reason; mirror it here.
+        if (!pinned && !enpassantRecheck<cMy>(ip, pos)) return false;
+        return true;
+      }
+      if (fpPiece == NO_PIECE) return false;                          // nothing there to capture
+      // (enemy colour and pFp already validated above)
+    }
+    else                                                              // straight push
+    {
+      if (fpPiece != NO_PIECE) return false;
+      if (int(fp) == int(ip) + pawnPush)
+        ;                                                             // single push
+      else if (int(fp) == int(ip) + 2 * pawnPush && (ipBit & startRank))
+      {
+        if (pos.pieceOnSquare(Square(int(ip) + pawnPush)) != NO_PIECE) return false;
+      }
+      else return false;
+    }
+
+    if (!(fpBit & checkMask)) return false;
+    if (!(fpBit & pinMask)) return false;
+    return true;
+  }
+
+  // ------------------------------------------------------------------- Knight
+  if (ipt == KNIGHT)
+  {
+    if (!(plt::knightMasks[ip] & fpBit)) return false;
+    if (!(fpBit & checkMask)) return false;
+    if (!(fpBit & pinMask)) return false;                             // a pinned knight can never move
+    return true;
+  }
+
+  // ----------------------------------------------------- Bishop / Rook / Queen
+  Bitboard reachable;
+  if      (ipt == BISHOP) reachable = attackSquares<BISHOP>(ip, occupied);
+  else if (ipt == ROOK  ) reachable = attackSquares<ROOK  >(ip, occupied);
+  else                    reachable = attackSquares<QUEEN >(ip, occupied);
+
+  if (!(reachable & fpBit)) return false;
+  if (!(fpBit & checkMask)) return false;
+  if (!(fpBit & pinMask)) return false;
+  return true;
+}
+
+bool
+isHashMoveLegal(Move move, const ChessBoard& pos, const MoveList& meta)
+{
+  return pos.color == WHITE
+    ? isHashMoveLegalImpl<WHITE>(move, pos, meta)
+    : isHashMoveLegalImpl<BLACK>(move, pos, meta);
 }
 
 #endif

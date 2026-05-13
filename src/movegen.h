@@ -3,6 +3,7 @@
 #ifndef MOVEGEN_H
 #define MOVEGEN_H
 
+#include <utility>
 #include "bitboard.h"
 #include "lookup_table.h"
 #include "movelist.h"
@@ -29,6 +30,32 @@
 // Checks if move is valid for given position
 bool
 isLegalMoveForPosition(Move move, const ChessBoard& pos);
+
+/**
+ * @brief Cheap legality check for a candidate move (e.g. a transposition-table
+ * best move) against a position whose metadata has already been computed.
+ *
+ * @param move  24-bit packed move (only bits 0..19 — ip/fp/pIp/pFp/promo — are
+ *              consulted; the type/colour/check bits are ignored).
+ * @param pos   the position the move would be played in.
+ * @param meta  a MoveList already filled by stagedGenerateMoves<GEN_METADATA>
+ *              (needs checkers / enemyAttackedSquares / legalSquaresMaskInCheck).
+ *
+ * Deliberately biased toward returning false: a false negative just costs the
+ * caller its fast path, a false positive would feed an illegal move to makeMove.
+ */
+bool
+isHashMoveLegal(Move move, const ChessBoard& pos, const MoveList& meta);
+
+/**
+ * @brief Micro-benchmark hook: times the legacy 8-direction pinnedRayDest vs.
+ * the rayDirection-dispatched pinnedRayDest_fast on every non-king own-side
+ * piece in `pos`, repeated `iters` times. Returns {slow_seconds, fast_seconds}.
+ *
+ * Single-position numbers are noisy; callers should sum across many positions.
+ */
+std::pair<double, double>
+benchmarkPinnedRayDest(const ChessBoard& pos, int iters);
 
 /**
  * @brief Runs one stage of move generation on the given MoveList.
