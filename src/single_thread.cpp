@@ -140,16 +140,22 @@ playMove(ChessBoard& pos, Move move, size_t moveNo,
 
 static void
 playSubsetMoves(
-  ChessBoard& pos, MoveArray& movesArray,
+  ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
   size_t start, size_t end,
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
-  Flag& hashf, Move& bestMoveOut,
-  size_t moveNoBias = 0
+  Flag& hashf, Move& bestMoveOut
 )
 {
   int pvNextIndex = pvIndex + MAX_PLY - ply;
+
+  // myMoves.removedMoves() accounts for moves searched *outside* this array
+  // (the hash-move fast-path searches 1 move before playAllMoves runs).
+  // Without this, LMR's `moveNo < LMR_LIMIT` gate gives the first staged
+  // move an extra full-depth search the old impl wouldn't have done —
+  // that's where the ~25% tree-bloat was coming from.
+  const size_t moveNoBias = myMoves.removedMoves();
 
   for (size_t moveNo = start; moveNo < end; ++moveNo)
   {
@@ -160,11 +166,6 @@ playSubsetMoves(
     if (bestMoveOut == NULL_MOVE)
       bestMoveOut = filter(move);
 
-    // moveNoBias accounts for moves searched *outside* this array (the
-    // hash-move fast-path searches 1 move before playAllMoves runs). Without
-    // this, LMR's `moveNo < LMR_LIMIT` gate gives the first staged move an
-    // extra full-depth search the old impl wouldn't have done — that's where
-    // the ~25% tree-bloat was coming from.
     Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, depth, alpha, beta, ply, pvNextIndex, numExtensions);
 
     // No time left!
@@ -203,8 +204,7 @@ playAllMoves(
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
-  Flag& hashf, Move& bestMoveOut,
-  size_t moveNoBias
+  Flag& hashf, Move& bestMoveOut
 )
 {
   if constexpr (moveGen == 0)
@@ -215,14 +215,14 @@ playAllMoves(
 
   size_t end = orderType == MType::QUIET ? movesArray.size() : orderMoves(pos, movesArray, orderType, ply, start);
 
-  playSubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut, moveNoBias);
+  playSubsetMoves(pos, myMoves, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   if constexpr (sizeof...(rest) > 0)
     playAllMoves<moveGen + 1, rest...>
-      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut, moveNoBias);
+      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 }
 
 Score
@@ -331,13 +331,12 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (hashMovePlayed)
     myMoves.removeMove(hashMove);
 
-  // Bias subsequent moveNo by 1 when the hash-move fast-path already searched
-  // one move — keeps the LMR_LIMIT gate behaving identically to the old impl
-  // where the hash move occupied movesArray[0].
-  size_t moveNoBias = hashMovePlayed ? 1 : 0;
+  // LMR bias is now derived from myMoves.removedMoves() inside
+  // playSubsetMoves — the hash-move fast-path's removeMove() call already
+  // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
   MoveArray movesArray;
   playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
-    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut, moveNoBias);
+    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 
   if constexpr (USE_TT) {
     tt.recordPosition(pos.hashValue, depth, alpha, hashf, bestMoveOut);

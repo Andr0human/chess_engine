@@ -200,10 +200,24 @@ MoveList::fillPawns(
         }
       }
 
-      movesArray.add(moveQ);
-      movesArray.add(moveR);
-      movesArray.add(moveN);
-      movesArray.add(moveB);
+      // Fast path: no hash-move suppression, or this (from,to) isn't the
+      // suppressed pair — emit all four flavors. promoSuppress == 0 is the
+      // common case; the (from,to) compare alone gates the slow path since
+      // a real promoSuppress always carries non-zero from|to bits.
+      if ((moveB & 0xFFF) != (promoSuppress & 0xFFF))
+      {
+        movesArray.add(moveQ);
+        movesArray.add(moveR);
+        movesArray.add(moveN);
+        movesArray.add(moveB);
+      }
+      else
+      {
+        if ((moveQ & 0xC0FFF) != promoSuppress) movesArray.add(moveQ);
+        if ((moveR & 0xC0FFF) != promoSuppress) movesArray.add(moveR);
+        if ((moveN & 0xC0FFF) != promoSuppress) movesArray.add(moveN);
+        if ((moveB & 0xC0FFF) != promoSuppress) movesArray.add(moveB);
+      }
     }
     else
     {
@@ -240,6 +254,12 @@ MoveList::countMoves() const noexcept
 
   while (mask > 0)
     moveCount += popCount(destSquares[nextSquare(mask)]);
+
+  // Promotion suppression keeps the shared destSquares bit set so the other
+  // three flavors still emit; the pawn-loop above counted all 4, so subtract
+  // the one fillPawns will skip. promoSuppress == 0 means no suppression.
+  if (promoSuppress)
+    moveCount -= 1;
 
   return moveCount;
 }
@@ -504,6 +524,16 @@ MoveList::removeMove(Move m) noexcept
 
   if (pt == PAWN)
   {
+    // Promotion: don't clear the destSquares bit (it's shared by all four
+    // Q/R/N/B flavors). Stash bits 0..11 (from|to) and bits 18..19 (piece)
+    // so fillPawns can skip just the one flavor at emission time.
+    if ((m >> 21) & 1)
+    {
+      promoSuppress = m & 0xC0FFF;
+      ++removedMovesCount;
+      return;
+    }
+
     // En passant: encoded as a capture (bit 20) with captured-piece field
     // (bits 15..17) == NONE, since fillEnpassantPawns leaves that field zero
     // (the captured pawn isn't on the destination square).
@@ -512,17 +542,19 @@ MoveList::removeMove(Move m) noexcept
     if (isCapture and captured == NONE)
     {
       enpassantPawns &= ~fromBit;
+      ++removedMovesCount;
       return;
     }
 
-    // Per-square stored pawn (pinned or promoting): the from-square is in
-    // initSquares. Pinned-pawn captures, single/double pushes from a pinned
-    // square, and all promotions land here.
+    // Per-square stored pawn (pinned): the from-square is in initSquares.
+    // Pinned-pawn captures and single/double pushes from a pinned square
+    // land here. (Promotions handled above.)
     if (fromBit & initSquares)
     {
       destSquares[fromSq] &= ~toBit;
       if (destSquares[fromSq] == 0)
         initSquares &= ~fromBit;
+      ++removedMovesCount;
       return;
     }
 
@@ -541,6 +573,7 @@ MoveList::removeMove(Move m) noexcept
       default: return; // not a legal pawn delta — silently ignore
     }
     pawnDestSquares[bucket] &= ~toBit;
+    ++removedMovesCount;
     return;
   }
 
@@ -549,6 +582,7 @@ MoveList::removeMove(Move m) noexcept
   destSquares[fromSq] &= ~toBit;
   if (destSquares[fromSq] == 0)
     initSquares &= ~fromBit;
+  ++removedMovesCount;
 }
 
 
