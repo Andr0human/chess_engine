@@ -493,6 +493,64 @@ MoveList::exists<MType::CHECK>(const ChessBoard& pos) const noexcept
   return false;
 }
 
+void
+MoveList::removeMove(Move m) noexcept
+{
+  const Square fromSq = from_sq(m);
+  const Square toSq   = to_sq(m);
+  const PieceType pt  = PieceType((m >> 12) & 7);
+  const Bitboard fromBit = 1ULL << fromSq;
+  const Bitboard toBit   = 1ULL << toSq;
+
+  if (pt == PAWN)
+  {
+    // En passant: encoded as a capture (bit 20) with captured-piece field
+    // (bits 15..17) == NONE, since fillEnpassantPawns leaves that field zero
+    // (the captured pawn isn't on the destination square).
+    const bool isCapture     = (m >> 20) & 1;
+    const PieceType captured = PieceType((m >> 15) & 7);
+    if (isCapture and captured == NONE)
+    {
+      enpassantPawns &= ~fromBit;
+      return;
+    }
+
+    // Per-square stored pawn (pinned or promoting): the from-square is in
+    // initSquares. Pinned-pawn captures, single/double pushes from a pinned
+    // square, and all promotions land here.
+    if (fromBit & initSquares)
+    {
+      destSquares[fromSq] &= ~toBit;
+      if (destSquares[fromSq] == 0)
+        initSquares &= ~fromBit;
+      return;
+    }
+
+    // Bulk shift-pawn move — identify the bucket from the to-from delta.
+    // Bucket layout (see pawnMovement / fillShiftPawns):
+    //   white (color=1): [0]=+9 (right cap), [1]=+7 (left cap), [2]=+16 (dpush), [3]=+8 (spush)
+    //   black (color=0): [0]=-7,             [1]=-9,            [2]=-16,        [3]=-8
+    const int delta = int(toSq) - int(fromSq);
+    int bucket;
+    switch (delta)
+    {
+      case   9: case  -7: bucket = 0; break;
+      case   7: case  -9: bucket = 1; break;
+      case  16: case -16: bucket = 2; break;
+      case   8: case  -8: bucket = 3; break;
+      default: return; // not a legal pawn delta — silently ignore
+    }
+    pawnDestSquares[bucket] &= ~toBit;
+    return;
+  }
+
+  // Knight, bishop, rook, queen, king (castling included — king's 2-square
+  // hop sits in destSquares[king_sq] like any other king destination).
+  destSquares[fromSq] &= ~toBit;
+  if (destSquares[fromSq] == 0)
+    initSquares &= ~fromBit;
+}
+
 
 template void MoveList::getMoves<MType(1), MType(0)>(const ChessBoard&, MoveArray&) const noexcept;
 template void MoveList::getMoves<MType(1), MType(4)>(const ChessBoard&, MoveArray&) const noexcept;

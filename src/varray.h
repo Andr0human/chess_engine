@@ -31,6 +31,10 @@ class Varray {
   clear() noexcept
   { Nc = 0; }
 
+  void
+  popBack() noexcept
+  { if (Nc > 0) --Nc; }
+
   T&
   operator[](size_t index) noexcept
   { return _array[index]; }

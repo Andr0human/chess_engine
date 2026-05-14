@@ -161,7 +161,6 @@ enum class MType: uint8_t
   PROMOTION = 1 << 3,
   PV = 1 << 4,
   KILLER = 1 << 5,
-  HASH_MOVE = 1 << 6
 };
 
 /**

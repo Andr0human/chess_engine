@@ -84,6 +84,17 @@ public:
   bool
   exists(const ChessBoard& pos) const noexcept;
 
+  // Remove a single move from the MoveList so subsequent getMoves<>() calls
+  // skip it. Used by the hash-move-before-movegen path to drop the already-
+  // searched hash move without a post-hoc swap+popBack on MoveArray.
+  //
+  // Caveat: for promotions, all four flavors (Q/R/B/N) share one destSquares
+  // bit, so removing a promotion drops every flavor to that target. Acceptable
+  // since the hash move is the best candidate at this node; underpromotions
+  // are searched at children via different paths.
+  void
+  removeMove(Move m) noexcept;
+
 private:
   template <MType mt1, MType mt2>
   void

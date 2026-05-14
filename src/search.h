@@ -330,7 +330,7 @@ class SearchData
 };
 
 size_t
-orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0, Move hashMove = NULL_MOVE);
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
 
 Score
 seeScore(const ChessBoard& pos, Move move);
