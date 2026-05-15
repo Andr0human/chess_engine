@@ -1,6 +1,7 @@
 
 #include "single_thread.h"
 #include "move_utils.h"
+#include "node_state.h"
 #include <iostream>
 
 uint64_t
@@ -106,9 +107,15 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
 template <ReductionFunc reductionFunction>
 static Score
-playMove(ChessBoard& pos, Move move, size_t moveNo,
-  Depth depth, Score alpha, Score beta, Ply ply, int pvNextIndex, int numExtensions)
+playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
 {
+  const Depth depth         = ns.depth;
+  const Score alpha         = ns.alpha;
+  const Score beta          = ns.beta;
+  const Ply   ply           = ns.ply;
+  const int   pvNextIndex   = ns.pvNextIndex();
+  const int   numExtensions = ns.numExtensions;
+
   Score eval = VALUE_ZERO;
 
   if (USE_LMR and lmrOk(move, depth, moveNo))
@@ -138,18 +145,60 @@ playMove(ChessBoard& pos, Move move, size_t moveNo,
   return eval;
 }
 
-static void
+// Searches the TT-suggested move first at the node's full (boosted) depth so
+// it gets the same effective ply budget as every other move. A beta cutoff
+// here returns without ever running GEN_CHECKS or orderMoves downstream.
+static HashMoveOutcome
+playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
+{
+  HashMoveOutcome out;
+
+  if (hashMove == NULL_MOVE or !isLegalMoveForPosition_V2(hashMove, pos))
+    return out;
+
+  info.hashMoveInList++;
+  out.searched = true;
+
+  const int pvNextIndex = ns.pvNextIndex();
+
+  pos.makeMove(hashMove);
+  Score eval = -alphaBeta(pos, ns.depth - 1, -ns.beta, -ns.alpha, ns.ply + 1, pvNextIndex, ns.numExtensions);
+  pos.unmakeMove();
+
+  if (info.timeOver())
+  {
+    out.result = TIMEOUT;
+    return out;
+  }
+
+  if (eval >= ns.beta)
+  {
+    info.hashMoveCutoffs++;
+    if constexpr (USE_TT)
+      tt.recordPosition(pos.hashValue, ns.depth, ns.beta, Flag::HASH_BETA, filter(hashMove));
+    out.result = ns.beta;
+    return out;
+  }
+
+  bestMove = filter(hashMove);
+  if (eval > ns.alpha)
+  {
+    ns.hashf = Flag::HASH_EXACT;
+    ns.alpha = eval;
+    pvArray[ns.pvIndex] = filter(hashMove);
+    movcpy(pvArray + ns.pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ns.ply - 1);
+  }
+
+  return out;
+}
+
+static Move
 playSubsetMoves(
   ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
   size_t start, size_t end,
-  Score& alpha, Score& beta,
-  Depth depth, Ply ply,
-  int pvIndex, int numExtensions,
-  Flag& hashf, Move& bestMoveOut
+  NodeState& ns, Move bestMove
 )
 {
-  int pvNextIndex = pvIndex + MAX_PLY - ply;
-
   // myMoves.removedMoves() accounts for moves searched *outside* this array
   // (the hash-move fast-path searches 1 move before playAllMoves runs).
   // Without this, LMR's `moveNo < LMR_LIMIT` gate gives the first staged
@@ -163,48 +212,48 @@ playSubsetMoves(
 
     // HASH_ALPHA fallback: remember the first searched move at this node so
     // the TT entry has *something* to suggest on a fail-low revisit.
-    if (bestMoveOut == NULL_MOVE)
-      bestMoveOut = filter(move);
+    if (bestMove == NULL_MOVE)
+      bestMove = filter(move);
 
-    Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, depth, alpha, beta, ply, pvNextIndex, numExtensions);
+    Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, ns);
 
     // No time left!
     if (info.timeOver())
-      return;
+      return bestMove;
 
     //! TODO: Why beta is not in root-search??
     // beta-cut found
-    if (eval >= beta)
+    if (eval >= ns.beta)
     {
-      hashf = Flag::HASH_BETA;
-      alpha = beta;
-      bestMoveOut = filter(move);
+      ns.hashf = Flag::HASH_BETA;
+      ns.alpha = ns.beta;
+      bestMove = filter(move);
 
       if (is_type<MType::QUIET>(move))
-        killerMoves[ply].addKillerMove(move);
+        killerMoves[ns.ply].addKillerMove(move);
       break;
     }
 
     // Better move found, update the result
-    if (eval > alpha) {
-      hashf = Flag::HASH_EXACT, alpha = eval;
-      bestMoveOut = filter(move);
-      pvArray[pvIndex] = filter(move);
-      movcpy (pvArray + pvIndex + 1,
-              pvArray + pvNextIndex, MAX_PLY - ply - 1);
+    if (eval > ns.alpha) {
+      ns.hashf = Flag::HASH_EXACT;
+      ns.alpha = eval;
+      bestMove = filter(move);
+      pvArray[ns.pvIndex] = filter(move);
+      movcpy (pvArray + ns.pvIndex + 1,
+              pvArray + ns.pvNextIndex(), MAX_PLY - ns.ply - 1);
     }
   }
+
+  return bestMove;
 }
 
 template <int moveGen, MType orderType, MType... rest>
-static void
+static Move
 playAllMoves(
   ChessBoard& pos, MoveList& myMoves,
   MoveArray movesArray, size_t start,
-  Score& alpha, Score& beta,
-  Depth depth, Ply ply,
-  int pvIndex, int numExtensions,
-  Flag& hashf, Move& bestMoveOut
+  NodeState& ns, Move bestMove
 )
 {
   if constexpr (moveGen == 0)
@@ -213,16 +262,19 @@ playAllMoves(
   if constexpr (moveGen == 1)
     myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
-  size_t end = orderType == MType::QUIET ? movesArray.size() : orderMoves(pos, movesArray, orderType, ply, start);
+  size_t end = orderType == MType::QUIET
+    ? movesArray.size()
+    : orderMoves(pos, movesArray, orderType, ns.ply, start);
 
-  playSubsetMoves(pos, myMoves, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
+  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove);
 
-  if (hashf == Flag::HASH_BETA)
-    return;
+  if (ns.hashf == Flag::HASH_BETA)
+    return bestMove;
 
   if constexpr (sizeof...(rest) > 0)
-    playAllMoves<moveGen + 1, rest...>
-      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
+    return playAllMoves<moveGen + 1, rest...>(pos, myMoves, movesArray, end, ns, bestMove);
+
+  return bestMove;
 }
 
 Score
@@ -280,47 +332,14 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     numExtensions += extensions;
   }
 
-  int pvNextIndex = pvIndex + MAX_PLY - ply;
   pvArray[pvIndex] = NULL_MOVE;
 
-  Flag hashf = Flag::HASH_ALPHA;
-  Move bestMoveOut = NULL_MOVE;
-  bool hashMovePlayed = false;
+  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
+  Move bestMove = NULL_MOVE;
 
-  // Hash-move-before-ordering attempt: if the TT handed back a move and V2
-  // says it's legal here, search it first at the *boosted* depth and
-  // numExtensions, so it gets the same effective ply budget as every other
-  // move at this node. A beta cutoff returns without ever running GEN_CHECKS
-  // or orderMoves.
-  if (hashMove != NULL_MOVE and isLegalMoveForPosition_V2(hashMove, pos))
-  {
-    info.hashMoveInList++;
-    hashMovePlayed = true;
-
-    pos.makeMove(hashMove);
-    Score eval = -alphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-    pos.unmakeMove();
-
-    if (info.timeOver())
-      return TIMEOUT;
-
-    if (eval >= beta)
-    {
-      info.hashMoveCutoffs++;
-      if constexpr (USE_TT)
-        tt.recordPosition(pos.hashValue, depth, beta, Flag::HASH_BETA, filter(hashMove));
-      return beta;
-    }
-
-    bestMoveOut = filter(hashMove);
-    if (eval > alpha)
-    {
-      hashf = Flag::HASH_EXACT;
-      alpha = eval;
-      pvArray[pvIndex] = filter(hashMove);
-      movcpy(pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
-    }
-  }
+  HashMoveOutcome hashOutcome = playHashMove(pos, hashMove, ns, bestMove);
+  if (hashOutcome.result.has_value())
+    return *hashOutcome.result;
 
   // Need check-giving-square data for MType::CHECK ordering downstream.
   stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
@@ -328,21 +347,21 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // Drop the already-searched hash move so subsequent getMoves<>() calls in
   // playAllMoves don't re-emit it. Both branches now feed the same uniform
   // playAllMoves<0, …> entry.
-  if (hashMovePlayed)
+  if (hashOutcome.searched)
     myMoves.removeMove(hashMove);
 
   // LMR bias is now derived from myMoves.removedMoves() inside
   // playSubsetMoves — the hash-move fast-path's removeMove() call already
   // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
   MoveArray movesArray;
-  playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
-    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
+  bestMove = playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
+    (pos, myMoves, movesArray, 0, ns, bestMove);
 
   if constexpr (USE_TT) {
-    tt.recordPosition(pos.hashValue, depth, alpha, hashf, bestMoveOut);
+    tt.recordPosition(pos.hashValue, depth, ns.alpha, ns.hashf, bestMove);
   }
 
-  return alpha;
+  return ns.alpha;
 }
 
 Score
@@ -351,19 +370,20 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
   perf_clock startTime;
   perf_ns_time duration;
 
-  int ply{0}, pvIndex{0}, pvNextIndex;
+  int ply{0}, pvIndex{0};
 
   MoveArray myMoves = info.getMoves();
 
   pvArray[pvIndex] = NULL_MOVE; // no pv yet
-  pvNextIndex = pvIndex + MAX_PLY - ply;
+
+  NodeState ns{alpha, beta, depth, Ply(ply), pvIndex, 0};
 
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
     Move move = myMoves[moveNo];
     startTime = perf::now();
 
-    Score eval = playMove<rootReduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, 0);
+    Score eval = playMove<rootReduction>(pos, move, moveNo, ns);
 
     duration = perf::now() - startTime;
     info.insertMoveToList(moveNo);
@@ -371,15 +391,15 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
     if (info.timeOver())
       return TIMEOUT;
 
-    if (eval > alpha)
+    if (eval > ns.alpha)
     {
-      alpha = eval;
+      ns.alpha = eval;
       pvArray[pvIndex] = filter(move);
-      movcpy (pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
+      movcpy (pvArray + pvIndex + 1, pvArray + ns.pvNextIndex(), MAX_PLY - ply - 1);
     }
   }
 
-  return alpha;
+  return ns.alpha;
 }
 
 void
