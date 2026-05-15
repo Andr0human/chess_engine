@@ -200,10 +200,24 @@ MoveList::fillPawns(
         }
       }
 
-      movesArray.add(moveQ);
-      movesArray.add(moveR);
-      movesArray.add(moveN);
-      movesArray.add(moveB);
+      // Fast path: no hash-move suppression, or this (from,to) isn't the
+      // suppressed pair — emit all four flavors. promoSuppress == 0 is the
+      // common case; the (from,to) compare alone gates the slow path since
+      // a real promoSuppress always carries non-zero from|to bits.
+      if ((moveB & 0xFFF) != (promoSuppress & 0xFFF))
+      {
+        movesArray.add(moveQ);
+        movesArray.add(moveR);
+        movesArray.add(moveN);
+        movesArray.add(moveB);
+      }
+      else
+      {
+        if ((moveQ & 0xC0FFF) != promoSuppress) movesArray.add(moveQ);
+        if ((moveR & 0xC0FFF) != promoSuppress) movesArray.add(moveR);
+        if ((moveN & 0xC0FFF) != promoSuppress) movesArray.add(moveN);
+        if ((moveB & 0xC0FFF) != promoSuppress) movesArray.add(moveB);
+      }
     }
     else
     {
@@ -240,6 +254,12 @@ MoveList::countMoves() const noexcept
 
   while (mask > 0)
     moveCount += popCount(destSquares[nextSquare(mask)]);
+
+  // Promotion suppression keeps the shared destSquares bit set so the other
+  // three flavors still emit; the pawn-loop above counted all 4, so subtract
+  // the one fillPawns will skip. promoSuppress == 0 means no suppression.
+  if (promoSuppress)
+    moveCount -= 1;
 
   return moveCount;
 }
@@ -491,6 +511,78 @@ MoveList::exists<MType::CHECK>(const ChessBoard& pos) const noexcept
   }
 
   return false;
+}
+
+void
+MoveList::removeMove(Move m) noexcept
+{
+  const Square fromSq = from_sq(m);
+  const Square toSq   = to_sq(m);
+  const PieceType pt  = PieceType((m >> 12) & 7);
+  const Bitboard fromBit = 1ULL << fromSq;
+  const Bitboard toBit   = 1ULL << toSq;
+
+  if (pt == PAWN)
+  {
+    // Promotion: don't clear the destSquares bit (it's shared by all four
+    // Q/R/N/B flavors). Stash bits 0..11 (from|to) and bits 18..19 (piece)
+    // so fillPawns can skip just the one flavor at emission time.
+    if ((m >> 21) & 1)
+    {
+      promoSuppress = m & 0xC0FFF;
+      ++removedMovesCount;
+      return;
+    }
+
+    // En passant: encoded as a capture (bit 20) with captured-piece field
+    // (bits 15..17) == NONE, since fillEnpassantPawns leaves that field zero
+    // (the captured pawn isn't on the destination square).
+    const bool isCapture     = (m >> 20) & 1;
+    const PieceType captured = PieceType((m >> 15) & 7);
+    if (isCapture and captured == NONE)
+    {
+      enpassantPawns &= ~fromBit;
+      ++removedMovesCount;
+      return;
+    }
+
+    // Per-square stored pawn (pinned): the from-square is in initSquares.
+    // Pinned-pawn captures and single/double pushes from a pinned square
+    // land here. (Promotions handled above.)
+    if (fromBit & initSquares)
+    {
+      destSquares[fromSq] &= ~toBit;
+      if (destSquares[fromSq] == 0)
+        initSquares &= ~fromBit;
+      ++removedMovesCount;
+      return;
+    }
+
+    // Bulk shift-pawn move — identify the bucket from the to-from delta.
+    // Bucket layout (see pawnMovement / fillShiftPawns):
+    //   white (color=1): [0]=+9 (right cap), [1]=+7 (left cap), [2]=+16 (dpush), [3]=+8 (spush)
+    //   black (color=0): [0]=-7,             [1]=-9,            [2]=-16,        [3]=-8
+    const int delta = int(toSq) - int(fromSq);
+    int bucket;
+    switch (delta)
+    {
+      case   9: case  -7: bucket = 0; break;
+      case   7: case  -9: bucket = 1; break;
+      case  16: case -16: bucket = 2; break;
+      case   8: case  -8: bucket = 3; break;
+      default: return; // not a legal pawn delta — silently ignore
+    }
+    pawnDestSquares[bucket] &= ~toBit;
+    ++removedMovesCount;
+    return;
+  }
+
+  // Knight, bishop, rook, queen, king (castling included — king's 2-square
+  // hop sits in destSquares[king_sq] like any other king destination).
+  destSquares[fromSq] &= ~toBit;
+  if (destSquares[fromSq] == 0)
+    initSquares &= ~fromBit;
+  ++removedMovesCount;
 }
 
 

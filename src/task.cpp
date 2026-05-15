@@ -1,4 +1,4 @@
-
+﻿
 #include <unordered_map>
 #include <functional>
 #include "task.h"
@@ -121,7 +121,7 @@ accuracyTest()
 }
 
 static void
-helper() 
+helper()
 {
   // Argument : elsa help
 
@@ -347,8 +347,8 @@ task(const vector<string>& args)
     {"count",    [](const auto& arguments){ nodeCount(arguments); }},
     {"movegen",  [](const auto& arguments){ debugMoveGenerator(arguments); }},
     {"static",   [](const auto& arguments){ staticEval(arguments); }},
-    {"bestmove", [](const auto& arguments){ bestMoveSearch(arguments); }},
-    {"readyOk",  [](const auto&){ readyOk(); }}
+    {"bestmove",  [](const auto& arguments){ bestMoveSearch(arguments); }},
+    {"readyOk",   [](const auto&){ readyOk(); }}
   };
 
   // Search for any command in the args

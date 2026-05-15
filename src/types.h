@@ -160,7 +160,7 @@ enum class MType: uint8_t
   CHECK     = 1 << 2,
   PROMOTION = 1 << 3,
   PV = 1 << 4,
-  KILLER = 1 << 5
+  KILLER = 1 << 5,
 };
 
 /**

@@ -26,6 +26,18 @@ public:
 
   Bitboard enpassantPawns;
 
+  // Single-promo suppression for the hash-move-before-movegen path.
+  // Packs (from | to<<6) in bits 0..11 and the promo-piece encoding in
+  // bits 18..19 (0=B, 1=N, 2=R, 3=Q — same layout as a real Move). Value
+  // 0 (from==to==0 — impossible) means no suppression.
+  Move promoSuppress;
+
+  // Number of times removeMove has been called with effect on this list.
+  // Used as the moveNo bias inside playSubsetMoves so LMR's `moveNo <
+  // LMR_LIMIT` gate accounts for moves searched outside the playAllMoves
+  // loop (i.e. the hash-move fast path).
+  uint16_t removedMovesCount;
+
   // Array to store squares that give check to the enemy king
   // {Pawn, Bishop, Knight, Rook, Queen}
   // Index 1: Squares where a bishop can give check to the enemy king
@@ -49,10 +61,15 @@ public:
   Bitboard enemyAttackedSquares;
 
   MoveList()
-  : checkers(0), initSquares(0), enpassantPawns(0) {}
+  : checkers(0), initSquares(0), enpassantPawns(0),
+    promoSuppress(0), removedMovesCount(0) {}
 
   MoveList(Color c)
-  : color(c), checkers(0), initSquares(0), enpassantPawns(0) {}
+  : color(c), checkers(0), initSquares(0), enpassantPawns(0),
+    promoSuppress(0), removedMovesCount(0) {}
+
+  size_t
+  removedMoves() const noexcept { return removedMovesCount; }
 
   void
   add(Square sq, Bitboard _destSquares)
@@ -83,6 +100,17 @@ public:
   template<MType mt>
   bool
   exists(const ChessBoard& pos) const noexcept;
+
+  // Remove a single move from the MoveList so subsequent getMoves<>() calls
+  // skip it. Used by the hash-move-before-movegen path to drop the already-
+  // searched hash move without a post-hoc swap+popBack on MoveArray.
+  //
+  // Promotions: all four flavors (Q/R/B/N) share one destSquares bit, so we
+  // can't clear the bit without dropping the other three legitimate flavors.
+  // Instead, stash (from,to)+piece into promoSuppress; fillPawns skips that
+  // one flavor at emission time.
+  void
+  removeMove(Move m) noexcept;
 
 private:
   template <MType mt1, MType mt2>

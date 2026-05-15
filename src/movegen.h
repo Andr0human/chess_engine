@@ -3,6 +3,7 @@
 #ifndef MOVEGEN_H
 #define MOVEGEN_H
 
+#include <utility>
 #include "bitboard.h"
 #include "lookup_table.h"
 #include "movelist.h"
@@ -30,6 +31,12 @@
 bool
 isLegalMoveForPosition(Move move, const ChessBoard& pos);
 
+// Same contract as isLegalMoveForPosition, but skips full move generation:
+// only computes the work needed for the moving piece (geometric reachability
+// + post-move king-safety via super-piece scan from king square).
+bool
+isLegalMoveForPosition_V2(Move move, const ChessBoard& pos);
+
 /**
  * @brief Runs one stage of move generation on the given MoveList.
  *
@@ -50,7 +57,6 @@ stagedGenerateMoves(const ChessBoard& pos, MoveList& myMoves);
  */
 MoveList
 generateMoves(const ChessBoard& pos, bool generateChecksData=false);
-
 
 bool
 pieceTrapped(const ChessBoard& pos, Bitboard myAttackedBB, Bitboard enemyAttackedBB);

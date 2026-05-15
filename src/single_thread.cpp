@@ -38,7 +38,7 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   const MoveList myMoves = generateMoves(pos);
 
-  if (myMoves.countMoves() == 0)
+  if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
   if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
@@ -140,20 +140,33 @@ playMove(ChessBoard& pos, Move move, size_t moveNo,
 
 static void
 playSubsetMoves(
-  ChessBoard& pos, MoveArray& movesArray,
+  ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
   size_t start, size_t end,
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
-  Flag& hashf
+  Flag& hashf, Move& bestMoveOut
 )
 {
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
+  // myMoves.removedMoves() accounts for moves searched *outside* this array
+  // (the hash-move fast-path searches 1 move before playAllMoves runs).
+  // Without this, LMR's `moveNo < LMR_LIMIT` gate gives the first staged
+  // move an extra full-depth search the old impl wouldn't have done —
+  // that's where the ~25% tree-bloat was coming from.
+  const size_t moveNoBias = myMoves.removedMoves();
+
   for (size_t moveNo = start; moveNo < end; ++moveNo)
   {
     Move move = movesArray[moveNo];
-    Score eval = playMove<reduction>(pos, move, moveNo, depth, alpha, beta, ply, pvNextIndex, numExtensions);
+
+    // HASH_ALPHA fallback: remember the first searched move at this node so
+    // the TT entry has *something* to suggest on a fail-low revisit.
+    if (bestMoveOut == NULL_MOVE)
+      bestMoveOut = filter(move);
+
+    Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, depth, alpha, beta, ply, pvNextIndex, numExtensions);
 
     // No time left!
     if (info.timeOver())
@@ -165,6 +178,7 @@ playSubsetMoves(
     {
       hashf = Flag::HASH_BETA;
       alpha = beta;
+      bestMoveOut = filter(move);
 
       if (is_type<MType::QUIET>(move))
         killerMoves[ply].addKillerMove(move);
@@ -174,6 +188,7 @@ playSubsetMoves(
     // Better move found, update the result
     if (eval > alpha) {
       hashf = Flag::HASH_EXACT, alpha = eval;
+      bestMoveOut = filter(move);
       pvArray[pvIndex] = filter(move);
       movcpy (pvArray + pvIndex + 1,
               pvArray + pvNextIndex, MAX_PLY - ply - 1);
@@ -189,28 +204,25 @@ playAllMoves(
   Score& alpha, Score& beta,
   Depth depth, Ply ply,
   int pvIndex, int numExtensions,
-  Flag& hashf
+  Flag& hashf, Move& bestMoveOut
 )
 {
-  // Set pvArray, for storing the search_tree
   if constexpr (moveGen == 0)
-  {
-    pvArray[pvIndex] = NULL_MOVE;
     myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
-  }
 
   if constexpr (moveGen == 1)
     myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
   size_t end = orderType == MType::QUIET ? movesArray.size() : orderMoves(pos, movesArray, orderType, ply, start);
-  playSubsetMoves(pos, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+
+  playSubsetMoves(pos, myMoves, movesArray, start, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 
   if (hashf == Flag::HASH_BETA)
     return;
 
   if constexpr (sizeof...(rest) > 0)
     playAllMoves<moveGen + 1, rest...>
-      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+      (pos, myMoves, movesArray, end, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 }
 
 Score
@@ -223,25 +235,44 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (depth <= 0)
     return quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
 
-  // Generate moves for current board position
-  MoveList myMoves = generateMoves(pos, true);
-
-  if (myMoves.countMoves() == 0)
-    return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
-
-  if (pos.threeMoveRepetition() or pos.fiftyMoveDraw() or (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos)))
+  // Cheap repetition / 50-move draws — no movegen needed.
+  if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
     return VALUE_DRAW;
 
   info.addNode();
 
-  if constexpr (USE_TT) {
-    // TT_lookup (Check if given board is already in transpostion table)
-    // check/stale-mate check needed before TT_lookup, else can lead to search failures.
-    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta);
+  Move hashMove = NULL_MOVE;
 
-    if (ttValue != VALUE_UNKNOWN)
+  if constexpr (USE_TT) {
+    bool ttHit = false;
+    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta, hashMove, ttHit);
+
+    info.ttProbes++;
+    if (ttHit) info.ttHits++;
+
+    if (ttValue != VALUE_UNKNOWN) {
+      info.ttCutoffs++;
       return ttValue;
+    }
+
+    if (hashMove != NULL_MOVE)
+      info.ttMoveProvided++;
   }
+
+  // Movegen: GEN_METADATA + GEN_MOVES first so the extension policy
+  // (countMoves), terminal/draw checks, and theoretical-draw recognizer all
+  // see complete data. GEN_CHECKS is deferred — it's only needed for
+  // MType::CHECK ordering inside playAllMoves, so a hash-move beta cutoff
+  // skips it (and all of orderMoves/staging) entirely.
+  MoveList myMoves;
+  stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
+  stagedGenerateMoves<GEN_MOVES   >(pos, myMoves);
+
+  if (!myMoves.anyMove())
+    return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
+
+  if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
+    return VALUE_DRAW;
 
   if constexpr (USE_EXTENSIONS) {
     int extensions = searchExtension(pos, myMoves, numExtensions, depth);
@@ -249,13 +280,66 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     numExtensions += extensions;
   }
 
+  int pvNextIndex = pvIndex + MAX_PLY - ply;
+  pvArray[pvIndex] = NULL_MOVE;
+
   Flag hashf = Flag::HASH_ALPHA;
+  Move bestMoveOut = NULL_MOVE;
+  bool hashMovePlayed = false;
+
+  // Hash-move-before-ordering attempt: if the TT handed back a move and V2
+  // says it's legal here, search it first at the *boosted* depth and
+  // numExtensions, so it gets the same effective ply budget as every other
+  // move at this node. A beta cutoff returns without ever running GEN_CHECKS
+  // or orderMoves.
+  if (hashMove != NULL_MOVE and isLegalMoveForPosition_V2(hashMove, pos))
+  {
+    info.hashMoveInList++;
+    hashMovePlayed = true;
+
+    pos.makeMove(hashMove);
+    Score eval = -alphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+    pos.unmakeMove();
+
+    if (info.timeOver())
+      return TIMEOUT;
+
+    if (eval >= beta)
+    {
+      info.hashMoveCutoffs++;
+      if constexpr (USE_TT)
+        tt.recordPosition(pos.hashValue, depth, beta, Flag::HASH_BETA, filter(hashMove));
+      return beta;
+    }
+
+    bestMoveOut = filter(hashMove);
+    if (eval > alpha)
+    {
+      hashf = Flag::HASH_EXACT;
+      alpha = eval;
+      pvArray[pvIndex] = filter(hashMove);
+      movcpy(pvArray + pvIndex + 1, pvArray + pvNextIndex, MAX_PLY - ply - 1);
+    }
+  }
+
+  // Need check-giving-square data for MType::CHECK ordering downstream.
+  stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
+
+  // Drop the already-searched hash move so subsequent getMoves<>() calls in
+  // playAllMoves don't re-emit it. Both branches now feed the same uniform
+  // playAllMoves<0, …> entry.
+  if (hashMovePlayed)
+    myMoves.removeMove(hashMove);
+
+  // LMR bias is now derived from myMoves.removedMoves() inside
+  // playSubsetMoves — the hash-move fast-path's removeMove() call already
+  // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
   MoveArray movesArray;
   playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
-    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf);
+    (pos, myMoves, movesArray, 0, alpha, beta, depth, ply, pvIndex, numExtensions, hashf, bestMoveOut);
 
   if constexpr (USE_TT) {
-    tt.recordPosition(pos.hashValue, depth, alpha, hashf);
+    tt.recordPosition(pos.hashValue, depth, alpha, hashf, bestMoveOut);
   }
 
   return alpha;
@@ -304,7 +388,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   resetPvLine();
   clearKillers();
 
-  if (generateMoves(board).countMoves() == 0)
+  if (!generateMoves(board).anyMove())
   {
     writer << "Position has no legal moves! Discarding Search." << endl;
     return;
@@ -377,5 +461,22 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
 
   info.searchCompleted();
   if (debug)
+  {
+    double hitRate = info.ttProbes
+      ? 100.0 * double(info.ttHits) / double(info.ttProbes) : 0.0;
+    double ttCutRate = info.ttHits
+      ? 100.0 * double(info.ttCutoffs) / double(info.ttHits) : 0.0;
+    writer << "TT: probes=" << info.ttProbes
+           << " hits=" << info.ttHits << " (" << std::fixed << std::setprecision(1) << hitRate << "%)"
+           << " cutoffs=" << info.ttCutoffs << " (" << ttCutRate << "% of hits)" << endl;
+
+    double cutoffRate = info.hashMoveInList
+      ? 100.0 * double(info.hashMoveCutoffs) / double(info.hashMoveInList) : 0.0;
+    double availRate = info.ttMoveProvided
+      ? 100.0 * double(info.hashMoveInList) / double(info.ttMoveProvided) : 0.0;
+    writer << "Hash move: ttProvided=" << info.ttMoveProvided
+           << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
+           << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
     writer << "Search Done!" << endl;
+  }
 }

@@ -83,13 +83,12 @@ TranspositionTable::hashKeyUpdate
 
 void
 TranspositionTable::recordPosition
-    (uint64_t hashValue, Depth depth, Score eval, Flag flag) noexcept
+    (uint64_t hashValue, Depth depth, Score eval, Flag flag, Move bestMove) noexcept
 {
   const auto addEntry = [&] (ZobristHashKey& key)
   {
     key.hashValue = hashValue;
-    key.eval = eval;
-    key.depthFlag = depth << 2 | int(flag);
+    key.pack(eval, depth, flag, bestMove);
   };
 
   size_t index = hashValue % TT_SIZE;
@@ -102,27 +101,55 @@ TranspositionTable::recordPosition
 
 int
 TranspositionTable::lookupPosition
-  (uint64_t hashValue, Depth depth, Score alpha, Score beta) const noexcept
+  (uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept
 {
-  const auto lookup = [&] (const ZobristHashKey &key)
+  const auto probe = [&] (const ZobristHashKey &key) -> int
   {
-    Flag flag = key.flag();
+    if (key.hashValue != hashValue)
+      return VALUE_UNKNOWN;
 
-    if (key.hashValue == hashValue and key.depth() > depth) {
-      if (flag == Flag::HASH_EXACT) return key.eval;
-      if (flag == Flag::HASH_ALPHA and key.eval <= alpha) return alpha;
-      if (flag == Flag::HASH_BETA  and key.eval >= beta ) return beta;
+    ttHit = true;
+
+    // Hash match — surface the stored move for ordering, even when the
+    // entry's depth is too shallow to produce a cutoff.
+    if (outMove == NULL_MOVE)
+      outMove = key.bestMove();
+
+    if (key.depth() > depth)
+    {
+      Flag flag = key.flag();
+      Score eval = key.eval();
+      if (flag == Flag::HASH_EXACT) return eval;
+      if (flag == Flag::HASH_ALPHA and eval <= alpha) return alpha;
+      if (flag == Flag::HASH_BETA  and eval >= beta ) return beta;
     }
 
-    return int(VALUE_UNKNOWN);
+    return VALUE_UNKNOWN;
   };
+
+  outMove = NULL_MOVE;
+  ttHit = false;
 
   size_t index = hashValue % TT_SIZE;
 
-  int res = lookup(ttPrimary[index]);
+  int res = probe(ttPrimary[index]);
   if (res != VALUE_UNKNOWN) return res;
 
-  return lookup(ttSecondary[index]);
+  return probe(ttSecondary[index]);
+}
+
+Move
+TranspositionTable::probeMove(uint64_t hashValue) const noexcept
+{
+  size_t index = hashValue % TT_SIZE;
+
+  if (ttPrimary[index].hashValue == hashValue)
+    return ttPrimary[index].bestMove();
+
+  if (ttSecondary[index].hashValue == hashValue)
+    return ttSecondary[index].bestMove();
+
+  return NULL_MOVE;
 }
 
 void
