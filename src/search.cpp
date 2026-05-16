@@ -44,6 +44,18 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   if (mTypes != MType::QUIET)
     std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
 
+  // Bad-capture demotion (improvements.md #1). On the dedicated CAPTURES
+  // stage the band is now SEE-sorted descending, so SEE<0 captures sit at
+  // the back. Pull `start` left past them — they stay in the array and get
+  // picked up by the QUIET-tail stage (which plays everything remaining),
+  // i.e. *after* killers/PV/checks. Search effort no longer gets spent on
+  // e.g. QxP-defended-by-pawn before any quiet move is tried.
+  if (mTypes == MType::CAPTURES)
+  {
+    while (start > prevS and seeScore(pos, movesArray[start - 1]) < 0)
+      --start;
+  }
+
   if (hasFlag(mTypes, MType::KILLER))
   {
     for (size_t i = start; i < movesArray.size(); i++) {
