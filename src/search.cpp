@@ -44,7 +44,7 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   if (mTypes != MType::QUIET)
     std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
 
-  // Bad-capture demotion (improvements.md #1). On the dedicated CAPTURES
+  // Bad-capture demotion. On the dedicated CAPTURES
   // stage the band is now SEE-sorted descending, so SEE<0 captures sit at
   // the back. Pull `start` left past them — they stay in the array and get
   // picked up by the QUIET-tail stage (which plays everything remaining),
