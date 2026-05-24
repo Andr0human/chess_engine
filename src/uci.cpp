@@ -7,6 +7,7 @@
 #include "single_thread.h"
 #include "tt.h"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -82,6 +83,43 @@ handlePosition(stringstream& ss)
   }
 }
 
+// Decide how long to search given the side-to-move's remaining clock and
+// increment (both in milliseconds). Faithful 1:1 port of the heuristic that
+// used to live on the Unity side (ChessEngine.DecideTimeForSearch): the GUI
+// now forwards the raw clock and the engine owns the time-management decision
+// — the correct UCI split. Returns the budget in seconds.
+double
+decideSearchTime(long long sideTimeMs, long long sideIncMs)
+{
+  const double timeLeft  = double(sideTimeMs) / 1000.0;  // seconds
+  const double increment = double(sideIncMs)  / 1000.0;  // seconds
+
+  // Estimate moves remaining from how much material is left: a full board
+  // (weight 7880) implies ~32 moves to go; as material comes off the estimate
+  // shrinks, so each remaining move gets a larger slice. Material weights
+  // match Unity's PositionWeight(): P100 N320 B300 R500 Q900.
+  const double maxMoves  = 32.0;
+  const double maxWeight = 7880.0;
+  const double currentWeight =
+      100.0 * g_board.count<PAWN>()   +
+      320.0 * g_board.count<KNIGHT>() +
+      300.0 * g_board.count<BISHOP>() +
+      500.0 * g_board.count<ROOK>()   +
+      900.0 * g_board.count<QUEEN>();
+
+  const double movesToGo =
+      maxMoves - (((maxWeight - currentWeight) / 400.0) * 1.3);
+
+  double searchTime = ((timeLeft + increment) / movesToGo) + (0.6 * increment);
+
+  // Never spend more than 62% of the remaining clock on one move.
+  searchTime = std::min(searchTime, 0.62 * timeLeft);
+
+  // Floor at 1 ms so the search always gets a sane positive budget
+  // (matches the Mathf.Max(1, ...) the Unity send site applied).
+  return std::max(searchTime, 0.001);
+}
+
 void
 handleGo(stringstream& ss)
 {
@@ -119,13 +157,14 @@ handleGo(stringstream& ss)
 
   if (moveTimeSec < 0)
   {
-    // Fall back to a wtime/btime based budget if present.
+    // No explicit movetime: derive a search budget from the side-to-move's
+    // clock (or fall back to the default if no clock was provided).
     long long sideTime = (g_board.color == WHITE) ? wtime : btime;
     long long sideInc  = (g_board.color == WHITE) ? winc  : binc;
-    if (sideTime > 0)
-      moveTimeSec = (double(sideTime) / 30.0 + double(sideInc)) / 1000.0;
-    else
-      moveTimeSec = double(DEFAULT_SEARCH_TIME);
+
+    moveTimeSec = (sideTime > 0)
+        ? decideSearchTime(sideTime, sideInc)
+        : double(DEFAULT_SEARCH_TIME);
   }
 
   // Run search; output goes to a discarded sink so iterative-deepening
