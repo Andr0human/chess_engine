@@ -7,6 +7,8 @@
 using std::abs;
 using std::min;
 
+EvalWeights evalWeights;
+
 static int
 distance(Square s, Square t)
 {
@@ -420,11 +422,11 @@ midGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   }
 
   float eval =
-      ed.materialWeight     * float(materialScore)
-    + ed.pieceTableWeight   * float(pieceTableScore)
-    + ed.mobilityWeight     * float(mobilityScore)
-    + ed.pawnStructureWeight * float(pawnStructure)
-    + ed.threatsWeight      * float(threatsScore);
+      evalWeights.materialWeightMg      * float(materialScore)
+    + evalWeights.pieceTableWeightMg    * float(pieceTableScore)
+    + evalWeights.mobilityWeightMg      * float(mobilityScore)
+    + evalWeights.pawnStructureWeightMg * float(pawnStructure)
+    + evalWeights.threatsWeightMg       * float(threatsScore);
 
   return Score(eval);
 }
@@ -565,10 +567,10 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
   }
 
   float eval =
-      ed.materialWeight     * float(materialScore)
-    + ed.pieceTableWeight   * float(pieceTableScore)
-    + 0.7f                  * float(pawnStructure)
-    + float(distanceScore);
+      evalWeights.materialWeightEg      * float(materialScore)
+    + evalWeights.pieceTableWeightEg    * float(pieceTableScore)
+    + evalWeights.pawnStructureWeightEg * float(pawnStructure)
+    + evalWeights.distanceWeightEg      * float(distanceScore);
 
   return Score(eval);
 }
@@ -646,3 +648,79 @@ template Score threats<true >(const ChessBoard& pos);
 
 template Score evaluate<false>(const ChessBoard& pos);
 template Score evaluate<true >(const ChessBoard& pos);
+
+
+EvalComponents
+extractEvalComponents(const ChessBoard& pos)
+{
+  EvalComponents ec;
+
+  EvalData ed = EvalData(pos);
+  float phase = ed.phase;
+  int pieceCount = pos.count<ALL>();
+
+  // Special endgames bypass the weighted eval entirely (see evaluate()): their score
+  // does not depend on the 9 weights, so they are not tunable.
+  if (pieceCount < 3)
+  {
+    if (pieceCount == 2
+    and pos.count<PAWN  >() == 1
+    and pos.count<BISHOP>() == 1
+    and pos.count<WHITE, ALL>() == 1)
+      return ec;  // bishopPawnEndgame, tunable = false
+  }
+
+  if ((pos.count<PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
+    return ec;  // loneKingEndGame, tunable = false
+
+  // Shared pawn-structure subtotal (white - black), computed once as in evaluate().
+  Score pawnStructure =
+      pawnStructureScore<WHITE>(pos, ed) - pawnStructureScore<BLACK>(pos, ed);
+  ed.pawnStructureScore = pawnStructure;
+
+  ec.tunable = true;
+  ec.phase   = phase;
+
+  // Midgame components — zeroed exactly when midGameScore early-returns (phase < 0.2).
+  if (!(phase < 0.2))
+  {
+    ec.matMg    = float(materialDiffereceMidGame(pos));
+    ec.ptMg     = float(pieceTableStrengthMidGame(pos));
+    ec.mobility = float(mobilityStrength(pos));
+    ec.pawnMg   = float(pawnStructure);
+    ec.threats  = float(threats<false>(pos));
+  }
+
+  // Endgame components — zeroed exactly when endGameScore early-returns (1 - phase < 0.2).
+  if (!((1 - phase) < 0.2))
+  {
+    ec.matEg    = float(materialDiffereceEndGame(pos));
+    ec.ptEg     = float(pieceTableStrengthEndGame(pos));
+    ec.pawnEg   = float(pawnStructure);
+    ec.distance = float(distanceBetweenKingsScore(pos));
+  }
+
+  return ec;
+}
+
+Score
+evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
+{
+  float mg =
+      w.materialWeightMg      * ec.matMg
+    + w.pieceTableWeightMg    * ec.ptMg
+    + w.mobilityWeightMg      * ec.mobility
+    + w.pawnStructureWeightMg * ec.pawnMg
+    + w.threatsWeightMg       * ec.threats;
+
+  float eg =
+      w.materialWeightEg      * ec.matEg
+    + w.pieceTableWeightEg    * ec.ptEg
+    + w.pawnStructureWeightEg * ec.pawnEg
+    + w.distanceWeightEg      * ec.distance;
+
+  // Match evaluate(): mg/eg are truncated to Score (int32) before the phase blend.
+  Score mgScore = Score(mg);
+  Score egScore = Score(eg);
+  return Score( ec.phase * float(mgScore) + (1 - ec.phase) * float(egScore) );
+}
