@@ -5,6 +5,7 @@
 #include "search.h"
 #include "single_thread.h"
 #include "test_positions.h"
+#include "tuner.h"
 
 void
 init(const vector<string>& args)
@@ -144,6 +145,9 @@ helper()
   
   puts("** For static evaluation of a position, type:\n");
   puts("** elsa static [fen <fen>]\n");
+
+  puts("** For tuning evaluation weights (Texel), type:\n");
+  puts("** elsa tune [data <path.epd>] [iters <n>]\n");
 
   puts("** Note: Commands and flags can be in any order\n");
   puts("         (e.g. 'elsa debug depth 3 fen <fen>' or 'elsa fen <fen> go')\n");
@@ -348,7 +352,8 @@ task(const vector<string>& args)
     {"movegen",  [](const auto& arguments){ debugMoveGenerator(arguments); }},
     {"static",   [](const auto& arguments){ staticEval(arguments); }},
     {"bestmove",  [](const auto& arguments){ bestMoveSearch(arguments); }},
-    {"readyOk",   [](const auto&){ readyOk(); }}
+    {"readyOk",   [](const auto&){ readyOk(); }},
+    {"tune",      [](const auto& arguments){ tuneEval(arguments); }}
   };
 
   // Search for any command in the args
