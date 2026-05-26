@@ -28,15 +28,6 @@ class EvalData
 	int boardWeight;
 	float phase;
 
-	Score pawnStructureScore;
-	Score threatScore;
-
-	constexpr static float materialWeight = 1.0f;
-	constexpr static float pieceTableWeight = 1.8f;
-	constexpr static float threatsWeight = 0.5f;
-	constexpr static float mobilityWeight = 1.2f;
-	constexpr static float pawnStructureWeight = 0.4f;
-
 	EvalData(const ChessBoard& pos)
 	{
 		materialCount<WHITE>(pos);
@@ -55,6 +46,26 @@ class EvalData
 	{ return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
+// Runtime-tunable evaluation blend weights (mg/eg split). Each weight scales a
+// per-component subtotal before the midgame/endgame scores are blended. A single
+// global instance is mutated in place by the Texel tuner between iterations (the
+// engine is single-threaded). Mobility and threats are midgame-only and king-distance
+// is endgame-only, matching how midGameScore/endGameScore use them.
+struct EvalWeights
+{
+	float materialWeightMg      = 1.0f;
+	float materialWeightEg      = 1.0f;
+	float pieceTableWeightMg    = 1.8f;
+	float pieceTableWeightEg    = 1.8f;
+	float pawnStructureWeightMg = 0.15f;
+	float pawnStructureWeightEg = 0.7f;
+	float mobilityWeightMg      = 2.2f;  // midgame-only
+	float threatsWeightMg       = 0.7f;  // midgame-only
+	float distanceWeightEg      = 1.0f;  // endgame-only king-distance term
+};
+
+extern EvalWeights evalWeights;
+
 template <bool debug=false>
 Score
 threats(const ChessBoard& pos);
@@ -62,6 +73,37 @@ threats(const ChessBoard& pos);
 template <bool debug=false>
 Score
 evaluate(const ChessBoard& pos);
+
+
+// White-relative per-component eval subtotals for one position, cached by the Texel
+// tuner so each iteration is pure arithmetic (no board/movegen). The blend is linear
+// in the weights given these subtotals + phase.
+//
+// Subtotals are already zeroed for the phase that early-returns in evaluate()
+// (mg when phase < 0.2, eg when 1 - phase < 0.2), so evalFromComponents() reproduces
+// evaluate<false>() (white-relative) exactly. `tunable` is false for special endgames
+// (loneKing / bishopPawn) which bypass the weighted eval — those must be skipped.
+struct EvalComponents
+{
+	bool  tunable = false;
+	float phase   = 0.0f;
+	// midgame components (zeroed when phase < 0.2)
+	float matMg = 0.0f, ptMg = 0.0f, pawnMg = 0.0f, mobility = 0.0f, threats = 0.0f;
+	// endgame components (zeroed when 1 - phase < 0.2); pawnEg is the endgame pawn-structure
+	// subtotal (passers / king-escort / safe-promote + doubled), distinct from the midgame
+	// pawnMg (doubled-pawn penalty only)
+	float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
+};
+
+// Extract the white-relative component subtotals for a position.
+EvalComponents
+extractEvalComponents(const ChessBoard& pos);
+
+// Reconstruct the white-relative static eval from cached components + weights.
+// Mirrors evaluate()'s arithmetic exactly, including the int truncation of the mg/eg
+// subscores before the phase blend.
+Score
+evalFromComponents(const EvalComponents& ec, const EvalWeights& w);
 
 
 #endif
