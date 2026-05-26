@@ -28,9 +28,6 @@ class EvalData
 	int boardWeight;
 	float phase;
 
-	Score pawnStructureScore;
-	Score threatScore;
-
 	EvalData(const ChessBoard& pos)
 	{
 		materialCount<WHITE>(pos);
@@ -60,10 +57,10 @@ struct EvalWeights
 	float materialWeightEg      = 1.0f;
 	float pieceTableWeightMg    = 1.8f;
 	float pieceTableWeightEg    = 1.8f;
-	float pawnStructureWeightMg = 0.4f;
+	float pawnStructureWeightMg = 0.15f;
 	float pawnStructureWeightEg = 0.7f;
-	float mobilityWeightMg      = 1.2f;  // midgame-only
-	float threatsWeightMg       = 0.5f;  // midgame-only
+	float mobilityWeightMg      = 2.2f;  // midgame-only
+	float threatsWeightMg       = 0.7f;  // midgame-only
 	float distanceWeightEg      = 1.0f;  // endgame-only king-distance term
 };
 
@@ -92,8 +89,9 @@ struct EvalComponents
 	float phase   = 0.0f;
 	// midgame components (zeroed when phase < 0.2)
 	float matMg = 0.0f, ptMg = 0.0f, pawnMg = 0.0f, mobility = 0.0f, threats = 0.0f;
-	// endgame components (zeroed when 1 - phase < 0.2); pawnEg is the same raw
-	// pawn-structure subtotal as pawnMg, kept separate for independent phase zeroing
+	// endgame components (zeroed when 1 - phase < 0.2); pawnEg is the endgame pawn-structure
+	// subtotal (passers / king-escort / safe-promote + doubled), distinct from the midgame
+	// pawnMg (doubled-pawn penalty only)
 	float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
 };
 

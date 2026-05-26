@@ -1,5 +1,8 @@
 
 #include <fstream>
+#include <sstream>
+#include <filesystem>
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <array>
@@ -259,7 +262,7 @@ coordinateDescent(const vector<TuneEntry>& data, double K, EvalWeights best, int
       step *= 0.5;  // resolution exhausted; refine
       cout << "  step " << std::fixed << std::setprecision(5) << step
            << "  mse " << std::setprecision(8) << bestMse
-           << "  (" << iter << " sweeps)\n";
+           << "  (" << iter << " sweeps)" << endl;
     }
   }
 
@@ -267,12 +270,62 @@ coordinateDescent(const vector<TuneEntry>& data, double K, EvalWeights best, int
 }
 
 void
-printWeights(const EvalWeights& w)
+printWeights(std::ostream& os, const EvalWeights& w)
 {
-  cout << std::fixed << std::setprecision(4);
+  os << std::fixed << std::setprecision(4);
   for (const auto& wr : WEIGHTS)
-    cout << "  " << std::left << std::setw(24) << wr.name
-         << std::right << (w.*wr.member) << '\n';
+    os << "  " << std::left << std::setw(24) << wr.name
+       << std::right << (w.*wr.member) << '\n';
+}
+
+// Loads one dataset, fits K, runs coordinate descent, and streams the report to stdout.
+// When reportPath is non-empty the same default/tuned-weight block is also written there.
+// Returns false if the dataset could not be loaded (so --all can skip to the next file).
+bool
+tuneDataset(const string& path, int maxIters, const string& reportPath)
+{
+  const perf_clock start = perf::now();
+  const vector<TuneEntry> data = loadDataset(path);
+  if (data.empty()) { cout << "No tunable positions loaded. Skipping " << path << ".\n"; return false; }
+  const perf_time buildTime = perf::now() - start;
+  cout << "Cache built in " << std::fixed << std::setprecision(2)
+       << buildTime.count() << " s.\n\n";
+
+  EvalWeights start_w = evalWeights;
+  const double K = fitK(data, start_w);
+  const double mseBefore = meanSquaredError(data, K, start_w);
+  cout << "Fitted K = " << std::setprecision(4) << K
+       << "   MSE (defaults) = " << std::setprecision(8) << mseBefore << "\n\n";
+
+  cout << "Coordinate descent:\n";
+  const EvalWeights tuned = coordinateDescent(data, K, start_w, maxIters);
+  const double mseAfter = meanSquaredError(data, K, tuned);
+
+  // Build the result block once, then send it to stdout and (optionally) the report file.
+  std::ostringstream report;
+  report << "Dataset: " << path << '\n'
+         << "Fitted K = " << std::fixed << std::setprecision(4) << K << '\n'
+         << "MSE before = " << std::setprecision(8) << mseBefore
+         << "   MSE after = " << mseAfter
+         << "   (" << std::setprecision(4)
+         << 100.0 * (mseBefore - mseAfter) / mseBefore << "% lower)\n\n"
+         << "Default weights:\n";
+  printWeights(report, start_w);
+  report << "Tuned weights:\n";
+  printWeights(report, tuned);
+
+  cout << '\n' << report.str();
+
+  if (!reportPath.empty())
+  {
+    std::ofstream f(reportPath);
+    if (f) { f << report.str(); cout << "  -> wrote " << reportPath << '\n'; }
+    else   { cout << "  ! could not write " << reportPath << '\n'; }
+  }
+
+  cout << "\nThese are NOT applied automatically — paste the values into EvalWeights "
+          "defaults if arena-validated.\n";
+  return true;
 }
 
 }  // namespace
@@ -289,40 +342,58 @@ tuneEval(const vector<string>& args)
     return;
   }
 
-  const string dataPath = utils::argValue(args, "data");
-  if (dataPath.empty())
-  {
-    cout << "No dataset given (use: elsa tune data <path.epd>). Self-check only.\n";
-    return;
-  }
-
   const int maxIters = utils::hasArg(args, "iters")
                      ? std::stoi(utils::argValue(args, "iters")) : 10000;
 
-  const perf_clock start = perf::now();
-  const vector<TuneEntry> data = loadDataset(dataPath);
-  if (data.empty()) { cout << "No tunable positions loaded. Aborting.\n"; return; }
-  const perf_time buildTime = perf::now() - start;
-  cout << "Cache built in " << std::fixed << std::setprecision(2)
-       << buildTime.count() << " s.\n\n";
+  // --all: tune every *.epd in the dataset directory in turn, writing each result to
+  // its own tune_<stem>.txt alongside the stdout report. Directory defaults to the
+  // texel_dataset folder (relative to the usual output/ working dir); override with
+  // `dir <path>`.
+  if (utils::hasArg(args, "--all") || utils::hasArg(args, "all"))
+  {
+    namespace fs = std::filesystem;
+    const string dirArg = utils::argValue(args, "dir");
+    const fs::path dir = dirArg.empty() ? fs::path("../Utility/texel_dataset") : fs::path(dirArg);
 
-  EvalWeights start_w = evalWeights;
-  const double K = fitK(data, start_w);
-  const double mseBefore = meanSquaredError(data, K, start_w);
-  cout << "Fitted K = " << std::setprecision(4) << K
-       << "   MSE (defaults) = " << std::setprecision(8) << mseBefore << "\n\n";
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec))
+    {
+      cout << "Dataset directory not found: " << dir.string()
+           << " (override with: elsa tune --all dir <path>)\n";
+      return;
+    }
 
-  cout << "Coordinate descent:\n";
-  const EvalWeights tuned = coordinateDescent(data, K, start_w, maxIters);
-  const double mseAfter = meanSquaredError(data, K, tuned);
+    vector<fs::path> datasets;
+    for (const auto& entry : fs::directory_iterator(dir))
+      if (entry.is_regular_file() && entry.path().extension() == ".epd")
+        datasets.push_back(entry.path());
+    std::sort(datasets.begin(), datasets.end());
 
-  cout << "\nMSE before = " << std::setprecision(8) << mseBefore
-       << "   MSE after = " << mseAfter
-       << "   (" << std::setprecision(4)
-       << 100.0 * (mseBefore - mseAfter) / mseBefore << "% lower)\n\n";
+    if (datasets.empty()) { cout << "No .epd files in " << dir.string() << '\n'; return; }
 
-  cout << "Default weights:\n"; printWeights(start_w);
-  cout << "Tuned weights:\n";   printWeights(tuned);
-  cout << "\nThese are NOT applied automatically — paste the values into EvalWeights "
-          "defaults if arena-validated.\n";
+    cout << "Tuning across " << datasets.size() << " dataset(s) in " << dir.string() << ":\n";
+    for (const auto& p : datasets) cout << "  - " << p.filename().string() << '\n';
+
+    size_t idx = 0;
+    for (const auto& p : datasets)
+    {
+      ++idx;
+      cout << "\n================ [" << idx << '/' << datasets.size() << "] "
+           << p.filename().string() << " ================\n";
+      const string reportPath = "tune_" + p.stem().string() + ".txt";
+      tuneDataset(p.string(), maxIters, reportPath);
+    }
+    cout << "\nAll datasets done.\n";
+    return;
+  }
+
+  const string dataPath = utils::argValue(args, "data");
+  if (dataPath.empty())
+  {
+    cout << "No dataset given (use: elsa tune data <path.epd>, or elsa tune --all). "
+            "Self-check only.\n";
+    return;
+  }
+
+  tuneDataset(dataPath, maxIters, "");
 }

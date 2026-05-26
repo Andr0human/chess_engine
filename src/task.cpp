@@ -148,6 +148,7 @@ helper()
 
   puts("** For tuning evaluation weights (Texel), type:\n");
   puts("** elsa tune [data <path.epd>] [iters <n>]\n");
+  puts("** elsa tune --all [dir <folder>] [iters <n>]   (tune every .epd in folder)\n");
 
   puts("** Note: Commands and flags can be in any order\n");
   puts("         (e.g. 'elsa debug depth 3 fen <fen>' or 'elsa fen <fen> go')\n");
