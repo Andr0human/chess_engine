@@ -66,6 +66,8 @@ For benchmarking, debugging, and scripted use, Elsa also exposes a CLI. Argument
 - `elsa count [fen <fen>] [depth <d>]` — perft node count with timing
 - `elsa movegen [fen <fen>] [depth <d>] [output <file>]` — dump per-root-move perft breakdown
 - `elsa static [fen <fen>]` — print ordered moves and static evaluation
+- `elsa tune [data <path.epd>] [iters <n>]` — Texel-tune the evaluation blend weights against a labeled EPD set
+- `elsa tune --all [dir <folder>] [iters <n>]` — run the tuner across every `.epd` file in a folder
 - `elsa readyOk` — quick smoke test (perft 3 from startpos = 8902)
 
 ### Example
