@@ -312,15 +312,31 @@ addMobilityScore(const ChessBoard& pos)
   return popCount(squares);
 }
 
-static Score
-mobilityStrength(const ChessBoard& pos)
+// White-relative per-piece-type mobility subtotals (raw popcount diffs, no per-piece
+// scaling — the EvalWeights scalars do that). Used by both the live eval and the
+// Texel cache so the two stay in lockstep.
+struct MobilityDiffs
 {
-  Score bishops = addMobilityScore<WHITE, BISHOP>(pos) - addMobilityScore<BLACK, BISHOP>(pos);
-  Score knights = addMobilityScore<WHITE, KNIGHT>(pos) - addMobilityScore<BLACK, KNIGHT>(pos);
-  Score rooks   = addMobilityScore<WHITE, ROOK  >(pos) - addMobilityScore<BLACK, ROOK  >(pos);
-  Score queens  = addMobilityScore<WHITE, QUEEN >(pos) - addMobilityScore<BLACK, QUEEN >(pos);
+  float bishop, knight, rook, queen;
 
-  return bishops + (2 * knights) + rooks + queens;
+  float weighted(const EvalWeights& w) const
+  {
+    return w.mobBishopWeightMg * bishop
+         + w.mobKnightWeightMg * knight
+         + w.mobRookWeightMg   * rook
+         + w.mobQueenWeightMg  * queen;
+  }
+};
+
+static MobilityDiffs
+mobilityDiffs(const ChessBoard& pos)
+{
+  return {
+    float(addMobilityScore<WHITE, BISHOP>(pos) - addMobilityScore<BLACK, BISHOP>(pos)),
+    float(addMobilityScore<WHITE, KNIGHT>(pos) - addMobilityScore<BLACK, KNIGHT>(pos)),
+    float(addMobilityScore<WHITE, ROOK  >(pos) - addMobilityScore<BLACK, ROOK  >(pos)),
+    float(addMobilityScore<WHITE, QUEEN >(pos) - addMobilityScore<BLACK, QUEEN >(pos)),
+  };
 }
 
 template <Color cMy>
@@ -369,14 +385,11 @@ pawnStructureScoreMidgame(const ChessBoard& pos)
 
 template<bool debug>
 static Score
-midGameScore(const ChessBoard& pos, float phase)
+midGameScore(const ChessBoard& pos, float /*phase*/)
 {
-  if (phase < 0.2)
-    return 0;
-
   Score materialScore   = materialDiffereceMidGame(pos);
   Score pieceTableScore = pieceTableStrengthMidGame(pos);
-  Score mobilityScore   = mobilityStrength(pos);
+  MobilityDiffs mob     = mobilityDiffs(pos);
   Score pawnStructure   = pawnStructureScoreMidgame<WHITE>(pos)
                         - pawnStructureScoreMidgame<BLACK>(pos);
   Score threatsScore    = threats<debug>(pos);
@@ -386,7 +399,10 @@ midGameScore(const ChessBoard& pos, float phase)
     cout << "-------------------- MIDGAME --------------------\n"
       << "\nmaterialScore   = " << materialScore
       << "\npieceTableScore = " << pieceTableScore
-      << "\nmobilityScore   = " << mobilityScore
+      << "\nmobBishop       = " << mob.bishop
+      << "\nmobKnight       = " << mob.knight
+      << "\nmobRook         = " << mob.rook
+      << "\nmobQueen        = " << mob.queen
       << "\npawnStructure   = " << pawnStructure
       << "\nthreatsScore    = " << threatsScore
       << "\n-------------------------------------------------" << endl;
@@ -395,7 +411,7 @@ midGameScore(const ChessBoard& pos, float phase)
   float eval =
       evalWeights.materialWeightMg      * float(materialScore)
     + evalWeights.pieceTableWeightMg    * float(pieceTableScore)
-    + evalWeights.mobilityWeightMg      * float(mobilityScore)
+    + mob.weighted(evalWeights)
     + evalWeights.pawnStructureWeightMg * float(pawnStructure)
     + evalWeights.threatsWeightMg       * float(threatsScore);
 
@@ -558,15 +574,12 @@ pawnStructureScoreEndgame(const ChessBoard& pos, const EvalData& ed)
 
 template<bool debug>
 static Score
-endGameScore(const ChessBoard& pos, const EvalData& ed, float phase)
+endGameScore(const ChessBoard& pos, const EvalData& ed, float /*phase*/)
 {
   // Distance between kings
   // King in corners
   // BN endgames
   // Rule of Square (2n1k1r1/p7/3B1Rp1/2P2pKp/8/4P1P1/5P1P/8 w - - 17 45)
-
-  if (phase < 0.2)
-    return 0;
 
   Score materialScore   = materialDiffereceEndGame(pos);
   Score pieceTableScore = pieceTableStrengthEndGame(pos);
@@ -683,26 +696,23 @@ extractEvalComponents(const ChessBoard& pos)
   ec.tunable = true;
   ec.phase   = phase;
 
-  // Midgame components — zeroed exactly when midGameScore early-returns (phase < 0.2).
-  if (!(phase < 0.2))
-  {
-    ec.matMg    = float(materialDiffereceMidGame(pos));
-    ec.ptMg     = float(pieceTableStrengthMidGame(pos));
-    ec.mobility = float(mobilityStrength(pos));
-    ec.pawnMg   = float(pawnStructureScoreMidgame<WHITE>(pos)
-                - pawnStructureScoreMidgame<BLACK>(pos));
-    ec.threats  = float(threats<false>(pos));
-  }
+  MobilityDiffs mob = mobilityDiffs(pos);
 
-  // Endgame components — zeroed exactly when endGameScore early-returns (1 - phase < 0.2).
-  if (!((1 - phase) < 0.2))
-  {
-    ec.matEg    = float(materialDiffereceEndGame(pos));
-    ec.ptEg     = float(pieceTableStrengthEndGame(pos));
-    ec.pawnEg   = float(pawnStructureScoreEndgame<WHITE>(pos, ed)
-                - pawnStructureScoreEndgame<BLACK>(pos, ed));
-    ec.distance = float(distanceBetweenKingsScore(pos));
-  }
+  ec.matMg     = float(materialDiffereceMidGame(pos));
+  ec.ptMg      = float(pieceTableStrengthMidGame(pos));
+  ec.mobBishop = mob.bishop;
+  ec.mobKnight = mob.knight;
+  ec.mobRook   = mob.rook;
+  ec.mobQueen  = mob.queen;
+  ec.pawnMg    = float(pawnStructureScoreMidgame<WHITE>(pos)
+               - pawnStructureScoreMidgame<BLACK>(pos));
+  ec.threats   = float(threats<false>(pos));
+
+  ec.matEg    = float(materialDiffereceEndGame(pos));
+  ec.ptEg     = float(pieceTableStrengthEndGame(pos));
+  ec.pawnEg   = float(pawnStructureScoreEndgame<WHITE>(pos, ed)
+              - pawnStructureScoreEndgame<BLACK>(pos, ed));
+  ec.distance = float(distanceBetweenKingsScore(pos));
 
   return ec;
 }
@@ -710,10 +720,12 @@ extractEvalComponents(const ChessBoard& pos)
 Score
 evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
 {
+  const MobilityDiffs mob{ec.mobBishop, ec.mobKnight, ec.mobRook, ec.mobQueen};
+
   float mg =
       w.materialWeightMg      * ec.matMg
     + w.pieceTableWeightMg    * ec.ptMg
-    + w.mobilityWeightMg      * ec.mobility
+    + mob.weighted(w)
     + w.pawnStructureWeightMg * ec.pawnMg
     + w.threatsWeightMg       * ec.threats;
 

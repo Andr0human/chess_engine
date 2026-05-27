@@ -206,17 +206,20 @@ fitK(const vector<TuneEntry>& data, const EvalWeights& w)
   return (lo + hi) / 2.0;
 }
 
-// The 9 tunable weights, exposed as named handles into a weight set for coordinate descent.
+// The 12 tunable weights, exposed as named handles into a weight set for coordinate descent.
 struct WeightRef { const char* name; float EvalWeights::* member; };
 
-static const std::array<WeightRef, 9> WEIGHTS = {{
+static const std::array<WeightRef, 12> WEIGHTS = {{
   {"materialWeightMg",      &EvalWeights::materialWeightMg},
   {"materialWeightEg",      &EvalWeights::materialWeightEg},
   {"pieceTableWeightMg",    &EvalWeights::pieceTableWeightMg},
   {"pieceTableWeightEg",    &EvalWeights::pieceTableWeightEg},
   {"pawnStructureWeightMg", &EvalWeights::pawnStructureWeightMg},
   {"pawnStructureWeightEg", &EvalWeights::pawnStructureWeightEg},
-  {"mobilityWeightMg",      &EvalWeights::mobilityWeightMg},
+  {"mobBishopWeightMg",     &EvalWeights::mobBishopWeightMg},
+  {"mobKnightWeightMg",     &EvalWeights::mobKnightWeightMg},
+  {"mobRookWeightMg",       &EvalWeights::mobRookWeightMg},
+  {"mobQueenWeightMg",      &EvalWeights::mobQueenWeightMg},
   {"threatsWeightMg",       &EvalWeights::threatsWeightMg},
   {"distanceWeightEg",      &EvalWeights::distanceWeightEg}
 }};
