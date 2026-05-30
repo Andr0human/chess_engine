@@ -7,18 +7,6 @@ using std::to_string;
 
 TranspositionTable tt;
 
-//* TODO xorshift for Random HashKey Generation
-uint64_t
-xorshift64star(void)
-{
-  /* initial seed must be nonzero, don't use a static variable for the state if multithreaded */
-  static uint64_t x = 1237;
-  x ^= x >> 12;
-  x ^= x << 25;
-  x ^= x >> 27;
-  return x * 0x2545F4914F6CDD1DULL;
-}
-
 void
 TranspositionTable::getRandomKeys() noexcept
 {
