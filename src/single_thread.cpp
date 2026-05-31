@@ -278,7 +278,7 @@ playAllMoves(
 }
 
 Score
-alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
+alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull)
 {
   if (info.timeOver())
     return TIMEOUT;
@@ -325,6 +325,38 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
     return VALUE_DRAW;
+
+  // --- Null-move pruning (NMP) ---
+  // Hand the opponent a free tempo and search their reply at reduced depth
+  // with a null window around beta. If they still can't pull our score below
+  // beta, a real move almost certainly fails high too — so prune. Uses the
+  // pre-extension depth and the already-populated myMoves.checkers.
+  if constexpr (USE_NMP)
+  {
+    if (doNull
+        and myMoves.checkers == 0                 // never null out of check
+        and depth >= NMP_MIN_DEPTH                 // too shallow to be worth it
+        and !isMateScore(beta)                     // don't manufacture false mates
+        and pos.hasNonPawnMaterial(pos.color))     // zugzwang guard
+    {
+      const int R = nullReduction(depth);
+      const int rawNullDepth = depth - 1 - R;
+      const Depth nullDepth = static_cast<Depth>(rawNullDepth > 0 ? rawNullDepth : 0);
+      const int pvNextIndex = pvIndex + MAX_PLY - ply;
+
+      pos.makeNullMove();
+      Score nullScore = -alphaBeta(pos, nullDepth, -beta, -beta + 1,
+                                   ply + 1, pvNextIndex, numExtensions,
+                                   /*doNull=*/false);
+      pos.unmakeNullMove();
+
+      if (info.timeOver())
+        return TIMEOUT;
+
+      if (nullScore >= beta)
+        return isMateScore(nullScore) ? beta : nullScore;
+    }
+  }
 
   if constexpr (USE_EXTENSIONS) {
     int extensions = searchExtension(pos, myMoves, numExtensions, depth);

@@ -20,6 +20,15 @@ clearKillers();
 Score
 checkmateScore(Ply ply);
 
+// True when a score lies in the mate range (mate-in-N is encoded as
+// VALUE_MATE - 20*ply, so anything within MAX_PLY of VALUE_MATE is a mate).
+bool
+isMateScore(Score score);
+
+// Null-move search depth reduction for the given remaining depth.
+int
+nullReduction(Depth depth);
+
 template <MType mt>
 inline bool
 is_type(Move m)

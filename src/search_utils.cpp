@@ -28,6 +28,14 @@ checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }
 
 bool
+isMateScore(Score score)
+{ return __abs(score) >= int(VALUE_MATE) - int(MAX_PLY); }
+
+int
+nullReduction(Depth depth)
+{ return 3 + depth / 4; }
+
+bool
 lmrOk(Move move, Depth depth, size_t moveNo)
 {
   if ((depth < 2) or (moveNo < LMR_LIMIT) or interestingMove(move))
