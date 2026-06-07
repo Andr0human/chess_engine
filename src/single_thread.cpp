@@ -37,6 +37,12 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (info.timeOver())
     return TIMEOUT;
 
+  // Terminate the PV here before any early return. Otherwise a no-capture
+  // node leaves this slot holding a stale entry from a sibling line, which
+  // addResult() copies whenever it is coincidentally legal in the new line —
+  // rendering phantom captures in the printed PV (e.g. "Kd4 (Kxe7)").
+  pvArray[pvIndex] = NULL_MOVE;
+
   const MoveList myMoves = generateMoves(pos);
 
   if (!myMoves.anyMove())
@@ -68,7 +74,6 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if constexpr (USE_MOVE_ORDER)
     orderMoves(pos, movesArray, MType::CAPTURES, 0);
 
-  pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
   const size_t LMP_THRESHOLD = movesArray.size() < 4 ? 1 : 3;
