@@ -372,9 +372,6 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 Score
 rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 {
-  perf_clock startTime;
-  perf_ns_time duration;
-
   int ply{0}, pvIndex{0};
 
   MoveArray myMoves = info.getMoves();
@@ -386,11 +383,9 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
     Move move = myMoves[moveNo];
-    startTime = perf::now();
 
     Score eval = playMove<rootReduction>(pos, move, moveNo, ns);
 
-    duration = perf::now() - startTime;
     info.insertMoveToList(moveNo);
 
     if (info.timeOver())
@@ -481,7 +476,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     if (withinValWindow and (__abs(eval) >= VALUE_INF - 500)) break;
 
     // Sort Moves according to time it took to explore the move.
-    info.sortMovesOnTime(pvArray[0]);
+    info.sortMovesOnNodes(pvArray[0]);
   }
 
   info.searchCompleted();

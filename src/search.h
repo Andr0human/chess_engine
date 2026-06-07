@@ -112,8 +112,8 @@ class SearchData
   // Stores the <best_move, eval> for each depth during search.
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
-  // Stores <move, time> for each move in each iteration.
-  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_MOVES> moveTimes;
+  // Stores <move, <nodes, qNodes>> searched for each move in each iteration.
+  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_MOVES> moveNodes;
 
   string
   ReadablePvLine(ChessBoard board) const noexcept
@@ -155,7 +155,7 @@ class SearchData
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 
     for (const Move move : movesArray)
-      moveTimes.add(make_pair(move, make_pair(0, 0)));
+      moveNodes.add(make_pair(move, make_pair(0, 0)));
   }
 
   bool
@@ -225,9 +225,9 @@ class SearchData
   totalNodes() const noexcept
   {
     return std::accumulate(
-      moveTimes.begin(), moveTimes.end(), Nodes(0),
-      [](Nodes sum, const pair<Move, pair<Nodes, Nodes>>& moveTime) {
-        return sum + moveTime.second.first;
+      moveNodes.begin(), moveNodes.end(), Nodes(0),
+      [](Nodes sum, const pair<Move, pair<Nodes, Nodes>>& entry) {
+        return sum + entry.second.first;
       }
     );
   }
@@ -236,9 +236,9 @@ class SearchData
   totalQNodes() const noexcept
   {
     return std::accumulate(
-      moveTimes.begin(), moveTimes.end(), Nodes(0),
-      [](uint64_t sum, const pair<Move, pair<Nodes, Nodes>>& moveTime) {
-        return sum + moveTime.second.second;
+      moveNodes.begin(), moveNodes.end(), Nodes(0),
+      [](uint64_t sum, const pair<Move, pair<Nodes, Nodes>>& entry) {
+        return sum + entry.second.second;
       }
     );
   }
@@ -273,19 +273,22 @@ class SearchData
            << " | " << "PV" << "\n";
   }
 
+  // Reorder root moves for the next iteration: keep the PV move first, then
+  // order the rest by descending subtree size (2*nodes + qNodes) so the
+  // hardest-to-resolve moves are searched earliest.
   void
-  sortMovesOnTime(Move bestMove)
+  sortMovesOnNodes(Move bestMove)
   {
-    for (size_t i = 0; i < moveTimes.size(); i++)
+    for (size_t i = 0; i < moveNodes.size(); i++)
     {
-      if (filter(bestMove) == filter(moveTimes[i].first))
+      if (filter(bestMove) == filter(moveNodes[i].first))
       {
-        std::swap(moveTimes[i], moveTimes[0]);
+        std::swap(moveNodes[i], moveNodes[0]);
         break;
       }
     }
 
-    std::sort(moveTimes.begin() + 1, moveTimes.end(), [](const auto &a, const auto &b) {
+    std::sort(moveNodes.begin() + 1, moveNodes.end(), [](const auto &a, const auto &b) {
       Nodes n1 = 2 * a.second.first + a.second.second;
       Nodes n2 = 2 * b.second.first + b.second.second;
       return n1 > n2;
@@ -301,19 +304,19 @@ class SearchData
          << " | " << setw( 8) << "Nodes"
          << " | " << setw(10) << "QNodes |\n";
     int moveNo = 1;
-    for (const auto& [move, tm] : moveTimes)
+    for (const auto& [move, nc] : moveNodes)
     {
       cout << " | " << setw(6) << fixed << moveNo++
            << " | " << setw(5) << fixed << printMove(move, pos)
-           << " | " << setw(8) << fixed << tm.first
-           << " | " << setw(7) << fixed << tm.second << " |\n";
+           << " | " << setw(8) << fixed << nc.first
+           << " | " << setw(7) << fixed << nc.second << " |\n";
     }
   }
 
   void
   insertMoveToList(size_t moveNo)
   {
-    moveTimes[moveNo].second = make_pair(nodes, qNodes);
+    moveNodes[moveNo].second = make_pair(nodes, qNodes);
     resetNodeCount();
   }
 
@@ -322,7 +325,7 @@ class SearchData
   {
     MoveArray movesArray;
 
-    for (const auto& moveTime : moveTimes)
+    for (const auto& moveTime : moveNodes)
       movesArray.add(moveTime.first);
 
     return movesArray;
