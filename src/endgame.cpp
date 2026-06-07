@@ -153,6 +153,30 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
       ((pos.color == side) and !(emyKing & Rank18))
     ) return true;
 
+  // Defender-king blockade draw: the defending king sits exactly two squares
+  // directly in front of the pawn (same file) and it is the attacker's move.
+  //   - attacker king one rank behind the pawn (d3/e3/f3 for a pawn on e4):
+  //     always a draw (defender holds the opposition / stalemate resource).
+  //   - attacker king beside the pawn (d4/f4): a draw unless the defender is
+  //     forced onto a non-rook-file promotion square, which is the only winning
+  //     break; on the a/h file that square is still the rook-pawn corner draw.
+  // Complements the blocks above which cover this geometry with the defender to move.
+  if ((side2move == side) and (emyKingSq == pawnSq + 16 * incFactor))
+  {
+    const int pawnF    = pawnSq   & 7;
+    const int myKingF  = myKingSq & 7;
+    const int fileDist = abs(myKingF - pawnF);
+
+    const bool behindKing = (myKingR == pawnR - incFactor) and (fileDist <= 1);
+    const bool besideKing = (myKingR == pawnR)             and (fileDist == 1);
+
+    if (behindKing)
+      return true;
+
+    if (besideKing and (!(emyKing & Rank18) or (emyKing & FileAH)))
+      return true;
+  }
+
   return false;
 }
 
