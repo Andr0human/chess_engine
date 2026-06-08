@@ -59,7 +59,6 @@ enum Search
   MAX_DEPTH = 36,
   LMR_LIMIT = 4,
   EXTENSION_LIMIT = 8,
-  VAL_WINDOW = 16,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   MAX_THREADS = 12,
@@ -121,20 +120,8 @@ enum Board: Bitboard
   WhiteSquares = 0x55AA55AA55AA55AA,
   BlackSquares = AllSquares ^ WhiteSquares,
 
-  QueenSide = FileA | FileB | FileC | FileD,
-  KingSide  = FileE | FileF | FileG | FileH,
-  WhiteSide = Rank1 | Rank2 | Rank3 | Rank4,
-  BlackSide = Rank5 | Rank6 | Rank7 | Rank8,
-
   RightAttkingPawns = AllSquares ^ (Rank18 | FileH),
   LeftAttkingPawns  = AllSquares ^ (Rank18 | FileA),
-
-  CentralSquare = (Rank4 | Rank5) & (FileD | FileE),
-  SemiCentralSquare = (Rank3 | Rank4 | Rank5 | Rank6) & (FileC | FileD | FileE | FileF),
-  OuterSquare = AllSquares ^ SemiCentralSquare,
-
-  WhiteColorCorner = 0xF07030180C0E0F0,
-  BlackColorCorner = 0xF0E0C0800103070F,
 };
 
 enum Square: int8_t
