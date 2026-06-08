@@ -13,6 +13,11 @@ init(const vector<string>& args)
   perf_clock start = perf::now();
   plt::init();
 
+  // Zobrist keys must always be seeded — hashValue (and therefore repetition
+  // detection) depends on them even when the TT is disabled. Allocating the
+  // table itself stays gated behind USE_TT (resize() re-seeds, harmlessly).
+  tt.getRandomKeys();
+
   if constexpr (USE_TT) {
     tt.resize(0);
   }

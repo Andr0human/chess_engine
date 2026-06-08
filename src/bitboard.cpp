@@ -196,10 +196,8 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
   board[ip] = NO_PIECE;
   board[fp] = ipt;
 
-  if constexpr (USE_TT) {
-    if (ep != SQUARE_NB)
-      hashValue ^= tt.hashKey(ep + 1);
-  }
+  if (ep != SQUARE_NB)
+    hashValue ^= tt.hashKey(ep + 1);
 
   // Reset the en-passant state
   csep = (csep & 1920) ^ SQUARE_NB;
@@ -230,10 +228,8 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
     int filter = 2047 ^ (384 << (color * 2));
     csep &= filter;
 
-    if constexpr (USE_TT) {
-      hashValue ^= tt.hashKey((oldCsep >> 7) + 66);
-      hashValue ^= tt.hashKey((csep >> 7) + 66);
-    }
+    hashValue ^= tt.hashKey((oldCsep >> 7) + 66);
+    hashValue ^= tt.hashKey((csep >> 7) + 66);
 
     if (isCastling(ip, fp))
       return makeMoveCastling<true>(ip, fp);
@@ -247,9 +243,7 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
     pieceBb[(fpt & 8) + ALL] ^= fPos;
     boardWeight -= pieceValues[ft - 1];
 
-    if constexpr (USE_TT) {
-      hashValue ^= tt.hashKeyUpdate(fpt, fp);
-    }
+    hashValue ^= tt.hashKeyUpdate(fpt, fp);
   }
 
   pieceBb[ipt] ^= iPos ^ fPos;
@@ -258,11 +252,9 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
   // Flip the sides.
   color = ~color;
 
-  if constexpr (USE_TT) {
-    hashValue ^= tt.hashKeyUpdate(ipt, ip)
-               ^ tt.hashKeyUpdate(ipt, fp)
-               ^ tt.hashKey(0);
-  }
+  hashValue ^= tt.hashKeyUpdate(ipt, ip)
+             ^ tt.hashKeyUpdate(ipt, fp)
+             ^ tt.hashKey(0);
 }
 
 
@@ -279,10 +271,8 @@ ChessBoard::makeMoveCastleCheck(PieceType piece, Square sq) noexcept
     int z = y + (y < 7 ? 9 : 0);
     csep &= 2047 ^ (1 << z);
 
-    if constexpr (USE_TT) {
-      hashValue ^= tt.hashKey((oldCsep >> 7) + 66);
-      hashValue ^= tt.hashKey((csep >> 7) + 66);
-    }
+    hashValue ^= tt.hashKey((oldCsep >> 7) + 66);
+    hashValue ^= tt.hashKey((csep >> 7) + 66);
   }
 }
 
@@ -295,13 +285,11 @@ ChessBoard::makeMoveDoublePawnPush(Square ip, Square fp) noexcept
   pieceBb[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
   pieceBb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
-  if constexpr (USE_TT) {
-    // Add current enpassant-state to hash_value
-    hashValue ^= tt.hashKey(1 + enPassantSquare());
-    hashValue ^= tt.hashKeyUpdate(own + 1, ip)
-               ^ tt.hashKeyUpdate(own + 1, fp)
-               ^ tt.hashKey(0);
-  }
+  // Add current enpassant-state to hash_value
+  hashValue ^= tt.hashKey(1 + enPassantSquare());
+  hashValue ^= tt.hashKeyUpdate(own + 1, ip)
+             ^ tt.hashKeyUpdate(own + 1, fp)
+             ^ tt.hashKey(0);
 
   color = ~color;
 }
@@ -327,12 +315,10 @@ ChessBoard::makeMoveEnpassant(Square ip, Square ep) noexcept
 
   color = ~color;
 
-  if constexpr (USE_TT) {
-    hashValue ^= tt.hashKeyUpdate(emy + PAWN, capPawnFp);
-    hashValue ^= tt.hashKeyUpdate(own + PAWN, ip)
-               ^ tt.hashKeyUpdate(own + PAWN, ep)
-               ^ tt.hashKey(0);
-  }
+  hashValue ^= tt.hashKeyUpdate(emy + PAWN, capPawnFp);
+  hashValue ^= tt.hashKeyUpdate(own + PAWN, ip)
+             ^ tt.hashKeyUpdate(own + PAWN, ep)
+             ^ tt.hashKey(0);
 }
 
 void
@@ -364,18 +350,14 @@ ChessBoard::makeMovePawnPromotion(Move move) noexcept
     pieceCt[emy + ALL]--;
     boardWeight -= pieceValues[cpt - 1];
 
-    if constexpr (USE_TT) {
-      hashValue ^= tt.hashKeyUpdate(emy + cpt, fp);
-    }
+    hashValue ^= tt.hashKeyUpdate(emy + cpt, fp);
   }
 
   color = ~color;
 
-  if constexpr (USE_TT) {
-    hashValue ^= tt.hashKeyUpdate(own + 1, ip);
-    hashValue ^= tt.hashKeyUpdate(own + newPt, fp);
-    hashValue ^= tt.hashKey(0);
-  }
+  hashValue ^= tt.hashKeyUpdate(own + 1, ip);
+  hashValue ^= tt.hashKeyUpdate(own + newPt, fp);
+  hashValue ^= tt.hashKey(0);
 }
 
 template <bool makeMoveCall>
@@ -408,13 +390,11 @@ void ChessBoard::makeMoveCastling(Square ip, Square fp) noexcept
     pieceBb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
     color = ~color;
 
-    if constexpr (USE_TT) {
-      int p1 = lsbIndex(rooksIndexes);
-      int p2 = msbIndex(rooksIndexes);
-      hashValue ^= tt.hashKeyUpdate(own + 6, ip) ^ tt.hashKeyUpdate(own + 6, fp);
-      hashValue ^= tt.hashKeyUpdate(own + 4, p1) ^ tt.hashKeyUpdate(own + 4, p2);
-      hashValue ^= tt.hashKey(0);
-    }
+    int p1 = lsbIndex(rooksIndexes);
+    int p2 = msbIndex(rooksIndexes);
+    hashValue ^= tt.hashKeyUpdate(own + 6, ip) ^ tt.hashKeyUpdate(own + 6, fp);
+    hashValue ^= tt.hashKeyUpdate(own + 4, p1) ^ tt.hashKeyUpdate(own + 4, p2);
+    hashValue ^= tt.hashKey(0);
   }
 }
 
@@ -539,29 +519,27 @@ ChessBoard::generateHashkey() const
 {
   Key key = 0;
 
-  if constexpr (USE_TT) {
-    int castleOffset = 66;
+  int castleOffset = 66;
 
-    if (color == 0)
-      key ^= tt.hashKey(0);
+  if (color == 0)
+    key ^= tt.hashKey(0);
 
-    if (enPassantSquare() != SQUARE_NB)
-      key ^= tt.hashKey(enPassantSquare() + 1);
+  if (enPassantSquare() != SQUARE_NB)
+    key ^= tt.hashKey(enPassantSquare() + 1);
 
-    key ^= tt.hashKey((csep >> 7) + castleOffset);
+  key ^= tt.hashKey((csep >> 7) + castleOffset);
 
-    for (int piece = 1; piece < 15; piece++)
+  for (int piece = 1; piece < 15; piece++)
+  {
+    if ((piece == 8) or (piece == 7))
+      continue;
+
+    Bitboard tmp = pieceBb[piece];
+    while (tmp > 0)
     {
-      if ((piece == 8) or (piece == 7))
-        continue;
-
-      Bitboard tmp = pieceBb[piece];
-      while (tmp > 0)
-      {
-        Square pos = lsbIndex(tmp);
-        tmp &= tmp - 1;
-        key ^= tt.hashKeyUpdate(piece, pos);
-      }
+      Square pos = lsbIndex(tmp);
+      tmp &= tmp - 1;
+      key ^= tt.hashKeyUpdate(piece, pos);
     }
   }
 
