@@ -157,9 +157,10 @@ helper()
   puts("** elsa isDraw [fen <fen>]\n");
 
   puts("** To validate the draw recognizer over a material signature, type:\n");
-  puts("** elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [allfiles] [dump <file>]\n");
+  puts("** elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]\n");
   puts("**   e.g. 'elsa egvalidate pieces Pb oracle threads 4'  (KPKB vs perfect WDL, 4 threads)\n");
   puts("**        add 'mirror' to also run the colour-mirror (KBKP) colour-symmetry self-check\n");
+  puts("**        oracle tables cache under output/egcache/ (sub-second reload); 'nocache' forces a fresh solve\n");
 
   puts("** For tuning evaluation weights (Texel), type:\n");
   puts("** elsa tune [data <path.epd>] [iters <n>]\n");

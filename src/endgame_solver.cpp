@@ -3,6 +3,29 @@
 #include <array>
 #include <queue>
 #include <set>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+
+// For locating the running executable, so the disk cache anchors beside the
+// binary rather than to the (caller-controlled) working directory.
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX           // keep std::min/std::max usable (windows.h defines macros)
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#elif defined(__APPLE__)
+#  include <climits>
+#  include <mach-o/dyld.h>
+#else
+#  include <climits>
+#  include <unistd.h>
+#endif
 
 #include "endgame_solver.h"
 #include "movegen.h"
@@ -11,6 +34,52 @@
 using Sig = EgSolver::Sig;
 
 namespace {
+
+// On-disk cache format. MAGIC tags the layout; SOLVER_VERSION tags the *meaning*
+// of the bytes and MUST be bumped whenever the solver, move generation, or
+// legality test changes, so stale tables from an older engine are rejected
+// rather than silently trusted. Either mismatch => the file is ignored and the
+// table is re-solved. (Escape hatch for an un-versioned change: `nocache`.)
+constexpr char     CACHE_MAGIC[4]   = { 'E', 'G', 'W', '1' };
+constexpr uint32_t SOLVER_VERSION   = 1;
+
+// Fixed-size header prefixed to the raw Wdl bytes. Every field is re-validated
+// on load (incl. the signature itself and the trailing byte count), so a
+// collision or truncated/partial file can never feed the oracle wrong data.
+struct CacheHeader
+{
+  char     magic[4];
+  uint32_t solverVer;
+  uint32_t n;          // men count
+  uint32_t pieces[4];  // the canonical signature (NO_PIECE-padded)
+  uint64_t total;      // == 64^n * 2 == number of Wdl bytes that follow
+};
+
+// Absolute directory of the running executable, or an empty path if it can't
+// be determined. Lets the cache anchor beside the binary instead of the CWD,
+// so launching elsa from any directory reuses the same cache files.
+std::filesystem::path
+exeDir()
+{
+#if defined(_WIN32)
+  wchar_t buf[MAX_PATH];
+  const DWORD len = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+  if (len == 0 || len >= MAX_PATH) return {};
+  return std::filesystem::path(std::wstring(buf, len)).parent_path();
+#elif defined(__APPLE__)
+  char buf[PATH_MAX];
+  uint32_t size = sizeof buf;
+  if (_NSGetExecutablePath(buf, &size) != 0) return {};
+  std::error_code ec;
+  const std::filesystem::path canon = std::filesystem::canonical(buf, ec);
+  return (ec ? std::filesystem::path(buf) : canon).parent_path();
+#else
+  char buf[PATH_MAX];
+  const ssize_t len = readlink("/proc/self/exe", buf, sizeof buf);
+  if (len <= 0 || len >= static_cast<ssize_t>(sizeof buf)) return {};
+  return std::filesystem::path(std::string(buf, static_cast<size_t>(len))).parent_path();
+#endif
+}
 
 // ---- small geometry / signature helpers ---------------------------------
 
@@ -396,8 +465,18 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
               return pawnCount(a) < pawnCount(b);
             });
 
+  // Solve bottom-up. Each table is a pure function of move generation, so a
+  // cached copy on disk is reloaded verbatim (sub-second) instead of recomputed;
+  // a miss solves and then persists for next time. Children are cached by their
+  // own signature, so they are shared across any target that reaches them.
+  tablesSolved = tablesLoaded = 0;
   for (const Sig& s : needed)
+  {
+    if (cacheEnabled && cacheLoad(s)) { ++tablesLoaded; continue; }
     solve(s);
+    if (cacheEnabled) cacheSave(s);
+    ++tablesSolved;
+  }
 
   return true;
 }
@@ -436,4 +515,118 @@ EgSolver::distribution(const std::vector<Piece>& extras,
     else if (v == Wdl::DRAW) ++draw;
   }
   return true;
+}
+
+// --------------------------------------------------------------------------
+// Disk persistence
+// --------------------------------------------------------------------------
+
+std::string
+EgSolver::resolvedCacheDir() const
+{
+  const std::filesystem::path base = cacheDir;
+  if (base.is_relative())
+  {
+    const std::filesystem::path ed = exeDir();
+    if (!ed.empty())
+      return (ed / base).string();
+  }
+  return cacheDir;   // absolute, or exe path unknown -> CWD-relative as before
+}
+
+std::string
+EgSolver::cachePath(const Sig& sig) const
+{
+  if (!cacheEnabled || cacheDir.empty() || sig.size() > 4)
+    return {};
+
+  // Key = the canonical signature's raw Piece bytes in hex. Bytes (not FEN
+  // letters) because NTFS is case-insensitive: 'P' and 'p' would collide.
+  static const char hex[] = "0123456789abcdef";
+  std::string key;
+  for (Piece p : sig)
+  {
+    key += hex[(static_cast<uint8_t>(p) >> 4) & 0xF];
+    key += hex[ static_cast<uint8_t>(p)       & 0xF];
+  }
+  return resolvedCacheDir() + "/sig_" + key + ".wdl";
+}
+
+bool
+EgSolver::cacheLoad(const Sig& sig)
+{
+  const std::string path = cachePath(sig);
+  if (path.empty())
+    return false;
+
+  std::ifstream in(path, std::ios::binary);
+  if (!in)
+    return false;
+
+  CacheHeader h{};
+  if (!in.read(reinterpret_cast<char*>(&h), sizeof h))
+    return false;
+
+  // Validate every field: a mismatch (old format, stale solver, key collision,
+  // truncated file) is treated as a miss so we re-solve rather than trust it.
+  if (std::memcmp(h.magic, CACHE_MAGIC, sizeof h.magic) != 0) return false;
+  if (h.solverVer != SOLVER_VERSION)                          return false;
+  if (h.n != sig.size())                                      return false;
+  for (size_t i = 0; i < sig.size(); ++i)
+    if (h.pieces[i] != static_cast<uint32_t>(sig[i]))         return false;
+  if (h.total != numStates(static_cast<int>(sig.size())))     return false;
+
+  std::vector<Wdl> table(h.total);
+  if (!in.read(reinterpret_cast<char*>(table.data()),
+               static_cast<std::streamsize>(h.total)))
+    return false;
+  // Reject a file with trailing junk (size must be exactly header + table).
+  if (in.peek() != std::ifstream::traits_type::eof())
+    return false;
+
+  registry.emplace(sig, std::move(table));
+  return true;
+}
+
+void
+EgSolver::cacheSave(const Sig& sig)
+{
+  const std::string path = cachePath(sig);
+  if (path.empty())
+    return;
+
+  const auto it = registry.find(sig);
+  if (it == registry.end())
+    return;
+  const std::vector<Wdl>& table = it->second;
+
+  std::error_code ec;
+  std::filesystem::create_directories(resolvedCacheDir(), ec);   // best effort
+
+  CacheHeader h{};
+  std::memcpy(h.magic, CACHE_MAGIC, sizeof h.magic);
+  h.solverVer = SOLVER_VERSION;
+  h.n         = static_cast<uint32_t>(sig.size());
+  for (size_t i = 0; i < sig.size() && i < 4; ++i)
+    h.pieces[i] = static_cast<uint32_t>(sig[i]);
+  h.total = table.size();
+
+  // Atomic publish: write a temp file, then rename over the final path so a
+  // crash mid-write never leaves a truncated table that later loads as garbage.
+  const std::string tmp = path + ".tmp";
+  {
+    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+    if (!out) return;
+    out.write(reinterpret_cast<const char*>(&h), sizeof h);
+    out.write(reinterpret_cast<const char*>(table.data()),
+              static_cast<std::streamsize>(table.size()));
+    if (!out) { out.close(); std::filesystem::remove(tmp, ec); return; }
+  }
+  std::filesystem::rename(tmp, path, ec);
+  if (ec)   // some platforms won't rename over an existing file
+  {
+    std::filesystem::remove(path, ec);
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) std::filesystem::remove(tmp, ec);
+  }
 }

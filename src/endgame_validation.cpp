@@ -406,7 +406,7 @@ reportScorecard(const Generator& g, const string& pieceStr)
 void
 validateEndgame(const vector<string>& args)
 {
-  // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [allfiles] [dump <file>]
+  // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
@@ -426,6 +426,12 @@ validateEndgame(const vector<string>& args)
   // a self-mirror material (e.g. Pp) has only one colouring regardless.
   //
   // `allfiles` disables the white-king fold (each tally must then double).
+  //
+  // The oracle's solved tables are cached under output/egcache/ (keyed by
+  // signature), so the first build pays the full solve and later runs on the
+  // same/overlapping material load in well under a second. `nocache` forces a
+  // fresh solve and skips persisting -- use it after a movegen change that did
+  // not bump the cache's SOLVER_VERSION.
 
   const string pieceArg = utils::hasArg(args, "pieces")
                         ? utils::argValue(args, "pieces")
@@ -446,6 +452,7 @@ validateEndgame(const vector<string>& args)
   const bool noFold   = utils::hasArg(args, "allfiles");
   const bool wantMirror = utils::hasArg(args, "mirror");
   const bool wantOracle = utils::hasArg(args, "oracle");
+  const bool noCache  = utils::hasArg(args, "nocache");
   const int maxKingFile = noFold ? 7 : 3;
 
   // Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
@@ -517,6 +524,7 @@ validateEndgame(const vector<string>& args)
     if (wantOracle)
     {
       auto solver = std::make_unique<EgSolver>();
+      solver->cacheEnabled = !noCache;
       vector<Piece> men;
       for (char c : cs)
         men.push_back(charToPiece(c));
@@ -530,7 +538,11 @@ validateEndgame(const vector<string>& args)
       {
         const perf_time obDur = perf::now() - obStart;
         cout << "done (" << std::fixed << std::setprecision(1)
-             << obDur.count() << " s)";
+             << obDur.count() << " s";
+        if (!noCache)
+          cout << "; " << solver->tablesSolved << " solved, "
+               << solver->tablesLoaded << " from cache";
+        cout << ")";
         uint64_t w = 0, d = 0, l = 0;
         if (solver->distribution(men, w, d, l))
           cout << "  full-legal WDL: win " << w << ", draw " << d

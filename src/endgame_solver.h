@@ -67,8 +67,42 @@ public:
   distribution(const std::vector<Piece>& extras,
                uint64_t& win, uint64_t& draw, uint64_t& loss) const;
 
+  // ---- disk persistence ---------------------------------------------------
+  // Each solved signature table is a pure function of the engine's move
+  // generation, so it is cached to disk and reloaded verbatim on a later run --
+  // turning a 60-90 s rebuild into a sub-second load. Tables are keyed by their
+  // raw Piece bytes (case-proof on NTFS, unlike FEN chars) under `cacheDir`.
+  // A loaded table is bit-identical to a freshly solved one, so probe() is
+  // unaffected; the cache is an optimization that can never feed wrong data
+  // (every header field + file size is re-validated on load).
+  //
+  // A relative `cacheDir` is anchored to the *executable's* directory, not the
+  // process CWD, so the cache always lands beside the binary (the default
+  // "egcache" => <exe-dir>/egcache, i.e. output/egcache for the normal build)
+  // regardless of where elsa is launched from. Set an absolute path to override.
+  bool        cacheEnabled = true;
+  std::string cacheDir     = "egcache";
+
+  // How the last build() resolved its DAG: tables computed vs loaded from disk.
+  // Lets the caller report warm-vs-cold without timing each table.
+  int tablesSolved = 0;
+  int tablesLoaded = 0;
+
 private:
   std::map<Sig, std::vector<Wdl>> registry;  // solved tables by signature
+
+  // `cacheDir` anchored to the executable's directory when it is relative
+  // (absolute paths pass through unchanged). Falls back to `cacheDir` verbatim
+  // if the executable path can't be determined.
+  std::string resolvedCacheDir() const;
+  // Cache file path for a signature, or "" if caching is disabled / no dir.
+  std::string cachePath(const Sig& sig) const;
+  // Try to load `sig` from disk straight into the registry; false on any
+  // miss/mismatch/IO error (caller then solves and saves).
+  bool cacheLoad(const Sig& sig);
+  // Persist the already-solved registry[sig] (atomic temp-then-rename). Best
+  // effort: IO failures are swallowed -- the cache is never load-bearing.
+  void cacheSave(const Sig& sig);
 
   // Context for the table currently being solved (so same-signature successors
   // can read the partially-filled table during relaxation).
