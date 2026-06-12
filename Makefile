@@ -25,18 +25,18 @@ endif
 # define any compile-time flags
 ifeq ($(OS),Windows_NT)
   ifeq ($(IS_CLANG),1)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -fopenmp
   else
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -fopenmp
   endif
 else
   # macOS (Darwin) doesn't support static linking, so remove those flags
   ifeq ($(UNAME_S),Darwin)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread -fopenmp
   else ifeq ($(IS_CLANG),1)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread -fopenmp
   else
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread -fopenmp
   endif
 endif
 
