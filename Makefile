@@ -6,11 +6,16 @@
 # define the Cpp compiler to use
 CXX = g++
 
-# detect OS
+# detect OS (uname does not exist on Windows shells, so skip it there)
+ifeq ($(OS),Windows_NT)
+UNAME_S :=
+else
 UNAME_S := $(shell uname -s)
+endif
 
 # detect compiler type (check if clang or Apple clang)
-CXX_VERSION := $(shell $(CXX) --version 2>/dev/null | head -n 1)
+# avoid head/pipe so this works under cmd.exe too; findstring scans full output
+CXX_VERSION := $(shell $(CXX) --version)
 ifeq ($(findstring clang,$(CXX_VERSION)),clang)
 IS_CLANG := 1
 else
@@ -20,18 +25,18 @@ endif
 # define any compile-time flags
 ifeq ($(OS),Windows_NT)
   ifeq ($(IS_CLANG),1)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -fopenmp
   else
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -fopenmp
   endif
 else
   # macOS (Darwin) doesn't support static linking, so remove those flags
   ifeq ($(UNAME_S),Darwin)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread -fopenmp
   else ifeq ($(IS_CLANG),1)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread -fopenmp
   else
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread -fopenmp
   endif
 endif
 
@@ -46,17 +51,27 @@ MAIN	:= elsa.exe
 SOURCEDIRS	:= $(SRC)
 # INCLUDEDIRS	:= $(INCLUDE)
 # LIBDIRS		:= $(LIB)
-FIXPATH = $(subst /,\,$1)
-RM	:= rm -rf
-MD	:= mkdir
 else
 MAIN	:= elsa
 SOURCEDIRS	:= $(shell find $(SRC) -type d)
 # INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d)
 # LIBDIRS		:= $(shell find $(LIB) -type d)
+endif
+
+# Delete/mkdir command must match the *recipe* shell, not the OS. On Windows, GNU
+# make runs recipes through sh.exe when it's on PATH (MSYS2 / Git Bash) and only
+# falls back to cmd.exe otherwise. `del` is a cmd builtin and is "command not
+# found" under sh -- which, combined with the `-` (ignore-error) prefix on the
+# clean recipe, silently turned `make clean` into a no-op and left stale .o's.
+# Keying off $(SHELL) (default /bin/sh, contains "sh") picks the right tool.
+ifeq ($(findstring sh,$(SHELL)),sh)
 FIXPATH = $1
 RM = rm -f
 MD	:= mkdir -p
+else
+FIXPATH = $(subst /,\,$1)
+RM	:= del /Q /F
+MD	:= mkdir
 endif
 
 
@@ -96,14 +111,14 @@ $(MAIN): $(OBJECTS)
 
 .PHONY: clean
 clean:
-	$(RM) $(OUTPUTMAIN)
-	$(RM) $(call FIXPATH,$(OBJECTS))
+	-$(RM) $(OUTPUTMAIN)
+	-$(RM) $(call FIXPATH,$(OBJECTS))
 	@echo Cleanup complete!
 
 
 .PHONY: clean_ob
 clean_ob:
-	$(RM) $(call FIXPATH,$(OBJECTS))
+	-$(RM) $(call FIXPATH,$(OBJECTS))
 	@echo Object-files Cleanup complete!
 
 run: all
