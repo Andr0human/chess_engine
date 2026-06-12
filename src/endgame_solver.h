@@ -12,11 +12,10 @@
 /**
  * @brief Self-contained perfect WDL oracle for small material signatures.
  *
- * This is the "oracle" stage of the endgame-verdict validation harness (see
- * docs/endgame-validation.md). Given a material signature it solves, by
- * backward induction (implemented as forward Bellman-Ford relaxation to a
- * fixpoint), the perfect win/draw/loss value of EVERY legal position, then
- * answers O(1) probes.
+ * This is the "oracle" stage of the endgame-verdict validation harness. Given a
+ * material signature it solves, by backward induction (implemented as forward
+ * Bellman-Ford relaxation to a fixpoint), the perfect win/draw/loss value of
+ * EVERY legal position, then answers O(1) probes.
  *
  * Verdicts are **side-to-move relative** and computed under **infinite play**:
  * there is no 50-move / DTZ notion, only "with unlimited time, can the side to

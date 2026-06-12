@@ -8,6 +8,10 @@
 #include <memory>
 #include <algorithm>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "endgame_validation.h"
 #include "endgame_solver.h"
 #include "bitboard.h"
@@ -402,7 +406,7 @@ reportScorecard(const Generator& g, const string& pieceStr)
 void
 validateEndgame(const vector<string>& args)
 {
-  // elsa egvalidate [pieces <set>] [oracle] [onecolor] [allfiles] [dump <file>]
+  // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [allfiles] [dump <file>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
@@ -414,11 +418,12 @@ validateEndgame(const vector<string>& args)
   //   pieces Rn   -> white rook + black knight    (KRKN)
   // Case encodes colour: UPPER = white, lower = black. Kings are implicit.
   //
-  // By default BOTH colourings of the material are enumerated: the set you name
-  // and its colour-mirror (e.g. Pb and pB), related by colour-swap + rank-flip.
-  // A correct (colour-symmetric) recognizer must give identical call-set and
-  // draw counts for the two -- a built-in self-check. `onecolor` restricts to
-  // the literal set; a self-mirror material (e.g. Pp) has only one colouring.
+  // By default only the named colouring is enumerated. `mirror` adds the
+  // colour-mirror (e.g. Pb and pB), related by colour-swap + rank-flip: a
+  // correct (colour-symmetric) recognizer must give identical call-set and draw
+  // counts for the two, so the pair is a built-in colour-symmetry self-check.
+  // The oracle build is per-colouring, so `mirror` roughly doubles the runtime;
+  // a self-mirror material (e.g. Pp) has only one colouring regardless.
   //
   // `allfiles` disables the white-king fold (each tally must then double).
 
@@ -439,15 +444,37 @@ validateEndgame(const vector<string>& args)
   const bool wantDump = utils::hasArg(args, "dump");
   const string dumpFile = wantDump ? utils::argValue(args, "dump") : string();
   const bool noFold   = utils::hasArg(args, "allfiles");
-  const bool oneColor = utils::hasArg(args, "onecolor");
+  const bool wantMirror = utils::hasArg(args, "mirror");
   const bool wantOracle = utils::hasArg(args, "oracle");
   const int maxKingFile = noFold ? 7 : 3;
+
+  // Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
+  // (the only parallel stage) so the harness need not saturate every core. 0 =
+  // not given = default to HALF the hardware threads, leaving the machine usable.
+  // Clamped to [1, hardware max]; an unparseable value falls back to the default.
+  int reqThreads = 0;
+  if (utils::hasArg(args, "threads"))
+  {
+    try { reqThreads = std::stoi(utils::argValue(args, "threads")); }
+    catch (...) { reqThreads = 0; }
+    if (reqThreads < 1) reqThreads = 1;
+  }
+
+#ifdef _OPENMP
+  const int maxThreads = omp_get_max_threads();
+  if (reqThreads > maxThreads) reqThreads = maxThreads;
+  // Default (no explicit request): half the cores, at least 1.
+  const int usingThreads = reqThreads > 0 ? reqThreads : std::max(1, maxThreads / 2);
+  omp_set_num_threads(usingThreads);
+#else
+  const int usingThreads = 1;
+#endif
 
   // ---- colourings to enumerate --------------------------------------------
   vector<string> colourings{ pieceArg };
   const string mirror = flipCase(pieceArg);
   const bool selfMirror = sameMaterial(pieceArg, mirror);
-  const bool haveMirror = !oneColor && !selfMirror;
+  const bool haveMirror = wantMirror && !selfMirror;
   if (haveMirror)
     colourings.push_back(mirror);
 
@@ -495,7 +522,9 @@ validateEndgame(const vector<string>& args)
         men.push_back(charToPiece(c));
 
       string err;
-      cout << "Building oracle for " << signatureOf(cs) << " ... " << std::flush;
+      cout << "Building oracle for " << signatureOf(cs)
+           << " (" << usingThreads << " thread" << (usingThreads == 1 ? "" : "s")
+           << ") ... " << std::flush;
       const perf_clock obStart = perf::now();
       if (solver->build(men, err))
       {
@@ -534,12 +563,14 @@ validateEndgame(const vector<string>& args)
     cout << "Colourings: " << pieceArg << " (" << signatureOf(pieceArg)
          << ") and colour-mirror " << mirror
          << " (" << signatureOf(mirror) << ").\n\n";
-  else if (oneColor && !selfMirror)
-    cout << "Colourings: " << pieceArg << " only (onecolor; mirror "
-         << mirror << " suppressed).\n\n";
-  else
+  else if (selfMirror)
     cout << "Colouring: " << pieceArg
          << " only (colour-symmetric material; no distinct mirror).\n\n";
+  else
+    cout << "Colouring: " << pieceArg << " (" << signatureOf(pieceArg)
+         << ") only (default; pass 'mirror' to also run the colour-mirror "
+         << mirror << " (" << signatureOf(mirror)
+         << ") and the colour-symmetry self-check).\n\n";
 
   for (size_t i = 0; i < gens.size(); ++i)
     reportColouring(gens[i], colourings[i]);

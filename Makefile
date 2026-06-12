@@ -51,17 +51,27 @@ MAIN	:= elsa.exe
 SOURCEDIRS	:= $(SRC)
 # INCLUDEDIRS	:= $(INCLUDE)
 # LIBDIRS		:= $(LIB)
-FIXPATH = $(subst /,\,$1)
-RM	:= del /Q /F
-MD	:= mkdir
 else
 MAIN	:= elsa
 SOURCEDIRS	:= $(shell find $(SRC) -type d)
 # INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d)
 # LIBDIRS		:= $(shell find $(LIB) -type d)
+endif
+
+# Delete/mkdir command must match the *recipe* shell, not the OS. On Windows, GNU
+# make runs recipes through sh.exe when it's on PATH (MSYS2 / Git Bash) and only
+# falls back to cmd.exe otherwise. `del` is a cmd builtin and is "command not
+# found" under sh -- which, combined with the `-` (ignore-error) prefix on the
+# clean recipe, silently turned `make clean` into a no-op and left stale .o's.
+# Keying off $(SHELL) (default /bin/sh, contains "sh") picks the right tool.
+ifeq ($(findstring sh,$(SHELL)),sh)
 FIXPATH = $1
 RM = rm -f
 MD	:= mkdir -p
+else
+FIXPATH = $(subst /,\,$1)
+RM	:= del /Q /F
+MD	:= mkdir
 endif
 
 
