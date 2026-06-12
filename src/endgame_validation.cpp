@@ -61,6 +61,57 @@ parsePiece(char c, Slot& out)
   }
 }
 
+// Flip the colour of every piece letter (P<->p): turns one colouring of a
+// material into its colour-mirror (e.g. "Pb" -> "pB").
+string
+flipCase(const string& s)
+{
+  string r = s;
+  for (char& c : r)
+    c = std::isupper(static_cast<unsigned char>(c))
+          ? static_cast<char>(std::tolower(static_cast<unsigned char>(c)))
+          : static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  return r;
+}
+
+// Do two piece strings name the same multiset of men? If so, a colouring is its
+// own colour-mirror (e.g. "Pp") and there is no distinct second colouring.
+bool
+sameMaterial(string a, string b)
+{
+  std::sort(a.begin(), a.end());
+  std::sort(b.begin(), b.end());
+  return a == b;
+}
+
+// Human-readable signature for an extras string, e.g. "Pb" -> "KPKB".
+string
+signatureOf(const string& extras)
+{
+  string w, b;
+  for (char c : extras)
+  {
+    char u = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    (std::isupper(static_cast<unsigned char>(c)) ? w : b) += u;
+  }
+  return "K" + w + "K" + b;
+}
+
+// Parse an extras string (kings excluded) into Slots. On an invalid letter,
+// returns false and sets badChar.
+bool
+parseExtras(const string& s, vector<Slot>& extras, char& badChar)
+{
+  extras.clear();
+  for (char c : s)
+  {
+    Slot sl;
+    if (!parsePiece(c, sl)) { badChar = c; return false; }
+    extras.push_back(sl);
+  }
+  return true;
+}
+
 // Exhaustive generator over a fixed piece set (the two kings plus `extras`).
 //
 // Symmetry: the position is folded by vertical mirror, canonicalised on the
@@ -199,68 +250,99 @@ struct Generator
   void run(Color s) { stm = s; place(0); }
 };
 
+// Print one colouring's tally block (no header / footer).
+void
+reportColouring(const Generator& g, const string& pieceStr)
+{
+  cout << "--- Colouring " << signatureOf(pieceStr)
+       << " (pieces " << pieceStr << ") ---\n";
+
+  cout << "Geometric placements    : " << g.geom
+       << "  (distinct sq, kings >= 2 apart, pawns on 2-7)\n";
+  cout << "  rejected (in check)   : " << g.rejInCheck
+       << "  (side not to move)\n";
+  cout << "Legal positions         : " << g.legal
+       << "  (stm White " << g.legalW
+       << ", stm Black " << g.legalB << ")\n";
+  cout << "  rejected (terminal)   : " << g.rejTerminal
+       << "  (checkmate / stalemate -- no moves)\n";
+  cout << "  rejected (has capture): " << g.rejCaptures
+       << "  (search skips the recognizer here)\n";
+  cout << "Recognizer call set     : " << g.quiet
+       << "  (stm White " << g.quietW
+       << ", stm Black " << g.quietB << ")\n";
+
+  const auto pct = [&] (uint64_t n) {
+    return g.quiet
+      ? (100.0 * static_cast<double>(n) / static_cast<double>(g.quiet))
+      : 0.0;
+  };
+
+  cout << std::fixed << std::setprecision(2);
+  cout << "  isTheoreticalDraw true  : " << g.heurDraw
+       << "  (" << pct(g.heurDraw) << "% of call set)"
+       << "  [stm W " << g.heurDrawW
+       << ", B " << g.heurDrawB << "]\n";
+  cout << "  isTheoreticalDraw false : " << g.heurNonDraw
+       << "  (" << pct(g.heurNonDraw) << "% of call set)\n\n";
+}
+
 } // namespace
 
 void
 validateEndgame(const vector<string>& args)
 {
-  // elsa egvalidate [pieces <set>] [dump <file>] [allfiles]
+  // elsa egvalidate [pieces <set>] [dump <file>] [allfiles] [onecolor]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
-  // `pieces` -- and tally isTheoreticalDraw over the whole set.
+  // `pieces` -- and tally isTheoreticalDraw over the recognizer's call set
+  // (legal, non-terminal, no capture available; see single_thread.cpp:51,331).
   //
-  //   pieces P    -> white pawn            (KPK)
-  //   pieces Pb   -> white pawn + black bishop  (KPKB, the default)
-  //   pieces Rn   -> white rook + black knight  (KRKN)
-  // Case encodes colour: UPPER = white, lower = black. Kings ('K'/'k') are
-  // implicit and rejected if passed.
+  //   pieces P    -> white pawn                  (KPK)
+  //   pieces Pb   -> white pawn + black bishop    (KPKB, the default)
+  //   pieces Rn   -> white rook + black knight    (KRKN)
+  // Case encodes colour: UPPER = white, lower = black. Kings are implicit.
   //
-  // Both sides-to-move are enumerated (the true result depends on it).
-  // Positions are folded by vertical mirror on the white king's file; the
-  // `allfiles` flag disables the fold as a self-check (every tally must double).
+  // By default BOTH colourings of the material are enumerated: the set you name
+  // and its colour-mirror (e.g. Pb and pB), related by colour-swap + rank-flip.
+  // A correct (colour-symmetric) recognizer must give identical call-set and
+  // draw counts for the two -- a built-in self-check. `onecolor` restricts to
+  // the literal set; a self-mirror material (e.g. Pp) has only one colouring.
+  //
+  // `allfiles` disables the white-king fold (each tally must then double).
 
-  // ---- parse the piece set (default KPKB) ---------------------------------
   const string pieceArg = utils::hasArg(args, "pieces")
                         ? utils::argValue(args, "pieces")
                         : string("Pb");
 
-  Generator gen;
-  gen.slots.push_back({'K', false}); // white king
-  gen.slots.push_back({'k', false}); // black king
-
-  for (char c : pieceArg)
+  vector<Slot> extras;
+  char badChar = 0;
+  if (!parseExtras(pieceArg, extras, badChar))
   {
-    Slot s;
-    if (!parsePiece(c, s))
-    {
-      cout << "Invalid piece in 'pieces " << pieceArg << "': '" << c << "'\n"
-              "  Use P/N/B/R/Q (white) or p/n/b/r/q (black). "
-              "Kings are implicit.\n";
-      return;
-    }
-    gen.slots.push_back(s);
+    cout << "Invalid piece in 'pieces " << pieceArg << "': '" << badChar << "'\n"
+            "  Use P/N/B/R/Q (white) or p/n/b/r/q (black). Kings are implicit.\n";
+    return;
   }
-
-  // Human-readable signature, e.g. KPKB / KRKN / KPK.
-  string whiteExtras, blackExtras;
-  for (size_t i = 2; i < gen.slots.size(); ++i)
-  {
-    char u = static_cast<char>(std::toupper(
-      static_cast<unsigned char>(gen.slots[i].fenChar)));
-    (std::isupper(static_cast<unsigned char>(gen.slots[i].fenChar))
-      ? whiteExtras : blackExtras) += u;
-  }
-  const string signature = "K" + whiteExtras + "K" + blackExtras;
 
   // ---- options ------------------------------------------------------------
   const bool wantDump = utils::hasArg(args, "dump");
   const string dumpFile = wantDump ? utils::argValue(args, "dump") : string();
+  const bool noFold   = utils::hasArg(args, "allfiles");
+  const bool oneColor = utils::hasArg(args, "onecolor");
+  const int maxKingFile = noFold ? 7 : 3;
 
-  const bool noFold = utils::hasArg(args, "allfiles");
-  gen.maxKingFile = noFold ? 7 : 3;
+  // ---- colourings to enumerate --------------------------------------------
+  vector<string> colourings{ pieceArg };
+  const string mirror = flipCase(pieceArg);
+  const bool selfMirror = sameMaterial(pieceArg, mirror);
+  const bool haveMirror = !oneColor && !selfMirror;
+  if (haveMirror)
+    colourings.push_back(mirror);
 
+  // ---- dump (shared across colourings) ------------------------------------
   std::ofstream out;
+  std::ofstream* outPtr = nullptr;
   if (wantDump)
   {
     out.open(dumpFile);
@@ -269,14 +351,31 @@ validateEndgame(const vector<string>& args)
       cout << "Could not open dump file: " << dumpFile << '\n';
       return;
     }
-    gen.out = &out;
+    outPtr = &out;
   }
 
   // ---- enumerate ----------------------------------------------------------
   const perf_clock start = perf::now();
 
-  gen.run(WHITE);
-  gen.run(BLACK);
+  vector<Generator> gens;
+  for (const string& cs : colourings)
+  {
+    Generator g;
+    g.slots.push_back({'K', false}); // white king
+    g.slots.push_back({'k', false}); // black king
+
+    vector<Slot> ex;
+    char b = 0;
+    parseExtras(cs, ex, b);            // flip of a valid set is always valid
+    for (const Slot& s : ex)
+      g.slots.push_back(s);
+
+    g.maxKingFile = maxKingFile;
+    g.out = outPtr;
+    g.run(WHITE);
+    g.run(BLACK);
+    gens.push_back(std::move(g));
+  }
 
   if (wantDump)
     out.close();
@@ -284,47 +383,51 @@ validateEndgame(const vector<string>& args)
   const perf_time dur = perf::now() - start;
 
   // ---- report -------------------------------------------------------------
-  cout << "\n=== Endgame validation: " << signature << " generator ===\n";
-  cout << "(pieces: kings + " << pieceArg << "; "
+  cout << "\n=== Endgame validation: " << signatureOf(pieceArg) << " generator ===\n";
+  cout << "(kings + " << pieceArg << "; "
        << (noFold ? "all 8 king files (self-check)"
                   : "white king folded to files a-d")
-       << ", both sides to move)\n\n";
+       << ", both sides to move)\n";
+  if (haveMirror)
+    cout << "Colourings: " << pieceArg << " (" << signatureOf(pieceArg)
+         << ") and colour-mirror " << mirror
+         << " (" << signatureOf(mirror) << ").\n\n";
+  else if (oneColor && !selfMirror)
+    cout << "Colourings: " << pieceArg << " only (onecolor; mirror "
+         << mirror << " suppressed).\n\n";
+  else
+    cout << "Colouring: " << pieceArg
+         << " only (colour-symmetric material; no distinct mirror).\n\n";
 
-  cout << "Geometric placements    : " << gen.geom
-       << "  (distinct sq, kings >= 2 apart, pawns on 2-7)\n";
-  cout << "  rejected (in check)   : " << gen.rejInCheck
-       << "  (side not to move)\n";
-  cout << "Legal positions         : " << gen.legal
-       << "  (stm White " << gen.legalW
-       << ", stm Black " << gen.legalB << ")\n";
-  cout << "  rejected (terminal)   : " << gen.rejTerminal
-       << "  (checkmate / stalemate -- no moves)\n";
-  cout << "  rejected (has capture): " << gen.rejCaptures
-       << "  (search skips the recognizer here)\n";
-  cout << "Recognizer call set     : " << gen.quiet
-       << "  (stm White " << gen.quietW
-       << ", stm Black " << gen.quietB << ")\n"
-       << "  = legal, non-terminal, no capture available -- exactly the\n"
-       << "    positions single_thread.cpp hands to isTheoreticalDraw.\n\n";
+  for (size_t i = 0; i < gens.size(); ++i)
+    reportColouring(gens[i], colourings[i]);
 
-  const auto pct = [&] (uint64_t n) {
-    return gen.quiet
-      ? (100.0 * static_cast<double>(n) / static_cast<double>(gen.quiet))
-      : 0.0;
-  };
-
-  cout << std::fixed << std::setprecision(2);
-  cout << "isTheoreticalDraw == true  : " << gen.heurDraw
-       << "  (" << pct(gen.heurDraw) << "% of call set)"
-       << "  [stm White " << gen.heurDrawW
-       << ", stm Black " << gen.heurDrawB << "]\n";
-  cout << "isTheoreticalDraw == false : " << gen.heurNonDraw
-       << "  (" << pct(gen.heurNonDraw) << "% of call set)\n\n";
+  // Colour-symmetry self-check: the two colourings are colour-swap + rank-flip
+  // images, a bijection preserving legality, the call gate, and the true
+  // result -- so a colour-symmetric recognizer must tally identically.
+  if (haveMirror)
+  {
+    const bool callOk = gens[0].quiet    == gens[1].quiet;
+    const bool drawOk = gens[0].heurDraw == gens[1].heurDraw;
+    cout << "Colour-symmetry self-check (the two colourings must tally identically):\n";
+    cout << "  call set : " << gens[0].quiet << " vs " << gens[1].quiet
+         << "   " << (callOk ? "OK" : "MISMATCH") << '\n';
+    cout << "  draws    : " << gens[0].heurDraw << " vs " << gens[1].heurDraw
+         << "   " << (drawOk ? "OK" : "MISMATCH") << '\n';
+    if (!callOk || !drawOk)
+      cout << "  ** isTheoreticalDraw is colour-asymmetric -- inspect. **\n";
+    cout << '\n';
+  }
 
   cout << "NOTE: no oracle yet -- these are the heuristic's labels, not\n"
           "      correctness. Win/draw ground truth is the next stage.\n";
   cout << "Elapsed: " << dur.count() << " s\n";
 
   if (wantDump)
-    cout << "Dumped " << gen.quiet << " positions to " << dumpFile << '\n';
+  {
+    uint64_t dumped = 0;
+    for (const Generator& g : gens)
+      dumped += g.quiet;
+    cout << "Dumped " << dumped << " positions to " << dumpFile << '\n';
+  }
 }
