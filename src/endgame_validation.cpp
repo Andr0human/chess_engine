@@ -402,7 +402,7 @@ reportScorecard(const Generator& g, const string& pieceStr)
 void
 validateEndgame(const vector<string>& args)
 {
-  // elsa egvalidate [pieces <set>] [dump <file>] [allfiles] [onecolor]
+  // elsa egvalidate [pieces <set>] [oracle] [onecolor] [allfiles] [dump <file>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
