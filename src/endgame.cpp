@@ -119,11 +119,11 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
       (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
-  if ((side2move == emySide) and
-      (pawn & rank4to7[side]) and
-      (passedPawnMasks[side][pawnSq] & emyKing) and
-     !((passedPawnMasks[WHITE][pawnSq - 8] | passedPawnMasks[BLACK][pawnSq]) & myKing)
-  ) return true;
+  // if ((side2move == emySide) and
+  //     (pawn & rank4to7[side]) and
+  //     (passedPawnMasks[side][pawnSq] & emyKing) and
+  //    !((passedPawnMasks[WHITE][pawnSq - 8] | passedPawnMasks[BLACK][pawnSq]) & myKing)
+  // ) return true;
 
   if ((side2move == side) and
       (pawn & rank3to5[side]) and
