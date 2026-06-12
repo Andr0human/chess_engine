@@ -5,9 +5,11 @@
 #include <cctype>
 #include <array>
 #include <vector>
+#include <memory>
 #include <algorithm>
 
 #include "endgame_validation.h"
+#include "endgame_solver.h"
 #include "bitboard.h"
 #include "endgame.h"
 #include "movegen.h"
@@ -59,6 +61,24 @@ parsePiece(char c, Slot& out)
     default:
       return false; // 'K'/'k' (kings are implicit) and anything else
   }
+}
+
+// Map a piece letter (case = colour) to the engine's Piece encoding.
+Piece
+charToPiece(char c)
+{
+  const bool white = std::isupper(static_cast<unsigned char>(c)) != 0;
+  PieceType pt = NONE;
+  switch (std::toupper(static_cast<unsigned char>(c)))
+  {
+    case 'P': pt = PAWN;   break;
+    case 'N': pt = KNIGHT; break;
+    case 'B': pt = BISHOP; break;
+    case 'R': pt = ROOK;   break;
+    case 'Q': pt = QUEEN;  break;
+    default:  pt = NONE;   break;
+  }
+  return make_piece(white ? WHITE : BLACK, pt);
 }
 
 // Flip the colour of every piece letter (P<->p): turns one colouring of a
@@ -140,6 +160,15 @@ struct Generator
   uint64_t quiet = 0, quietW = 0, quietB = 0;
   uint64_t heurDraw = 0, heurNonDraw = 0, heurDrawW = 0, heurDrawB = 0;
 
+  // Oracle scorecard (only when `oracle` is set). The 4-bucket confusion matrix
+  // of isTheoreticalDraw vs perfect WDL, plus the oracle's own W/D/L split over
+  // the call set. `falseDraw` is the dangerous bucket; its FENs are collected.
+  const EgSolver* oracle = nullptr;
+  uint64_t agreeDraw = 0, agreeNondraw = 0, missedDraw = 0, falseDraw = 0;
+  uint64_t oWin = 0, oDraw = 0, oLoss = 0, oBad = 0;
+  std::vector<string> falseFens;
+  static constexpr size_t MAX_FALSE_FENS = 64;
+
   string
   buildFen() const
   {
@@ -207,6 +236,27 @@ struct Generator
 
     if (out)
       (*out) << fen << " | " << (isDraw ? 'D' : '.') << '\n';
+
+    if (oracle)
+    {
+      const Wdl truth = oracle->probe(pos);
+      const bool oracleDraw = (truth == Wdl::DRAW);
+
+      if      (truth == Wdl::WIN)  ++oWin;
+      else if (truth == Wdl::LOSS) ++oLoss;
+      else if (truth == Wdl::DRAW) ++oDraw;
+      else                         ++oBad;   // ILLEGAL/UNKNOWN -- should never happen
+
+      if (isDraw && oracleDraw)        ++agreeDraw;
+      else if (!isDraw && !oracleDraw) ++agreeNondraw;
+      else if (!isDraw && oracleDraw)  ++missedDraw;     // safe coverage gap
+      else                                               // heuristic draw, truth decided
+      {
+        ++falseDraw;                                     // DANGEROUS
+        if (falseFens.size() < MAX_FALSE_FENS)
+          falseFens.push_back(fen);
+      }
+    }
   }
 
   // Place the man for `slot`, then recurse. Cheap geometric rejects (file fold,
@@ -309,6 +359,44 @@ reportColouring(const Generator& g, const string& pieceStr)
        << "  (" << pct(g.heurNonDraw) << "% of call set)\n\n";
 }
 
+// Print the oracle confusion matrix for one colouring: isTheoreticalDraw's
+// boolean label vs the solver's perfect WDL, collapsed to draw-vs-decided.
+void
+reportScorecard(const Generator& g, const string& pieceStr)
+{
+  const uint64_t total = g.agreeDraw + g.agreeNondraw + g.missedDraw + g.falseDraw;
+
+  cout << "--- Oracle scorecard " << signatureOf(pieceStr)
+       << " (pieces " << pieceStr << ") ---\n";
+  cout << "Call-set positions scored : " << total << '\n';
+  cout << "Oracle WDL (side-to-move)  : win " << g.oWin
+       << ", draw " << g.oDraw << ", loss " << g.oLoss;
+  if (g.oBad)
+    cout << "  [** " << g.oBad << " unresolved -- BUG **]";
+  cout << "\n\n";
+
+  cout << "Confusion matrix (isTheoreticalDraw vs perfect WDL):\n";
+  cout << "  agree-draw    (heur draw,  truth draw)    : " << g.agreeDraw    << "  correct\n";
+  cout << "  agree-nondraw (heur false, truth decided) : " << g.agreeNondraw << "  correct (defers to eval)\n";
+  cout << "  missed-draw   (heur false, truth draw)    : " << g.missedDraw   << "  safe gap\n";
+  cout << "  FALSE-DRAW    (heur draw,  truth decided) : " << g.falseDraw
+       << (g.falseDraw ? "  ** DANGEROUS **" : "  (none -- good)") << '\n';
+
+  const double agreePct = total
+    ? 100.0 * static_cast<double>(g.agreeDraw + g.agreeNondraw) / static_cast<double>(total)
+    : 0.0;
+  cout << std::fixed << std::setprecision(2)
+       << "  agreement                                 : " << agreePct << "%\n";
+
+  if (!g.falseFens.empty())
+  {
+    cout << "  false-draw FENs (first " << g.falseFens.size() << "):\n";
+    for (const string& f : g.falseFens)
+      cout << "    " << f << '\n';
+  }
+  cout << '\n';
+}
+
 } // namespace
 
 void
@@ -352,6 +440,7 @@ validateEndgame(const vector<string>& args)
   const string dumpFile = wantDump ? utils::argValue(args, "dump") : string();
   const bool noFold   = utils::hasArg(args, "allfiles");
   const bool oneColor = utils::hasArg(args, "onecolor");
+  const bool wantOracle = utils::hasArg(args, "oracle");
   const int maxKingFile = noFold ? 7 : 3;
 
   // ---- colourings to enumerate --------------------------------------------
@@ -380,6 +469,7 @@ validateEndgame(const vector<string>& args)
   const perf_clock start = perf::now();
 
   vector<Generator> gens;
+  vector<std::unique_ptr<EgSolver>> solvers;   // keep oracles alive for reporting
   for (const string& cs : colourings)
   {
     Generator g;
@@ -394,6 +484,36 @@ validateEndgame(const vector<string>& args)
 
     g.maxKingFile = maxKingFile;
     g.out = outPtr;
+
+    // Build the perfect WDL oracle for this colouring (its own capture/promotion
+    // DAG), then bucket each call-set position against it inside leaf().
+    if (wantOracle)
+    {
+      auto solver = std::make_unique<EgSolver>();
+      vector<Piece> men;
+      for (char c : cs)
+        men.push_back(charToPiece(c));
+
+      string err;
+      cout << "Building oracle for " << signatureOf(cs) << " ... " << std::flush;
+      const perf_clock obStart = perf::now();
+      if (solver->build(men, err))
+      {
+        const perf_time obDur = perf::now() - obStart;
+        cout << "done (" << std::fixed << std::setprecision(1)
+             << obDur.count() << " s)";
+        uint64_t w = 0, d = 0, l = 0;
+        if (solver->distribution(men, w, d, l))
+          cout << "  full-legal WDL: win " << w << ", draw " << d
+               << ", loss " << l;
+        cout << '\n';
+        g.oracle = solver.get();
+        solvers.push_back(std::move(solver));
+      }
+      else
+        cout << "skipped: " << err << '\n';
+    }
+
     g.run(WHITE);
     g.run(BLACK);
     gens.push_back(std::move(g));
@@ -441,8 +561,34 @@ validateEndgame(const vector<string>& args)
     cout << '\n';
   }
 
-  cout << "NOTE: no oracle yet -- these are the heuristic's labels, not\n"
-          "      correctness. Win/draw ground truth is the next stage.\n";
+  // ---- oracle scorecard ---------------------------------------------------
+  if (wantOracle)
+  {
+    for (size_t i = 0; i < gens.size(); ++i)
+      if (gens[i].oracle)
+        reportScorecard(gens[i], colourings[i]);
+
+    // The two colourings are colour-swap + rank-flip images, so the safe and
+    // dangerous buckets must match exactly -- a check on the oracle itself.
+    if (haveMirror && gens[0].oracle && gens[1].oracle)
+    {
+      const bool fdOk = gens[0].falseDraw  == gens[1].falseDraw;
+      const bool mdOk = gens[0].missedDraw == gens[1].missedDraw;
+      cout << "Oracle colour-symmetry self-check (buckets must match):\n";
+      cout << "  false-draw  : " << gens[0].falseDraw << " vs " << gens[1].falseDraw
+           << "   " << (fdOk ? "OK" : "MISMATCH") << '\n';
+      cout << "  missed-draw : " << gens[0].missedDraw << " vs " << gens[1].missedDraw
+           << "   " << (mdOk ? "OK" : "MISMATCH") << "\n\n";
+    }
+  }
+
+  if (wantOracle)
+    cout << "Scorecard above is correctness: FALSE-DRAW must be 0 (the engine\n"
+            "      would otherwise discard a decided game). missed-draw is a\n"
+            "      safe coverage gap.\n";
+  else
+    cout << "NOTE: no oracle (pass 'oracle' for the WDL scorecard) -- these are\n"
+            "      the heuristic's labels, not correctness.\n";
   cout << "Elapsed: " << dur.count() << " s\n";
 
   if (wantDump)
