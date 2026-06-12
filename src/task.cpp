@@ -6,6 +6,7 @@
 #include "single_thread.h"
 #include "test_positions.h"
 #include "tuner.h"
+#include "endgame_validation.h"
 
 void
 init(const vector<string>& args)
@@ -359,7 +360,8 @@ task(const vector<string>& args)
     {"static",   [](const auto& arguments){ staticEval(arguments); }},
     {"bestmove",  [](const auto& arguments){ bestMoveSearch(arguments); }},
     {"readyOk",   [](const auto&){ readyOk(); }},
-    {"tune",      [](const auto& arguments){ tuneEval(arguments); }}
+    {"tune",      [](const auto& arguments){ tuneEval(arguments); }},
+    {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }}
   };
 
   // Search for any command in the args
