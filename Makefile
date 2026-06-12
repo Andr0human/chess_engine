@@ -6,11 +6,16 @@
 # define the Cpp compiler to use
 CXX = g++
 
-# detect OS
+# detect OS (uname does not exist on Windows shells, so skip it there)
+ifeq ($(OS),Windows_NT)
+UNAME_S :=
+else
 UNAME_S := $(shell uname -s)
+endif
 
 # detect compiler type (check if clang or Apple clang)
-CXX_VERSION := $(shell $(CXX) --version 2>/dev/null | head -n 1)
+# avoid head/pipe so this works under cmd.exe too; findstring scans full output
+CXX_VERSION := $(shell $(CXX) --version)
 ifeq ($(findstring clang,$(CXX_VERSION)),clang)
 IS_CLANG := 1
 else
@@ -47,7 +52,7 @@ SOURCEDIRS	:= $(SRC)
 # INCLUDEDIRS	:= $(INCLUDE)
 # LIBDIRS		:= $(LIB)
 FIXPATH = $(subst /,\,$1)
-RM	:= rm -rf
+RM	:= del /Q /F
 MD	:= mkdir
 else
 MAIN	:= elsa
@@ -96,14 +101,14 @@ $(MAIN): $(OBJECTS)
 
 .PHONY: clean
 clean:
-	$(RM) $(OUTPUTMAIN)
-	$(RM) $(call FIXPATH,$(OBJECTS))
+	-$(RM) $(OUTPUTMAIN)
+	-$(RM) $(call FIXPATH,$(OBJECTS))
 	@echo Cleanup complete!
 
 
 .PHONY: clean_ob
 clean_ob:
-	$(RM) $(call FIXPATH,$(OBJECTS))
+	-$(RM) $(call FIXPATH,$(OBJECTS))
 	@echo Object-files Cleanup complete!
 
 run: all
