@@ -130,7 +130,8 @@ struct Generator
   std::ofstream* out = nullptr;
 
   Color stm = WHITE;
-  std::array<int, 16> square{}; // current square per slot
+  std::array<int, 16> square{};   // current square per slot
+  std::array<int, 16> prevSame{}; // nearest earlier slot with same fenChar, or -1
 
   // Counters.
   uint64_t geom = 0, rejInCheck = 0;
@@ -238,6 +239,14 @@ struct Generator
         if (square[j] == sq) { overlap = true; break; }
       if (overlap) continue;
 
+      // Identical men (same fenChar -> same colour and type) are
+      // interchangeable: placing them independently would generate each
+      // position k! times. Enforce a strict ascending-square order across
+      // identical slots so every multiset placement is emitted exactly once.
+      // (square[prevSame] is already set: prevSame < slot, placed earlier.)
+      if (prevSame[slot] >= 0 && sq <= square[prevSame[slot]])
+        continue;
+
       // Kings never adjacent (checked the moment the black king lands).
       if (slot == BK && kingDistance(square[WK], sq) <= 1)
         continue;
@@ -247,7 +256,20 @@ struct Generator
     }
   }
 
-  void run(Color s) { stm = s; place(0); }
+  // Precompute, for each slot, the nearest earlier slot carrying the same
+  // fenChar (or -1). Drives the identical-piece ordering constraint in place().
+  void
+  computePrevSame()
+  {
+    for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+    {
+      prevSame[i] = -1;
+      for (int j = i - 1; j >= 0; --j)
+        if (slots[j].fenChar == slots[i].fenChar) { prevSame[i] = j; break; }
+    }
+  }
+
+  void run(Color s) { stm = s; computePrevSame(); place(0); }
 };
 
 // Print one colouring's tally block (no header / footer).
