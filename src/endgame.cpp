@@ -15,6 +15,13 @@ chebyshevDistance(Square s1, Square s2)
   return std::max(abs(rank1 - rank2), abs(file1 - file2));
 }
 
+Bitboard
+getRank1(uint8_t color)
+{ return color == WHITE ? Rank1 : Rank8; }
+
+Bitboard
+getRank8(uint8_t color)
+{ return color == WHITE ? Rank8 : Rank1; }
 
 constexpr Bitboard rank2to6[COLOR_NB] = {
   AllSquares ^ (Rank18 | Rank2),
@@ -196,29 +203,77 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   if (pos.count<WHITE, ALL>() == 1)
   {
     // Pawn and bishop are of different side
-    const Bitboard pawn = pos.getPiece(emySide, PAWN);
-    const Square pawnSq = squareNo(pawn);
+    const Bitboard pawn      = pos.getPiece(emySide, PAWN);
+    const Bitboard myKing    = pos.getPiece(side   , KING);
+    const Bitboard emyKing   = pos.getPiece(emySide, KING);
+    const Square   pawnSq    = squareNo(pawn   );
+    const Square   emyKingSq = squareNo(emyKing);
+
+    Bitboard kingCapMask    = attackSquares<KING>(squareNo(myKing), 0);
+    Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
+    Bitboard extEmyKingCapMask = 0;
+
+    Bitboard bishopCapMask = attackSquares<BISHOP>(bishopSq, myKing);
+
+    {
+      const Bitboard emyKingLegalMask = emyKingCapMask & ~(occupied | bishopCapMask | kingCapMask);
+      if ((emyKingLegalMask == 0) and
+          (side2move == side) and
+          (attackSquares<BISHOP>(emyKingSq, occupied) & bishopCapMask)
+      ) return false;
+
+      if ((side2move == side) and
+          (emyKing & FileAH) and
+          (emyKing & getRank1(emySide)) and
+          (emyKing & attackSquares<BISHOP>(bishopSq, 0))
+      ) return false;
+    }
+
+    {
+      const Bitboard kingLegalMask = kingCapMask & ~(occupied | emyKingCapMask);
+      if (~kingLegalMask and (myKing & plt::pawnCaptureMasks[emySide][pawnSq + 8 * (2 * emySide - 1)]))
+        return false;
+    }
+
+    if (side2move == emySide)
+    {
+      Bitboard temp = emyKingCapMask;
+      while (temp)
+      {
+        const Square sq = nextSquare(temp);
+        extEmyKingCapMask |= attackSquares<KING>(sq, 0);
+      }
+    }
 
     Bitboard pawnMask = passedPawnMasks[emySide][pawnSq] & plt::lineMasks[pawnSq];
 
-    if ((bishop | pos.getPiece(side, KING)) & pawnMask)
+    if ((bishop | myKing) & pawnMask)
       return true;
 
-    if (attackSquares<BISHOP>(bishopSq, 0) & pawnMask)
-      return true;
+    if ((bishopCapMask & pawnMask & ~emyKingCapMask) and
+        ((side2move == side) or ((side2move == emySide) and (bishop & ~extEmyKingCapMask)))
+    ) return true;
 
-    if (side2move == emySide)
+    if (side2move == emySide) {
       pawnMask ^= pawnMask & plt::pawnMasks[emySide][pawnSq];
+
+      if ((plt::pawnCaptureMasks[emySide][pawnSq + 8 * (2 * emySide - 1)] & myKing) and
+          (emyKingCapMask & (1ULL << (pawnSq + 8 * (2 * emySide - 1))))
+      ) pawnMask ^= pawnMask & emyKingCapMask;
+    }
+    
+    const Bitboard dangerMask = emyKingCapMask | myKing | ((side2move == emySide) * extEmyKingCapMask);
 
     while (pawnMask)
     {
       const Square sq = nextSquare(pawnMask);
+      const Bitboard bishopSquares = bishopCapMask & attackSquares<BISHOP>(sq, myKing);
 
-      const Bitboard bishopSquares = attackSquares<BISHOP>(bishopSq, occupied) & attackSquares<BISHOP>(sq, occupied);
-      const Square   emyKingSq = squareNo(pos.getPiece(emySide, KING));
+      const Bitboard intersection = bishopSquares & ~dangerMask;
 
-      if (bishopSquares & ~plt::kingMasks[emyKingSq])
+      if (intersection & ~getRank8(emySide)) {
         return true;
+      }
     }
 
     return false;
