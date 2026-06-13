@@ -20,6 +20,10 @@ getRank1(uint8_t color)
 { return color == WHITE ? Rank1 : Rank8; }
 
 Bitboard
+getRank2(uint8_t color)
+{ return color == WHITE ? Rank2 : Rank7; }
+
+Bitboard
 getRank8(uint8_t color)
 { return color == WHITE ? Rank8 : Rank1; }
 
@@ -197,23 +201,25 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   const Color emySide = ~side;
 
   const Bitboard occupied = pos.all();
-  const Bitboard bishop   = pos.getPiece(side, BISHOP);
+  const Bitboard bishop   = pos.getPiece(side,  BISHOP);
+  const Bitboard myKing   = pos.getPiece(side,    KING);
+  const Bitboard emyKing  = pos.getPiece(emySide, KING);
+
   const Square   bishopSq = squareNo(bishop);
+  const Square     kingSq = squareNo(myKing);
+  const Square  emyKingSq = squareNo(emyKing);
+
+  Bitboard kingCapMask    = attackSquares<KING>(kingSq   , 0);
+  Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
+  Bitboard bishopCapMask = attackSquares<BISHOP>(bishopSq, myKing);
 
   if (pos.count<WHITE, ALL>() == 1)
   {
     // Pawn and bishop are of different side
-    const Bitboard pawn      = pos.getPiece(emySide, PAWN);
-    const Bitboard myKing    = pos.getPiece(side   , KING);
-    const Bitboard emyKing   = pos.getPiece(emySide, KING);
-    const Square   pawnSq    = squareNo(pawn   );
-    const Square   emyKingSq = squareNo(emyKing);
+    const Bitboard   pawn = pos.getPiece(emySide, PAWN);
+    const Square   pawnSq = squareNo(pawn);
 
-    Bitboard kingCapMask    = attackSquares<KING>(squareNo(myKing), 0);
-    Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
     Bitboard extEmyKingCapMask = 0;
-
-    Bitboard bishopCapMask = attackSquares<BISHOP>(bishopSq, myKing);
 
     {
       const Bitboard emyKingLegalMask = emyKingCapMask & ~(occupied | bishopCapMask | kingCapMask);
@@ -282,14 +288,40 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   const Bitboard pawn = pos.getPiece(side, PAWN);
   const Square pawnSq = squareNo(pawn);
 
+  const int pawnR    = pawnSq    >> 3;
+  const int kingR    = kingSq    >> 3;
+  const int emyKingR = emyKingSq >> 3;
+
   Bitboard pawnMask = passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq];
   Bitboard cornerMask = pawnMask & Rank18;
 
-  if (((cornerMask & WhiteSquares) and (bishop & WhiteSquares))
-   or ((cornerMask & BlackSquares) and (bishop & BlackSquares))) return false;
+  // Not a theoretical draw if, pawn is protected by bishop or king
+  // or is closer to promo square than enemy king
+  // or the pawn can reach a square above protected by its king
+  if ((pawn & kingCapMask) or
+      (pawn & bishopCapMask) or
+      ((side == WHITE ? pawnR > emyKingR : pawnR < emyKingR) and !(plt::pawnMasks[side][pawnSq] & bishop)) or
+      (!(plt::pawnMasks[side][pawnSq] & occupied) and (attackSquares<KING>(pawnSq + 8 * (2 * side - 1), 0) & myKing))
+  ) return false;
 
-  if ((pawn & FileAH) and (pos.getPiece(emySide, KING) & pawnMask))
-    return true;
+  if ((pawn & FileAH) and
+      (emyKing & pawnMask) and
+      (side == WHITE ? emyKingR > kingR + 1 : emyKingR < kingR - 1) and
+      (((cornerMask & WhiteSquares) and !(bishop & WhiteSquares))
+    or ((cornerMask & BlackSquares) and !(bishop & BlackSquares)))
+  ) return true;
+
+  // If pawn is attacked by enemy king and our king cannot support the pawn
+  if ((pawn & emyKingCapMask) and !(kingCapMask & attackSquares<KING>(pawnSq, 0) & ~emyKingCapMask)) {
+    // If bishop is just above it
+    if ((plt::pawnMasks[side][pawnSq] & bishop))
+      return true;
+    
+    // If bishop cannot support it
+    if (!(pawn & getRank2(side)) and
+       (!(bishopCapMask & plt::pawnMasks[side][pawnSq]) and !(bishopCapMask & attackSquares<BISHOP>(pawnSq, occupied)))
+    ) return true;
+  }
 
   return false;
 }
