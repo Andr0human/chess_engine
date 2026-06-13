@@ -371,6 +371,17 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
       (abs(emyKingSqR - bishopSqR) > 1 and abs(emyKingSqF - bishopSqF) > 1)
   ) return true;
 
+  // Safe-draw guard (data-mined against the perfect KRKB oracle, FALSE-DRAW-free
+  // over the full sweep): defender to move, its king off the edge with the bishop
+  // guarded by that king, the kings >= 3 apart, and the rook not bearing on the
+  // bishop -> a held draw the conservative branch above misses.
+  if ((pos.color == emySide) and
+      !(emyKing & (Rank18 | FileAH)) and
+      (chebyshevDistance(emyKingSq, bishopSq) == 1) and
+      (chebyshevDistance(kingSq, emyKingSq) >= 3) and
+      !(attackSquares<ROOK>(squareNo(pos.getPiece(side, ROOK)), 0) & bishop)
+  ) return true;
+
   return false;
 }
 
