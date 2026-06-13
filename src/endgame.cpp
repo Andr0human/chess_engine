@@ -358,15 +358,18 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
 
   const Square    kingSq = squareNo(pos.getPiece(side, KING));
   const Square emyKingSq = squareNo(emyKing);
+  const Square  bishopSq = squareNo(bishop);
 
-  if ((attackSquares<ROOK>(emyKingSq, 0) & bishop) == 0)
-  {
-    if (!(emyKing & (Rank18 | FileA | FileH)))
-      return true;
+  const int emyKingSqR = emyKingSq >> 3;
+  const int emyKingSqF = emyKingSq &  7;
+  const int  bishopSqR = bishopSq  >> 3;
+  const int  bishopSqF = bishopSq  &  7;
 
-    if (chebyshevDistance(kingSq, emyKingSq) >= 4)
-      return true;
-  }
+  if (!(emyKing & (Rank18 | FileAH)) and
+      !(attackSquares<ROOK>(squareNo(pos.getPiece(side, ROOK)), 0) & bishop) and
+      (chebyshevDistance(kingSq, bishopSq) > 3) and
+      (abs(emyKingSqR - bishopSqR) > 1 and abs(emyKingSqF - bishopSqF) > 1)
+  ) return true;
 
   return false;
 }
