@@ -323,6 +323,24 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // skips it (and all of orderMoves/staging) entirely.
   MoveList myMoves;
   stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
+
+  // Reverse futility pruning: at a shallow, not-in-check node, if the static
+  // eval already beats beta by a depth-scaled margin, assume some move holds
+  // the cutoff and return without generating/searching moves. evaluate() is
+  // computed lazily — only when the cheap gates (not in check, shallow depth,
+  // non-mate window) pass. Fail-hard return; no TT store on the prune.
+  if constexpr (USE_RFP)
+  {
+    if (myMoves.checkers == 0
+      and depth <= RFP_MAX_DEPTH
+      and __abs(beta) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = evaluate(pos);
+      if (staticEval - RFP_MARGIN * depth >= beta)
+        return beta;
+    }
+  }
+
   stagedGenerateMoves<GEN_MOVES   >(pos, myMoves);
 
   if (!myMoves.anyMove())
