@@ -238,18 +238,18 @@ struct Generator
     else
       ++heurNonDraw;
 
-    if (out)
-      (*out) << fen << " | " << (isDraw ? 'D' : '.') << '\n';
-
+    // Oracle verdict (side-to-move relative) as a single char, also appended to
+    // the dump so a position can be filtered by truth: 'W'/'L'/'D', '?' = bad.
+    char oracleCh = 0;
     if (oracle)
     {
       const Wdl truth = oracle->probe(pos);
       const bool oracleDraw = (truth == Wdl::DRAW);
 
-      if      (truth == Wdl::WIN)  ++oWin;
-      else if (truth == Wdl::LOSS) ++oLoss;
-      else if (truth == Wdl::DRAW) ++oDraw;
-      else                         ++oBad;   // ILLEGAL/UNKNOWN -- should never happen
+      if      (truth == Wdl::WIN)  { ++oWin;  oracleCh = 'W'; }
+      else if (truth == Wdl::LOSS) { ++oLoss; oracleCh = 'L'; }
+      else if (truth == Wdl::DRAW) { ++oDraw; oracleCh = 'D'; }
+      else                         { ++oBad;  oracleCh = '?'; }  // ILLEGAL/UNKNOWN -- should never happen
 
       if (isDraw && oracleDraw)        ++agreeDraw;
       else if (!isDraw && !oracleDraw) ++agreeNondraw;
@@ -260,6 +260,16 @@ struct Generator
         if (falseFens.size() < MAX_FALSE_FENS)
           falseFens.push_back(fen);
       }
+    }
+
+    // dump: `FEN | <D|.>` (recognizer) and, when an oracle is present,
+    // ` | <W|D|L>` (truth). A missed-draw line is exactly `| . | D`.
+    if (out)
+    {
+      (*out) << fen << " | " << (isDraw ? 'D' : '.');
+      if (oracle)
+        (*out) << " | " << oracleCh;
+      (*out) << '\n';
     }
   }
 
