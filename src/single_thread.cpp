@@ -282,6 +282,17 @@ playAllMoves(
   return bestMove;
 }
 
+// Lazily compute and cache the node's static evaluation. Multiple search
+// heuristics (RFP today; razoring / futility / improving later) want the same
+// value — compute it at most once per node and reuse it from NodeState.
+static inline Score
+nodeStaticEval(ChessBoard& pos, NodeState& ns)
+{
+  if (!ns.staticEval.has_value())
+    ns.staticEval = evaluate(pos);
+  return *ns.staticEval;
+}
+
 Score
 alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
 {
@@ -324,20 +335,29 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   MoveList myMoves;
   stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
 
+  // Per-node search state. Built here, before RFP, so the node's static eval
+  // can be cached in it once (via nodeStaticEval) and reused by every
+  // heuristic in the node. depth / numExtensions are pre-extension at this
+  // point — synced into ns after the extension policy runs below.
+  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
+
   // Reverse futility pruning: at a shallow, not-in-check node, if the static
   // eval already beats beta by a depth-scaled margin, assume some move holds
-  // the cutoff and return without generating/searching moves. evaluate() is
-  // computed lazily — only when the cheap gates (not in check, shallow depth,
-  // non-mate window) pass. Fail-hard return; no TT store on the prune.
+  // the cutoff and return without generating/searching moves. nodeStaticEval()
+  // is computed lazily — only when the cheap gates (not in check, shallow
+  // depth, non-mate window) pass. Fail-soft return: staticEval (>= beta, since
+  // staticEval - margin*depth >= beta) hands the parent a truer lower bound
+  // than a flat beta. No TT store on the prune; bestMove untouched, so the
+  // fail-low TT-hint/LMR gotcha (best-move semantics) does not apply here.
   if constexpr (USE_RFP)
   {
     if (myMoves.checkers == 0
       and depth <= RFP_MAX_DEPTH
       and __abs(beta) < VALUE_MATE - MAX_PLY * 20)
     {
-      const Score staticEval = evaluate(pos);
+      const Score staticEval = nodeStaticEval(pos, ns);
       if (staticEval - RFP_MARGIN * depth >= beta)
-        return beta;
+        return staticEval;
     }
   }
 
@@ -353,11 +373,12 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     int extensions = searchExtension(pos, myMoves, numExtensions, depth);
     depth += extensions;
     numExtensions += extensions;
+    ns.depth = depth;
+    ns.numExtensions = numExtensions;
   }
 
   pvArray[pvIndex] = NULL_MOVE;
 
-  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
   Move bestMove = NULL_MOVE;
 
   HashMoveOutcome hashOutcome = playHashMove(pos, hashMove, ns, bestMove);

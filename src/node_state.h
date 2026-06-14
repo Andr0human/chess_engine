@@ -22,6 +22,10 @@ struct NodeState
   int numExtensions;
   Flag hashf = Flag::HASH_ALPHA;
 
+  // Node static eval, computed at most once per node (lazy) and reused across
+  // RFP / razoring / futility / improving. nullopt until first requested.
+  std::optional<Score> staticEval = std::nullopt;
+
   constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
 };
 
