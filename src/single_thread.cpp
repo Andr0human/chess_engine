@@ -201,7 +201,7 @@ static Move
 playSubsetMoves(
   ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
   size_t start, size_t end,
-  NodeState& ns, Move bestMove
+  NodeState& ns, Move bestMove, bool futilityStage = false
 )
 {
   // myMoves.removedMoves() accounts for moves searched *outside* this array
@@ -214,6 +214,18 @@ playSubsetMoves(
   for (size_t moveNo = start; moveNo < end; ++moveNo)
   {
     Move move = movesArray[moveNo];
+
+    // Quiet-move futility: at a shallow, not-in-check node whose static eval
+    // sits a depth-scaled margin below alpha (ns.quietFutile, computed in
+    // alphaBeta), the residual quiet moves are very unlikely to raise it. Once
+    // at least one move has been searched (bestMove set — so the fail-low
+    // return is backed by a real score), skip the rest. This is reached with
+    // futilityStage == true only for the QUIET residual (captures / promotions
+    // / checks / PV / killers ran in earlier stages), so every move here is
+    // already quiet & non-check — no per-move type test needed. Unverified bet
+    // (cf. razoring's qsearch check); the depth-scaled margin is the safety.
+    if (futilityStage and ns.quietFutile and bestMove != NULL_MOVE)
+      break;
 
     // HASH_ALPHA fallback: remember the first searched move at this node so
     // the TT entry has *something* to suggest on a fail-low revisit.
@@ -271,7 +283,10 @@ playAllMoves(
     ? movesArray.size()
     : orderMoves(pos, movesArray, orderType, ns.ply, start);
 
-  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove);
+  // Only the residual QUIET stage may futility-prune; earlier stages (captures,
+  // promotions, checks, PV, killers) always search their moves.
+  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove,
+                             orderType == MType::QUIET);
 
   if (ns.hashf == Flag::HASH_BETA)
     return bestMove;
@@ -280,6 +295,17 @@ playAllMoves(
     return playAllMoves<moveGen + 1, rest...>(pos, myMoves, movesArray, end, ns, bestMove);
 
   return bestMove;
+}
+
+// Lazily compute and cache the node's static evaluation. Multiple search
+// heuristics (RFP today; razoring / futility / improving later) want the same
+// value — compute it at most once per node and reuse it from NodeState.
+static inline Score
+nodeStaticEval(ChessBoard& pos, NodeState& ns)
+{
+  if (!ns.staticEval.has_value())
+    ns.staticEval = evaluate(pos);
+  return *ns.staticEval;
 }
 
 Score
@@ -323,6 +349,60 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // skips it (and all of orderMoves/staging) entirely.
   MoveList myMoves;
   stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
+
+  // Per-node search state. Built here, before RFP, so the node's static eval
+  // can be cached in it once (via nodeStaticEval) and reused by every
+  // heuristic in the node. depth / numExtensions are pre-extension at this
+  // point — synced into ns after the extension policy runs below.
+  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
+
+  // Reverse futility pruning: at a shallow, not-in-check node, if the static
+  // eval already beats beta by a depth-scaled margin, assume some move holds
+  // the cutoff and return without generating/searching moves. nodeStaticEval()
+  // is computed lazily — only when the cheap gates (not in check, shallow
+  // depth, non-mate window) pass. Fail-soft return: staticEval (>= beta, since
+  // staticEval - margin*depth >= beta) hands the parent a truer lower bound
+  // than a flat beta. No TT store on the prune; bestMove untouched, so the
+  // fail-low TT-hint/LMR gotcha (best-move semantics) does not apply here.
+  if constexpr (USE_RFP)
+  {
+    if (myMoves.checkers == 0
+      and depth <= RFP_MAX_DEPTH
+      and __abs(beta) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      if (staticEval - RFP_MARGIN * depth >= beta)
+        return staticEval;
+    }
+  }
+
+  // Razoring: alpha-side mirror of RFP. At a shallow, not-in-check node whose
+  // static eval sits a depth-scaled margin *below* alpha, the node looks
+  // hopeless on the alpha side. Rather than trust the static eval blindly,
+  // verify with a quiescence search (it resolves hanging captures the static
+  // eval missed); only if qsearch still fails low (<= alpha) do we return that
+  // fail-soft score instead of a full-width search. If qsearch beats alpha the
+  // node wasn't hopeless after all — fall through. Eval reuses the RFP cache
+  // (nodeStaticEval computes at most once per node). Like RFP: no TT store,
+  // bestMove untouched, so the fail-low TT-hint/LMR gotcha does not apply.
+  if constexpr (USE_RAZOR)
+  {
+    if (myMoves.checkers == 0
+      and depth <= RAZOR_MAX_DEPTH
+      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      if (staticEval + RAZOR_MARGIN * depth <= alpha)
+      {
+        const Score razorScore = quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
+        if (info.timeOver())
+          return TIMEOUT;
+        if (razorScore <= alpha)
+          return razorScore;
+      }
+    }
+  }
+
   stagedGenerateMoves<GEN_MOVES   >(pos, myMoves);
 
   if (!myMoves.anyMove())
@@ -335,11 +415,33 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     int extensions = searchExtension(pos, myMoves, numExtensions, depth);
     depth += extensions;
     numExtensions += extensions;
+    ns.depth = depth;
+    ns.numExtensions = numExtensions;
+  }
+
+  // Quiet-move futility precondition (consumed in the QUIET stage of
+  // playAllMoves -> playSubsetMoves). At a shallow, not-in-check node outside
+  // the mate window whose static eval sits a depth-scaled margin below alpha,
+  // the residual quiet moves are very unlikely to raise it. We only *flag* it
+  // here; the actual skip happens per-move, after >=1 move is searched, so the
+  // fail-low return stays backed by a real score. depth is post-extension
+  // (an extended = interesting node gets a larger depth/margin -> futility
+  // fires less). nodeStaticEval reuses the RFP/razoring cache, so this adds no
+  // eval cost at depth <= RFP_MAX_DEPTH (RFP already computed it for non-check
+  // nodes). No TT/bestMove effect — like RFP/razoring, the LMR gotcha is N/A.
+  if constexpr (USE_FUTILITY)
+  {
+    if (myMoves.checkers == 0
+      and depth <= FUTILITY_MAX_DEPTH
+      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      ns.quietFutile = (staticEval + FUTILITY_MARGIN * depth <= alpha);
+    }
   }
 
   pvArray[pvIndex] = NULL_MOVE;
 
-  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
   Move bestMove = NULL_MOVE;
 
   HashMoveOutcome hashOutcome = playHashMove(pos, hashMove, ns, bestMove);
