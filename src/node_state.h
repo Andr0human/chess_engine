@@ -26,6 +26,11 @@ struct NodeState
   // RFP / razoring / futility / improving. nullopt until first requested.
   std::optional<Score> staticEval = std::nullopt;
 
+  // Quiet-move futility flag, set in alphaBeta when the node's static eval sits
+  // a depth-scaled margin below alpha. Consumed in the QUIET stage of
+  // playSubsetMoves to skip the residual quiet moves once one move is searched.
+  bool quietFutile = false;
+
   constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
 };
 

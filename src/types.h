@@ -26,6 +26,7 @@ enum SearchFlag: bool
   USE_MOVE_ORDER = true,
   USE_RFP = true,
   USE_RAZOR = true,
+  USE_FUTILITY = true,
 };
 
 enum Color: uint8_t
@@ -63,6 +64,7 @@ enum Search
   EXTENSION_LIMIT = 8,
   RFP_MAX_DEPTH = 6,
   RAZOR_MAX_DEPTH = 3,
+  FUTILITY_MAX_DEPTH = 4,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   MAX_THREADS = 12,
@@ -99,6 +101,7 @@ enum Value: Score
   VALUE_WINDOW = 4,
   RFP_MARGIN = 110,
   RAZOR_MARGIN = 240,
+  FUTILITY_MARGIN = 120,
   VALUE_TRANSPOSITION_TABLE_SEED = 1557,
 
 

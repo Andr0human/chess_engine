@@ -201,7 +201,7 @@ static Move
 playSubsetMoves(
   ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
   size_t start, size_t end,
-  NodeState& ns, Move bestMove
+  NodeState& ns, Move bestMove, bool futilityStage = false
 )
 {
   // myMoves.removedMoves() accounts for moves searched *outside* this array
@@ -214,6 +214,18 @@ playSubsetMoves(
   for (size_t moveNo = start; moveNo < end; ++moveNo)
   {
     Move move = movesArray[moveNo];
+
+    // Quiet-move futility: at a shallow, not-in-check node whose static eval
+    // sits a depth-scaled margin below alpha (ns.quietFutile, computed in
+    // alphaBeta), the residual quiet moves are very unlikely to raise it. Once
+    // at least one move has been searched (bestMove set — so the fail-low
+    // return is backed by a real score), skip the rest. This is reached with
+    // futilityStage == true only for the QUIET residual (captures / promotions
+    // / checks / PV / killers ran in earlier stages), so every move here is
+    // already quiet & non-check — no per-move type test needed. Unverified bet
+    // (cf. razoring's qsearch check); the depth-scaled margin is the safety.
+    if (futilityStage and ns.quietFutile and bestMove != NULL_MOVE)
+      break;
 
     // HASH_ALPHA fallback: remember the first searched move at this node so
     // the TT entry has *something* to suggest on a fail-low revisit.
@@ -271,7 +283,10 @@ playAllMoves(
     ? movesArray.size()
     : orderMoves(pos, movesArray, orderType, ns.ply, start);
 
-  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove);
+  // Only the residual QUIET stage may futility-prune; earlier stages (captures,
+  // promotions, checks, PV, killers) always search their moves.
+  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove,
+                             orderType == MType::QUIET);
 
   if (ns.hashf == Flag::HASH_BETA)
     return bestMove;
@@ -402,6 +417,27 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     numExtensions += extensions;
     ns.depth = depth;
     ns.numExtensions = numExtensions;
+  }
+
+  // Quiet-move futility precondition (consumed in the QUIET stage of
+  // playAllMoves -> playSubsetMoves). At a shallow, not-in-check node outside
+  // the mate window whose static eval sits a depth-scaled margin below alpha,
+  // the residual quiet moves are very unlikely to raise it. We only *flag* it
+  // here; the actual skip happens per-move, after >=1 move is searched, so the
+  // fail-low return stays backed by a real score. depth is post-extension
+  // (an extended = interesting node gets a larger depth/margin -> futility
+  // fires less). nodeStaticEval reuses the RFP/razoring cache, so this adds no
+  // eval cost at depth <= RFP_MAX_DEPTH (RFP already computed it for non-check
+  // nodes). No TT/bestMove effect — like RFP/razoring, the LMR gotcha is N/A.
+  if constexpr (USE_FUTILITY)
+  {
+    if (myMoves.checkers == 0
+      and depth <= FUTILITY_MAX_DEPTH
+      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      ns.quietFutile = (staticEval + FUTILITY_MARGIN * depth <= alpha);
+    }
   }
 
   pvArray[pvIndex] = NULL_MOVE;
