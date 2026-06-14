@@ -295,6 +295,16 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   Bitboard pawnMask = passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq];
   Bitboard cornerMask = pawnMask & Rank18;
 
+  // Wrong-bishop rook-pawn draw: checked before the non-draw block below so a
+  // corner-held draw isn't pre-empted by the pawn being bishop/king-defended or
+  // ahead of the enemy king. With the wrong bishop the king can't be evicted.
+  if ((pawn & FileAH) and
+      (emyKing & pawnMask) and
+      (side == WHITE ? emyKingR > kingR + 1 : emyKingR < kingR - 1) and
+      (((cornerMask & WhiteSquares) and !(bishop & WhiteSquares))
+    or ((cornerMask & BlackSquares) and !(bishop & BlackSquares)))
+  ) return true;
+
   // Not a theoretical draw if, pawn is protected by bishop or king
   // or is closer to promo square than enemy king
   // or the pawn can reach a square above protected by its king
@@ -303,13 +313,6 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
       ((side == WHITE ? pawnR > emyKingR : pawnR < emyKingR) and !(plt::pawnMasks[side][pawnSq] & bishop)) or
       (!(plt::pawnMasks[side][pawnSq] & occupied) and (attackSquares<KING>(pawnSq + 8 * (2 * side - 1), 0) & myKing))
   ) return false;
-
-  if ((pawn & FileAH) and
-      (emyKing & pawnMask) and
-      (side == WHITE ? emyKingR > kingR + 1 : emyKingR < kingR - 1) and
-      (((cornerMask & WhiteSquares) and !(bishop & WhiteSquares))
-    or ((cornerMask & BlackSquares) and !(bishop & BlackSquares)))
-  ) return true;
 
   // If pawn is attacked by enemy king and our king cannot support the pawn
   if ((pawn & emyKingCapMask) and !(kingCapMask & attackSquares<KING>(pawnSq, 0) & ~emyKingCapMask)) {
