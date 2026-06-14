@@ -361,6 +361,33 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     }
   }
 
+  // Razoring: alpha-side mirror of RFP. At a shallow, not-in-check node whose
+  // static eval sits a depth-scaled margin *below* alpha, the node looks
+  // hopeless on the alpha side. Rather than trust the static eval blindly,
+  // verify with a quiescence search (it resolves hanging captures the static
+  // eval missed); only if qsearch still fails low (<= alpha) do we return that
+  // fail-soft score instead of a full-width search. If qsearch beats alpha the
+  // node wasn't hopeless after all — fall through. Eval reuses the RFP cache
+  // (nodeStaticEval computes at most once per node). Like RFP: no TT store,
+  // bestMove untouched, so the fail-low TT-hint/LMR gotcha does not apply.
+  if constexpr (USE_RAZOR)
+  {
+    if (myMoves.checkers == 0
+      and depth <= RAZOR_MAX_DEPTH
+      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      if (staticEval + RAZOR_MARGIN * depth <= alpha)
+      {
+        const Score razorScore = quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
+        if (info.timeOver())
+          return TIMEOUT;
+        if (razorScore <= alpha)
+          return razorScore;
+      }
+    }
+  }
+
   stagedGenerateMoves<GEN_MOVES   >(pos, myMoves);
 
   if (!myMoves.anyMove())
