@@ -294,13 +294,14 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
   Bitboard pawnMask = passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq];
   Bitboard cornerMask = pawnMask & Rank18;
+  const int increment = int(side2move == side);
 
   // Wrong-bishop rook-pawn draw: checked before the non-draw block below so a
   // corner-held draw isn't pre-empted by the pawn being bishop/king-defended or
   // ahead of the enemy king. With the wrong bishop the king can't be evicted.
   if ((pawn & FileAH) and
-      (emyKing & pawnMask) and
-      (side == WHITE ? emyKingR > kingR + 1 : emyKingR < kingR - 1) and
+      (emyKing & passedPawnMasks[side][pawnSq]) and
+      (side == WHITE ? emyKingR > kingR + increment : emyKingR < kingR - increment) and
       (((cornerMask & WhiteSquares) and !(bishop & WhiteSquares))
     or ((cornerMask & BlackSquares) and !(bishop & BlackSquares)))
   ) return true;
