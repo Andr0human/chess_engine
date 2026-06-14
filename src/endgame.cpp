@@ -15,17 +15,13 @@ chebyshevDistance(Square s1, Square s2)
   return std::max(abs(rank1 - rank2), abs(file1 - file2));
 }
 
-Bitboard
-getRank1(uint8_t color)
-{ return color == WHITE ? Rank1 : Rank8; }
-
-Bitboard
-getRank2(uint8_t color)
-{ return color == WHITE ? Rank2 : Rank7; }
-
-Bitboard
-getRank8(uint8_t color)
-{ return color == WHITE ? Rank8 : Rank1; }
+// Color-relative ranks: relativeRank[color][r] is the r-th rank (1-8) counting
+// from color's own back rank, so the BLACK row mirrors to absolute rank 9-r.
+// Ranks are 1-based; index 0 is a NoSquares placeholder so call sites read naturally.
+constexpr Bitboard relativeRank[COLOR_NB][9] = {
+  { NoSquares, Rank8, Rank7, Rank6, Rank5, Rank4, Rank3, Rank2, Rank1 },  // BLACK
+  { NoSquares, Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8 },  // WHITE
+};
 
 constexpr Bitboard rank2to6[COLOR_NB] = {
   AllSquares ^ (Rank18 | Rank2),
@@ -230,7 +226,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
       if ((side2move == side) and
           (emyKing & FileAH) and
-          (emyKing & getRank1(emySide)) and
+          (emyKing & relativeRank[emySide][1]) and
           (emyKing & attackSquares<BISHOP>(bishopSq, 0))
       ) return false;
     }
@@ -277,7 +273,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
       const Bitboard intersection = bishopSquares & ~dangerMask;
 
-      if (intersection & ~getRank8(emySide)) {
+      if (intersection & ~relativeRank[emySide][8]) {
         return true;
       }
     }
@@ -301,7 +297,8 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   // ahead of the enemy king. With the wrong bishop the king can't be evicted.
   if ((pawn & FileAH) and
       (emyKing & passedPawnMasks[side][pawnSq]) and
-      (side == WHITE ? emyKingR > kingR + increment : emyKingR < kingR - increment) and
+      ((side == WHITE ? emyKingR > kingR + increment : emyKingR < kingR - increment)
+    or (emyKing & (relativeRank[side][7] | relativeRank[side][8]))) and
       (((cornerMask & WhiteSquares) and !(bishop & WhiteSquares))
     or ((cornerMask & BlackSquares) and !(bishop & BlackSquares)))
   ) return true;
@@ -322,7 +319,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
       return true;
     
     // If bishop cannot support it
-    if (!(pawn & getRank2(side)) and
+    if (!(pawn & relativeRank[side][2]) and
        (!(bishopCapMask & plt::pawnMasks[side][pawnSq]) and !(bishopCapMask & attackSquares<BISHOP>(pawnSq, occupied)))
     ) return true;
   }
