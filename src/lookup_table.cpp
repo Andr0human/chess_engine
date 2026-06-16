@@ -26,6 +26,7 @@ MaskTable kingOuterMasks;
 array<MaskTable, COLOR_NB>        pawnMasks;
 array<MaskTable, COLOR_NB> pawnCaptureMasks;
 array<MaskTable, COLOR_NB>  passedPawnMasks;
+array<MaskTable, COLOR_NB>  ruleOfSquares;
 
 MaskTable   rookStartIndex;
 MaskTable bishopStartIndex;
@@ -356,6 +357,24 @@ buildPassedPawnTable(MaskTable& arr, MaskTable& genTable)
   }
 }
 
+static void
+buildRuleOfSquaresTable(MaskTable& table, MaskTable& genTable)
+{
+  for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
+  {
+    const int sqR  = sq >> 3;
+    const int sqF  = sq &  7;
+    const int dist = 7 - sqR;
+
+    Bitboard value = 0;
+
+    for (int i = std::max(0, sqF - dist); i < std::min(sqF + dist + 1, 8); i++)
+      value |= genTable[sqR * 8 + i] | 1ULL << (sqR * 8 + i);
+
+    table[sq] = value;
+  }
+}
+
 
 static void
 mergeTable(MaskTable& toTable, MaskTable& fromTable1, MaskTable& fromTable2)
@@ -401,6 +420,9 @@ init()
 
   buildPassedPawnTable(passedPawnMasks[1],   upMasks);
   buildPassedPawnTable(passedPawnMasks[0], downMasks);
+
+  buildRuleOfSquaresTable(ruleOfSquares[1],   upMasks);
+  buildRuleOfSquaresTable(ruleOfSquares[0], downMasks);
 
   setZero(diagonalMasks);
   setZero(lineMasks);
