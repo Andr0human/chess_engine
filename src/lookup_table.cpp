@@ -358,13 +358,13 @@ buildPassedPawnTable(MaskTable& arr, MaskTable& genTable)
 }
 
 static void
-buildRuleOfSquaresTable(MaskTable& table, MaskTable& genTable)
+buildRuleOfSquaresTable(MaskTable& table, Color c, MaskTable& genTable)
 {
   for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
   {
     const int sqR  = sq >> 3;
     const int sqF  = sq &  7;
-    const int dist = 7 - sqR;
+    const int dist = c == WHITE ? 7 - sqR : sqR;
 
     Bitboard value = 0;
 
@@ -413,16 +413,16 @@ init()
   buildKingTable(kingMasks);
   buildKingOuterTable(kingOuterMasks);
 
-  buildPawnTable(pawnMasks[1],  1, false);
-  buildPawnTable(pawnMasks[0], -1, false);
-  buildPawnTable(pawnCaptureMasks[1],  1,  true);
-  buildPawnTable(pawnCaptureMasks[0], -1,  true);
+  buildPawnTable(pawnMasks[WHITE],  1, false);
+  buildPawnTable(pawnMasks[BLACK], -1, false);
+  buildPawnTable(pawnCaptureMasks[WHITE],  1,  true);
+  buildPawnTable(pawnCaptureMasks[BLACK], -1,  true);
 
-  buildPassedPawnTable(passedPawnMasks[1],   upMasks);
-  buildPassedPawnTable(passedPawnMasks[0], downMasks);
+  buildPassedPawnTable(passedPawnMasks[WHITE],   upMasks);
+  buildPassedPawnTable(passedPawnMasks[BLACK], downMasks);
 
-  buildRuleOfSquaresTable(ruleOfSquares[1],   upMasks);
-  buildRuleOfSquaresTable(ruleOfSquares[0], downMasks);
+  buildRuleOfSquaresTable(ruleOfSquares[WHITE], WHITE,   upMasks);
+  buildRuleOfSquaresTable(ruleOfSquares[BLACK], BLACK, downMasks);
 
   setZero(diagonalMasks);
   setZero(lineMasks);
