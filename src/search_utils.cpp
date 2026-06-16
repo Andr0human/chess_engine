@@ -85,7 +85,6 @@ searchExtension(
   Depth depth
 )
 {
-  const size_t moveCount = myMoves.countMoves();
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
 
