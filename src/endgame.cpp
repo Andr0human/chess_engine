@@ -3,6 +3,7 @@
 #include "attacks.h"
 
 using plt::passedPawnMasks;
+using plt::ruleOfSquares;
 
 
 // TODO: KRRK, KRNK
@@ -106,59 +107,123 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
   const Color side = pos.count<WHITE, PAWN>() ? WHITE : BLACK;
   const Color emySide = ~side;
 
-  const Bitboard    pawn = pos.getPiece(side, PAWN);
-  const Bitboard  myKing = pos.getPiece(side, KING);
+  const Bitboard    pawn = pos.getPiece(side   , PAWN);
+  const Bitboard  myKing = pos.getPiece(side   , KING);
   const Bitboard emyKing = pos.getPiece(emySide, KING);
 
   const int side2move = pos.color;
   const int incFactor = 2 * side - 1;
+  const int sideAdvantage = int(side2move == side);
 
-  const Square pawnSq    = squareNo(pawn   );
-  const Square myKingSq  = squareNo(myKing );
+  const Square    pawnSq = squareNo(pawn   );
+  const Square  myKingSq = squareNo(myKing );
   const Square emyKingSq = squareNo(emyKing);
 
-  const int pawnR   = pawnSq   >> 3;
-  const int myKingR = myKingSq >> 3;
+  const int    pawnR = pawnSq    >> 3;
+  const int  myKingR = myKingSq  >> 3;
+  const int emyKingR = emyKingSq >> 3;
 
-  if ((side2move == emySide) and
+  const int    pawnF = pawnSq    &  7;
+  const int  myKingF = myKingSq  &  7;
+  const int emyKingF = emyKingSq &  7;
+  const int kingFileDiff = myKingF - emyKingF;
+
+  const int pawnOnRank2    =    pawn & relativeRank[side][2] ? 1 : 0;
+  const int myKingOnRank8  =  myKing & relativeRank[side][8] ? 1 : 0;
+  const int emyKingOnRank8 = emyKing & relativeRank[side][8] ? 1 : 0;
+  const int emyKingOnDiag  = int(
+    ((pawnR - pawnF) == (emyKingR - emyKingF)) or
+    ((pawnR + pawnF) == (emyKingR + emyKingF))
+  );
+
+  if (!sideAdvantage and
+     (pawn & FileAH) and
+     (myKing & (plt::passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq])) and
+     (abs(kingFileDiff) == 2 or abs(kingFileDiff) == 3) and
+     (side == WHITE
+      ? emyKingR >= myKingR - 1 - myKingOnRank8
+      : emyKingR <= myKingR + 1 + myKingOnRank8)
+  ) return true;
+
+  int ruleOfSquareIndex = pawnSq;
+  if (!sideAdvantage)
+    ruleOfSquareIndex -= 8 * incFactor;
+
+  if ((pawn & relativeRank[side][2]) and (myKing & ~plt::pawnMasks[side][pawnSq]))
+    ruleOfSquareIndex += 8 * incFactor;
+
+  if (emyKing & ~plt::ruleOfSquares[side][ruleOfSquareIndex])
+    return false;
+
+  if (emyKing & plt::ruleOfSquares[side][ruleOfSquareIndex]) {
+    int dist = std::max(abs(pawnR - emyKingR), abs(pawnF - emyKingF));
+
+    if ((side == WHITE
+         ? (pawnR - dist - sideAdvantage - emyKingOnRank8 >= myKingR)
+         : (pawnR + dist + sideAdvantage + emyKingOnRank8 <= myKingR)) and
+        (myKingR != emyKingR)
+    ) return true;
+
+    const int    sideAdvOffset = sideAdvantage  * pawnOnRank2 * !emyKingOnDiag;
+    const int nonSideAdvOffset = !sideAdvantage * pawnOnRank2 * !emyKingOnDiag * 2;
+
+    if (side == WHITE
+        ? (myKingR >= pawnR + incFactor + dist + sideAdvantage + emyKingOnDiag + sideAdvOffset + nonSideAdvOffset)
+        : (myKingR <= pawnR + incFactor - dist - sideAdvantage - emyKingOnDiag - sideAdvOffset - nonSideAdvOffset)
+    ) return true;
+
+    if ((pawnF - dist - 1 - sideAdvantage - pawnOnRank2 >= myKingF) or
+        (pawnF + dist + 1 + sideAdvantage + pawnOnRank2 <= myKingF)
+    ) return true;
+  }
+
+  if ((myKingR == pawnR + 2 * incFactor) and (myKingF == pawnF)
+  ) return false;
+
+  if ((pawn & FileAH) and (emyKing & passedPawnMasks[side][pawnSq]))
+    return true;
+
+  if (sideAdvantage and
+      (side == WHITE
+        ? (myKingR == pawnR + 1) and (emyKingR == myKingR + 2)
+        : (myKingR == pawnR - 1) and (emyKingR == myKingR - 2)) and
+      (myKingF == emyKingF) and
+     !emyKingOnRank8 and
+     !pawnOnRank2
+  ) return true;       // 102
+
+  if (!sideAdvantage and
       (pawn & rank2to6[side]) and
       (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
       (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
-  // if ((side2move == emySide) and
-  //     (pawn & rank4to7[side]) and
-  //     (passedPawnMasks[side][pawnSq] & emyKing) and
-  //    !((passedPawnMasks[WHITE][pawnSq - 8] | passedPawnMasks[BLACK][pawnSq]) & myKing)
-  // ) return true;
-
-  if ((side2move == side) and
-      (pawn & rank3to5[side]) and
-      (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
-      (passedPawnMasks[side][pawnSq] & emyKing)
+  if (sideAdvantage and
+     (pawn & rank3to5[side]) and
+     (side == WHITE ? myKingR <= pawnR - 1 : myKingR >= pawnR + 1) and
+     (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
-  if ((pawnSq + 8 * incFactor == emyKingSq) and
-      (pawnSq - 8 * incFactor ==  myKingSq) and
-      ((pos.color == emySide) or (!(emyKing & Rank18) and (pos.color == side)))
-    ) return true;
+  // if ((pawnSq + 8 * incFactor == emyKingSq) and
+  //     (pawnSq - 8 * incFactor ==  myKingSq) and
+  //     (!sideAdvantage or (!(emyKing & Rank18) and sideAdvantage))
+  // ) return true;
 
-  if ((pawnSq + 8 * incFactor == emyKingSq) and
-      (pawn & (AllSquares ^ FileAH)) and
-      ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
-      ((pos.color == side) or (!(emyKing & Rank18) and (pos.color == emySide)))
-    ) return true;
+  // if ((pawnSq + 8 * incFactor == emyKingSq) and
+  //     (pawn & (AllSquares ^ FileAH)) and
+  //     ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
+  //     (sideAdvantage or (!(emyKing & Rank18) and !sideAdvantage))
+  // ) return true;
 
-  if ((pawn & (AllSquares ^ FileAH)) and
-      ((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
-      ((pawnSq + 16 * incFactor == emyKingSq) and
-      ((pos.color == emySide)))
-    ) return true;
+  // if ((pawn & (AllSquares ^ FileAH)) and
+  //     ((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
+  //     ((pawnSq + 16 * incFactor == emyKingSq) and !sideAdvantage)
+  // ) return true;
 
-  if ((pawnSq +  8 * incFactor ==  myKingSq) and
-      (pawnSq + 24 * incFactor == emyKingSq) and
-      ((pos.color == side) and !(emyKing & Rank18))
-    ) return true;
+  // if ((pawnSq +  8 * incFactor ==  myKingSq) and
+  //     (pawnSq + 24 * incFactor == emyKingSq) and
+  //     (sideAdvantage and !(emyKing & Rank18))
+  // ) return true;
 
   // Defender-king blockade draw: the defending king sits exactly two squares
   // directly in front of the pawn (same file) and it is the attacker's move.
@@ -168,21 +233,16 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
   //     forced onto a non-rook-file promotion square, which is the only winning
   //     break; on the a/h file that square is still the rook-pawn corner draw.
   // Complements the blocks above which cover this geometry with the defender to move.
-  if ((side2move == side) and (emyKingSq == pawnSq + 16 * incFactor))
-  {
-    const int pawnF    = pawnSq   & 7;
-    const int myKingF  = myKingSq & 7;
-    const int fileDist = abs(myKingF - pawnF);
-
-    const bool behindKing = (myKingR == pawnR - incFactor) and (fileDist <= 1);
-    const bool besideKing = (myKingR == pawnR)             and (fileDist == 1);
-
-    if (behindKing)
-      return true;
-
-    if (besideKing and (!(emyKing & Rank18) or (emyKing & FileAH)))
-      return true;
-  }
+  // if (sideAdvantage and (emyKingSq == pawnSq + 16 * incFactor))
+  // {
+  //   const int pawnF    = pawnSq   & 7;
+  //   const int myKingF  = myKingSq & 7;
+  //   const int fileDist = abs(myKingF - pawnF);
+  //   const bool behindKing = (myKingR == pawnR - incFactor) and (fileDist <= 1);
+  //   const bool besideKing = (myKingR == pawnR)             and (fileDist == 1);
+  //   if (behindKing or (besideKing and (!(emyKing & Rank18) or (emyKing & FileAH))))
+  //     return true;
+  // }
 
   return false;
 }
@@ -427,4 +487,3 @@ isTheoreticalDraw(const ChessBoard& pos)
 
   return false;
 }
-
