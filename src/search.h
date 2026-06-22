@@ -3,6 +3,7 @@
 #define SEARCH_H
 
 #include <iomanip>
+#include <atomic>
 #include "perf.h"
 #include "varray.h"
 #include "bitboard.h"
@@ -74,6 +75,12 @@ class TestPosition
   getFen() const
   { return fen; }
 };
+
+// Control-plane abort signal raised by the UCI `stop`/`quit` handlers (main
+// thread) and polled by the search worker via SearchData::shouldStop(). Lives
+// outside SearchData because std::atomic is non-copyable and `info` is
+// rebuilt by copy-assignment (`info = SearchData(...)`) on every search.
+extern std::atomic<bool> searchStop;
 
 class SearchData
 {
@@ -176,6 +183,13 @@ class SearchData
     nanoseconds duration = perf::now() - startTime;
     return duration >= allotedTime;
   }
+
+  // Abort predicate polled at every search checkpoint: true when the time
+  // budget is spent OR the UCI layer asked to stop. Used in place of
+  // timeOver() at the abort gates so `stop` (and `go infinite`) work.
+  bool
+  shouldStop() const noexcept
+  { return timeOver() || searchStop.load(std::memory_order_relaxed); }
 
   double
   timeSpent() const noexcept
