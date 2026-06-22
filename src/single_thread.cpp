@@ -34,7 +34,7 @@ static Score
 quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
   // Check if Time Left for Search
-  if (info.timeOver())
+  if (info.shouldStop())
     return TIMEOUT;
 
   // Terminate the PV here before any early return. Otherwise a no-capture
@@ -88,7 +88,7 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     Score score = -quiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
     pos.unmakeMove();
 
-    if (info.timeOver())
+    if (info.shouldStop())
       return TIMEOUT;
 
     // Check for Beta-cutoff
@@ -170,7 +170,7 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
   Score eval = -alphaBeta(pos, ns.depth - 1, -ns.beta, -ns.alpha, ns.ply + 1, pvNextIndex, ns.numExtensions);
   pos.unmakeMove();
 
-  if (info.timeOver())
+  if (info.shouldStop())
   {
     out.result = TIMEOUT;
     return out;
@@ -235,7 +235,7 @@ playSubsetMoves(
     Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, ns);
 
     // No time left!
-    if (info.timeOver())
+    if (info.shouldStop())
       return bestMove;
 
     //! TODO: Why beta is not in root-search??
@@ -311,7 +311,7 @@ nodeStaticEval(ChessBoard& pos, NodeState& ns)
 Score
 alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
 {
-  if (info.timeOver())
+  if (info.shouldStop())
     return TIMEOUT;
 
     // Depth 0, starting Quiensense Search
@@ -395,7 +395,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
       if (staticEval + RAZOR_MARGIN * depth <= alpha)
       {
         const Score razorScore = quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
-        if (info.timeOver())
+        if (info.shouldStop())
           return TIMEOUT;
         if (razorScore <= alpha)
           return razorScore;
@@ -490,7 +490,7 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 
     info.insertMoveToList(moveNo);
 
-    if (info.timeOver())
+    if (info.shouldStop())
       return TIMEOUT;
 
     if (eval > ns.alpha)
@@ -529,7 +529,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   {
     Score eval = rootAlphaBeta(board, alpha, beta, depth);
 
-    if (info.timeOver())
+    if (info.shouldStop())
       break;
 
     if ((eval <= alpha) or (eval >= beta))

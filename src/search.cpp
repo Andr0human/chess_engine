@@ -10,6 +10,8 @@ is_type<MType::PV>(Move m)
 
 SearchData info;
 
+std::atomic<bool> searchStop{false};
+
 #ifndef MOVE_REORDERING
 
 
