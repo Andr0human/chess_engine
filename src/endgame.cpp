@@ -267,13 +267,14 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
   Bitboard kingCapMask    = attackSquares<KING>(kingSq   , 0);
   Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
-  Bitboard bishopCapMask = attackSquares<BISHOP>(bishopSq, myKing);
+  Bitboard bishopCapMask  = attackSquares<BISHOP>(bishopSq, myKing);
 
   if (pos.count<WHITE, ALL>() == 1)
   {
     // Pawn and bishop are of different side
-    const Bitboard   pawn = pos.getPiece(emySide, PAWN);
-    const Square   pawnSq = squareNo(pawn);
+    const Bitboard pawn = pos.getPiece(emySide, PAWN);
+    const Square pawnSq = squareNo(pawn);
+    const int     pawnR = pawnSq >> 3;
 
     Bitboard extEmyKingCapMask = 0;
 
@@ -309,12 +310,20 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
     Bitboard pawnMask = passedPawnMasks[emySide][pawnSq] & plt::lineMasks[pawnSq];
 
-    if ((bishop | myKing) & pawnMask)
+    if (myKing & pawnMask)
       return true;
+
+    if ((bishop & pawnMask) and
+       ((bishopCapMask & ~emyKing & ~myKing) & ~emyKingCapMask)
+    ) return true;
 
     if ((bishopCapMask & pawnMask & ~emyKingCapMask) and
         ((side2move == side) or ((side2move == emySide) and (bishop & ~extEmyKingCapMask)))
     ) return true;
+
+    if ((plt::pawnCaptureMasks[emySide][pawnSq] & myKing) and
+        (emySide == WHITE ? pawnR > 4 : pawnR < 3)
+    ) return false;
 
     if (side2move == emySide) {
       pawnMask ^= pawnMask & plt::pawnMasks[emySide][pawnSq];
