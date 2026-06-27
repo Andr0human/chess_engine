@@ -269,8 +269,9 @@ struct Walker
       ++t.heurNonDraw;
 
     // Oracle verdict (side-to-move relative) as a single char, also appended to
-    // the dump so a position can be filtered by truth: 'W'/'L'/'D', '?' = bad.
+    // the dump so a mismatch can be read by truth: 'W'/'L'/'D', '?' = bad.
     char oracleCh = 0;
+    bool mismatch = false;   // recognizer disagrees with the oracle
     if (oracle)
     {
       const Wdl truth = oracle->probe(pos);
@@ -290,16 +291,21 @@ struct Walker
         if (falseFens.size() < MAX_FALSE_FENS)
           falseFens.push_back(fen);
       }
+
+      mismatch = (isDraw != oracleDraw);
     }
 
-    // dump: `FEN | <D|.>` (recognizer) and, when an oracle is present,
-    // ` | <W|D|L>` (truth). A missed-draw line is exactly `| . | D`.
-    if (wantDump)
+    // dump: only positions where the recognizer and the oracle disagree --
+    // `FEN | <D|.> | <W|D|L>` (recognizer verdict then truth). A missed draw is
+    // exactly `| . | D`; a false draw is `| D | W` or `| D | L`. `dump` requires
+    // `oracle` (validated up front), so `oracle` is always set here when wantDump.
+    if (wantDump && mismatch)
     {
       dump += fen;
       dump += " | ";
       dump += (isDraw ? 'D' : '.');
-      if (oracle) { dump += " | "; dump += oracleCh; }
+      dump += " | ";
+      dump += oracleCh;
       dump += '\n';
     }
   }
@@ -558,6 +564,15 @@ validateEndgame(const vector<string>& args)
   const bool noFold   = utils::hasArg(args, "allfiles");
   const bool wantMirror = utils::hasArg(args, "mirror");
   const bool wantOracle = utils::hasArg(args, "oracle");
+
+  // The dump records only recognizer/oracle disagreements, so it needs the
+  // oracle's truth -- reject `dump` without `oracle` rather than emitting nothing.
+  if (wantDump && !wantOracle)
+  {
+    cout << "dump requires oracle (the truth column defines a mismatch); "
+            "pass 'oracle'.\n";
+    return;
+  }
   const bool noCache  = utils::hasArg(args, "nocache");
   const int maxKingFile = noFold ? 7 : 3;
 
@@ -749,7 +764,7 @@ validateEndgame(const vector<string>& args)
   {
     uint64_t dumped = 0;
     for (const Generator& g : gens)
-      dumped += g.t.quiet;
-    cout << "Dumped " << dumped << " positions to " << dumpFile << '\n';
+      dumped += g.t.missedDraw + g.t.falseDraw;
+    cout << "Dumped " << dumped << " mismatched positions to " << dumpFile << '\n';
   }
 }
