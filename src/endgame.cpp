@@ -16,6 +16,20 @@ chebyshevDistance(Square s1, Square s2)
   return std::max(abs(rank1 - rank2), abs(file1 - file2));
 }
 
+static bool
+kingBetweenQueens(const Square kingSq, const Bitboard queen1, const Bitboard queen2)
+{
+  auto between = [&](Bitboard pos, Bitboard neg) {
+    return ((pos & queen1) and (neg & queen2)) or
+           ((pos & queen2) and (neg & queen1));
+  };
+
+  return between(plt::upMasks[kingSq],      plt::downMasks[kingSq])      or
+         between(plt::leftMasks[kingSq],    plt::rightMasks[kingSq])     or
+         between(plt::upLeftMasks[kingSq],  plt::downRightMasks[kingSq]) or
+         between(plt::upRightMasks[kingSq], plt::downLeftMasks[kingSq]);
+}
+
 // Color-relative ranks: relativeRank[color][r] is the r-th rank (1-8) counting
 // from color's own back rank, so the BLACK row mirrors to absolute rank 9-r.
 // Ranks are 1-based; index 0 is a NoSquares placeholder so call sites read naturally.
@@ -66,6 +80,15 @@ isEndgame<Endgames::KPBK>(const ChessBoard& pos)
   return pos.count<ALL   >() == 2
      and pos.count<PAWN  >() == 1
      and pos.count<BISHOP>() == 1;
+}
+
+template <>
+inline bool
+isEndgame<Endgames::KPQK>(const ChessBoard& pos)
+{
+  return pos.count<ALL   >() == 2
+     and pos.count<PAWN  >() == 1
+     and pos.count<QUEEN>() == 1;
 }
 
 template <>
@@ -398,6 +421,162 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
 template <>
 inline bool
+Endgame<Endgames::KPQK>(const ChessBoard& pos)
+{
+  // Look from side who has bishop
+  const Color side2move = pos.color;
+  const Color side = pos.count<WHITE, QUEEN>() ? BLACK : WHITE;
+  const Color emySide = ~side;
+
+  const int sideAdvantage = int(side2move == side);
+  const int incFactor = 2 * side - 1;
+
+  const Bitboard occupied = pos.all();
+  const Bitboard myKing   = pos.getPiece(side   ,  KING);
+  const Bitboard emyKing  = pos.getPiece(emySide,  KING);
+  const Bitboard queen    = pos.getPiece(emySide, QUEEN);
+
+  const Square    kingSq = squareNo(myKing);
+  const Square emyKingSq = squareNo(emyKing);
+  const Square   queenSq = squareNo(queen);
+
+  Bitboard kingMask    = attackSquares<KING >(kingSq   , occupied);
+  Bitboard emyKingMask = attackSquares<KING >(emyKingSq, 0);
+  Bitboard queenMask   = attackSquares<QUEEN>(queenSq, emyKing);
+
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    const Bitboard pawn = pos.getPiece(side, PAWN);
+    const Square pawnSq = squareNo(pawn);
+    Bitboard pawnMask   = passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq];
+
+    const int  myKingR = kingSq    >> 3;
+    const int  myKingF = kingSq     & 7;
+    const int emyKingR = emyKingSq >> 3;
+    const int emyKingF = emyKingSq  & 7;
+    const int    pawnF = pawnSq     & 7;
+    const int    pawnR = pawnSq    >> 3;
+    const int   queenF = queenSq    & 7;
+    const int   queenR = queenSq   >> 3;
+    const Square promoSq = pawnSq + 8 * incFactor;
+
+    const auto pawnOnRank7 = !!(pawn & relativeRank[side][7]);
+    const auto kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
+
+    if (side == WHITE ? pawnR < 5 : pawnR > 2)
+      return false;
+
+    if ((emyKing | queen) & pawnMask)
+      return false;   // Leaves 1 safe gap with queen included (8/8/8/1p6/8/KQ6/8/k7 b - - 0 1)
+
+    if (sideAdvantage and
+       pawnOnRank7 and
+       kingNotOnPromoSq and
+       (myKing & ~queenMask)
+    ) {
+      // Condition-1
+      if (kingBetweenQueens(emyKingSq, queen, 1ULL << promoSq) and !kingBetweenQueens(kingSq, queen, 1ULL << promoSq)) {
+        return (chebyshevDistance(emyKingSq, queenSq) == 1)
+           and (chebyshevDistance(kingSq, emyKingSq) > 2)
+           and (queen & ~(FileAH & Rank18))
+           and !(emyKingMask & (1ULL << promoSq));
+      }                 // 1391
+    }
+
+    if (!sideAdvantage and
+       (emyKing & ruleOfSquares[side][pawnSq]) and
+       (emyKing & ~(kingMask | plt::pawnCaptureMasks[side][pawnSq]))
+    ) return false;
+
+    // if pawn can promote,
+    // opp (queen | king) cannot capture,
+    // own king is not on promo square
+    // Condition-1 pre-check needed
+    if (sideAdvantage and
+       pawnOnRank7 and
+       kingNotOnPromoSq and
+       !((queenMask | emyKingMask) & (1ULL << promoSq)) and
+       !((queenMask | emyKingMask) & myKing)
+    ) {
+      if ((emyKing & relativeRank[side][8]) and
+          (queen   & relativeRank[side][7]) and
+          ((pawnF - queenF) * (pawnF - emyKingF) > 0) and
+          (abs(pawnF - queenF) > abs(pawnF - emyKingF)) and
+          (chebyshevDistance(emyKingSq, queenSq) > 3)
+      ) return false;
+
+      if ((emyKingF == pawnF) and
+          (abs(queenF - emyKingF) == 1) and
+          (abs(pawnR - queenR) > abs(pawnR - emyKingR)) and
+          (chebyshevDistance(emyKingSq, queenSq) > 3)
+      ) return false;
+
+      if ((myKingF == pawnF) or (abs(myKingF - pawnF) == 1 and (myKing & FileAH)))
+      {
+        const Bitboard mask = side == WHITE ? plt::downMasks[kingSq] : plt::upMasks[kingSq];
+        if (queenMask & mask)
+          return false;
+      }
+
+      // King and promo square share the a1-h8 diagonal (file - rank constant).
+      // A bare `% 9` index test wrongly fires on file-wrapped differences that
+      // happen to be multiples of 9, which breaks colour symmetry (the index
+      // delta is not preserved under a vertical mirror).
+      if ((myKingF - myKingR) == (pawnF - (promoSq >> 3)))
+      {
+        const Bitboard mask = side == WHITE ? plt::downLeftMasks[kingSq] : plt::upRightMasks[kingSq];
+        if (queenMask & mask)
+          return false;
+      }
+
+      // Same for the a8-h1 anti-diagonal (file + rank constant); `% 7` had the
+      // identical file-wrap false-positive bug.
+      if ((myKingF + myKingR) == (pawnF + (promoSq >> 3)))
+      {
+        const Bitboard mask = side == WHITE ? plt::downRightMasks[kingSq] : plt::upLeftMasks[kingSq];
+        if (queenMask & mask)
+          return false;
+      }
+
+      if ((myKingR == (promoSq >> 3)))
+      {
+        const Bitboard mask = (pawnF > myKingF) ? plt::leftMasks[kingSq] : plt::rightMasks[kingSq];
+        if (queenMask & mask)
+          return false;
+      }
+
+      if ((kingMask & ~(queenMask | emyKingMask)) and
+          (chebyshevDistance(kingSq, emyKingSq) > 2 + int(!!(myKing & EdgeSquares))) and
+         !((emyKingMask & queen) and (queen & CornerSquares)) and
+         !((queenMask | emyKingMask) & myKing)
+      ) return true;
+    }
+
+    // Condition-1 pre-check needed
+    if (sideAdvantage and
+        (myKing & (relativeRank[side][8] & FileAH)) and
+        pawnOnRank7 and
+        (abs(pawnF - myKingF) == 2) and
+        (abs(pawnF - emyKingF)   > 2)
+    ) return true;      // 2729
+
+    if (!sideAdvantage and
+       (myKing & CornerSquares) and
+       (kingMask & pawn) and
+       ((kingMask ^ (kingMask & (queenMask | pawn))) == 0) and
+       (chebyshevDistance(kingSq, emyKingSq) > (chebyshevDistance(kingSq, queenSq))) and
+       (chebyshevDistance(kingSq, emyKingSq) > 4)
+    ) return true;
+
+    return false;
+  }
+
+  return false;
+}
+
+
+template <>
+inline bool
 Endgame<Endgames::KBBK>(const ChessBoard& pos)
 {
   if (pos.count<WHITE, BISHOP>() == 1)
@@ -483,6 +662,9 @@ isTheoreticalDraw(const ChessBoard& pos)
 
     if (isEndgame<Endgames::KPBK>(pos))
       return Endgame<Endgames::KPBK>(pos);
+
+    if (isEndgame<Endgames::KPQK>(pos))
+      return Endgame<Endgames::KPQK>(pos);
 
     if (isEndgame<Endgames::KBBK>(pos))
       return Endgame<Endgames::KBBK>(pos);

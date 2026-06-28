@@ -85,6 +85,7 @@ enum class Endgames: uint8_t
   KNK,
   KBK,
   KPBK,
+  KPQK,
   KBNK,
   KBBK,
   KNNK,
@@ -131,6 +132,8 @@ enum Board: Bitboard
 
   RightAttkingPawns = AllSquares ^ (Rank18 | FileH),
   LeftAttkingPawns  = AllSquares ^ (Rank18 | FileA),
+  CornerSquares = FileAH & Rank18,
+  EdgeSquares   = FileAH | Rank18
 };
 
 enum Square: int8_t
