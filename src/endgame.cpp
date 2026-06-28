@@ -423,7 +423,7 @@ template <>
 inline bool
 Endgame<Endgames::KPQK>(const ChessBoard& pos)
 {
-  // Look from side who has bishop
+  // Look from the pawn side (the side that does not hold the queen)
   const Color side2move = pos.color;
   const Color side = pos.count<WHITE, QUEEN>() ? BLACK : WHITE;
   const Color emySide = ~side;
