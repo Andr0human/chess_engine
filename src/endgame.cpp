@@ -460,8 +460,9 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
     const int   queenR = queenSq   >> 3;
     const Square promoSq = pawnSq + 8 * incFactor;
 
-    const auto pawnOnRank7 = !!(pawn & relativeRank[side][7]);
-    const auto kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
+    const bool pawnOnRank7 = !!(pawn & relativeRank[side][7]);
+    const bool kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
+    const int  distanceBtwKings = chebyshevDistance(kingSq, emyKingSq);
 
     if (side == WHITE ? pawnR < 5 : pawnR > 2)
       return false;
@@ -477,7 +478,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
       // Condition-1
       if (kingBetweenQueens(emyKingSq, queen, 1ULL << promoSq) and !kingBetweenQueens(kingSq, queen, 1ULL << promoSq)) {
         return (chebyshevDistance(emyKingSq, queenSq) == 1)
-           and (chebyshevDistance(kingSq, emyKingSq) > 2)
+           and (distanceBtwKings > 2)
            and (queen & ~(FileAH & Rank18))
            and !(emyKingMask & (1ULL << promoSq));
       }                 // 1391
@@ -513,7 +514,8 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
 
       if ((myKingF == pawnF) or (abs(myKingF - pawnF) == 1 and (myKing & FileAH)))
       {
-        const Bitboard mask = side == WHITE ? plt::downMasks[kingSq] : plt::upMasks[kingSq];
+        Bitboard mask = side == WHITE ? plt::downMasks[kingSq] : plt::upMasks[kingSq];
+        mask &= ~kingMask;
         if (queenMask & mask)
           return false;
       }
@@ -524,7 +526,8 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
       // delta is not preserved under a vertical mirror).
       if ((myKingF - myKingR) == (pawnF - (promoSq >> 3)))
       {
-        const Bitboard mask = side == WHITE ? plt::downLeftMasks[kingSq] : plt::upRightMasks[kingSq];
+        Bitboard mask = side == WHITE ? plt::downLeftMasks[kingSq] : plt::upRightMasks[kingSq];
+        mask &= ~kingMask;
         if (queenMask & mask)
           return false;
       }
@@ -533,20 +536,22 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
       // identical file-wrap false-positive bug.
       if ((myKingF + myKingR) == (pawnF + (promoSq >> 3)))
       {
-        const Bitboard mask = side == WHITE ? plt::downRightMasks[kingSq] : plt::upLeftMasks[kingSq];
+        Bitboard mask = side == WHITE ? plt::downRightMasks[kingSq] : plt::upLeftMasks[kingSq];
+        mask &= ~kingMask;
         if (queenMask & mask)
           return false;
       }
 
       if ((myKingR == (promoSq >> 3)))
       {
-        const Bitboard mask = (pawnF > myKingF) ? plt::leftMasks[kingSq] : plt::rightMasks[kingSq];
+        Bitboard mask = (pawnF > myKingF) ? plt::leftMasks[kingSq] : plt::rightMasks[kingSq];
+        mask &= ~kingMask;
         if (queenMask & mask)
           return false;
       }
 
       if ((kingMask & ~(queenMask | emyKingMask)) and
-          (chebyshevDistance(kingSq, emyKingSq) > 2 + int(!!(myKing & EdgeSquares))) and
+          (distanceBtwKings > 2 + int(!!(myKing & EdgeSquares))) and
          !((emyKingMask & queen) and (queen & CornerSquares)) and
          !((queenMask | emyKingMask) & myKing)
       ) return true;
@@ -564,8 +569,16 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
        (myKing & CornerSquares) and
        (kingMask & pawn) and
        ((kingMask ^ (kingMask & (queenMask | pawn))) == 0) and
-       (chebyshevDistance(kingSq, emyKingSq) > (chebyshevDistance(kingSq, queenSq))) and
-       (chebyshevDistance(kingSq, emyKingSq) > 4)
+       (distanceBtwKings > (chebyshevDistance(kingSq, queenSq))) and
+       (distanceBtwKings > 4)
+    ) return true;
+
+    if (pawnOnRank7 and
+        sideAdvantage and
+       (myKing & (relativeRank[side][7] | relativeRank[side][8])) and
+       (chebyshevDistance(pawnSq, emyKingSq) > 2) and
+       (((pawn & FileC) and (myKing & (FileA | FileB)))
+     or ((pawn & FileF) and (myKing & (FileG | FileH))))
     ) return true;
 
     return false;
