@@ -247,9 +247,23 @@ indexMen(const ChessBoard& pos, std::array<Piece, 4>& men, int& n)
     tmp[n++] = { pos.pieceOnSquare(Square(sq)), sq };
   }
 
-  std::sort(tmp.begin(), tmp.begin() + n,
-            [] (const auto& a, const auto& b)
-            { return a.first != b.first ? a.first < b.first : a.second < b.second; });
+  // Insertion sort by (Piece, square). Hand-rolled rather than std::sort: the
+  // range is <= 4 elements, so introsort's machinery is pure overhead, and its
+  // fixed 16-element final-insertion-sort step also makes GCC emit a bogus
+  // -Warray-bounds on this `tmp[4]` (the >16 path is dead but not provably so).
+  for (int i = 1; i < n; ++i)
+  {
+    std::pair<Piece, int> key = tmp[i];
+    int j = i - 1;
+    while (j >= 0 &&
+           (tmp[j].first != key.first ? key.first < tmp[j].first
+                                      : key.second < tmp[j].second))
+    {
+      tmp[j + 1] = tmp[j];
+      --j;
+    }
+    tmp[j + 1] = key;
+  }
 
   uint64_t idx = 0;
   for (int i = 0; i < n; ++i)
