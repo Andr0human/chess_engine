@@ -605,53 +605,6 @@ inline bool
 Endgame<Endgames::KBNK>(const ChessBoard& pos)
 { return pos.count<WHITE, ALL>() == 1; }
 
-
-/* template <>
-bool
-Endgame<Endgames::KRBK>(const ChessBoard& pos)
-{
-  if ((pos.count<WHITE, ALL>() == 2) or (pos.count<BLACK, ALL>() == 2))
-    return false;
-
-  const Color side = pos.count<WHITE, ROOK>() ? WHITE : BLACK;
-  const Color emySide = ~side;
-
-  const Bitboard emyKing = pos.getPiece(emySide, KING  );
-  const Bitboard bishop  = pos.getPiece(emySide, BISHOP);
-
-  const Square    kingSq = squareNo(pos.getPiece(side, KING));
-  const Square emyKingSq = squareNo(emyKing);
-  const Square  bishopSq = squareNo(bishop);
-
-  const int emyKingSqR = emyKingSq >> 3;
-  const int emyKingSqF = emyKingSq &  7;
-  const int  bishopSqR = bishopSq  >> 3;
-  const int  bishopSqF = bishopSq  &  7;
-
-  const Square rookSq = squareNo(pos.getPiece(side, ROOK));
-  const bool rookHitsBishop = attackSquares<ROOK>(rookSq, 0) & bishop;
-
-  if (!(emyKing & (Rank18 | FileAH)) and
-      !rookHitsBishop and
-      (chebyshevDistance(kingSq, bishopSq) > 3) and
-      (abs(emyKingSqR - bishopSqR) > 1 and abs(emyKingSqF - bishopSqF) > 1)
-  ) return true;
-
-  // Center fortress (data-mined against the perfect KRKB oracle, FALSE-DRAW-free
-  // over the full sweep): the defending king is off the edge with its bishop
-  // guarded by that king (so the rook cannot win it) -> a held draw. The
-  // king-separation bound is asymmetric: with the defender to move the kings need
-  // only be >= 3 apart, but with the *attacker* to move it can win a tempo at
-  // exactly 3, so it needs >= 4 (every dist-3 attacker-to-move case is a win).
-  if (!(emyKing & (Rank18 | FileAH)) and
-      (chebyshevDistance(emyKingSq, bishopSq) == 1) and
-      (chebyshevDistance(kingSq, emyKingSq) >= 3 + int(pos.color == side)) and
-      !rookHitsBishop
-  ) return true;
-
-  return false;
-} */
-
 template <>
 bool
 Endgame<Endgames::KRBK>(const ChessBoard& pos)
@@ -686,11 +639,11 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   const int    distBtwKings  = chebyshevDistance(kingSq, emyKingSq);
 
   const Bitboard bishopMask  = attackSquares<BISHOP>(bishopSq , king);
-  const Bitboard rookMask    = attackSquares< ROOK >(rookSq   , emyKing);
-  const Bitboard kingMask    = attackSquares< KING >(kingSq   , 0);
+  const Bitboard rookMask    = attackSquares< ROOK >(rookSq   , emyKing); 
   const Bitboard emyKingMask = attackSquares< KING >(emyKingSq, 0);
 
   const Bitboard rookDiag = attackSquares<BISHOP>(rookSq, 0);
+  const bool rookHitsBishop = attackSquares<ROOK>(rookSq, 0) & bishop;
 
   if (sideAdvantage and (rookDiag & emyKing))
   {
@@ -733,128 +686,32 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
     ) return false;
   }
 
-  // --------------------------------------------------------------------------------------
+  if (!(king & EdgeSquares) and
+      !rookHitsBishop and
+      (chebyshevDistance(emyKingSq, bishopSq) > 3) and
+      (abs(kingR - bishopR) > 1 and abs(kingF - bishopF) > 1)
+  ) return true;
 
-  if ((king & CornerSquares) and (distBtwKings == 2))
-  {
-    if (((kingR + kingF) & 1) == ((bishopR + bishopF) & 1))
-      return false;
+  // Center fortress (data-mined against the perfect KRKB oracle, FALSE-DRAW-free
+  // over the full sweep): the defending king is off the edge with its bishop
+  // guarded by that king (so the rook cannot win it) -> a held draw. The
+  // king-separation bound is asymmetric: with the defender to move the kings need
+  // only be >= 3 apart, but with the *attacker* to move it can win a tempo at
+  // exactly 3, so it needs >= 4 (every dist-3 attacker-to-move case is a win).
+  if (!(king & EdgeSquares) and
+      (chebyshevDistance(kingSq, bishopSq) == 1) and
+      (distBtwKings > 2 + !sideAdvantage) and
+      !rookHitsBishop
+  ) return true;
 
-    if (((kingR == emyKingR and kingF == rookF) or (kingR == rookR and kingF == emyKingF)) and
-       !(bishopMask & kingMask)
-    ) return false;
+  // Kings far apart with the bishop hugging its own king: the rook can never
+  // break in before the defence re-forms. Data-mined FALSE-DRAW-free over the
+  // full KRKB oracle; independent of edge/side-to-move (both were irrelevant in
+  // the residual PURE-DRAW buckets). Generalises the fortress rule above.
+  if ((chebyshevDistance(kingSq, bishopSq) < 3) and (distBtwKings > 4))
+    return true;
 
-    if (!sideAdvantage)
-      return false;
-
-    if (rookMask & king)
-      return false;
-
-    // A loose bishop offers no defensive resource: undefended by its own king
-    // and not attacking the rook, it lets the enemy rook mate the cornered king
-    // (the attacker's king is already only 2 squares away). Only claim the draw
-    // when the bishop is actually held.
-    const bool bishopGuarded  = (kingMask & bishop) != 0;
-    const bool bishopHitsRook = (attackSquares<BISHOP>(bishopSq, occupied) & rook) != 0;
-    if (!bishopGuarded and !bishopHitsRook)
-      return false;
-  }
-
-  // Defender king cornered on a square the bishop's colour matches, attacker to
-  // move, kings three apart: the mating net closes exactly as it does at
-  // distance two (handled above) -- the extra king step is absorbed on the
-  // attacker's move. Verified pure-decided against the oracle (~95%+ wins,
-  // ~20:1 decided-to-drawn), so claiming a draw here would be a false-draw.
-  if (!sideAdvantage and (king & CornerSquares) and (distBtwKings == 3) and
-     (((kingR + kingF) & 1) == ((bishopR + bishopF) & 1))
-  ) return false;
-
-  // Rook forks king and bishop, defender to move, bishop stranded from its own
-  // king. The rook bears on the defender king (giving check, so the defender
-  // must respond) and on the bishop at the same time; with the bishop a full
-  // king-move away (chebyshev >= 5) the king cannot step out of check and still
-  // cover it, so the bishop drops -> decided. Verified against the oracle: this
-  // slice runs ~7:1 decided-to-drawn (kills ~21k false-draws for ~3k safe missed
-  // draws), climbing to ~15:1 at distance 7. Claiming a draw here is a false-draw.
-  {
-    const Bitboard rookRay = attackSquares<ROOK>(rookSq, occupied);
-    if (sideAdvantage and (rookRay & bishop) and (rookRay & king) and
-        chebyshevDistance(kingSq, bishopSq) >= 5)
-      return false;
-  }
-
-  // Kings in opposition along the edge the defender is pinned to, attacker to
-  // move. On a file-edge (A/H) opposition means equal ranks; on a rank-edge
-  // (1/8) it means equal files. With the defender king on the edge, the kings
-  // two squares apart and directly opposed, and the attacker on the move, the
-  // rook drives the king back with the attacker's king holding the opposition:
-  // the defender cannot hold the bishop and the square at once -> decided.
-  // Verified against the oracle: this slice runs ~2.67:1 decided-to-drawn
-  // (kills ~20k false-draws for ~7k safe missed draws). Claiming a draw here is
-  // a false-draw.
-  {
-    const bool kingsAlign =
-      king & FileAH ? kingR == emyKingR
-                    : (king & Rank18 ? kingF == emyKingF : false);
-    if ((king & EdgeSquares) and distBtwKings == 2 and not sideAdvantage and
-        kingsAlign)
-      return false;
-  }
-
-  // Bucket instrumentation (egvalidate only): tag this position with a feature
-  // vector so the harness can group and read each bucket's oracle WDL. Emitted
-  // here -- after every carve-out, just before the terminal draw verdict -- so
-  // only the *leftover* positions we still claim as draws are bucketed. The
-  // ones already decided by a return-false carve-out above are excluded.
-  if (BucketProbe::enabled)
-  {
-    // Does the defender king have any legal move? A king step is legal if it
-    // stays off its own bishop's square, out of the enemy king's contact zone,
-    // and off the rook's rays -- the rays are recomputed with the king lifted
-    // (occupied ^ king), so a square screened only by the king still counts as
-    // attacked. The rook's own square is never on its ray, so capturing an
-    // undefended rook is correctly counted as a legal move.
-    // const Bitboard rookRayNoKing = attackSquares<ROOK>(rookSq, occupied ^ king);
-    // const Bitboard kingLegalMask =
-    //   kingMask & ~(bishop | emyKingMask | rookRayNoKing);
-    // const bool defKingHasMove = kingLegalMask != 0;
-
-    // Rook bearing directly on the bishop along a clear ray (real occupancy, so
-    // intervening pieces block). A rook already attacking the bishop threatens to
-    // win it.
-    // const Bitboard rookRay = attackSquares<ROOK>(rookSq, occupied);
-    // const bool rookAttacksBishop = (rookRay & bishop) != 0;
-
-    // Colour of the corner nearest the defender king vs the bishop's square
-    // colour. A defender driven toward a corner the bishop cannot cover
-    // (opposite colour) is the textbook losing pattern.
-    // const int  cornerR = (kingR >= 4) ? 7 : 0;
-    // const int  cornerF = (kingF >= 4) ? 7 : 0;
-    // const bool cornerColorMatch =
-    //   (((cornerR + cornerF) & 1) == ((bishopR + bishopF) & 1));
-    // const int bishopColorMatch = (((kingR + kingF) & 1) == ((bishopR + bishopF) & 1));
-
-    const auto kingsAlign =
-      king & FileAH ? kingR == emyKingR : (king & Rank18 ? kingF == emyKingF : false);
-
-    const auto kingBishopAdjacent =
-      (abs(kingR - bishopR) == 1) or (abs(kingF - bishopF) == 1);
-
-    BucketProbe::emit({
-      {"defKingOnEdge",     int((king & EdgeSquares) != 0)},
-      {"distBtwKings2",      distBtwKings == 2},
-      {"kingBishopAdjacent", int(kingBishopAdjacent)},
-      {"defenderToMove",    sideAdvantage},
-      // {"bishopColorMatch",  int(bishopColorMatch)},
-      {"kingsAlign", int(kingsAlign)}
-      // {"defKingMove",       int(defKingHasMove)},
-      // {"rookAttacksBishop", int(rookAttacksBishop)},
-      // {"kingBishopDist",    chebyshevDistance(kingSq, bishopSq)},
-      // {"rookAttacksKing",   int(rookAttacksKing)}
-    });
-  }
-
-  return true;
+  return false;
 }
 
 bool

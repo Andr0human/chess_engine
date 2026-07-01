@@ -26,12 +26,17 @@ BucketTally::report(std::ostream& out, const std::string& title) const
   out << "  bucket                 win      draw      loss"
          "   decided  dec:draw   verdict\n";
 
+  uint64_t pureDrawTotal = 0;   // sum of draw column over PURE-DRAW buckets
+
   for (const auto& [key, arr] : rows)
   {
     const uint64_t win = arr[0], draw = arr[1], loss = arr[2];
     const uint64_t decided = win + loss;   // false-draws if this bucket is claimed
     const bool pureDraw    = (decided == 0 && draw != 0);
     const bool pureDecided = (draw == 0 && decided != 0);
+
+    if (pureDraw)
+      pureDrawTotal += draw;
 
     // Decided-to-draw ratio: carve-out efficiency (false-draws killed per draw
     // sacrificed if this whole bucket is turned into a return-false). A pure-
@@ -57,5 +62,7 @@ BucketTally::report(std::ostream& out, const std::string& title) const
         << "   " << (pureDraw ? "PURE-DRAW"
                     : pureDecided ? "PURE-DECIDED" : "mixed") << '\n';
   }
+
+  out << "  PURE-DRAW total draws  : " << pureDrawTotal << '\n';
   out << '\n';
 }
