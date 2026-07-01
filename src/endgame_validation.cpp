@@ -5,6 +5,7 @@
 #include <cctype>
 #include <array>
 #include <vector>
+#include <map>
 #include <memory>
 #include <algorithm>
 
@@ -15,6 +16,7 @@
 #include "endgame_validation.h"
 #include "endgame_solver.h"
 #include "bitboard.h"
+#include "bucket_probe.h"
 #include "endgame.h"
 #include "movegen.h"
 #include "move_utils.h"
@@ -203,6 +205,10 @@ struct Walker
   std::vector<string> falseFens;  // up to MAX_FALSE_FENS examples for this slice
   string              dump;       // dump lines for this slice (merged in task order)
 
+  // Per-bucket oracle WDL. Populated only when BucketProbe is enabled and an
+  // oracle is present; folded into the Generator's tally after the sweep.
+  BucketTally buckets;
+
   string
   buildFen() const
   {
@@ -259,6 +265,7 @@ struct Walker
     ++t.quiet;
     (stm == WHITE ? t.quietW : t.quietB)++;
 
+    BucketProbe::reset();   // recognizer emits iff it buckets this position
     const bool isDraw = isTheoreticalDraw(pos);
     if (isDraw)
     {
@@ -290,6 +297,17 @@ struct Walker
         ++t.falseDraw;                                   // DANGEROUS
         if (falseFens.size() < MAX_FALSE_FENS)
           falseFens.push_back(fen);
+      }
+
+      // Per-bucket WDL: fold this position's oracle result into its feature
+      // bucket so the harness can tell which buckets are pure-draw.
+      if (BucketProbe::enabled && BucketProbe::fired())
+      {
+        const BucketTally::Result r = (truth == Wdl::WIN)  ? BucketTally::WIN
+                                    : (truth == Wdl::DRAW) ? BucketTally::DRAW
+                                                           : BucketTally::LOSS;
+        buckets.add(BucketProbe::current(), r, isDraw);
+        buckets.setNames(BucketProbe::names());
       }
 
       mismatch = (isDraw != oracleDraw);
@@ -374,6 +392,7 @@ struct Generator
   Tally               t;
   std::vector<string> falseFens;
   string              dump;
+  BucketTally         buckets;
 
   // Precompute, for each slot, the nearest earlier slot carrying the same
   // fenChar (or -1). Drives the identical-piece ordering constraint in place().
@@ -434,6 +453,7 @@ struct Generator
           falseFens.push_back(f);
       if (wantDump)
         dump += w.dump;
+      buckets.merge(w.buckets);
     }
   }
 };
@@ -624,6 +644,9 @@ validateEndgame(const vector<string>& args)
   // ---- enumerate ----------------------------------------------------------
   const perf_clock start = perf::now();
 
+  // Collect per-bucket features only when we have an oracle to pair them with.
+  BucketProbe::enabled = wantOracle;
+
   vector<Generator> gens;
   vector<std::unique_ptr<EgSolver>> solvers;   // keep oracles alive for reporting
   for (const string& cs : colourings)
@@ -681,6 +704,8 @@ validateEndgame(const vector<string>& args)
     gens.push_back(std::move(g));
   }
 
+  BucketProbe::enabled = false;
+
   if (wantDump)
   {
     for (const Generator& g : gens)
@@ -735,7 +760,12 @@ validateEndgame(const vector<string>& args)
   {
     for (size_t i = 0; i < gens.size(); ++i)
       if (gens[i].oracle)
+      {
         reportScorecard(gens[i], colourings[i]);
+        gens[i].buckets.report(
+          cout,
+          "Bucket WDL " + signatureOf(colourings[i]) + " (pieces " + colourings[i] + ")");
+      }
 
     // The two colourings are colour-swap + rank-flip images, so the safe and
     // dangerous buckets must match exactly -- a check on the oracle itself.
