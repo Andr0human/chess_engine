@@ -612,37 +612,104 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   if ((pos.count<WHITE, ALL>() == 2) or (pos.count<BLACK, ALL>() == 2))
     return false;
 
-  const Color side = pos.count<WHITE, ROOK>() ? WHITE : BLACK;
+  const Color side = pos.count<WHITE, BISHOP>() ? WHITE : BLACK;
   const Color emySide = ~side;
+  const int sideAdvantage = side == pos.color;
 
+  const Bitboard occupied = pos.all();
+  const Bitboard    king = pos.getPiece(side   , KING  );
+  const Bitboard  bishop = pos.getPiece(side   , BISHOP);
   const Bitboard emyKing = pos.getPiece(emySide, KING  );
-  const Bitboard bishop  = pos.getPiece(emySide, BISHOP);
+  const Bitboard    rook = pos.getPiece(emySide, ROOK  );
 
-  const Square    kingSq = squareNo(pos.getPiece(side, KING));
+  const Square    kingSq = squareNo(king   );
+  const Square  bishopSq = squareNo(bishop );
   const Square emyKingSq = squareNo(emyKing);
-  const Square  bishopSq = squareNo(bishop);
+  const Square    rookSq = squareNo(rook   );
 
-  const int emyKingSqR = emyKingSq >> 3;
-  const int emyKingSqF = emyKingSq &  7;
-  const int  bishopSqR = bishopSq  >> 3;
-  const int  bishopSqF = bishopSq  &  7;
+  const int kingR    = kingSq >> 3;
+  const int kingF    = kingSq  & 7;
+  const int bishopR  = bishopSq >> 3;
+  const int bishopF  = bishopSq  & 7;
+  const int emyKingR = emyKingSq >> 3;
+  const int emyKingF = emyKingSq & 7;
+  const int rookR    = rookSq >> 3;
+  const int rookF    = rookSq   & 7;
 
-  if (!(emyKing & (Rank18 | FileAH)) and
-      !(attackSquares<ROOK>(squareNo(pos.getPiece(side, ROOK)), 0) & bishop) and
-      (chebyshevDistance(kingSq, bishopSq) > 3) and
-      (abs(emyKingSqR - bishopSqR) > 1 and abs(emyKingSqF - bishopSqF) > 1)
+  const int    distBtwKings  = chebyshevDistance(kingSq, emyKingSq);
+
+  const Bitboard bishopMask  = attackSquares<BISHOP>(bishopSq , king);
+  const Bitboard rookMask    = attackSquares< ROOK >(rookSq   , emyKing); 
+  const Bitboard emyKingMask = attackSquares< KING >(emyKingSq, 0);
+
+  const Bitboard rookDiag = attackSquares<BISHOP>(rookSq, 0);
+  const bool rookHitsBishop = attackSquares<ROOK>(rookSq, 0) & bishop;
+
+  if (sideAdvantage and (rookDiag & emyKing))
+  {
+    const auto mask = attackSquares<BISHOP>(emyKingSq, 0) & attackSquares<BISHOP>(rookSq, 0);
+    if (((mask & bishopMask) & ~emyKingMask) and (king & ~rookMask))
+      return true;
+  }
+
+  if ((rookMask & king) and (rookMask & bishop))
+  {
+    const Bitboard inBtwMask = attackSquares<ROOK>(rookSq, occupied) & attackSquares<ROOK>(kingSq, occupied);
+    const Bitboard bishopInBtw = (bishopMask | bishop) & inBtwMask;
+
+    if (!bishopInBtw and
+       (chebyshevDistance(kingSq, bishopSq) > 2)
+    ) return false;
+  }
+
+  if (kingR == bishopR)
+  {
+    const Bitboard inBtwMask = attackSquares<ROOK>(kingSq, 0) & attackSquares<ROOK>(bishopSq, 0);
+    if (!sideAdvantage and
+       (emyKingF != rookF) and
+       (chebyshevDistance(kingSq, bishopSq) > 2) and
+       (abs(kingF - rookF) > 1) and
+       (emyKing & ~inBtwMask) and
+      !(bishopMask & emyKing)
+    ) return false;
+  }
+
+  if (kingF == bishopF)
+  {
+    const Bitboard inBtwMask = attackSquares<ROOK>(kingSq, 0) & attackSquares<ROOK>(bishopSq, 0);
+    if (!sideAdvantage and
+       (emyKingR != rookR) and
+       (chebyshevDistance(kingSq, bishopSq) > 2) and
+       (abs(kingR - rookR) > 1) and
+       (emyKing & ~inBtwMask) and
+      !(bishopMask & emyKing)
+    ) return false;
+  }
+
+  if (!(king & EdgeSquares) and
+      !rookHitsBishop and
+      (chebyshevDistance(emyKingSq, bishopSq) > 3) and
+      (abs(kingR - bishopR) > 1 and abs(kingF - bishopF) > 1)
   ) return true;
 
-  // Safe-draw guard (data-mined against the perfect KRKB oracle, FALSE-DRAW-free
-  // over the full sweep): defender to move, its king off the edge with the bishop
-  // guarded by that king, the kings >= 3 apart, and the rook not bearing on the
-  // bishop -> a held draw the conservative branch above misses.
-  if ((pos.color == emySide) and
-      !(emyKing & (Rank18 | FileAH)) and
-      (chebyshevDistance(emyKingSq, bishopSq) == 1) and
-      (chebyshevDistance(kingSq, emyKingSq) >= 3) and
-      !(attackSquares<ROOK>(squareNo(pos.getPiece(side, ROOK)), 0) & bishop)
+  // Center fortress (data-mined against the perfect KRKB oracle, FALSE-DRAW-free
+  // over the full sweep): the defending king is off the edge with its bishop
+  // guarded by that king (so the rook cannot win it) -> a held draw. The
+  // king-separation bound is asymmetric: with the defender to move the kings need
+  // only be >= 3 apart, but with the *attacker* to move it can win a tempo at
+  // exactly 3, so it needs >= 4 (every dist-3 attacker-to-move case is a win).
+  if (!(king & EdgeSquares) and
+      (chebyshevDistance(kingSq, bishopSq) == 1) and
+      (distBtwKings > 2 + !sideAdvantage) and
+      !rookHitsBishop
   ) return true;
+
+  // Kings far apart with the bishop hugging its own king: the rook can never
+  // break in before the defence re-forms. Data-mined FALSE-DRAW-free over the
+  // full KRKB oracle; independent of edge/side-to-move (both were irrelevant in
+  // the residual PURE-DRAW buckets). Generalises the fortress rule above.
+  if ((chebyshevDistance(kingSq, bishopSq) < 3) and (distBtwKings > 4))
+    return true;
 
   return false;
 }
