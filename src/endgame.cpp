@@ -636,7 +636,8 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   const int rookR    = rookSq >> 3;
   const int rookF    = rookSq   & 7;
 
-  const int    distBtwKings  = chebyshevDistance(kingSq, emyKingSq);
+  const int distBtwKings       = chebyshevDistance(kingSq, emyKingSq);
+  const int distBtwKingAndBish = chebyshevDistance(kingSq, bishopSq );
 
   const Bitboard bishopMask  = attackSquares<BISHOP>(bishopSq , king);
   const Bitboard rookMask    = attackSquares< ROOK >(rookSq   , emyKing); 
@@ -699,7 +700,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   // only be >= 3 apart, but with the *attacker* to move it can win a tempo at
   // exactly 3, so it needs >= 4 (every dist-3 attacker-to-move case is a win).
   if (!(king & EdgeSquares) and
-      (chebyshevDistance(kingSq, bishopSq) == 1) and
+      (distBtwKingAndBish == 1) and
       (distBtwKings > 2 + !sideAdvantage) and
       !rookHitsBishop
   ) return true;
@@ -708,7 +709,16 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   // break in before the defence re-forms. Data-mined FALSE-DRAW-free over the
   // full KRKB oracle; independent of edge/side-to-move (both were irrelevant in
   // the residual PURE-DRAW buckets). Generalises the fortress rule above.
-  if ((chebyshevDistance(kingSq, bishopSq) < 3) and (distBtwKings > 4))
+  if ((distBtwKingAndBish < 3) and (distBtwKings > 4))
+    return true;
+
+  // Off-edge, king two squares from its bishop, kings exactly four apart: a held
+  // draw regardless of side to move. Data-mined against the perfect KRKB oracle
+  // as two twin PURE-DRAW buckets (defender- and attacker-to-move, ~206k draws
+  // combined, zero decided) that the far-apart rule above misses at distKings==4.
+  if (!(king & EdgeSquares) and
+      (distBtwKingAndBish == 2) and
+      (distBtwKings == 4))
     return true;
 
   return false;
