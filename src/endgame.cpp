@@ -227,45 +227,19 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
      (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
-  // if ((pawnSq + 8 * incFactor == emyKingSq) and
-  //     (pawnSq - 8 * incFactor ==  myKingSq) and
-  //     (!sideAdvantage or (!(emyKing & Rank18) and sideAdvantage))
-  // ) return true;
-
-  // if ((pawnSq + 8 * incFactor == emyKingSq) and
-  //     (pawn & (AllSquares ^ FileAH)) and
-  //     ((pawnSq - 7 * incFactor == myKingSq) or (pawnSq - 9 * incFactor == myKingSq)) and
-  //     (sideAdvantage or (!(emyKing & Rank18) and !sideAdvantage))
-  // ) return true;
-
-  // if ((pawn & (AllSquares ^ FileAH)) and
-  //     ((pawnSq + 1 == myKingSq) or (pawnSq - 1 == myKingSq)) and
-  //     ((pawnSq + 16 * incFactor == emyKingSq) and !sideAdvantage)
-  // ) return true;
-
-  // if ((pawnSq +  8 * incFactor ==  myKingSq) and
-  //     (pawnSq + 24 * incFactor == emyKingSq) and
-  //     (sideAdvantage and !(emyKing & Rank18))
-  // ) return true;
-
-  // Defender-king blockade draw: the defending king sits exactly two squares
-  // directly in front of the pawn (same file) and it is the attacker's move.
-  //   - attacker king one rank behind the pawn (d3/e3/f3 for a pawn on e4):
-  //     always a draw (defender holds the opposition / stalemate resource).
-  //   - attacker king beside the pawn (d4/f4): a draw unless the defender is
-  //     forced onto a non-rook-file promotion square, which is the only winning
-  //     break; on the a/h file that square is still the rook-pawn corner draw.
-  // Complements the blocks above which cover this geometry with the defender to move.
-  // if (sideAdvantage and (emyKingSq == pawnSq + 16 * incFactor))
-  // {
-  //   const int pawnF    = pawnSq   & 7;
-  //   const int myKingF  = myKingSq & 7;
-  //   const int fileDist = abs(myKingF - pawnF);
-  //   const bool behindKing = (myKingR == pawnR - incFactor) and (fileDist <= 1);
-  //   const bool besideKing = (myKingR == pawnR)             and (fileDist == 1);
-  //   if (behindKing or (besideKing and (!(emyKing & Rank18) or (emyKing & FileAH))))
-  //     return true;
-  // }
+  // Rook-pawn corner draw (oracle-mined with bucket-probing).
+  // With a rook pawn, if the defending king is closer to the queening corner than
+  // the attacking king by a safe margin, the attacker cannot evict it from the
+  // corner -- drawn. The margin is one square tighter when the pawn side is to
+  // move, since it gains a tempo (sideAdvantage == 1 => needs mdq - edq >= 2).
+  if (pawn & FileAH)
+  {
+    const Square queenSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
+    const int edq = chebyshevDistance(emyKingSq, queenSq);   // defender -> corner
+    const int mdq = chebyshevDistance(myKingSq,  queenSq);   // attacker -> corner
+    if (mdq - edq >= 1 + sideAdvantage)
+      return true;
+  }
 
   return false;
 }
