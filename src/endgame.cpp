@@ -53,6 +53,25 @@ constexpr Bitboard rank4to7[COLOR_NB] = {
   Rank2 | Rank3 | Rank4 | Rank5
 };
 
+static int
+getRuleOfSquareIndex(const ChessBoard& pos, Color side, Square pawnSq)
+{
+  const int sideAdvantage = int(side == pos.color);
+  const int incFactor     = 2 * int(side) - 1;
+
+  const Bitboard myKing = pos.getPiece(side, KING);
+  const Bitboard   pawn = pos.getPiece(side, PAWN);
+
+  int ruleOfSquareIndex = pawnSq;
+
+  if (!sideAdvantage)
+    ruleOfSquareIndex -= 8 * incFactor;
+
+  if ((pawn & relativeRank[side][2]) and (myKing & ~plt::pawnMasks[side][pawnSq]))
+    ruleOfSquareIndex += 8 * incFactor;
+
+  return ruleOfSquareIndex;
+}
 
 template <Endgames e>
 inline bool
@@ -119,6 +138,15 @@ isEndgame<Endgames::KRBK>(const ChessBoard& pos)
      and pos.count<BISHOP>() == 1;
 }
 
+template <>
+inline bool
+isEndgame<Endgames::KPNK>(const ChessBoard& pos)
+{
+  return pos.count<ALL   >() == 2
+     and pos.count<PAWN  >() == 1
+     and pos.count<KNIGHT>() == 1;
+}
+
 template <Endgames e>
 inline bool
 Endgame(const ChessBoard& pos) = delete;
@@ -168,12 +196,7 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
       : emyKingR <= myKingR + 1 + myKingOnRank8)
   ) return true;
 
-  int ruleOfSquareIndex = pawnSq;
-  if (!sideAdvantage)
-    ruleOfSquareIndex -= 8 * incFactor;
-
-  if ((pawn & relativeRank[side][2]) and (myKing & ~plt::pawnMasks[side][pawnSq]))
-    ruleOfSquareIndex += 8 * incFactor;
+  const int ruleOfSquareIndex = getRuleOfSquareIndex(pos, side, pawnSq);
 
   if (emyKing & ~plt::ruleOfSquares[side][ruleOfSquareIndex])
     return false;
@@ -698,6 +721,89 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   return false;
 }
 
+template <>
+inline bool
+Endgame<Endgames::KPNK>(const ChessBoard& pos)
+{
+  // Look from the KNIGHT side -- the defender fighting to hold the draw against
+  // the passed pawn. Like KPQK this covers both material configs: the
+  // opposite-side KN-vs-KP case (each side one non-king man) carries the draw
+  // logic; same-side KPN-vs-K falls through to the terminal return false (trivial
+  // win -- a safe missed-draw gap for now).
+  const Color side2move = pos.color;
+  const Color side    = pos.count<WHITE, KNIGHT>() ? WHITE : BLACK;   // knight (defender)
+  const Color emySide = ~side;                                        // pawn (attacker)
+
+  const int defToMove = int(side2move == side);
+
+  const Bitboard myKing  = pos.getPiece(side   , KING);
+  const Bitboard emyKing = pos.getPiece(emySide, KING);
+
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    const Bitboard knight = pos.getPiece(side,    KNIGHT);
+    const Bitboard pawn   = pos.getPiece(emySide, PAWN  );
+
+    const Square  knightSq = squareNo(knight );
+    const Square    pawnSq = squareNo(pawn   );
+    const Square  myKingSq = squareNo(myKing );
+    const Square emyKingSq = squareNo(emyKing);
+
+    const int    pawnR = pawnSq >> 3;
+    const int    pawnF = pawnSq  & 7;
+    // Pawn advancement counted from the ATTACKER's back rank: 2..7, higher = closer to promotion.
+    const int  pawnRel = (emySide == WHITE) ? pawnR + 1 : 8 - pawnR;
+
+    const Square promoSq = static_cast<Square>((emySide == WHITE ? 56 : 0) + pawnF);
+    const int defKingPromoDist = chebyshevDistance(myKingSq, promoSq);
+    const int defKingPawnDist  = chebyshevDistance(myKingSq, pawnSq);
+    const int  knightPawnDist  = chebyshevDistance(knightSq, pawnSq);
+    const int ruleOfSquareIndex = getRuleOfSquareIndex(pos, emySide, pawnSq) + 8 * (2 * emySide - 1);
+
+    const auto pawnOnFileAH = (pawn & FileAH) != 0;
+    const auto kingInROS = (plt::ruleOfSquares[emySide][ruleOfSquareIndex] & myKing) != 0;
+    const auto legalKnightSquares = (plt::knightMasks[knightSq] &
+      ~(attackSquares<KING>(emyKingSq, 0) | plt::pawnCaptureMasks[emySide][pawnSq])) != 0;
+
+    // --- Draw rules first: claim the known draws before any carve-out filter, so
+    // a filter can never steal a genuine draw from a rule below it. ---
+
+    // Defender king blockades the promotion square (any pawn rank): the pawn can
+    // never queen, so a held draw. Oracle-mined FALSE-DRAW-free.
+    if (defKingPromoDist == 0)
+      return true;
+
+    // Unadvanced pawn with the defence in range: the pawn is still on the
+    // attacker's 2nd/3rd rank, the defender king is near the promotion square,
+    // and the king or knight is close enough to the pawn to blockade or win it.
+    // Oracle-mined FALSE-DRAW-free over the full KPKN sweep.
+    if (pawnRel <= 3 and defKingPromoDist <= 3 and
+        std::min(defKingPawnDist, knightPawnDist) <= 3)
+      return true;
+
+    // Defender to move, unadvanced non-rook pawn, and the knight has a safe
+    // (non-losing) move: the defender always has a holding move, so it holds the
+    // draw. Rook pawns are excluded -- there the knight can be trapped in the
+    // corner (the sibling bucket carries decided positions). Oracle-mined
+    // FALSE-DRAW-free.
+    if (pawnRel <= 3 and defToMove and legalKnightSquares and not pawnOnFileAH)
+      return true;
+
+    // Same holding pattern one rank further advanced (pawnRel 4), made safe by the
+    // rule-of-the-square: the defender king is inside the pawn's promotion square,
+    // so it catches the pawn. Without the king-in-square gate rank 4 leaks decided
+    // positions; with it the bucket is pure. Oracle-mined FALSE-DRAW-free.
+    if (pawnRel <= 4 and defToMove and legalKnightSquares and not pawnOnFileAH and kingInROS)
+      return true;
+
+    // Everything else falls through: the pawn is advanced and the defence is not
+    // in a recognized holding pattern -- treat as decided and defer to search.
+    return false;
+  }
+
+  return false;
+}
+
 bool
 isTheoreticalDraw(const ChessBoard& pos)
 {
@@ -738,6 +844,9 @@ isTheoreticalDraw(const ChessBoard& pos)
 
     if (isEndgame<Endgames::KRBK>(pos))
       return Endgame<Endgames::KRBK>(pos);
+
+    if (isEndgame<Endgames::KPNK>(pos))
+      return Endgame<Endgames::KPNK>(pos);
   }
 
   return false;
