@@ -92,6 +92,11 @@ class SearchData
 
   uint64_t nodes, qNodes;
 
+  // Cumulative node count over the entire search (all depths, main + q).
+  // Unlike `nodes`/`qNodes` this is NEVER cleared by resetNodeCount(), so it
+  // feeds the UCI `nodes`/`nps` fields, which GUIs expect to be cumulative.
+  Nodes searchedNodes = 0;
+
   // Time provided to find move for current position
   nanoseconds allotedTime;
 
@@ -222,11 +227,11 @@ class SearchData
 
   void
   addNode() noexcept
-  { nodes++; }
+  { nodes++; searchedNodes++; }
 
   void
   addQNode() noexcept
-  { qNodes++; }
+  { qNodes++; searchedNodes++; }
 
   void
   resetNodeCount() noexcept
@@ -234,6 +239,20 @@ class SearchData
 
   pair<Move, Score> lastIterationResult() const noexcept
   { return moveEvals.back(); }
+
+  // Cumulative nodes (main + quiescence) searched so far, across all depths.
+  Nodes
+  totalSearchedNodes() const noexcept
+  { return searchedNodes; }
+
+  // Nodes per second over the whole search so far. Guards against a zero
+  // elapsed time on very fast first iterations.
+  Nodes
+  nps() const noexcept
+  {
+    const double elapsed = timeSpent();
+    return elapsed > 0.0 ? Nodes(double(searchedNodes) / elapsed) : searchedNodes;
+  }
 
   Nodes
   totalNodes() const noexcept

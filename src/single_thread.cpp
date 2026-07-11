@@ -557,7 +557,8 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
         long long timeMs = static_cast<long long>(info.timeSpent() * 1000.0);
         std::cout << "info depth " << int(depth)
                   << " score cp " << int(eval)
-                  << " nodes " << info.totalNodes()
+                  << " nodes " << info.totalSearchedNodes()
+                  << " nps " << info.nps()
                   << " time " << timeMs
                   << " pv";
         for (int i = 0; i < MAX_PV_ARRAY_SIZE; ++i)
@@ -599,6 +600,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     writer << "Hash move: ttProvided=" << info.ttMoveProvided
            << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
            << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
+    writer << "Nodes: " << info.totalSearchedNodes()
+           << " | Time: " << std::fixed << std::setprecision(2) << info.timeSpent() << "s"
+           << " | NPS: " << info.nps() << endl;
     writer << "Search Done!" << endl;
   }
 }
