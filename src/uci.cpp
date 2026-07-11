@@ -105,6 +105,15 @@ handlePosition(stringstream& ss)
   }
 }
 
+// A fixed slice of the clock reserved for move-transmission / process latency
+// so we never plan to think right up to the flag. In-process (Chessmate) this
+// is nearly free, but over an external GUI's stdio pipes (cutechess/fastchess)
+// the go→bestmove round-trip latency is real and un-budgeted; a self-play
+// sanity run flagged once on time even in-process (zero margin). 40 ms sits
+// comfortably above typical pipe latency without eating meaningfully into
+// think time at blitz. Tune up if time-losses ever appear over an external GUI.
+constexpr double MOVE_OVERHEAD = 0.040;  // seconds
+
 // Decide how long to search given the side-to-move's remaining clock and
 // increment (both in milliseconds). Faithful 1:1 port of the heuristic that
 // used to live on the Unity side (ChessEngine.DecideTimeForSearch): the GUI
@@ -113,8 +122,11 @@ handlePosition(stringstream& ss)
 double
 decideSearchTime(long long sideTimeMs, long long sideIncMs)
 {
-  const double timeLeft  = double(sideTimeMs) / 1000.0;  // seconds
-  const double increment = double(sideIncMs)  / 1000.0;  // seconds
+  // Shave the overhead off the usable clock up front so both the budget formula
+  // and the 62% cap below plan against time we can actually afford to spend.
+  const double timeLeft  =
+      std::max(0.0, double(sideTimeMs) / 1000.0 - MOVE_OVERHEAD);  // seconds
+  const double increment = double(sideIncMs)  / 1000.0;            // seconds
 
   // Estimate moves remaining from how much material is left: a full board
   // (weight 7880) implies ~32 moves to go; as material comes off the estimate

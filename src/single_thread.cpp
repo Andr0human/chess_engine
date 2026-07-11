@@ -561,11 +561,17 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
                   << " nps " << info.nps()
                   << " time " << timeMs
                   << " pv";
-        for (int i = 0; i < MAX_PV_ARRAY_SIZE; ++i)
+        // Print the validated PV (built by addResult above), not the raw
+        // pvArray. Early-return nodes (TT cutoff / draw / RFP / razoring) don't
+        // null-terminate their pvArray slot, so a parent that copies such a
+        // child's row inherits a stale tail — harmless to search (pvArray never
+        // feeds a search decision) but it made the raw walk emit illegal moves
+        // (fastchess "Illegal PV move" warnings). getPvLine() is legality-checked;
+        // stop at the first quiescence move, as the prior raw printer did.
+        for (const Move m : info.getPvLine())
         {
-          if (pvArray[i] == NULL_MOVE) break;
-          if (pvArray[i] & quiescenceMove()) break;
-          std::cout << " " << moveToUci(pvArray[i]);
+          if (m & quiescenceMove()) break;
+          std::cout << " " << moveToUci(m);
         }
         std::cout << std::endl;
       }
