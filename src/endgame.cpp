@@ -796,6 +796,20 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
     if (pawnRel <= 4 and defToMove and legalKnightSquares and not pawnOnFileAH and kingInROS)
       return true;
 
+    const int  knightF =  knightSq & 7;
+    const int emyKingF = emyKingSq & 7;
+    if ((plt::knightMasks[knightSq] & (1ULL << promoSq)) and
+        (pawn & relativeRank[emySide][7] or (legalKnightSquares and defToMove)) and
+       !(pawn & FileAH) and
+       !((chebyshevDistance(emyKingSq, pawnSq) <= 1 + !defToMove) and ((knightF - pawnF) * (emyKingF - pawnF) >= 0))
+    ) return true;
+
+    if (defToMove and
+       (plt::knightMasks[pawnSq] & plt::knightMasks[emyKingSq] & plt::knightMasks[knightSq] & ~myKing) and
+      !(myKing & plt::pawnCaptureMasks[emySide][pawnSq]) and
+       (emyKing & ~CornerSquares)
+    ) return true;
+
     // Everything else falls through: the pawn is advanced and the defence is not
     // in a recognized holding pattern -- treat as decided and defer to search.
     return false;
