@@ -170,6 +170,13 @@ class SearchData
       moveNodes.add(make_pair(move, make_pair(0, 0)));
   }
 
+  // Read access to the validated principal variation (built by addResult;
+  // every move legality-checked). Used by the UCI info printer so it emits a
+  // legal PV instead of walking the raw pvArray (whose tail can be stale).
+  const Varray<Move, MAX_PLY>&
+  getPvLine() const noexcept
+  { return pvLine; }
+
   bool
   isPartOfPv(const Move m) const noexcept
   {
