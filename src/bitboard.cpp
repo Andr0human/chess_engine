@@ -549,19 +549,31 @@ ChessBoard::generateHashkey() const
 void
 ChessBoard::makeNullMove()
 {
-  csep = (csep & 1920) ^ 64;
-  // hashValue ^= TT.HashIndex[0];
+  // Save full state so unmakeNullMove can restore it verbatim. A null move is
+  // never irreversible, so (unlike undoInfoPush) we never reset the stack.
+  undoInfo[undoInfoStackCounter++] = UndoInfo(NULL_MOVE, csep, hashValue, halfmove);
+
+  // An en-passant target cannot survive a null move — drop it from the hash
+  // before csep is cleared (read while csep still holds the old value).
+  if (enPassantSquare() != SQUARE_NB)
+    hashValue ^= tt.hashKey(enPassantSquare() + 1);
+
+  // Flip side-to-move in the hash, mirroring every real move (hashKey(0)).
+  hashValue ^= tt.hashKey(0);
+
+  // Reset en-passant state (keep castling bits), then flip side to move.
+  csep = (csep & 1920) ^ SQUARE_NB;
   color = ~color;
 }
 
 void
 ChessBoard::unmakeNullMove()
 {
-  // Update to not use t_csep form external source
-  // csep = t_csep;
-  // Hash_Value ^= TT.HashIndex[0];
   color = ~color;
-  // moveInvert(0, t_csep, t_HashVal);
+  undoInfoStackCounter--;
+  csep      = undoInfo[undoInfoStackCounter].csep;
+  hashValue = undoInfo[undoInfoStackCounter].hash;
+  halfmove  = undoInfo[undoInfoStackCounter].halfmove;
 }
 
 void

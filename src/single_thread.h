@@ -47,7 +47,7 @@ search(
  * @return Score 
  */
 Score
-alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions);
+alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull = true);
 
 
 Score
