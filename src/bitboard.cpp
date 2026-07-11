@@ -553,15 +553,13 @@ ChessBoard::makeNullMove()
   // never irreversible, so (unlike undoInfoPush) we never reset the stack.
   undoInfo[undoInfoStackCounter++] = UndoInfo(NULL_MOVE, csep, hashValue, halfmove);
 
-  if constexpr (USE_TT) {
-    // An en-passant target cannot survive a null move — drop it from the hash
-    // before csep is cleared (read while csep still holds the old value).
-    if (enPassantSquare() != SQUARE_NB)
-      hashValue ^= tt.hashKey(enPassantSquare() + 1);
+  // An en-passant target cannot survive a null move — drop it from the hash
+  // before csep is cleared (read while csep still holds the old value).
+  if (enPassantSquare() != SQUARE_NB)
+    hashValue ^= tt.hashKey(enPassantSquare() + 1);
 
-    // Flip side-to-move in the hash, mirroring every real move (hashKey(0)).
-    hashValue ^= tt.hashKey(0);
-  }
+  // Flip side-to-move in the hash, mirroring every real move (hashKey(0)).
+  hashValue ^= tt.hashKey(0);
 
   // Reset en-passant state (keep castling bits), then flip side to move.
   csep = (csep & 1920) ^ SQUARE_NB;
