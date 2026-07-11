@@ -25,6 +25,9 @@ enum SearchFlag: bool
   USE_EXTENSIONS = true,
   USE_MOVE_ORDER = true,
   USE_NMP = true,
+  USE_RFP = true,
+  USE_RAZOR = true,
+  USE_FUTILITY = true,
 };
 
 enum Color: uint8_t
@@ -62,6 +65,9 @@ enum Search
   EXTENSION_LIMIT = 8,
   NMP_MIN_DEPTH = 3,
   VAL_WINDOW = 16,
+  RFP_MAX_DEPTH = 6,
+  RAZOR_MAX_DEPTH = 3,
+  FUTILITY_MAX_DEPTH = 4,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   MAX_THREADS = 12,
@@ -82,10 +88,12 @@ enum class Endgames: uint8_t
   KNK,
   KBK,
   KPBK,
+  KPQK,
   KBNK,
   KBBK,
   KNNK,
   KRBK,
+  KPNK,
 };
 
 enum Value: Score
@@ -96,6 +104,9 @@ enum Value: Score
   VALUE_INF  = 16001,
   VALUE_UNKNOWN = 555666777,
   VALUE_WINDOW = 4,
+  RFP_MARGIN = 110,
+  RAZOR_MARGIN = 240,
+  FUTILITY_MARGIN = 120,
   VALUE_TRANSPOSITION_TABLE_SEED = 1557,
 
 
@@ -123,20 +134,10 @@ enum Board: Bitboard
   WhiteSquares = 0x55AA55AA55AA55AA,
   BlackSquares = AllSquares ^ WhiteSquares,
 
-  QueenSide = FileA | FileB | FileC | FileD,
-  KingSide  = FileE | FileF | FileG | FileH,
-  WhiteSide = Rank1 | Rank2 | Rank3 | Rank4,
-  BlackSide = Rank5 | Rank6 | Rank7 | Rank8,
-
   RightAttkingPawns = AllSquares ^ (Rank18 | FileH),
   LeftAttkingPawns  = AllSquares ^ (Rank18 | FileA),
-
-  CentralSquare = (Rank4 | Rank5) & (FileD | FileE),
-  SemiCentralSquare = (Rank3 | Rank4 | Rank5 | Rank6) & (FileC | FileD | FileE | FileF),
-  OuterSquare = AllSquares ^ SemiCentralSquare,
-
-  WhiteColorCorner = 0xF07030180C0E0F0,
-  BlackColorCorner = 0xF0E0C0800103070F,
+  CornerSquares = FileAH & Rank18,
+  EdgeSquares   = FileAH | Rank18
 };
 
 enum Square: int8_t

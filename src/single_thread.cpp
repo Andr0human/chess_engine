@@ -34,8 +34,14 @@ static Score
 quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
   // Check if Time Left for Search
-  if (info.timeOver())
+  if (info.shouldStop())
     return TIMEOUT;
+
+  // Terminate the PV here before any early return. Otherwise a no-capture
+  // node leaves this slot holding a stale entry from a sibling line, which
+  // addResult() copies whenever it is coincidentally legal in the new line —
+  // rendering phantom captures in the printed PV (e.g. "Kd4 (Kxe7)").
+  pvArray[pvIndex] = NULL_MOVE;
 
   const MoveList myMoves = generateMoves(pos);
 
@@ -68,7 +74,6 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if constexpr (USE_MOVE_ORDER)
     orderMoves(pos, movesArray, MType::CAPTURES, 0);
 
-  pvArray[pvIndex] = 0; // no pv yet
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
   const size_t LMP_THRESHOLD = movesArray.size() < 4 ? 1 : 3;
@@ -83,7 +88,7 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     Score score = -quiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
     pos.unmakeMove();
 
-    if (info.timeOver())
+    if (info.shouldStop())
       return TIMEOUT;
 
     // Check for Beta-cutoff
@@ -165,7 +170,7 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
   Score eval = -alphaBeta(pos, ns.depth - 1, -ns.beta, -ns.alpha, ns.ply + 1, pvNextIndex, ns.numExtensions);
   pos.unmakeMove();
 
-  if (info.timeOver())
+  if (info.shouldStop())
   {
     out.result = TIMEOUT;
     return out;
@@ -196,7 +201,7 @@ static Move
 playSubsetMoves(
   ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
   size_t start, size_t end,
-  NodeState& ns, Move bestMove
+  NodeState& ns, Move bestMove, bool futilityStage = false
 )
 {
   // myMoves.removedMoves() accounts for moves searched *outside* this array
@@ -210,6 +215,18 @@ playSubsetMoves(
   {
     Move move = movesArray[moveNo];
 
+    // Quiet-move futility: at a shallow, not-in-check node whose static eval
+    // sits a depth-scaled margin below alpha (ns.quietFutile, computed in
+    // alphaBeta), the residual quiet moves are very unlikely to raise it. Once
+    // at least one move has been searched (bestMove set — so the fail-low
+    // return is backed by a real score), skip the rest. This is reached with
+    // futilityStage == true only for the QUIET residual (captures / promotions
+    // / checks / PV / killers ran in earlier stages), so every move here is
+    // already quiet & non-check — no per-move type test needed. Unverified bet
+    // (cf. razoring's qsearch check); the depth-scaled margin is the safety.
+    if (futilityStage and ns.quietFutile and bestMove != NULL_MOVE)
+      break;
+
     // HASH_ALPHA fallback: remember the first searched move at this node so
     // the TT entry has *something* to suggest on a fail-low revisit.
     if (bestMove == NULL_MOVE)
@@ -218,7 +235,7 @@ playSubsetMoves(
     Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, ns);
 
     // No time left!
-    if (info.timeOver())
+    if (info.shouldStop())
       return bestMove;
 
     //! TODO: Why beta is not in root-search??
@@ -266,7 +283,10 @@ playAllMoves(
     ? movesArray.size()
     : orderMoves(pos, movesArray, orderType, ns.ply, start);
 
-  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove);
+  // Only the residual QUIET stage may futility-prune; earlier stages (captures,
+  // promotions, checks, PV, killers) always search their moves.
+  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove,
+                             orderType == MType::QUIET);
 
   if (ns.hashf == Flag::HASH_BETA)
     return bestMove;
@@ -277,10 +297,21 @@ playAllMoves(
   return bestMove;
 }
 
+// Lazily compute and cache the node's static evaluation. Multiple search
+// heuristics (RFP today; razoring / futility / improving later) want the same
+// value — compute it at most once per node and reuse it from NodeState.
+static inline Score
+nodeStaticEval(ChessBoard& pos, NodeState& ns)
+{
+  if (!ns.staticEval.has_value())
+    ns.staticEval = evaluate(pos);
+  return *ns.staticEval;
+}
+
 Score
 alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull)
 {
-  if (info.timeOver())
+  if (info.shouldStop())
     return TIMEOUT;
 
     // Depth 0, starting Quiensense Search
@@ -318,6 +349,60 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // skips it (and all of orderMoves/staging) entirely.
   MoveList myMoves;
   stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
+
+  // Per-node search state. Built here, before RFP, so the node's static eval
+  // can be cached in it once (via nodeStaticEval) and reused by every
+  // heuristic in the node. depth / numExtensions are pre-extension at this
+  // point — synced into ns after the extension policy runs below.
+  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
+
+  // Reverse futility pruning: at a shallow, not-in-check node, if the static
+  // eval already beats beta by a depth-scaled margin, assume some move holds
+  // the cutoff and return without generating/searching moves. nodeStaticEval()
+  // is computed lazily — only when the cheap gates (not in check, shallow
+  // depth, non-mate window) pass. Fail-soft return: staticEval (>= beta, since
+  // staticEval - margin*depth >= beta) hands the parent a truer lower bound
+  // than a flat beta. No TT store on the prune; bestMove untouched, so the
+  // fail-low TT-hint/LMR gotcha (best-move semantics) does not apply here.
+  if constexpr (USE_RFP)
+  {
+    if (myMoves.checkers == 0
+      and depth <= RFP_MAX_DEPTH
+      and __abs(beta) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      if (staticEval - RFP_MARGIN * depth >= beta)
+        return staticEval;
+    }
+  }
+
+  // Razoring: alpha-side mirror of RFP. At a shallow, not-in-check node whose
+  // static eval sits a depth-scaled margin *below* alpha, the node looks
+  // hopeless on the alpha side. Rather than trust the static eval blindly,
+  // verify with a quiescence search (it resolves hanging captures the static
+  // eval missed); only if qsearch still fails low (<= alpha) do we return that
+  // fail-soft score instead of a full-width search. If qsearch beats alpha the
+  // node wasn't hopeless after all — fall through. Eval reuses the RFP cache
+  // (nodeStaticEval computes at most once per node). Like RFP: no TT store,
+  // bestMove untouched, so the fail-low TT-hint/LMR gotcha does not apply.
+  if constexpr (USE_RAZOR)
+  {
+    if (myMoves.checkers == 0
+      and depth <= RAZOR_MAX_DEPTH
+      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      if (staticEval + RAZOR_MARGIN * depth <= alpha)
+      {
+        const Score razorScore = quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
+        if (info.shouldStop())
+          return TIMEOUT;
+        if (razorScore <= alpha)
+          return razorScore;
+      }
+    }
+  }
+
   stagedGenerateMoves<GEN_MOVES   >(pos, myMoves);
 
   if (!myMoves.anyMove())
@@ -362,11 +447,33 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     int extensions = searchExtension(pos, myMoves, numExtensions, depth);
     depth += extensions;
     numExtensions += extensions;
+    ns.depth = depth;
+    ns.numExtensions = numExtensions;
+  }
+
+  // Quiet-move futility precondition (consumed in the QUIET stage of
+  // playAllMoves -> playSubsetMoves). At a shallow, not-in-check node outside
+  // the mate window whose static eval sits a depth-scaled margin below alpha,
+  // the residual quiet moves are very unlikely to raise it. We only *flag* it
+  // here; the actual skip happens per-move, after >=1 move is searched, so the
+  // fail-low return stays backed by a real score. depth is post-extension
+  // (an extended = interesting node gets a larger depth/margin -> futility
+  // fires less). nodeStaticEval reuses the RFP/razoring cache, so this adds no
+  // eval cost at depth <= RFP_MAX_DEPTH (RFP already computed it for non-check
+  // nodes). No TT/bestMove effect — like RFP/razoring, the LMR gotcha is N/A.
+  if constexpr (USE_FUTILITY)
+  {
+    if (myMoves.checkers == 0
+      and depth <= FUTILITY_MAX_DEPTH
+      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+    {
+      const Score staticEval = nodeStaticEval(pos, ns);
+      ns.quietFutile = (staticEval + FUTILITY_MARGIN * depth <= alpha);
+    }
   }
 
   pvArray[pvIndex] = NULL_MOVE;
 
-  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
   Move bestMove = NULL_MOVE;
 
   HashMoveOutcome hashOutcome = playHashMove(pos, hashMove, ns, bestMove);
@@ -399,9 +506,6 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 Score
 rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 {
-  perf_clock startTime;
-  perf_ns_time duration;
-
   int ply{0}, pvIndex{0};
 
   MoveArray myMoves = info.getMoves();
@@ -413,14 +517,12 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
     Move move = myMoves[moveNo];
-    startTime = perf::now();
 
     Score eval = playMove<rootReduction>(pos, move, moveNo, ns);
 
-    duration = perf::now() - startTime;
     info.insertMoveToList(moveNo);
 
-    if (info.timeOver())
+    if (info.shouldStop())
       return TIMEOUT;
 
     if (eval > ns.alpha)
@@ -459,7 +561,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   {
     Score eval = rootAlphaBeta(board, alpha, beta, depth);
 
-    if (info.timeOver())
+    if (info.shouldStop())
       break;
 
     if ((eval <= alpha) or (eval >= beta))
@@ -487,14 +589,21 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
         long long timeMs = static_cast<long long>(info.timeSpent() * 1000.0);
         std::cout << "info depth " << int(depth)
                   << " score cp " << int(eval)
-                  << " nodes " << info.totalNodes()
+                  << " nodes " << info.totalSearchedNodes()
+                  << " nps " << info.nps()
                   << " time " << timeMs
                   << " pv";
-        for (int i = 0; i < MAX_PV_ARRAY_SIZE; ++i)
+        // Print the validated PV (built by addResult above), not the raw
+        // pvArray. Early-return nodes (TT cutoff / draw / RFP / razoring) don't
+        // null-terminate their pvArray slot, so a parent that copies such a
+        // child's row inherits a stale tail — harmless to search (pvArray never
+        // feeds a search decision) but it made the raw walk emit illegal moves
+        // (fastchess "Illegal PV move" warnings). getPvLine() is legality-checked;
+        // stop at the first quiescence move, as the prior raw printer did.
+        for (const Move m : info.getPvLine())
         {
-          if (pvArray[i] == NULL_MOVE) break;
-          if (pvArray[i] & quiescenceMove()) break;
-          std::cout << " " << moveToUci(pvArray[i]);
+          if (m & quiescenceMove()) break;
+          std::cout << " " << moveToUci(m);
         }
         std::cout << std::endl;
       }
@@ -508,7 +617,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     if (withinValWindow and (__abs(eval) >= VALUE_INF - 500)) break;
 
     // Sort Moves according to time it took to explore the move.
-    info.sortMovesOnTime(pvArray[0]);
+    info.sortMovesOnNodes(pvArray[0]);
   }
 
   info.searchCompleted();
@@ -529,6 +638,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     writer << "Hash move: ttProvided=" << info.ttMoveProvided
            << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
            << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
+    writer << "Nodes: " << info.totalSearchedNodes()
+           << " | Time: " << std::fixed << std::setprecision(2) << info.timeSpent() << "s"
+           << " | NPS: " << info.nps() << endl;
     writer << "Search Done!" << endl;
   }
 }

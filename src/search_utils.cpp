@@ -93,12 +93,11 @@ searchExtension(
   Depth depth
 )
 {
-  const size_t moveCount = myMoves.countMoves();
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
 
   // If king is in check, add 1
-  if (myMoves.checkers > 0 and moveCount < 3)
+  if (myMoves.checkers > 0)
     return 1;
 
   // if queen trapped and attacked by minor piece, add 1

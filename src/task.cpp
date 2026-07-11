@@ -6,12 +6,19 @@
 #include "single_thread.h"
 #include "test_positions.h"
 #include "tuner.h"
+#include "endgame.h"
+#include "endgame_validation.h"
 
 void
 init(const vector<string>& args)
 {
   perf_clock start = perf::now();
   plt::init();
+
+  // Zobrist keys must always be seeded — hashValue (and therefore repetition
+  // detection) depends on them even when the TT is disabled. Allocating the
+  // table itself stays gated behind USE_TT (resize() re-seeds, harmlessly).
+  tt.getRandomKeys();
 
   if constexpr (USE_TT) {
     tt.resize(0);
@@ -145,6 +152,15 @@ helper()
   
   puts("** For static evaluation of a position, type:\n");
   puts("** elsa static [fen <fen>]\n");
+
+  puts("** To query the theoretical-draw recognizer, type:\n");
+  puts("** elsa isDraw [fen <fen>]\n");
+
+  puts("** To validate the draw recognizer over a material signature, type:\n");
+  puts("** elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]\n");
+  puts("**   e.g. 'elsa egvalidate pieces Pb oracle threads 4'  (KPKB vs perfect WDL, 4 threads)\n");
+  puts("**        add 'mirror' to also run the colour-mirror (KBKP) colour-symmetry self-check\n");
+  puts("**        oracle tables cache under output/egcache/ (sub-second reload); 'nocache' forces a fresh solve\n");
 
   puts("** For tuning evaluation weights (Texel), type:\n");
   puts("** elsa tune [data <path.epd>] [iters <n>]\n");
@@ -322,6 +338,40 @@ staticEval(const vector<string>& args)
 }
 
 static void
+isDrawCheck(const vector<string>& args)
+{
+  // elsa isDraw [fen <fen>]
+
+  const string fen = utils::getFen(args, START_FEN);
+  ChessBoard pos(fen);
+
+  cout << "Fen = " << fen << '\n';
+
+  // Mirror the search gate exactly (single_thread.cpp:51, :331): the recognizer
+  // is consulted only on non-terminal positions with no capture available for
+  // the side to move. Report which branch the position falls into.
+  const MoveList moves = generateMoves(pos);
+
+  if (!moves.anyMove())
+  {
+    cout << (moves.checkers ? "Terminal: checkmate" : "Terminal: stalemate")
+         << "  (recognizer not consulted)\n";
+    return;
+  }
+
+  if (moves.exists<MType::CAPTURES>(pos))
+  {
+    cout << "Capture available  (search skips the recognizer here)\n";
+    return;
+  }
+
+  const bool draw = isTheoreticalDraw(pos);
+  cout << "isTheoreticalDraw = " << (draw ? "true   (theoretical draw)"
+                                          : "false  (not a theoretical draw)")
+       << '\n';
+}
+
+static void
 readyOk()
 {
   // Argument : elsa readyOk
@@ -354,7 +404,9 @@ task(const vector<string>& args)
     {"static",   [](const auto& arguments){ staticEval(arguments); }},
     {"bestmove",  [](const auto& arguments){ bestMoveSearch(arguments); }},
     {"readyOk",   [](const auto&){ readyOk(); }},
-    {"tune",      [](const auto& arguments){ tuneEval(arguments); }}
+    {"isDraw",    [](const auto& arguments){ isDrawCheck(arguments); }},
+    {"tune",      [](const auto& arguments){ tuneEval(arguments); }},
+    {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }}
   };
 
   // Search for any command in the args

@@ -6,11 +6,16 @@
 # define the Cpp compiler to use
 CXX = g++
 
-# detect OS
+# detect OS (uname does not exist on Windows shells, so skip it there)
+ifeq ($(OS),Windows_NT)
+UNAME_S :=
+else
 UNAME_S := $(shell uname -s)
+endif
 
 # detect compiler type (check if clang or Apple clang)
-CXX_VERSION := $(shell $(CXX) --version 2>/dev/null | head -n 1)
+# avoid head/pipe so this works under cmd.exe too; findstring scans full output
+CXX_VERSION := $(shell $(CXX) --version)
 ifeq ($(findstring clang,$(CXX_VERSION)),clang)
 IS_CLANG := 1
 else
@@ -20,18 +25,18 @@ endif
 # define any compile-time flags
 ifeq ($(OS),Windows_NT)
   ifeq ($(IS_CLANG),1)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -fopenmp
   else
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -fopenmp
   endif
 else
   # macOS (Darwin) doesn't support static linking, so remove those flags
   ifeq ($(UNAME_S),Darwin)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread -fopenmp
   else ifeq ($(IS_CLANG),1)
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -pthread -fopenmp
   else
-    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread
+    CXXFLAGS	:= -std=c++2a -g -march=native -O3 -flto=auto -m64 -Wall -Wextra -Wpedantic -Wshadow -Wconversion -static -static-libgcc -static-libstdc++ -pthread -fopenmp
   endif
 endif
 
@@ -46,17 +51,55 @@ MAIN	:= elsa.exe
 SOURCEDIRS	:= $(SRC)
 # INCLUDEDIRS	:= $(INCLUDE)
 # LIBDIRS		:= $(LIB)
-FIXPATH = $(subst /,\,$1)
-RM	:= rm -rf
-MD	:= mkdir
 else
 MAIN	:= elsa
 SOURCEDIRS	:= $(shell find $(SRC) -type d)
 # INCLUDEDIRS	:= $(shell find $(INCLUDE) -type d)
 # LIBDIRS		:= $(shell find $(LIB) -type d)
-FIXPATH = $1
-RM = rm -f
-MD	:= mkdir -p
+endif
+
+# Delete/mkdir command must match the *recipe* shell, not the OS. On Windows, GNU
+# make runs recipes through sh.exe when it's on PATH (MSYS2 / Git Bash) and only
+# falls back to cmd.exe otherwise. `del` is a cmd builtin and is "command not
+# found" under sh -- which, combined with the `-` (ignore-error) prefix on the
+# clean recipe, silently turns `make clean` into a no-op and leaves stale .o's.
+#
+# Detect coreutils by probing PATH for `rm`, NOT by inspecting $(SHELL): $(SHELL)
+# defaults to /bin/sh and so always contains "sh", even on a bare MinGW install
+# with no sh.exe/rm.exe present -- which picked `rm` and then failed at recipe
+# time with CreateProcess e=2 (make runs metacharacter-free lines directly). If
+# `rm` is on PATH it works whether the line runs directly or via sh; if it isn't,
+# there is no sh either, make falls back to cmd.exe, and `del` is the builtin.
+# RMQUIET silences "Could Not Find" when a clean target is already absent: `del`
+# writes that to stderr, so `2>NUL` drops it; `rm -f` is silent already, so it is
+# empty on the coreutils branches.
+#
+# IMPORTANT: the `where rm` probe below must NOT redirect to NUL. This $(shell ...)
+# runs at parse time through *make's* shell -- which is sh.exe when MSYS2/Git Bash
+# is on PATH. Under sh, `NUL` is a plain filename (not the cmd.exe null device), so
+# `2>NUL` here would create a stray 0-byte `NUL` file in the repo root on every make
+# invocation. We can't redirect portably yet (the shell isn't known until this probe
+# resolves), so we don't: `where rm` is silent on stdout/stderr when rm is found, and
+# only prints a harmless one-line "Could not find" to the console on cmd-only systems
+# where rm is absent. RMQUIET (= 2>NUL only on the cmd/del branch) is safe because it
+# is used inside recipes, which by then run via cmd.exe where NUL is the real device.
+ifeq ($(OS),Windows_NT)
+  ifeq ($(shell where rm),)
+    FIXPATH = $(subst /,\,$1)
+    RM	:= del /Q /F
+    MD	:= mkdir
+    RMQUIET := 2>NUL
+  else
+    FIXPATH = $1
+    RM = rm -f
+    MD	:= mkdir -p
+    RMQUIET :=
+  endif
+else
+  FIXPATH = $1
+  RM = rm -f
+  MD	:= mkdir -p
+  RMQUIET :=
 endif
 
 
@@ -96,14 +139,14 @@ $(MAIN): $(OBJECTS)
 
 .PHONY: clean
 clean:
-	$(RM) $(OUTPUTMAIN)
-	$(RM) $(call FIXPATH,$(OBJECTS))
+	-$(RM) $(OUTPUTMAIN) $(RMQUIET)
+	-$(RM) $(call FIXPATH,$(OBJECTS)) $(RMQUIET)
 	@echo Cleanup complete!
 
 
 .PHONY: clean_ob
 clean_ob:
-	$(RM) $(call FIXPATH,$(OBJECTS))
+	-$(RM) $(call FIXPATH,$(OBJECTS)) $(RMQUIET)
 	@echo Object-files Cleanup complete!
 
 run: all

@@ -292,7 +292,7 @@ enpassantPawns(const ChessBoard& pos, MoveList& myMoves,
 
 template <Color cMy>
 static inline void
-promotionPawns(MoveList &myMoves, Bitboard moveSq, Bitboard captSq, Bitboard pawns)
+promotionPawns(const ChessBoard& pos, MoveList &myMoves, Bitboard moveSq, Bitboard captSq, Bitboard pawns)
 {
   while (pawns != 0)
   {
@@ -306,7 +306,7 @@ promotionPawns(MoveList &myMoves, Bitboard moveSq, Bitboard captSq, Bitboard paw
       Square fp = nextSquare(endSquares);
       destSquares |= 1ULL << fp;
     }
-    myMoves.add(ip, destSquares);
+    myMoves.add(pos, ip, destSquares);
   }
 }
 
@@ -339,13 +339,13 @@ pawnMovement(const ChessBoard& pos, MoveList &myMoves)
   Bitboard rCaptures = shift(rPawns, 7 + 2 * (1 - c)) & captSq;
 
   enpassantPawns<cMy, shift>(pos, myMoves, lPawns, rPawns, KA);
-  promotionPawns<cMy>(myMoves, moveSq, captSq, ePawns);
+  promotionPawns<cMy>(pos, myMoves, moveSq, captSq, ePawns);
 
-  myMoves.addPawns(0, lCaptures);
-  myMoves.addPawns(1, rCaptures);
+  myMoves.addPawns(pos, 0, lCaptures);
+  myMoves.addPawns(pos, 1, rCaptures);
 
-  myMoves.addPawns(2, shift(sPawns, 8) & moveSq);
-  myMoves.addPawns(3, shift(pawns , 8) & moveSq);
+  myMoves.addPawns(pos, 2, shift(sPawns, 8) & moveSq);
+  myMoves.addPawns(pos, 3, shift(pawns , 8) & moveSq);
 }
 
 #endif
@@ -377,7 +377,7 @@ pinsCheck(const ChessBoard& pos, MoveList& myMoves, Bitboard slidingPieceMy, Bit
   {
     Bitboard destSq  = maskTable[kpos] ^ maskTable[indexS] ^ firstPiece;
 
-    myMoves.add(indexF, destSq);
+    myMoves.add(pos, indexF, destSq);
     return pinnedPieces;
   }
 
@@ -392,7 +392,7 @@ pinsCheck(const ChessBoard& pos, MoveList& myMoves, Bitboard slidingPieceMy, Bit
   Bitboard ssPawn = shift(sPawn & Rank63[cMy], 8) & freeSq;
 
   if ((pawn == 's') and (firstPiece & pos.piece<cMy, PAWN>()))
-    myMoves.add(indexF, sPawn | ssPawn);
+    myMoves.add(pos, indexF, sPawn | ssPawn);
 
   if ((pawn == 'c') and (firstPiece & pos.piece<cMy, PAWN>()))
   {
@@ -402,7 +402,7 @@ pinsCheck(const ChessBoard& pos, MoveList& myMoves, Bitboard slidingPieceMy, Bit
     if ((eps != SQUARE_NB) and (maskTable[kpos] & captSq & (1ULL << eps)) != 0)
       myMoves.enpassantPawns |= 1ULL << indexF;
     else
-      myMoves.add(indexF, destSq);
+      myMoves.add(pos, indexF, destSq);
   }
 
   return pinnedPieces;
@@ -460,7 +460,7 @@ addLegalSquares(const ChessBoard& pos, MoveList& myMoves)
     Square ip = nextSquare(pieceBb);
     Bitboard destSquares  = legalSquares<pt>(ip, ownPieces, occupied) & validSquares;
 
-    myMoves.add(ip, destSquares);
+    myMoves.add(pos, ip, destSquares);
   }
 
   if constexpr (sizeof...(rest) > 0)
@@ -569,7 +569,7 @@ kingMoves(const ChessBoard& pos, MoveList& myMoves)
   Bitboard kingMask = plt::kingMasks[kpos];
   Bitboard destSq  = kingMask & (~(pos.piece<cMy, ALL>() | attackedSq));
 
-  myMoves.add(kpos, destSq);
+  myMoves.add(pos, kpos, destSq);
 
   if (!(pos.csep & 1920) or ((1ULL << kpos) & attackedSq)) {
     // no castling move available, thus early exit
@@ -595,7 +595,7 @@ kingMoves(const ChessBoard& pos, MoveList& myMoves)
   if ((pos.csep & queenSide) and !(apieces & lMidSq) and !(lSq & coveredSquares))
     destSq |= 1ULL << (shift + 2);
 
-  myMoves.add(kpos, destSq);
+  myMoves.add(pos, kpos, destSq);
 }
 
 
@@ -685,7 +685,6 @@ stagedGenerateMovesImpl(const ChessBoard& pos, MoveList& myMoves)
   {
     myMoves.color = cMy;
     myMoves.myPawns = pos.piece<cMy, PAWN>();
-    myMoves.myAttackedSquares = generateAttackedSquares<cMy>(pos, pos.all());
     myMoves.enemyAttackedSquares = generateAttackedSquares<~cMy>(pos, pos.all() ^ pos.piece<cMy, KING>());
 
     kingAttackers<cMy>(pos, myMoves);

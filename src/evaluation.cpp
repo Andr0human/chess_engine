@@ -608,7 +608,7 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float /*phase*/)
 
 #endif
 
-Score bishopPawnEndgame(const ChessBoard& pos)
+Score minorPiecePawnEndgame(const ChessBoard& pos)
 {
   const Square pawnSq = squareNo(pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>());
   const int row = pawnSq >> 3;
@@ -626,10 +626,11 @@ evaluate(const ChessBoard& pos)
 
   if (pieceCount < 3)
   {
-    if (pieceCount == 2
-    and pos.count<PAWN  >() == 1
-    and pos.count<BISHOP>() == 1
-    and pos.count<WHITE, ALL>() == 1) return bishopPawnEndgame(pos) * side2move;
+    if ((pieceCount == 2) and
+        (pos.count<PAWN  >() == 1) and
+        (pos.count<BISHOP>() == 1 or pos.count<KNIGHT>() == 1) and
+        (pos.count<WHITE, ALL>() == 1)
+    ) return minorPiecePawnEndgame(pos) * side2move;
   }
 
   if (debug)

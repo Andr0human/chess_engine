@@ -3,6 +3,7 @@
 #define SEARCH_H
 
 #include <iomanip>
+#include <atomic>
 #include "perf.h"
 #include "varray.h"
 #include "bitboard.h"
@@ -75,6 +76,12 @@ class TestPosition
   { return fen; }
 };
 
+// Control-plane abort signal raised by the UCI `stop`/`quit` handlers (main
+// thread) and polled by the search worker via SearchData::shouldStop(). Lives
+// outside SearchData because std::atomic is non-copyable and `info` is
+// rebuilt by copy-assignment (`info = SearchData(...)`) on every search.
+extern std::atomic<bool> searchStop;
+
 class SearchData
 {
   // Set the starting point for clock
@@ -84,6 +91,11 @@ class SearchData
   Color side;
 
   uint64_t nodes, qNodes;
+
+  // Cumulative node count over the entire search (all depths, main + q).
+  // Unlike `nodes`/`qNodes` this is NEVER cleared by resetNodeCount(), so it
+  // feeds the UCI `nodes`/`nps` fields, which GUIs expect to be cumulative.
+  Nodes searchedNodes = 0;
 
   // Time provided to find move for current position
   nanoseconds allotedTime;
@@ -112,8 +124,8 @@ class SearchData
   // Stores the <best_move, eval> for each depth during search.
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
-  // Stores <move, time> for each move in each iteration.
-  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_MOVES> moveTimes;
+  // Stores <move, <nodes, qNodes>> searched for each move in each iteration.
+  Varray<pair<Move, pair<Nodes, Nodes>> , MAX_MOVES> moveNodes;
 
   string
   ReadablePvLine(ChessBoard board) const noexcept
@@ -155,8 +167,15 @@ class SearchData
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 
     for (const Move move : movesArray)
-      moveTimes.add(make_pair(move, make_pair(0, 0)));
+      moveNodes.add(make_pair(move, make_pair(0, 0)));
   }
+
+  // Read access to the validated principal variation (built by addResult;
+  // every move legality-checked). Used by the UCI info printer so it emits a
+  // legal PV instead of walking the raw pvArray (whose tail can be stale).
+  const Varray<Move, MAX_PLY>&
+  getPvLine() const noexcept
+  { return pvLine; }
 
   bool
   isPartOfPv(const Move m) const noexcept
@@ -176,6 +195,13 @@ class SearchData
     nanoseconds duration = perf::now() - startTime;
     return duration >= allotedTime;
   }
+
+  // Abort predicate polled at every search checkpoint: true when the time
+  // budget is spent OR the UCI layer asked to stop. Used in place of
+  // timeOver() at the abort gates so `stop` (and `go infinite`) work.
+  bool
+  shouldStop() const noexcept
+  { return timeOver() || searchStop.load(std::memory_order_relaxed); }
 
   double
   timeSpent() const noexcept
@@ -208,11 +234,11 @@ class SearchData
 
   void
   addNode() noexcept
-  { nodes++; }
+  { nodes++; searchedNodes++; }
 
   void
   addQNode() noexcept
-  { qNodes++; }
+  { qNodes++; searchedNodes++; }
 
   void
   resetNodeCount() noexcept
@@ -221,13 +247,27 @@ class SearchData
   pair<Move, Score> lastIterationResult() const noexcept
   { return moveEvals.back(); }
 
+  // Cumulative nodes (main + quiescence) searched so far, across all depths.
+  Nodes
+  totalSearchedNodes() const noexcept
+  { return searchedNodes; }
+
+  // Nodes per second over the whole search so far. Guards against a zero
+  // elapsed time on very fast first iterations.
+  Nodes
+  nps() const noexcept
+  {
+    const double elapsed = timeSpent();
+    return elapsed > 0.0 ? Nodes(double(searchedNodes) / elapsed) : searchedNodes;
+  }
+
   Nodes
   totalNodes() const noexcept
   {
     return std::accumulate(
-      moveTimes.begin(), moveTimes.end(), Nodes(0),
-      [](Nodes sum, const pair<Move, pair<Nodes, Nodes>>& moveTime) {
-        return sum + moveTime.second.first;
+      moveNodes.begin(), moveNodes.end(), Nodes(0),
+      [](Nodes sum, const pair<Move, pair<Nodes, Nodes>>& entry) {
+        return sum + entry.second.first;
       }
     );
   }
@@ -236,9 +276,9 @@ class SearchData
   totalQNodes() const noexcept
   {
     return std::accumulate(
-      moveTimes.begin(), moveTimes.end(), Nodes(0),
-      [](uint64_t sum, const pair<Move, pair<Nodes, Nodes>>& moveTime) {
-        return sum + moveTime.second.second;
+      moveNodes.begin(), moveNodes.end(), Nodes(0),
+      [](uint64_t sum, const pair<Move, pair<Nodes, Nodes>>& entry) {
+        return sum + entry.second.second;
       }
     );
   }
@@ -273,19 +313,22 @@ class SearchData
            << " | " << "PV" << "\n";
   }
 
+  // Reorder root moves for the next iteration: keep the PV move first, then
+  // order the rest by descending subtree size (2*nodes + qNodes) so the
+  // hardest-to-resolve moves are searched earliest.
   void
-  sortMovesOnTime(Move bestMove)
+  sortMovesOnNodes(Move bestMove)
   {
-    for (size_t i = 0; i < moveTimes.size(); i++)
+    for (size_t i = 0; i < moveNodes.size(); i++)
     {
-      if (filter(bestMove) == filter(moveTimes[i].first))
+      if (filter(bestMove) == filter(moveNodes[i].first))
       {
-        std::swap(moveTimes[i], moveTimes[0]);
+        std::swap(moveNodes[i], moveNodes[0]);
         break;
       }
     }
 
-    std::sort(moveTimes.begin() + 1, moveTimes.end(), [](const auto &a, const auto &b) {
+    std::sort(moveNodes.begin() + 1, moveNodes.end(), [](const auto &a, const auto &b) {
       Nodes n1 = 2 * a.second.first + a.second.second;
       Nodes n2 = 2 * b.second.first + b.second.second;
       return n1 > n2;
@@ -301,19 +344,19 @@ class SearchData
          << " | " << setw( 8) << "Nodes"
          << " | " << setw(10) << "QNodes |\n";
     int moveNo = 1;
-    for (const auto& [move, tm] : moveTimes)
+    for (const auto& [move, nc] : moveNodes)
     {
       cout << " | " << setw(6) << fixed << moveNo++
            << " | " << setw(5) << fixed << printMove(move, pos)
-           << " | " << setw(8) << fixed << tm.first
-           << " | " << setw(7) << fixed << tm.second << " |\n";
+           << " | " << setw(8) << fixed << nc.first
+           << " | " << setw(7) << fixed << nc.second << " |\n";
     }
   }
 
   void
   insertMoveToList(size_t moveNo)
   {
-    moveTimes[moveNo].second = make_pair(nodes, qNodes);
+    moveNodes[moveNo].second = make_pair(nodes, qNodes);
     resetNodeCount();
   }
 
@@ -322,7 +365,7 @@ class SearchData
   {
     MoveArray movesArray;
 
-    for (const auto& moveTime : moveTimes)
+    for (const auto& moveTime : moveNodes)
       movesArray.add(moveTime.first);
 
     return movesArray;

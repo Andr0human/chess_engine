@@ -36,6 +36,7 @@ namespace plt
   extern array<MaskTable, COLOR_NB> pawnMasks;
   extern array<MaskTable, COLOR_NB> pawnCaptureMasks;
   extern array<MaskTable, COLOR_NB> passedPawnMasks;
+  extern array<MaskTable, COLOR_NB> ruleOfSquares;
 
   extern MaskTable rookStartIndex;
   extern MaskTable bishopStartIndex;

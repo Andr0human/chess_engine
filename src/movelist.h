@@ -62,27 +62,31 @@ public:
 
   MoveList()
   : checkers(0), initSquares(0), enpassantPawns(0),
-    promoSuppress(0), removedMovesCount(0) {}
+    promoSuppress(0), removedMovesCount(0), myAttackedSquares(0) {}
 
   MoveList(Color c)
   : color(c), checkers(0), initSquares(0), enpassantPawns(0),
-    promoSuppress(0), removedMovesCount(0) {}
+    promoSuppress(0), removedMovesCount(0), myAttackedSquares(0) {}
 
   size_t
   removedMoves() const noexcept { return removedMovesCount; }
 
   void
-  add(Square sq, Bitboard _destSquares)
+  add(const ChessBoard& pos, Square sq, Bitboard _destSquares)
   {
     if (_destSquares == 0)
       return;
     destSquares[sq] = _destSquares;
     initSquares |= 1ULL << sq;
+    myAttackedSquares |= _destSquares & pos.all();
   }
 
   void
-  addPawns(size_t index, Bitboard _destSquares)
-  { pawnDestSquares[index] = _destSquares; }
+  addPawns(const ChessBoard& pos, size_t index, Bitboard _destSquares)
+  {
+    pawnDestSquares[index] = _destSquares;
+    myAttackedSquares |= _destSquares & pos.all();
+  }
 
   size_t
   countMoves() const noexcept;

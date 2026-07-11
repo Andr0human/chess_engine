@@ -8,9 +8,11 @@
 #include "tt.h"
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 using std::cin;
 using std::cout;
@@ -23,6 +25,26 @@ namespace
 
 // Persistent board across commands within a session.
 ChessBoard g_board(START_FEN);
+
+// The search runs on this worker so the UCI loop stays responsive to
+// stop/quit/isready while thinking. Only one search runs at a time (it owns
+// the global `info` and the shared TT), so callers stop-and-join the previous
+// worker before starting anything that touches that shared state.
+std::thread g_worker;
+
+// Raise the abort flag (polled by the search via SearchData::shouldStop) and
+// wait for the worker to unwind and emit its `bestmove`. Safe to call when no
+// search is running. `searchStop` is left set; handleGo clears it before the
+// next launch.
+void
+stopAndJoin()
+{
+  if (g_worker.joinable())
+  {
+    searchStop.store(true, std::memory_order_relaxed);
+    g_worker.join();
+  }
+}
 
 void
 sendId()
@@ -83,6 +105,15 @@ handlePosition(stringstream& ss)
   }
 }
 
+// A fixed slice of the clock reserved for move-transmission / process latency
+// so we never plan to think right up to the flag. In-process (Chessmate) this
+// is nearly free, but over an external GUI's stdio pipes (cutechess/fastchess)
+// the go→bestmove round-trip latency is real and un-budgeted; a self-play
+// sanity run flagged once on time even in-process (zero margin). 40 ms sits
+// comfortably above typical pipe latency without eating meaningfully into
+// think time at blitz. Tune up if time-losses ever appear over an external GUI.
+constexpr double MOVE_OVERHEAD = 0.040;  // seconds
+
 // Decide how long to search given the side-to-move's remaining clock and
 // increment (both in milliseconds). Faithful 1:1 port of the heuristic that
 // used to live on the Unity side (ChessEngine.DecideTimeForSearch): the GUI
@@ -91,8 +122,11 @@ handlePosition(stringstream& ss)
 double
 decideSearchTime(long long sideTimeMs, long long sideIncMs)
 {
-  const double timeLeft  = double(sideTimeMs) / 1000.0;  // seconds
-  const double increment = double(sideIncMs)  / 1000.0;  // seconds
+  // Shave the overhead off the usable clock up front so both the budget formula
+  // and the 62% cap below plan against time we can actually afford to spend.
+  const double timeLeft  =
+      std::max(0.0, double(sideTimeMs) / 1000.0 - MOVE_OVERHEAD);  // seconds
+  const double increment = double(sideIncMs)  / 1000.0;            // seconds
 
   // Estimate moves remaining from how much material is left: a full board
   // (weight 7880) implies ~32 moves to go; as material comes off the estimate
@@ -167,19 +201,26 @@ handleGo(stringstream& ss)
         : double(DEFAULT_SEARCH_TIME);
   }
 
-  // Run search; output goes to a discarded sink so iterative-deepening
-  // table dumps don't pollute the UCI stream.
-  std::ostringstream sink;
-  ChessBoard searchBoard = g_board;
-  search(searchBoard, maxDepth, moveTimeSec, sink, false, true);
+  // Stop any prior search and launch this one on the worker. The board is
+  // copied into the lambda so later `position` edits can't disturb a running
+  // search. The worker prints `bestmove` when search() returns — whether it
+  // ended by depth/time or an async `stop`. Iterative-deepening table dumps go
+  // to a discarded sink; only the UCI `info`/`bestmove` lines reach stdout.
+  stopAndJoin();
+  searchStop.store(false, std::memory_order_relaxed);
 
-  Move best = info.lastIterationResult().first;
-  cout << "bestmove " << moveToUci(best) << endl;
+  g_worker = std::thread([board = g_board, maxDepth, moveTimeSec]() {
+    std::ostringstream sink;
+    search(board, maxDepth, moveTimeSec, sink, false, true);
+    cout << "bestmove " << moveToUci(info.lastIterationResult().first) << endl;
+  });
 }
 
 void
 handleUciNewGame()
 {
+  // Stop first: clearing the TT under a live search would race the worker.
+  stopAndJoin();
   g_board = ChessBoard(START_FEN);
   if constexpr (USE_TT) {
     tt.clear();
@@ -221,14 +262,19 @@ uciLoop()
     }
     else if (cmd == "stop")
     {
-      // Best-effort: search runs synchronously, so by the time we read
-      // "stop" the search has already completed and its bestmove was
-      // printed. Nothing to do here.
+      // Raise the abort flag; the worker observes it at its next checkpoint,
+      // unwinds, and prints `bestmove`. It is joined on the next go/quit.
+      searchStop.store(true, std::memory_order_relaxed);
     }
     else if (cmd == "quit")
     {
+      stopAndJoin();
       break;
     }
     // Silently accept: debug, setoption, register, ponderhit, etc.
   }
+
+  // Reached on EOF (stdin closed) without an explicit `quit`: never let a
+  // joinable std::thread destruct, which would std::terminate the process.
+  stopAndJoin();
 }

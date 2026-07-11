@@ -84,8 +84,6 @@ class TranspositionTable
 
   array<uint64_t, HASH_INDEXES_SIZE> hashIndex;
 
-  void getRandomKeys() noexcept;
-
   void allocateTables();
 
   void freeTables();
@@ -93,6 +91,11 @@ class TranspositionTable
   public:
   // Initialize Transposition Table
   TranspositionTable() { }
+
+  // Seed the Zobrist key table. Needed for hashValue maintenance (repetition
+  // detection) independently of whether the TT itself is enabled, so it must
+  // be callable even when USE_TT is false. resize() also calls it.
+  void getRandomKeys() noexcept;
 
   TranspositionTable(int preset)
   { resize(preset); }
