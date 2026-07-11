@@ -435,7 +435,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
                                    /*doNull=*/false);
       pos.unmakeNullMove();
 
-      if (info.timeOver())
+      if (info.shouldStop())
         return TIMEOUT;
 
       if (nullScore >= beta)
