@@ -206,10 +206,10 @@ fitK(const vector<TuneEntry>& data, const EvalWeights& w)
   return (lo + hi) / 2.0;
 }
 
-// The 12 tunable weights, exposed as named handles into a weight set for coordinate descent.
+// The tunable weights, exposed as named handles into a weight set for coordinate descent.
 struct WeightRef { const char* name; float EvalWeights::* member; };
 
-static const std::array<WeightRef, 12> WEIGHTS = {{
+static const std::array<WeightRef, 17> WEIGHTS = {{
   {"materialWeightMg",      &EvalWeights::materialWeightMg},
   {"materialWeightEg",      &EvalWeights::materialWeightEg},
   {"pieceTableWeightMg",    &EvalWeights::pieceTableWeightMg},
@@ -221,7 +221,12 @@ static const std::array<WeightRef, 12> WEIGHTS = {{
   {"mobRookWeightMg",       &EvalWeights::mobRookWeightMg},
   {"mobQueenWeightMg",      &EvalWeights::mobQueenWeightMg},
   {"threatsWeightMg",       &EvalWeights::threatsWeightMg},
-  {"distanceWeightEg",      &EvalWeights::distanceWeightEg}
+  {"distanceWeightEg",      &EvalWeights::distanceWeightEg},
+  {"bishopPairWeightMg",    &EvalWeights::bishopPairWeightMg},
+  {"bishopPairWeightEg",    &EvalWeights::bishopPairWeightEg},
+  {"rookFileWeightMg",      &EvalWeights::rookFileWeightMg},
+  {"isolatedPawnWeightMg",  &EvalWeights::isolatedPawnWeightMg},
+  {"isolatedPawnWeightEg",  &EvalWeights::isolatedPawnWeightEg}
 }};
 
 // Coordinate descent: probe each weight +-step, keep any move that lowers MSE; when a full

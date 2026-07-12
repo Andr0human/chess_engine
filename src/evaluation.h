@@ -70,6 +70,14 @@ struct EvalWeights
 	float mobQueenWeightMg      = 4.5f;  // midgame-only
 	float threatsWeightMg       = 0.7f;  // midgame-only
 	float distanceWeightEg      = 1.0f;  // endgame-only king-distance term
+	// --- eval batch (bishop pair / rook-file / isolated pawns), Texel-tuned 2026-07-12 ---
+	// Cross-dataset unanimous signal; adopted low-end of each range (rookFile tempered
+	// below tuned ~23 to offset overlap with the standing rook-mobility term).
+	float bishopPairWeightMg    =  40.0f;
+	float bishopPairWeightEg    =  55.0f;  // pair worth more in open endgames
+	float rookFileWeightMg      =  16.0f;  // x units: open~32cp, semi-open~16cp (mg-only)
+	float isolatedPawnWeightMg  = -16.0f;  // penalty; weight carries the sign
+	float isolatedPawnWeightEg  =  -4.0f;  // tuner: eg isolani much milder than mg
 };
 
 extern EvalWeights evalWeights;
@@ -96,6 +104,9 @@ struct EvalComponents
 	// 2x knight bake-in) so the tuner sees an unbiased per-piece subtotal.
 	float matMg = 0.0f, ptMg = 0.0f, pawnMg = 0.0f, threats = 0.0f;
 	float mobBishop = 0.0f, mobKnight = 0.0f, mobRook = 0.0f, mobQueen = 0.0f;
+	// eval batch: bishopPair (-1/0/+1) and isolated (whiteIso-blackIso) feed BOTH
+	// phases; rookFileMg is mg-only. All white-relative unit diffs.
+	float bishopPair = 0.0f, rookFileMg = 0.0f, isolated = 0.0f;
 	// endgame components; pawnEg is the endgame pawn-structure subtotal
 	// (passers / king-escort / safe-promote + doubled), distinct from the midgame
 	// pawnMg (doubled-pawn penalty only)
