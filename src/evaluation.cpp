@@ -259,6 +259,58 @@ threats(const ChessBoard& pos)
 
 #ifndef MIDGAME
 
+// Smear a bitboard so every occupied file is fully set (standard file-fill).
+static Bitboard
+fileFill(Bitboard b)
+{
+  b |= b >> 8;  b |= b << 8;
+  b |= b >> 16; b |= b << 16;
+  b |= b >> 32; b |= b << 32;
+  return b;
+}
+
+// +1 if White has the bishop pair, -1 if Black does, 0 otherwise.
+static int
+bishopPairDiff(const ChessBoard& pos)
+{
+  return int(pos.count<WHITE, BISHOP>() >= 2)
+       - int(pos.count<BLACK, BISHOP>() >= 2);
+}
+
+// Rook-file "units": +2 per rook on a fully-open file, +1 per semi-open file.
+template <Color cMy>
+static Score
+rookFileUnits(const ChessBoard& pos)
+{
+  Bitboard rooks    = pos.piece<cMy, ROOK>();
+  Bitboard myPawns  = pos.piece<cMy, PAWN>();
+  Bitboard allPawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
+  Score units = 0;
+
+  while (rooks != 0)
+  {
+    Square sq = nextSquare(rooks);
+    Bitboard file = FileA << (sq & 7);
+
+    if      ((file & allPawns) == 0) units += 2;  // open
+    else if ((file & myPawns)  == 0) units += 1;  // semi-open
+  }
+
+  return units;
+}
+
+// Count of pawns with no friendly pawn on either adjacent file.
+template <Color cMy>
+static int
+isolatedPawnCount(const ChessBoard& pos)
+{
+  Bitboard pawns     = pos.piece<cMy, PAWN>();
+  Bitboard files     = fileFill(pawns);
+  Bitboard neighbors = ((files & ~Bitboard(FileH)) << 1)
+                     | ((files & ~Bitboard(FileA)) >> 1);
+  return popCount(pawns & ~neighbors);
+}
+
 static Score
 materialDiffereceMidGame(const ChessBoard& pos)
 {
@@ -394,6 +446,10 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
                         - pawnStructureScoreMidgame<BLACK>(pos);
   Score threatsScore    = threats<debug>(pos);
 
+  int   bishopPair = bishopPairDiff(pos);
+  Score rookFile   = rookFileUnits<WHITE>(pos) - rookFileUnits<BLACK>(pos);
+  int   isolated   = isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos);
+
   if (debug)
   {
     cout << "-------------------- MIDGAME --------------------\n"
@@ -405,6 +461,9 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
       << "\nmobQueen        = " << mob.queen
       << "\npawnStructure   = " << pawnStructure
       << "\nthreatsScore    = " << threatsScore
+      << "\nbishopPair      = " << bishopPair
+      << "\nrookFile        = " << rookFile
+      << "\nisolated        = " << isolated
       << "\n-------------------------------------------------" << endl;
   }
 
@@ -413,7 +472,10 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
     + evalWeights.pieceTableWeightMg    * float(pieceTableScore)
     + mob.weighted(evalWeights)
     + evalWeights.pawnStructureWeightMg * float(pawnStructure)
-    + evalWeights.threatsWeightMg       * float(threatsScore);
+    + evalWeights.threatsWeightMg       * float(threatsScore)
+    + evalWeights.bishopPairWeightMg    * float(bishopPair)
+    + evalWeights.rookFileWeightMg      * float(rookFile)
+    + evalWeights.isolatedPawnWeightMg  * float(isolated);
 
   return Score(eval);
 }
@@ -587,6 +649,9 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float /*phase*/)
                         - pawnStructureScoreEndgame<BLACK>(pos, ed);
   Score distanceScore   = distanceBetweenKingsScore(pos);
 
+  int bishopPair = bishopPairDiff(pos);
+  int isolated   = isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos);
+
   if (debug)
   {
     cout << "-------------------- ENDGAME --------------------\n"
@@ -594,6 +659,8 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float /*phase*/)
       << "\npieceTableScore    = " << pieceTableScore
       << "\npawnStructureScore = " << pawnStructure
       << "\ndistanceScore      = " << distanceScore
+      << "\nbishopPair         = " << bishopPair
+      << "\nisolated           = " << isolated
       << "\n-------------------------------------------------" << endl;
   }
 
@@ -601,7 +668,9 @@ endGameScore(const ChessBoard& pos, const EvalData& ed, float /*phase*/)
       evalWeights.materialWeightEg      * float(materialScore)
     + evalWeights.pieceTableWeightEg    * float(pieceTableScore)
     + evalWeights.pawnStructureWeightEg * float(pawnStructure)
-    + evalWeights.distanceWeightEg      * float(distanceScore);
+    + evalWeights.distanceWeightEg      * float(distanceScore)
+    + evalWeights.bishopPairWeightEg    * float(bishopPair)
+    + evalWeights.isolatedPawnWeightEg  * float(isolated);
 
   return Score(eval);
 }
@@ -715,6 +784,10 @@ extractEvalComponents(const ChessBoard& pos)
               - pawnStructureScoreEndgame<BLACK>(pos, ed));
   ec.distance = float(distanceBetweenKingsScore(pos));
 
+  ec.bishopPair = float(bishopPairDiff(pos));
+  ec.rookFileMg = float(rookFileUnits<WHITE>(pos) - rookFileUnits<BLACK>(pos));
+  ec.isolated   = float(isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos));
+
   return ec;
 }
 
@@ -728,13 +801,18 @@ evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
     + w.pieceTableWeightMg    * ec.ptMg
     + mob.weighted(w)
     + w.pawnStructureWeightMg * ec.pawnMg
-    + w.threatsWeightMg       * ec.threats;
+    + w.threatsWeightMg       * ec.threats
+    + w.bishopPairWeightMg    * ec.bishopPair
+    + w.rookFileWeightMg      * ec.rookFileMg
+    + w.isolatedPawnWeightMg  * ec.isolated;
 
   float eg =
       w.materialWeightEg      * ec.matEg
     + w.pieceTableWeightEg    * ec.ptEg
     + w.pawnStructureWeightEg * ec.pawnEg
-    + w.distanceWeightEg      * ec.distance;
+    + w.distanceWeightEg      * ec.distance
+    + w.bishopPairWeightEg    * ec.bishopPair
+    + w.isolatedPawnWeightEg  * ec.isolated;
 
   // Match evaluate(): mg/eg are truncated to Score (int32) before the phase blend.
   Score mgScore = Score(mg);
