@@ -5,6 +5,7 @@
 #include <cctype>
 #include <array>
 #include <vector>
+#include <map>
 #include <memory>
 #include <algorithm>
 
@@ -15,6 +16,7 @@
 #include "endgame_validation.h"
 #include "endgame_solver.h"
 #include "bitboard.h"
+#include "bucket_probe.h"
 #include "endgame.h"
 #include "movegen.h"
 #include "move_utils.h"
@@ -195,6 +197,7 @@ struct Walker
   int                       maxKingFile = 3;     // 3 = folded (a-d); 7 = allfiles self-check
   const EgSolver*           oracle   = nullptr;
   bool                      wantDump = false;
+  bool                      wantSamples = false;   // keep example FENs per bucket
 
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
@@ -202,6 +205,10 @@ struct Walker
   Tally               t;
   std::vector<string> falseFens;  // up to MAX_FALSE_FENS examples for this slice
   string              dump;       // dump lines for this slice (merged in task order)
+
+  // Per-bucket oracle WDL. Populated only when BucketProbe is enabled and an
+  // oracle is present; folded into the Generator's tally after the sweep.
+  BucketTally buckets;
 
   string
   buildFen() const
@@ -259,6 +266,7 @@ struct Walker
     ++t.quiet;
     (stm == WHITE ? t.quietW : t.quietB)++;
 
+    BucketProbe::reset();   // recognizer emits iff it buckets this position
     const bool isDraw = isTheoreticalDraw(pos);
     if (isDraw)
     {
@@ -290,6 +298,18 @@ struct Walker
         ++t.falseDraw;                                   // DANGEROUS
         if (falseFens.size() < MAX_FALSE_FENS)
           falseFens.push_back(fen);
+      }
+
+      // Per-bucket WDL: fold this position's oracle result into its feature
+      // bucket so the harness can tell which buckets are pure-draw.
+      if (BucketProbe::enabled && BucketProbe::fired())
+      {
+        const BucketTally::Result r = (truth == Wdl::WIN)  ? BucketTally::WIN
+                                    : (truth == Wdl::DRAW) ? BucketTally::DRAW
+                                                           : BucketTally::LOSS;
+        buckets.add(BucketProbe::current(), r, isDraw,
+                    wantSamples ? &fen : nullptr);
+        buckets.setNames(BucketProbe::names());
       }
 
       mismatch = (isDraw != oracleDraw);
@@ -366,6 +386,7 @@ struct Generator
   vector<Slot> slots;          // index 0 = white king, 1 = black king, then extras
   int maxKingFile = 3;         // 3 = folded (a-d); 7 = allfiles self-check
   bool wantDump = false;
+  bool wantSamples = false;
   const EgSolver* oracle = nullptr;
 
   std::array<int, 16> prevSame{}; // nearest earlier slot with same fenChar, or -1
@@ -374,6 +395,7 @@ struct Generator
   Tally               t;
   std::vector<string> falseFens;
   string              dump;
+  BucketTally         buckets;
 
   // Precompute, for each slot, the nearest earlier slot carrying the same
   // fenChar (or -1). Drives the identical-piece ordering constraint in place().
@@ -417,6 +439,7 @@ struct Generator
       w.maxKingFile = maxKingFile;
       w.oracle    = oracle;
       w.wantDump  = wantDump;
+      w.wantSamples = wantSamples;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
       w.place(BK);                          // white king fixed; recurse from black king down
@@ -434,6 +457,7 @@ struct Generator
           falseFens.push_back(f);
       if (wantDump)
         dump += w.dump;
+      buckets.merge(w.buckets);
     }
   }
 };
@@ -576,6 +600,35 @@ validateEndgame(const vector<string>& args)
   const bool noCache  = utils::hasArg(args, "nocache");
   const int maxKingFile = noFold ? 7 : 3;
 
+  // `combos` automates the feature-set search: instead of hand-editing the emit
+  // to one candidate vector and re-sweeping per combination, the recognizer emits
+  // its whole candidate pool once and this rolls that cube up onto every subset
+  // of size 1..maxk, ranked per size. One sweep covers every subset -- the rollup
+  // is exact, since bucket rows are pure counts (BucketTally::project).
+  const bool wantCombos = utils::hasArg(args, "combos");
+  if (wantCombos && !wantOracle)
+  {
+    cout << "combos requires oracle (subsets are scored against the oracle's "
+            "WDL truth); pass 'oracle'.\n";
+    return;
+  }
+
+  size_t combosMaxK = 4;
+  if (utils::hasArg(args, "maxk"))
+  {
+    try { combosMaxK = static_cast<size_t>(std::stoul(utils::argValue(args, "maxk"))); }
+    catch (...) { combosMaxK = 4; }
+    if (combosMaxK < 1) combosMaxK = 1;
+  }
+
+  size_t combosTopN = 5;
+  if (utils::hasArg(args, "top"))
+  {
+    try { combosTopN = static_cast<size_t>(std::stoul(utils::argValue(args, "top"))); }
+    catch (...) { combosTopN = 5; }
+    if (combosTopN < 1) combosTopN = 1;
+  }
+
   // Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
   // (the only parallel stage) so the harness need not saturate every core. 0 =
   // not given = default to HALF the hardware threads, leaving the machine usable.
@@ -624,6 +677,9 @@ validateEndgame(const vector<string>& args)
   // ---- enumerate ----------------------------------------------------------
   const perf_clock start = perf::now();
 
+  // Collect per-bucket features only when we have an oracle to pair them with.
+  BucketProbe::enabled = wantOracle;
+
   vector<Generator> gens;
   vector<std::unique_ptr<EgSolver>> solvers;   // keep oracles alive for reporting
   for (const string& cs : colourings)
@@ -640,6 +696,11 @@ validateEndgame(const vector<string>& args)
 
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
+
+    // Sample FENs serve the per-bucket table, which `combos` does not print --
+    // and a whole-pool cube has buckets by the hundred thousand, so collecting
+    // examples there would cost a lot of memory to produce nothing readable.
+    g.wantSamples = !wantCombos;
 
     // Build the perfect WDL oracle for this colouring (its own capture/promotion
     // DAG), then bucket each call-set position against it inside leaf().
@@ -680,6 +741,8 @@ validateEndgame(const vector<string>& args)
     g.run();
     gens.push_back(std::move(g));
   }
+
+  BucketProbe::enabled = false;
 
   if (wantDump)
   {
@@ -735,7 +798,20 @@ validateEndgame(const vector<string>& args)
   {
     for (size_t i = 0; i < gens.size(); ++i)
       if (gens[i].oracle)
+      {
         reportScorecard(gens[i], colourings[i]);
+
+        const string tag = signatureOf(colourings[i]) + " (pieces " + colourings[i] + ")";
+
+        // With `combos` the emitted pool is wide, so the raw per-bucket table is
+        // thousands of unreadable rows -- the subset search is the point. Print
+        // one or the other, never both.
+        if (wantCombos)
+          reportSubsetSearch(cout, gens[i].buckets, combosMaxK, combosTopN,
+                             "Feature-subset search " + tag);
+        else
+          gens[i].buckets.report(cout, "Bucket WDL " + tag);
+      }
 
     // The two colourings are colour-swap + rank-flip images, so the safe and
     // dangerous buckets must match exactly -- a check on the oracle itself.
