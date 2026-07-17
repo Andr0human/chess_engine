@@ -810,6 +810,15 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
        (emyKing & ~CornerSquares)
     ) return true;
 
+    if ((defKingPromoDist == 1) and
+        (chebyshevDistance(emyKingSq, promoSq) > 2)
+    ) return true;
+
+    if (kingInROS and
+       ((chebyshevDistance(emyKingSq, pawnSq) > 5)
+     or (chebyshevDistance(emyKingSq, promoSq) == 4))
+    ) return true;
+
     // Everything else falls through: the pawn is advanced and the defence is not
     // in a recognized holding pattern -- treat as decided and defer to search.
     return false;
