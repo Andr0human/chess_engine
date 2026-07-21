@@ -310,6 +310,7 @@ struct Walker
         buckets.add(BucketProbe::current(), r, isDraw,
                     wantSamples ? &fen : nullptr);
         buckets.setNames(BucketProbe::names());
+        buckets.setRoles(BucketProbe::roles());
       }
 
       mismatch = (isDraw != oracleDraw);
@@ -613,6 +614,34 @@ validateEndgame(const vector<string>& args)
     return;
   }
 
+  // `sums` searches signed linear rules (`+a -b -c >= t`) over the TERM-tagged
+  // features instead of bare coordinates; `frozen` mines those rules and then hands
+  // the best few to the subset search as boolean coordinates. Independent of
+  // `combos` and of each other -- each answers a different question (which
+  // coordinates matter / which inequality cuts / does an inequality beat raw
+  // coordinates), so asking for two prints two tables rather than picking a winner.
+  const bool wantSums = utils::hasArg(args, "sums");
+  if (wantSums && !wantOracle)
+  {
+    cout << "sums requires oracle (rules are scored against the oracle's "
+            "WDL truth); pass 'oracle'.\n";
+    return;
+  }
+
+  // `freeze <n>` sets the slot count and implies `frozen`, so neither has to be
+  // written with the other. A bare `frozen` takes the default.
+  const bool wantFrozen = utils::hasArg(args, "frozen") || utils::hasArg(args, "freeze");
+  if (wantFrozen && !wantOracle)
+  {
+    cout << "frozen requires oracle (rules are scored against the oracle's "
+            "WDL truth); pass 'oracle'.\n";
+    return;
+  }
+
+  // Any of the three replaces the raw per-bucket table: they all want the wide
+  // emitted pool, whose cube runs to hundreds of thousands of rows.
+  const bool wantSearch = wantCombos || wantSums || wantFrozen;
+
   size_t combosMaxK = 4;
   if (utils::hasArg(args, "maxk"))
   {
@@ -627,6 +656,17 @@ validateEndgame(const vector<string>& args)
     try { combosTopN = static_cast<size_t>(std::stoul(utils::argValue(args, "top"))); }
     catch (...) { combosTopN = 5; }
     if (combosTopN < 1) combosTopN = 1;
+  }
+
+  // How many mined halfspaces `frozen` spends as feature coordinates. Two is enough
+  // to see whether an inequality outranks the raw pool without burying the subset
+  // table under coordinates that all cut the same way.
+  size_t freezeN = 2;
+  if (utils::hasArg(args, "freeze"))
+  {
+    try { freezeN = static_cast<size_t>(std::stoul(utils::argValue(args, "freeze"))); }
+    catch (...) { freezeN = 2; }
+    if (freezeN < 1) freezeN = 1;
   }
 
   // Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
@@ -697,10 +737,10 @@ validateEndgame(const vector<string>& args)
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
 
-    // Sample FENs serve the per-bucket table, which `combos` does not print --
+    // Sample FENs serve the per-bucket table, which none of the searches print --
     // and a whole-pool cube has buckets by the hundred thousand, so collecting
     // examples there would cost a lot of memory to produce nothing readable.
-    g.wantSamples = !wantCombos;
+    g.wantSamples = !wantSearch;
 
     // Build the perfect WDL oracle for this colouring (its own capture/promotion
     // DAG), then bucket each call-set position against it inside leaf().
@@ -750,8 +790,6 @@ validateEndgame(const vector<string>& args)
       out << g.dump;
     out.close();
   }
-
-  const perf_time dur = perf::now() - start;
 
   // ---- report -------------------------------------------------------------
   cout << "\n=== Endgame validation: " << signatureOf(pieceArg) << " generator ===\n";
@@ -803,13 +841,20 @@ validateEndgame(const vector<string>& args)
 
         const string tag = signatureOf(colourings[i]) + " (pieces " + colourings[i] + ")";
 
-        // With `combos` the emitted pool is wide, so the raw per-bucket table is
-        // thousands of unreadable rows -- the subset search is the point. Print
-        // one or the other, never both.
+        // Under any search flag the emitted pool is wide, so the raw per-bucket
+        // table is thousands of unreadable rows -- the searches are the point.
+        // Print whichever were asked for; they compose, and the raw table is the
+        // no-flag default.
         if (wantCombos)
           reportSubsetSearch(cout, gens[i].buckets, combosMaxK, combosTopN,
                              "Feature-subset search " + tag);
-        else
+        if (wantSums)
+          reportSumSearch(cout, gens[i].buckets, combosMaxK, combosTopN,
+                          "Signed-sum search " + tag);
+        if (wantFrozen)
+          reportFrozenSearch(cout, gens[i].buckets, combosMaxK, combosTopN, freezeN,
+                             "Frozen-halfspace search " + tag);
+        if (!wantSearch)
           gens[i].buckets.report(cout, "Bucket WDL " + tag);
       }
 
@@ -834,6 +879,10 @@ validateEndgame(const vector<string>& args)
   else
     cout << "NOTE: no oracle (pass 'oracle' for the WDL scorecard) -- these are\n"
             "      the heuristic's labels, not correctness.\n";
+  // Measured to here, not before the report block: the bucket-probe searches
+  // (combos/sums/frozen) do their mining inside the report phase, so freezing the
+  // clock earlier undercounts by the entire search -- the bulk of the wall time.
+  const perf_time dur = perf::now() - start;
   cout << "Elapsed: " << dur.count() << " s\n";
 
   if (wantDump)

@@ -27,6 +27,12 @@
 //     values. When disabled this is a single static-bool load -- nothing is
 //     built, so real search stays allocation-free.
 //
+//     A feature may be tagged TERM to declare it commensurate with the other
+//     TERMs (ranks, files, distances -- all measured in squares), which opts it
+//     into the signed-sum search on top of the plain subset search:
+//         BucketProbe::emit({{"pawnR", pawnR, BucketProbe::TERM},
+//                            {"kingInROS", ros}, ...});
+//
 //   * the harness (endgame_validation.cpp): flips BucketProbe::enabled on around
 //     the sweep, calls BucketProbe::reset() before each recognizer call, and
 //     folds BucketProbe::current() into a BucketTally when the probe fired.
@@ -40,25 +46,36 @@ class BucketProbe
   public:
   using Key = std::vector<int>;
 
+  // What a feature may be used for. FLAG is a bare coordinate: bucket on its
+  // value, nothing else. TERM additionally declares it commensurate with every
+  // other TERM -- same unit, so a signed sum of them is meaningful -- which is
+  // what lets the sum search combine them into `+a -b -c >= t` rules. Tag only
+  // same-unit quantities; a 0/1 flag among distances is fine (it reads as a
+  // one-square correction) but a rank added to a piece count is nonsense.
+  enum Role { FLAG, TERM };
+
   // One feature of the vector: its column label plus this position's value.
   // The recognizer names each feature inline at the emit site, so the labels
   // travel with the data instead of a separate list the harness must keep in sync.
-  struct Feature { const char* name; int value; };
+  // `role` defaults to FLAG, so a two-field `{"name", v}` emit stays valid.
+  struct Feature { const char* name; int value; Role role = FLAG; };
 
   // Master switch. Off by default => emit() is never reached in real search.
   static bool enabled;
 
   // Recognizer -> harness: record this position's feature values, and (since
-  // they are identical on every emit) the column labels alongside them.
+  // they are identical on every emit) the column labels and roles alongside them.
   static void
   emit(std::initializer_list<Feature> feats)
   {
     tlKey.clear();
     tlNames.clear();
+    tlRoles.clear();
     for (const Feature& f : feats)
     {
       tlKey.push_back(f.value);
       tlNames.emplace_back(f.name);
+      tlRoles.push_back(f.role);
     }
     tlValid = true;
   }
@@ -70,12 +87,14 @@ class BucketProbe
   static bool       fired()   { return tlValid; }
   static const Key& current() { return tlKey; }
 
-  // Harness: the column labels matching the current feature vector.
+  // Harness: the column labels / roles matching the current feature vector.
   static const std::vector<std::string>& names() { return tlNames; }
+  static const std::vector<Role>&        roles() { return tlRoles; }
 
   private:
   static thread_local Key                      tlKey;
   static thread_local std::vector<std::string> tlNames;
+  static thread_local std::vector<Role>        tlRoles;
   static thread_local bool                     tlValid;
 };
 
@@ -86,7 +105,8 @@ class BucketProbe
 class BucketTally
 {
   public:
-  using Key = std::vector<int>;
+  using Key  = std::vector<int>;
+  using Role = BucketProbe::Role;
 
   enum Result { WIN = 0, DRAW = 1, LOSS = 2 };
 
@@ -123,10 +143,13 @@ class BucketTally
       s.push_back(*fen);
   }
 
-  // Record the feature column labels (identical for every bucket). Set once from
-  // the probe; later identical calls are no-ops.
+  // Record the feature column labels / roles (identical for every bucket). Set
+  // once from the probe; later identical calls are no-ops.
   void
   setNames(const std::vector<std::string>& n) { if (names.empty()) names = n; }
+
+  void
+  setRoles(const std::vector<Role>& r) { if (roles.empty()) roles = r; }
 
   // Merge another tally (worker -> generator reduction). Order-independent, so
   // the parallel total equals the serial total exactly.
@@ -134,6 +157,7 @@ class BucketTally
   merge(const BucketTally& other)
   {
     if (names.empty()) names = other.names;
+    if (roles.empty()) roles = other.roles;
     for (const auto& [k, r] : other.rows)
     {
       Row& dst = rows[k];
@@ -149,15 +173,70 @@ class BucketTally
   size_t bucketCount()  const { return rows.size(); }
 
   const std::vector<std::string>& featureNames() const { return names; }
+  const std::vector<Role>&        featureRoles() const { return roles; }
+
+  // Indices of the features the recognizer tagged TERM -- the pool the signed-sum
+  // search may draw on. Empty when nothing is tagged, which is the signal that
+  // this endgame has no sum-eligible vocabulary declared yet.
+  std::vector<size_t>
+  termIndices() const
+  {
+    std::vector<size_t> idx;
+    for (size_t i = 0; i < roles.size(); ++i)
+      if (roles[i] == BucketProbe::TERM)
+        idx.push_back(i);
+    return idx;
+  }
 
   // Total call-set positions folded in (win + draw + loss over every bucket).
   uint64_t positionCount() const;
 
+  // One bucket flattened down to what every verdict actually rests on: draws vs
+  // decided. A bucket is claimable exactly when decided == 0.
+  struct Bucket { Key key; uint64_t draws = 0; uint64_t decided = 0; };
+
+  // Every bucket, in key order. The sum search needs to rescan the cube's TERM
+  // coordinates thousands of times (once per sign vector), which remap() cannot
+  // serve -- it allocates a key per row, right for a single re-key but ruinous
+  // across a search. Key order also means a 1-D re-key comes out already sorted,
+  // so the threshold sweep is a straight walk.
+  std::vector<Bucket> buckets() const;
+
+  // Re-key the tally: rebuild it with `keyFn` mapping each existing key to a new
+  // one, summing the rows that collide. Sound for the same reason project() is --
+  // rows are pure counts, so any many-to-one re-key yields *exactly* what a
+  // dedicated sweep emitting that key would have tallied. That is what makes one
+  // cube a sufficient statistic for any derived coordinate: project() is the case
+  // where keyFn selects coordinates, a signed sum is the case where it adds them.
+  //
+  // Derived coordinates are FLAG unless `newRoles` says otherwise: a computed
+  // value is not commensurate with anything by default, and silently re-tagging
+  // one TERM would admit sums of sums into the sum search.
+  template <typename Fn>
+  BucketTally
+  remap(Fn keyFn, const std::vector<std::string>& newNames,
+        const std::vector<Role>& newRoles = {}) const
+  {
+    BucketTally out;
+    out.names = newNames;
+    out.roles = newRoles.empty()
+                  ? std::vector<Role>(newNames.size(), BucketProbe::FLAG)
+                  : newRoles;
+
+    for (const auto& [key, r] : rows)
+    {
+      Row& dst = out.rows[keyFn(key)];
+      for (int i = 0; i < 4; ++i) dst.n[i] += r.n[i];
+      takeSamples(dst.drawFens, r.drawFens);
+      takeSamples(dst.decFens,  r.decFens);
+    }
+    return out;
+  }
+
   // Marginalize onto a feature subset: sum every bucket whose key agrees on the
-  // features in `featIdx` (indices into the emitted vector). Because bucket rows
-  // are pure counts, the result is *exactly* what a dedicated sweep emitting only
-  // those features would have tallied -- which is what lets one sweep serve every
-  // subset instead of one sweep per subset.
+  // features in `featIdx` (indices into the emitted vector). The subset's features
+  // keep the roles they were emitted with -- unlike a derived coordinate, a
+  // projected one *is* the original.
   BucketTally project(const std::vector<size_t>& featIdx) const;
 
   // Verdict counts over all buckets (see Summary).
@@ -190,6 +269,7 @@ class BucketTally
 
   std::map<Key, Row>       rows;
   std::vector<std::string> names;
+  std::vector<Role>        roles;
 };
 
 // Automated feature-set search. Given a `cube` tallied over the recognizer's full
@@ -205,5 +285,43 @@ class BucketTally
 void
 reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
                    size_t topN, const std::string& title);
+
+// Automated signed-sum search: mine rules of the shape `+a -b -c >= t` over the
+// features the recognizer tagged TERM. For each sign vector in {-1,0,+1}^m the
+// cube is re-keyed by the raw sum, and the sweep scanned for the extreme
+// threshold past which no bucket holds a decided position -- that row *is* the
+// constant, so one pass yields the whole threshold range instead of one guess.
+// The sum is kept raw, never clamped: clamping merges the end buckets, which is
+// precisely where a threshold outside the assumed window would show itself.
+//
+// `maxL0` caps the nonzero coefficients: a coefficient of 0 excludes a term, so
+// signs subsume subset selection, and L0 -- not the bucket count, which saturates
+// at 2 for a halfspace -- is what parsimony means here. Candidates are enumerated
+// as subset-mask x signs so the cap prunes rather than filters, and the first
+// nonzero coefficient is pinned to +1: sigma and -sigma cut the same partition.
+// That halving is lossless only because each candidate is scanned in *both*
+// directions (claim `>= t` and claim `<= t`) -- the two opposite sides of the one
+// cut. Drop either half and the search silently loses every rule of that shape.
+void
+reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
+                size_t topN, const std::string& title);
+
+// The two searches composed: mine the best `freezeN` halfspaces with the sum
+// search, append each to the cube as a boolean coordinate via remap(), and run the
+// subset search over the widened pool. No third search -- the point is that a
+// halfspace collapses several TERMs into one feature, so a size-k subset holding
+// one reaches rules no raw size-k subset can express. Bucket counts are untouched:
+// a halfspace is a function of coordinates already in the key, so it can neither
+// collide two keys nor split one.
+//
+// `maxK` caps both searches (L0 for the mining, subset size for the search over the
+// result). Slots go to the strongest halfspaces across every L0 rather than the
+// best per L0 -- a frozen slot wants the best discriminator going, and the per-L0
+// grouping exists to price parsimony, which a frozen rule has already paid for --
+// but only one per sign vector: two thresholds on one cut are the same
+// discriminator twice.
+void
+reportFrozenSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
+                   size_t topN, size_t freezeN, const std::string& title);
 
 #endif // BUCKET_PROBE_H
