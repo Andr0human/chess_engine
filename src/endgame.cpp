@@ -461,6 +461,28 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
     const bool kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
     const int  distanceBtwKings = chebyshevDistance(kingSq, emyKingSq);
 
+    // The square the pawn actually promotes on (promoSq above is only the
+    // square directly in front of it, which coincides only from the 7th).
+    const Square promoSquare  = Square(pawnF + (side == WHITE ? 56 : 0));
+    const int    dkPromoDist  = chebyshevDistance(kingSq   , promoSquare);
+    const int    daPromoDist  = chebyshevDistance(emyKingSq, promoSquare);
+    const int    pawnEdgeFile = std::min(pawnF, 7 - pawnF);
+
+    // Rook-/bishop-pawn fortress. With the pawn on the 7th and its own king
+    // holding the promotion square, the queen alone cannot make progress: an
+    // a/h or c/f pawn hands the defender the stalemate resource that a b/g or
+    // centre pawn lacks, so the win needs the attacking king -- and it is still
+    // six ranks away. The defender-to-move bishop-pawn case tolerates one more
+    // tempo of approach. The king may not sit *on* the promotion square of a
+    // rook pawn while the attacker is to move: there it blocks its own pawn
+    // with no flight square, and the queen mates instead of stalemating.
+    if (pawnOnRank7 and (kingMask & pawn) and
+       ((pawnEdgeFile == 0) or (pawnEdgeFile == 2)) and
+        (dkPromoDist <= 1) and
+       !((pawnEdgeFile == 0) and !sideAdvantage and (dkPromoDist == 0)) and
+        (daPromoDist >= 6 - int(sideAdvantage and (pawnEdgeFile == 2)))
+    ) return true;
+
     if (side == WHITE ? pawnR < 5 : pawnR > 2)
       return false;
 
@@ -509,12 +531,34 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
           (chebyshevDistance(emyKingSq, queenSq) > 3)
       ) return false;
 
+      // The four filters below reject a position because the queen bears on the
+      // defending king along a file/diagonal/rank -- the skewer that wins the
+      // new queen after the pawn promotes. That test is purely geometric, so it
+      // also rejects positions where the skewer cannot be converted: with the
+      // defending king already on the promotion square's doorstep and the
+      // attacking king still out of range, there is no follow-up and the
+      // ending is drawn regardless of the alignment.
+      const bool queenLineDraw =
+           (dkPromoDist == 1 and distanceBtwKings > daPromoDist)
+        or (dkPromoDist == 1 and daPromoDist >= 4 and distanceBtwKings >= 4)
+        or (dkPromoDist == 2 and daPromoDist >= 5 and distanceBtwKings >= 6);
+
+      // A skewer along a file or rank is far weaker than one along a diagonal:
+      // the promoted queen and the king sit on the same colour complex there,
+      // so the diagonal pin has no parry while the orthogonal one is met by
+      // interposing. With the king a knight's-move from the promotion square
+      // and the attacking king still four away, the orthogonal alignment is
+      // therefore not enough to win.
+      const bool queenLineDrawOrthogonal =
+           queenLineDraw
+        or (dkPromoDist == 2 and daPromoDist >= 4);
+
       if ((myKingF == pawnF) or (abs(myKingF - pawnF) == 1 and (myKing & FileAH)))
       {
         Bitboard mask = side == WHITE ? plt::downMasks[kingSq] : plt::upMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDrawOrthogonal;
       }
 
       // King and promo square share the a1-h8 diagonal (file - rank constant).
@@ -526,7 +570,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         Bitboard mask = side == WHITE ? plt::downLeftMasks[kingSq] : plt::upRightMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDraw;
       }
 
       // Same for the a8-h1 anti-diagonal (file + rank constant); `% 7` had the
@@ -536,7 +580,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         Bitboard mask = side == WHITE ? plt::downRightMasks[kingSq] : plt::upLeftMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDraw;
       }
 
       if ((myKingR == (promoSq >> 3)))
@@ -544,7 +588,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         Bitboard mask = (pawnF > myKingF) ? plt::leftMasks[kingSq] : plt::rightMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDrawOrthogonal;
       }
 
       if ((kingMask & ~(queenMask | emyKingMask)) and
