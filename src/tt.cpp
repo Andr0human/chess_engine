@@ -103,7 +103,7 @@ TranspositionTable::lookupPosition
     if (outMove == NULL_MOVE)
       outMove = key.bestMove();
 
-    if (key.depth() > depth)
+    if (key.depth() >= depth)
     {
       Flag flag = key.flag();
       Score eval = key.eval();
