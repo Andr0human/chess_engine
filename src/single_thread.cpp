@@ -368,7 +368,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   {
     if (myMoves.checkers == 0
       and depth <= RFP_MAX_DEPTH
-      and __abs(beta) < VALUE_MATE - MAX_PLY * 20)
+      and !isMateScore(beta))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
       if (staticEval - RFP_MARGIN * depth >= beta)
@@ -389,7 +389,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   {
     if (myMoves.checkers == 0
       and depth <= RAZOR_MAX_DEPTH
-      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+      and !isMateScore(alpha))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
       if (staticEval + RAZOR_MARGIN * depth <= alpha)
@@ -421,8 +421,8 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     if (doNull
         and myMoves.checkers == 0                 // never null out of check
         and depth >= NMP_MIN_DEPTH                 // too shallow to be worth it
-        and !isMateScore(beta)                     // don't manufacture false mates
-        and pos.hasNonPawnMaterial(pos.color))     // zugzwang guard
+        and pos.hasNonPawnMaterial(pos.color)      // zugzwang guard
+        and !isMateScore(beta))                    // don't manufacture false mates
     {
       const int R = nullReduction(depth);
       const int rawNullDepth = depth - 1 - R;
@@ -439,7 +439,13 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
         return TIMEOUT;
 
       if (nullScore >= beta)
-        return isMateScore(nullScore) ? beta : nullScore;
+      {
+        // A mate score off a null move is not trustworthy — the side to move
+        // was handed a free tempo. Clamp to beta rather than propagate it.
+        if (isMateScore(nullScore))
+          return beta;
+        return nullScore;
+      }
     }
   }
 
@@ -465,7 +471,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   {
     if (myMoves.checkers == 0
       and depth <= FUTILITY_MAX_DEPTH
-      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+      and !isMateScore(alpha))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
       ns.quietFutile = (staticEval + FUTILITY_MARGIN * depth <= alpha);
@@ -638,6 +644,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     writer << "Hash move: ttProvided=" << info.ttMoveProvided
            << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
            << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
+
     writer << "Nodes: " << info.totalSearchedNodes()
            << " | Time: " << std::fixed << std::setprecision(2) << info.timeSpent() << "s"
            << " | NPS: " << info.nps() << endl;
