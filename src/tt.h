@@ -116,11 +116,14 @@ class TranspositionTable
   uint64_t
   hashKeyUpdate(int piece, int pos) const noexcept;
 
+  // `ply` is the storing/probing node's distance from the root. It is used only
+  // to rebase mate scores (which are root-relative on the search stack but must
+  // be node-relative in a table shared across paths) — non-mate evals ignore it.
   void
-  recordPosition(uint64_t hashValue, Depth depth, Score eval, Flag flag, Move bestMove) noexcept;
+  recordPosition(uint64_t hashValue, Depth depth, Ply ply, Score eval, Flag flag, Move bestMove) noexcept;
 
   int
-  lookupPosition(uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
+  lookupPosition(uint64_t hashValue, Depth depth, Ply ply, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
 
   // Fetch just the stored best move for a position — no flag/eval/depth logic,
   // no terminal dependency. Used to try the hash move before full move generation.

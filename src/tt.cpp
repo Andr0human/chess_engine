@@ -1,11 +1,42 @@
 
 
 #include "tt.h"
+#include "search_utils.h"   // isMateScore
 
 using std::string;
 using std::to_string;
 
 TranspositionTable tt;
+
+// --- Mate-score <-> TT conversion -------------------------------------------
+//
+// Mate scores are encoded root-relative (checkmateScore = -VALUE_MATE + 20*ply),
+// so the value carries the *absolute* ply at which the mate lands. A TT entry,
+// though, is shared by every path that reaches the position, and those paths sit
+// at different plies: an entry written at ply 8 and read at ply 3 would report a
+// mate 5 plies further out than it is, and could hand back a bogus cutoff.
+//
+// So mates are stored *node-relative* (distance from the entry's own node) and
+// converted back on probe. Non-mate scores are path-independent and pass through
+// untouched — which is what keeps this change inert outside the mate window.
+//
+// Range: the largest magnitude ever stored is VALUE_MATE + 20*MAX_PLY = 16800,
+// comfortably inside the 16-bit signed eval field (see ZobristHashKey::pack).
+static Score
+valueToTt(Score eval, Ply ply) noexcept
+{
+  if (!isMateScore(eval))
+    return eval;
+  return eval > 0 ? Score(eval + 20 * ply) : Score(eval - 20 * ply);
+}
+
+static Score
+valueFromTt(Score eval, Ply ply) noexcept
+{
+  if (!isMateScore(eval))
+    return eval;
+  return eval > 0 ? Score(eval - 20 * ply) : Score(eval + 20 * ply);
+}
 
 void
 TranspositionTable::getRandomKeys() noexcept
@@ -71,12 +102,15 @@ TranspositionTable::hashKeyUpdate
 
 void
 TranspositionTable::recordPosition
-    (uint64_t hashValue, Depth depth, Score eval, Flag flag, Move bestMove) noexcept
+    (uint64_t hashValue, Depth depth, Ply ply, Score eval, Flag flag, Move bestMove) noexcept
 {
+  // Store mate scores as a distance from *this* node, not from the root.
+  const Score storedEval = valueToTt(eval, ply);
+
   const auto addEntry = [&] (ZobristHashKey& key)
   {
     key.hashValue = hashValue;
-    key.pack(eval, depth, flag, bestMove);
+    key.pack(storedEval, depth, flag, bestMove);
   };
 
   size_t index = hashValue % TT_SIZE;
@@ -89,7 +123,7 @@ TranspositionTable::recordPosition
 
 int
 TranspositionTable::lookupPosition
-  (uint64_t hashValue, Depth depth, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept
+  (uint64_t hashValue, Depth depth, Ply ply, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept
 {
   const auto probe = [&] (const ZobristHashKey &key) -> int
   {
@@ -106,7 +140,10 @@ TranspositionTable::lookupPosition
     if (key.depth() >= depth)
     {
       Flag flag = key.flag();
-      Score eval = key.eval();
+      // Back to root-relative *before* the bound tests — alpha and beta are
+      // root-relative, so comparing a node-relative mate against them would
+      // cut off on the wrong distance.
+      Score eval = valueFromTt(key.eval(), ply);
       if (flag == Flag::HASH_EXACT) return eval;
       if (flag == Flag::HASH_ALPHA and eval <= alpha) return alpha;
       if (flag == Flag::HASH_BETA  and eval >= beta ) return beta;

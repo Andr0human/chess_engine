@@ -21,7 +21,7 @@ Score
 checkmateScore(Ply ply);
 
 // True when a score lies in the mate range (mate-in-N is encoded as
-// VALUE_MATE - 20*ply, so anything within MAX_PLY of VALUE_MATE is a mate).
+// VALUE_MATE - 20*ply, so anything within 20*MAX_PLY of VALUE_MATE is a mate).
 bool
 isMateScore(Score score);
 

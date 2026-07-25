@@ -180,7 +180,7 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
   {
     info.hashMoveCutoffs++;
     if constexpr (USE_TT)
-      tt.recordPosition(pos.hashValue, ns.depth, ns.beta, Flag::HASH_BETA, filter(hashMove));
+      tt.recordPosition(pos.hashValue, ns.depth, ns.ply, ns.beta, Flag::HASH_BETA, filter(hashMove));
     out.result = ns.beta;
     return out;
   }
@@ -234,9 +234,12 @@ playSubsetMoves(
 
     Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, ns);
 
-    // No time left!
+    // No time left! Flag the node as aborted so the caller skips the TT store.
     if (info.shouldStop())
+    {
+      ns.aborted = true;
       return bestMove;
+    }
 
     //! TODO: Why beta is not in root-search??
     // beta-cut found
@@ -288,7 +291,8 @@ playAllMoves(
   bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove,
                              orderType == MType::QUIET);
 
-  if (ns.hashf == Flag::HASH_BETA)
+  // Out of time — don't walk the remaining stages just to abort in each of them.
+  if (ns.hashf == Flag::HASH_BETA or ns.aborted)
     return bestMove;
 
   if constexpr (sizeof...(rest) > 0)
@@ -328,7 +332,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   if constexpr (USE_TT) {
     bool ttHit = false;
-    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta, hashMove, ttHit);
+    Score ttValue = tt.lookupPosition(pos.hashValue, depth, ply, alpha, beta, hashMove, ttHit);
 
     info.ttProbes++;
     if (ttHit) info.ttHits++;
@@ -502,8 +506,13 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   bestMove = playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
     (pos, myMoves, movesArray, 0, ns, bestMove);
 
+  // Skip the store on an aborted node: ns.alpha is a partial bound over however
+  // many moves fit in the remaining time, and writing it at full `depth` would
+  // pollute the table for the next iteration *and* the next move of the game
+  // (the TT is not cleared between moves).
   if constexpr (USE_TT) {
-    tt.recordPosition(pos.hashValue, depth, ns.alpha, ns.hashf, bestMove);
+    if (!ns.aborted)
+      tt.recordPosition(pos.hashValue, depth, ply, ns.alpha, ns.hashf, bestMove);
   }
 
   return ns.alpha;
