@@ -121,6 +121,14 @@ class SearchData
 
   Varray<Move, MAX_PLY> pvLine;
 
+  // How much of pvLine the search actually walked, i.e. the length before
+  // extendPvFromTt() appended its tail. isPartOfPv() — which drives the
+  // MType::PV ordering bucket via is_type<MType::PV> — must stay bounded by
+  // this: the TT tail is reconstructed for display, and letting it widen the
+  // set of moves promoted in ordering would make a cosmetic fix perturb the
+  // search at every node.
+  size_t pvSearchedLen = 0;
+
   // Stores the <best_move, eval> for each depth during search.
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
@@ -149,6 +157,65 @@ class SearchData
       res[res.size() - 1] = ')';
 
     return res;
+  }
+
+  // Rebuild the tail of a PV that pvArray truncated.
+  //
+  // The triangular pvArray only records moves at nodes that actually searched
+  // moves and raised alpha. A node that returns early — a TT cutoff above all,
+  // but also the draw / RFP / razoring / NMP exits — hands its parent a score
+  // with no move attached, so the printed line stops dead there (a depth-11
+  // search showing three moves). The score is still a real depth-11 score; the
+  // moves are just missing from the display.
+  //
+  // They aren't lost, though: the node that cut off has a TT entry, and so does
+  // every node beyond it, written by whichever iteration searched them for real.
+  // So walk the table's best moves onward from the position the raw PV ended at.
+  //
+  // The appended moves are for display only — see pvSearchedLen for why they
+  // are fenced off from isPartOfPv().
+  void
+  extendPvFromTt(ChessBoard pos)
+  {
+    // With the TT disabled there is no table to walk — and TT_SIZE is 0, so
+    // probeMove()'s `hash % TT_SIZE` would divide by zero.
+    if constexpr (!USE_TT)
+      return;
+
+    // A line that ended inside quiescence ended *naturally*; appending
+    // main-search moves would splice them into the "(...)" tail of the
+    // readable PV, misrepresenting them as quiescence moves.
+    if (pvLine.size() > 0 and (pvLine.back() & quiescenceMove()))
+      return;
+
+    // Repetition guard. Two positions can each store the other's move as best
+    // (a king/rook shuffle), and the walk would happily bounce between them
+    // until it filled the line to capacity with a fake PV.
+    Varray<uint64_t, MAX_PLY + 1> seen;
+    seen.add(pos.hashValue);
+
+    const auto alreadySeen = [&seen] (uint64_t key) {
+      for (const uint64_t k : seen)
+        if (k == key) return true;
+      return false;
+    };
+
+    while (pvLine.size() < pvLine.capacity())
+    {
+      const Move move = tt.probeMove(pos.hashValue);
+
+      // No entry (the position was never stored, e.g. a terminal node), or the
+      // entry belongs to a 64-bit key collision and its move is nonsense here.
+      if (move == NULL_MOVE or !isLegalMoveForPosition(move, pos))
+        break;
+
+      pvLine.add(move);
+      pos.makeMove(move);
+
+      if (alreadySeen(pos.hashValue))
+        break;
+      seen.add(pos.hashValue);
+    }
   }
 
   public:
@@ -182,7 +249,8 @@ class SearchData
   {
     const Move filteredMove = filter(m);
 
-    for (size_t i = 0; i < pvLine.size(); i++) {
+    // Searched prefix only — the TT-reconstructed tail must not reach ordering.
+    for (size_t i = 0; i < pvSearchedLen; i++) {
       if (filter(pvLine[i]) == filteredMove)
         return true;
     }
@@ -215,13 +283,26 @@ class SearchData
   {
     pvLine.clear();
 
-    for (int i = 0; i < MAX_PV_ARRAY_SIZE; i++)
+    // Bounded by pvLine's capacity, not MAX_PV_ARRAY_SIZE: the root's row in
+    // the triangular pvArray is only the first MAX_PLY entries, so a full-length
+    // legal line would otherwise run off it into the ply-1 row (and the extra
+    // moves would be silently dropped by Varray::add anyway).
+    for (size_t i = 0; i < pvLine.capacity(); i++)
     {
       if (!isLegalMoveForPosition(pv[i], pos))
         break;
       pvLine.add(pv[i]);
       pos.makeMove(pv[i]);
     }
+
+    // Everything up to here was genuinely searched — freeze that bound before
+    // the TT tail goes on, so move ordering only ever sees the searched prefix.
+    pvSearchedLen = pvLine.size();
+
+    // `pos` now sits at the end of the raw line — walk the TT onward from here
+    // to recover the moves an early-returning node never wrote to pvArray.
+    extendPvFromTt(pos);
+
     moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
   }
 

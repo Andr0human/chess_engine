@@ -322,6 +322,14 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (depth <= 0)
     return quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
 
+  // Terminate this node's PV row before any early return (same reason as in
+  // quiescenceSearch). A TT cutoff / draw / RFP / razoring exit that leaves the
+  // row untouched hands the parent a stale line from a sibling, which
+  // addResult() then copies for as long as it happens to stay legal — printing
+  // moves that were never searched here. Truncating honestly is also what lets
+  // SearchData::extendPvFromTt() rebuild a *real* tail from the table.
+  pvArray[pvIndex] = NULL_MOVE;
+
   // Cheap repetition / 50-move draws — no movegen needed.
   if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
     return VALUE_DRAW;
@@ -482,8 +490,6 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     }
   }
 
-  pvArray[pvIndex] = NULL_MOVE;
-
   Move bestMove = NULL_MOVE;
 
   HashMoveOutcome hashOutcome = playHashMove(pos, hashMove, ns, bestMove);
@@ -609,12 +615,11 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
                   << " time " << timeMs
                   << " pv";
         // Print the validated PV (built by addResult above), not the raw
-        // pvArray. Early-return nodes (TT cutoff / draw / RFP / razoring) don't
-        // null-terminate their pvArray slot, so a parent that copies such a
-        // child's row inherits a stale tail — harmless to search (pvArray never
-        // feeds a search decision) but it made the raw walk emit illegal moves
-        // (fastchess "Illegal PV move" warnings). getPvLine() is legality-checked;
-        // stop at the first quiescence move, as the prior raw printer did.
+        // pvArray: every move in it is legality-checked, where a raw walk used
+        // to emit illegal moves (fastchess "Illegal PV move" warnings). It also
+        // carries the TT-reconstructed tail, so a line ending at an
+        // early-returning node still shows its full length. Stop at the first
+        // quiescence move, as the prior raw printer did.
         for (const Move m : info.getPvLine())
         {
           if (m & quiescenceMove()) break;
