@@ -147,6 +147,15 @@ isEndgame<Endgames::KPNK>(const ChessBoard& pos)
      and pos.count<KNIGHT>() == 1;
 }
 
+template <>
+inline bool
+isEndgame<Endgames::KPRK>(const ChessBoard& pos)
+{
+  return pos.count<ALL >() == 2
+     and pos.count<PAWN>() == 1
+     and pos.count<ROOK>() == 1;
+}
+
 template <Endgames e>
 inline bool
 Endgame(const ChessBoard& pos) = delete;
@@ -871,6 +880,71 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
   return false;
 }
 
+template <>
+inline bool
+Endgame<Endgames::KPRK>(const ChessBoard& pos)
+{
+  // Look from the PAWN side -- the defender fighting to hold the draw against the
+  // rook. Like KPQK/KPNK this covers both material configs: the opposite-side
+  // KP-vs-KR case (each side one non-king man) carries the draw logic; same-side
+  // KPR-vs-K falls through to the terminal return false (trivial win -- a safe
+  // missed-draw gap).
+  const Color side    = pos.count<WHITE, PAWN>() ? WHITE : BLACK;   // pawn (defender)
+  const Color emySide = ~side;                                      // rook (attacker)
+
+  const Bitboard  myKing = pos.getPiece(side   , KING);
+  const Bitboard emyKing = pos.getPiece(emySide, KING);
+
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    const Bitboard pawn = pos.getPiece(side   , PAWN);
+    const Bitboard rook = pos.getPiece(emySide, ROOK);
+
+    const Square    pawnSq = squareNo(pawn   );
+    const Square    rookSq = squareNo(rook   );
+    const Square  myKingSq = squareNo(myKing );
+    const Square emyKingSq = squareNo(emyKing);
+
+    const int pawnR = pawnSq >> 3;
+    const int pawnF = pawnSq &  7;
+
+    const Square promoSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
+
+    // Rank of the pawn counted from its own side, 2..7 (7 == one step from promoting).
+    const int pawnRel = (side == WHITE) ? (pawnR + 1) : (8 - pawnR);
+
+    const int dkPromoD = chebyshevDistance(myKingSq , promoSq);
+    const int akPromoD = chebyshevDistance(emyKingSq, promoSq);
+    const int  dkPawnD = chebyshevDistance(myKingSq ,  pawnSq);
+    const int  akPawnD = chebyshevDistance(emyKingSq,  pawnSq);
+    const int   rPawnD = chebyshevDistance(rookSq   ,  pawnSq);
+
+    // Self-block draw. The defending king sits on (or beside) its own queening
+    // square with the pawn two ranks back -- so it stands in the way of the very
+    // pawn it is escorting and the pawn side can never make progress; the rook
+    // simply shuffles. The akPawnD floor keeps the attacking king too far away to
+    // turn the position into a win instead, and it steps with dkPromoD because a
+    // king one square off the promotion square needs the extra tempo.
+    if (dkPromoD <= 1 and dkPawnD == 2 and akPawnD >= 5 + dkPromoD)
+      return true;
+
+    // Same self-block shape (defending king on/beside the queening square, pawn two
+    // ranks back), but fenced by where the *attacker* stands rather than by its
+    // distance to the pawn: the rook king is a full board away from the queening
+    // square, so it can never join in. The two rook exclusions are the positions
+    // where the pawn side, on move, actually breaks through -- with the rook either
+    // level with the attacking king's distance or two files short of it, it lacks the
+    // tempo to both check and return, and the pawn queens.
+    if (dkPromoD <= 1 and pawnRel == 6 and akPromoD >= 6
+        and rPawnD != akPromoD and rPawnD != akPromoD - 2)
+      return true;
+
+    return false;
+  }
+
+  return false;
+}
+
 bool
 isTheoreticalDraw(const ChessBoard& pos)
 {
@@ -914,6 +988,9 @@ isTheoreticalDraw(const ChessBoard& pos)
 
     if (isEndgame<Endgames::KPNK>(pos))
       return Endgame<Endgames::KPNK>(pos);
+
+    if (isEndgame<Endgames::KPRK>(pos))
+      return Endgame<Endgames::KPRK>(pos);
   }
 
   return false;
