@@ -891,6 +891,7 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
   // missed-draw gap).
   const Color side    = pos.count<WHITE, PAWN>() ? WHITE : BLACK;   // pawn (defender)
   const Color emySide = ~side;                                      // rook (attacker)
+  const auto defToMove = int(side == pos.color);
 
   const Bitboard  myKing = pos.getPiece(side   , KING);
   const Bitboard emyKing = pos.getPiece(emySide, KING);
@@ -919,6 +920,23 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
     const int  akPawnD = chebyshevDistance(emyKingSq,  pawnSq);
     const int   rPawnD = chebyshevDistance(rookSq   ,  pawnSq);
 
+    // Rook-sac lever, hoisted out of the third rule so the probe can gate on it:
+    // can the rook reach the queening line on a square neither the defending king
+    // nor the pawn covers?
+    const Bitboard rookMask  = attackSquares<ROOK>(rookSq, emyKing) & ~emyKing;
+    const Bitboard reachMask = plt::lineMasks[promoSq]
+                             & ~(plt::kingMasks[myKingSq] | plt::pawnCaptureMasks[side][pawnSq]);
+    const bool rookReach = (rookMask & reachMask) != 0;
+
+    // Pawn one step from queening with the rook side to move. The defending king
+    // covers the queening square (dkPromoD <= 2) and the attacking king is too far
+    // from the pawn to help (akPawnD >= 4), so the rook is on its own: it must
+    // either give itself up for the pawn or let it queen and be skewered. Either
+    // way the game ends in bare kings. Exhaustively pure over the call set.
+    if (rookReach and defToMove == 0 and pawnRel == 7
+        and dkPromoD <= 2 and akPawnD >= 4)
+      return true;
+
     // Self-block draw. The defending king sits on (or beside) its own queening
     // square with the pawn two ranks back -- so it stands in the way of the very
     // pawn it is escorting and the pawn side can never make progress; the rook
@@ -936,8 +954,16 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
     // level with the attacking king's distance or two files short of it, it lacks the
     // tempo to both check and return, and the pawn queens.
     if (dkPromoD <= 1 and pawnRel == 6 and akPromoD >= 6
-        and rPawnD != akPromoD and rPawnD != akPromoD - 2)
-      return true;
+        and rPawnD != akPromoD and rPawnD != akPromoD - 2
+    ) return true;
+
+    if ((dkPromoD + chebyshevDistance(pawnSq, promoSq) < akPromoD) and
+        (dkPawnD == 1) and (rPawnD > 1 + defToMove) and (pawnRel < 8 - defToMove)
+        and (akPawnD > 3 + !defToMove) and ((myKingSq & 7) != (pawnSq & 7))
+    ) {
+      if (rookReach)
+        return true;
+    }
 
     return false;
   }
