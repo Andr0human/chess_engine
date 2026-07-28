@@ -182,6 +182,12 @@ class ChessBoard
   getPiece(Color c, PieceType pt) const noexcept
   { return pieceBb[make_piece(c, pt)]; }
 
+  // NMP zugzwang guard: at least one non-pawn, non-king piece for `c`.
+  bool
+  hasNonPawnMaterial(Color c) const noexcept
+  { return pieceCt[make_piece(c, KNIGHT)] + pieceCt[make_piece(c, BISHOP)]
+         + pieceCt[make_piece(c, ROOK)]   + pieceCt[make_piece(c, QUEEN)] > 0; }
+
   constexpr Bitboard
   all() const noexcept
   { return pieceBb[make_piece(WHITE, ALL)] | pieceBb[make_piece(BLACK, ALL)]; }

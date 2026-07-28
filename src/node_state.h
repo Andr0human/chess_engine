@@ -31,6 +31,14 @@ struct NodeState
   // playSubsetMoves to skip the residual quiet moves once one move is searched.
   bool quietFutile = false;
 
+  // Set when playSubsetMoves bails out mid-node on shouldStop(). At that point
+  // `alpha` only reflects the moves that happened to be searched before the
+  // clock ran out, so the node must NOT be written to the TT — a partial bound
+  // stored at full depth outlives the iteration and poisons later searches.
+  // Carried as state rather than re-testing shouldStop() at the store site so
+  // the abort costs no extra clock read on the hot path.
+  bool aborted = false;
+
   constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
 };
 

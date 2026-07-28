@@ -191,5 +191,14 @@ isEndgame<Endgames::KPNK>(const ChessBoard& pos)
      and pos.count<KNIGHT>() == 1;
 }
 
+template <>
+inline bool
+isEndgame<Endgames::KPRK>(const ChessBoard& pos)
+{
+  return pos.count<ALL >() == 2
+     and pos.count<PAWN>() == 1
+     and pos.count<ROOK>() == 1;
+}
+
 
 #endif

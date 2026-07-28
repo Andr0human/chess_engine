@@ -180,7 +180,7 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
   {
     info.hashMoveCutoffs++;
     if constexpr (USE_TT)
-      tt.recordPosition(pos.hashValue, ns.depth, ns.beta, Flag::HASH_BETA, filter(hashMove));
+      tt.recordPosition(pos.hashValue, ns.depth, ns.ply, ns.beta, Flag::HASH_BETA, filter(hashMove));
     out.result = ns.beta;
     return out;
   }
@@ -234,9 +234,12 @@ playSubsetMoves(
 
     Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, ns);
 
-    // No time left!
+    // No time left! Flag the node as aborted so the caller skips the TT store.
     if (info.shouldStop())
+    {
+      ns.aborted = true;
       return bestMove;
+    }
 
     //! TODO: Why beta is not in root-search??
     // beta-cut found
@@ -288,7 +291,8 @@ playAllMoves(
   bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove,
                              orderType == MType::QUIET);
 
-  if (ns.hashf == Flag::HASH_BETA)
+  // Out of time — don't walk the remaining stages just to abort in each of them.
+  if (ns.hashf == Flag::HASH_BETA or ns.aborted)
     return bestMove;
 
   if constexpr (sizeof...(rest) > 0)
@@ -309,7 +313,7 @@ nodeStaticEval(ChessBoard& pos, NodeState& ns)
 }
 
 Score
-alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions)
+alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull)
 {
   if (info.shouldStop())
     return TIMEOUT;
@@ -317,6 +321,14 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     // Depth 0, starting Quiensense Search
   if (depth <= 0)
     return quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
+
+  // Terminate this node's PV row before any early return (same reason as in
+  // quiescenceSearch). A TT cutoff / draw / RFP / razoring exit that leaves the
+  // row untouched hands the parent a stale line from a sibling, which
+  // addResult() then copies for as long as it happens to stay legal — printing
+  // moves that were never searched here. Truncating honestly is also what lets
+  // SearchData::extendPvFromTt() rebuild a *real* tail from the table.
+  pvArray[pvIndex] = NULL_MOVE;
 
   // Cheap repetition / 50-move draws — no movegen needed.
   if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
@@ -328,7 +340,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   if constexpr (USE_TT) {
     bool ttHit = false;
-    Score ttValue = tt.lookupPosition(pos.hashValue, depth, alpha, beta, hashMove, ttHit);
+    Score ttValue = tt.lookupPosition(pos.hashValue, depth, ply, alpha, beta, hashMove, ttHit);
 
     info.ttProbes++;
     if (ttHit) info.ttHits++;
@@ -368,7 +380,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   {
     if (myMoves.checkers == 0
       and depth <= RFP_MAX_DEPTH
-      and __abs(beta) < VALUE_MATE - MAX_PLY * 20)
+      and !isMateScore(beta))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
       if (staticEval - RFP_MARGIN * depth >= beta)
@@ -389,7 +401,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   {
     if (myMoves.checkers == 0
       and depth <= RAZOR_MAX_DEPTH
-      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+      and !isMateScore(alpha))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
       if (staticEval + RAZOR_MARGIN * depth <= alpha)
@@ -410,6 +422,44 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
     return VALUE_DRAW;
+
+  // --- Null-move pruning (NMP) ---
+  // Hand the opponent a free tempo and search their reply at reduced depth
+  // with a null window around beta. If they still can't pull our score below
+  // beta, a real move almost certainly fails high too — so prune. Uses the
+  // pre-extension depth and the already-populated myMoves.checkers.
+  if constexpr (USE_NMP)
+  {
+    if (doNull
+        and myMoves.checkers == 0                 // never null out of check
+        and depth >= NMP_MIN_DEPTH                 // too shallow to be worth it
+        and pos.hasNonPawnMaterial(pos.color)      // zugzwang guard
+        and !isMateScore(beta))                    // don't manufacture false mates
+    {
+      const int R = nullReduction(depth);
+      const int rawNullDepth = depth - 1 - R;
+      const Depth nullDepth = static_cast<Depth>(rawNullDepth > 0 ? rawNullDepth : 0);
+      const int pvNextIndex = pvIndex + MAX_PLY - ply;
+
+      pos.makeNullMove();
+      Score nullScore = -alphaBeta(pos, nullDepth, -beta, -beta + 1,
+                                   ply + 1, pvNextIndex, numExtensions,
+                                   /*doNull=*/false);
+      pos.unmakeNullMove();
+
+      if (info.shouldStop())
+        return TIMEOUT;
+
+      if (nullScore >= beta)
+      {
+        // A mate score off a null move is not trustworthy — the side to move
+        // was handed a free tempo. Clamp to beta rather than propagate it.
+        if (isMateScore(nullScore))
+          return beta;
+        return nullScore;
+      }
+    }
+  }
 
   if constexpr (USE_EXTENSIONS) {
     int extensions = searchExtension(pos, myMoves, numExtensions, depth);
@@ -433,14 +483,12 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   {
     if (myMoves.checkers == 0
       and depth <= FUTILITY_MAX_DEPTH
-      and __abs(alpha) < VALUE_MATE - MAX_PLY * 20)
+      and !isMateScore(alpha))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
       ns.quietFutile = (staticEval + FUTILITY_MARGIN * depth <= alpha);
     }
   }
-
-  pvArray[pvIndex] = NULL_MOVE;
 
   Move bestMove = NULL_MOVE;
 
@@ -464,8 +512,13 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   bestMove = playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
     (pos, myMoves, movesArray, 0, ns, bestMove);
 
+  // Skip the store on an aborted node: ns.alpha is a partial bound over however
+  // many moves fit in the remaining time, and writing it at full `depth` would
+  // pollute the table for the next iteration *and* the next move of the game
+  // (the TT is not cleared between moves).
   if constexpr (USE_TT) {
-    tt.recordPosition(pos.hashValue, depth, ns.alpha, ns.hashf, bestMove);
+    if (!ns.aborted)
+      tt.recordPosition(pos.hashValue, depth, ply, ns.alpha, ns.hashf, bestMove);
   }
 
   return ns.alpha;
@@ -557,14 +610,20 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
         long long timeMs = static_cast<long long>(info.timeSpent() * 1000.0);
         std::cout << "info depth " << int(depth)
                   << " score cp " << int(eval)
-                  << " nodes " << info.totalNodes()
+                  << " nodes " << info.totalSearchedNodes()
+                  << " nps " << info.nps()
                   << " time " << timeMs
                   << " pv";
-        for (int i = 0; i < MAX_PV_ARRAY_SIZE; ++i)
+        // Print the validated PV (built by addResult above), not the raw
+        // pvArray: every move in it is legality-checked, where a raw walk used
+        // to emit illegal moves (fastchess "Illegal PV move" warnings). It also
+        // carries the TT-reconstructed tail, so a line ending at an
+        // early-returning node still shows its full length. Stop at the first
+        // quiescence move, as the prior raw printer did.
+        for (const Move m : info.getPvLine())
         {
-          if (pvArray[i] == NULL_MOVE) break;
-          if (pvArray[i] & quiescenceMove()) break;
-          std::cout << " " << moveToUci(pvArray[i]);
+          if (m & quiescenceMove()) break;
+          std::cout << " " << moveToUci(m);
         }
         std::cout << std::endl;
       }
@@ -599,6 +658,10 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     writer << "Hash move: ttProvided=" << info.ttMoveProvided
            << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
            << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
+
+    writer << "Nodes: " << info.totalSearchedNodes()
+           << " | Time: " << std::fixed << std::setprecision(2) << info.timeSpent() << "s"
+           << " | NPS: " << info.nps() << endl;
     writer << "Search Done!" << endl;
   }
 }

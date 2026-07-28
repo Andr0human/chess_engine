@@ -24,6 +24,7 @@ enum SearchFlag: bool
   USE_LMR = true,
   USE_EXTENSIONS = true,
   USE_MOVE_ORDER = true,
+  USE_NMP = true,
   USE_RFP = true,
   USE_RAZOR = true,
   USE_FUTILITY = true,
@@ -62,6 +63,8 @@ enum Search
   MAX_DEPTH = 36,
   LMR_LIMIT = 4,
   EXTENSION_LIMIT = 8,
+  NMP_MIN_DEPTH = 3,
+  VAL_WINDOW = 16,
   RFP_MAX_DEPTH = 6,
   RAZOR_MAX_DEPTH = 3,
   FUTILITY_MAX_DEPTH = 4,
@@ -91,6 +94,7 @@ enum class Endgames: uint8_t
   KNNK,
   KRBK,
   KPNK,
+  KPRK,
 };
 
 enum Value: Score
@@ -99,6 +103,15 @@ enum Value: Score
   VALUE_DRAW = -5,
   VALUE_MATE = 16000,
   VALUE_INF  = 16001,
+
+  // Lower edge of the mate band. Mates are encoded ply-relative at 20 points
+  // per ply (checkmateScore = -VALUE_MATE + 20 * ply), so the deepest
+  // representable mate (ply == MAX_PLY) scores +/-15200. Any |score| at or
+  // above this is a forced mate, anything below is a normal eval. Single
+  // source of truth for isMateScore() and the RFP / razoring / futility
+  // mate-window gates, which used to open-code it.
+  MATE_BOUND = VALUE_MATE - 20 * MAX_PLY,
+
   VALUE_UNKNOWN = 555666777,
   VALUE_WINDOW = 4,
   RFP_MARGIN = 110,

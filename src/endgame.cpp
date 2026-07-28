@@ -323,6 +323,28 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
     const bool kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
     const int  distanceBtwKings = chebyshevDistance(kingSq, emyKingSq);
 
+    // The square the pawn actually promotes on (promoSq above is only the
+    // square directly in front of it, which coincides only from the 7th).
+    const Square promoSquare  = Square(pawnF + (side == WHITE ? 56 : 0));
+    const int    dkPromoDist  = chebyshevDistance(kingSq   , promoSquare);
+    const int    daPromoDist  = chebyshevDistance(emyKingSq, promoSquare);
+    const int    pawnEdgeFile = std::min(pawnF, 7 - pawnF);
+
+    // Rook-/bishop-pawn fortress. With the pawn on the 7th and its own king
+    // holding the promotion square, the queen alone cannot make progress: an
+    // a/h or c/f pawn hands the defender the stalemate resource that a b/g or
+    // centre pawn lacks, so the win needs the attacking king -- and it is still
+    // six ranks away. The defender-to-move bishop-pawn case tolerates one more
+    // tempo of approach. The king may not sit *on* the promotion square of a
+    // rook pawn while the attacker is to move: there it blocks its own pawn
+    // with no flight square, and the queen mates instead of stalemating.
+    if (pawnOnRank7 and (kingMask & pawn) and
+       ((pawnEdgeFile == 0) or (pawnEdgeFile == 2)) and
+        (dkPromoDist <= 1) and
+       !((pawnEdgeFile == 0) and !sideAdvantage and (dkPromoDist == 0)) and
+        (daPromoDist >= 6 - int(sideAdvantage and (pawnEdgeFile == 2)))
+    ) return true;
+
     if (side == WHITE ? pawnR < 5 : pawnR > 2)
       return false;
 
@@ -371,12 +393,34 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
           (chebyshevDistance(emyKingSq, queenSq) > 3)
       ) return false;
 
+      // The four filters below reject a position because the queen bears on the
+      // defending king along a file/diagonal/rank -- the skewer that wins the
+      // new queen after the pawn promotes. That test is purely geometric, so it
+      // also rejects positions where the skewer cannot be converted: with the
+      // defending king already on the promotion square's doorstep and the
+      // attacking king still out of range, there is no follow-up and the
+      // ending is drawn regardless of the alignment.
+      const bool queenLineDraw =
+           (dkPromoDist == 1 and distanceBtwKings > daPromoDist)
+        or (dkPromoDist == 1 and daPromoDist >= 4 and distanceBtwKings >= 4)
+        or (dkPromoDist == 2 and daPromoDist >= 5 and distanceBtwKings >= 6);
+
+      // A skewer along a file or rank is far weaker than one along a diagonal:
+      // the promoted queen and the king sit on the same colour complex there,
+      // so the diagonal pin has no parry while the orthogonal one is met by
+      // interposing. With the king a knight's-move from the promotion square
+      // and the attacking king still four away, the orthogonal alignment is
+      // therefore not enough to win.
+      const bool queenLineDrawOrthogonal =
+           queenLineDraw
+        or (dkPromoDist == 2 and daPromoDist >= 4);
+
       if ((myKingF == pawnF) or (abs(myKingF - pawnF) == 1 and (myKing & FileAH)))
       {
         Bitboard mask = side == WHITE ? plt::downMasks[kingSq] : plt::upMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDrawOrthogonal;
       }
 
       // King and promo square share the a1-h8 diagonal (file - rank constant).
@@ -388,7 +432,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         Bitboard mask = side == WHITE ? plt::downLeftMasks[kingSq] : plt::upRightMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDraw;
       }
 
       // Same for the a8-h1 anti-diagonal (file + rank constant); `% 7` had the
@@ -398,7 +442,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         Bitboard mask = side == WHITE ? plt::downRightMasks[kingSq] : plt::upLeftMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDraw;
       }
 
       if ((myKingR == (promoSq >> 3)))
@@ -406,7 +450,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         Bitboard mask = (pawnF > myKingF) ? plt::leftMasks[kingSq] : plt::rightMasks[kingSq];
         mask &= ~kingMask;
         if (queenMask & mask)
-          return false;
+          return queenLineDrawOrthogonal;
       }
 
       if ((kingMask & ~(queenMask | emyKingMask)) and
@@ -658,8 +702,96 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
     if (pawnRel <= 4 and defToMove and legalKnightSquares and not pawnOnFileAH and kingInROS)
       return true;
 
+    const int  knightF =  knightSq & 7;
+    const int emyKingF = emyKingSq & 7;
+    if ((plt::knightMasks[knightSq] & (1ULL << promoSq)) and
+        (pawn & relativeRank[emySide][7] or (legalKnightSquares and defToMove)) and
+       !(pawn & FileAH) and
+       !((chebyshevDistance(emyKingSq, pawnSq) <= 1 + !defToMove) and ((knightF - pawnF) * (emyKingF - pawnF) >= 0))
+    ) return true;
+
+    if (defToMove and
+       (plt::knightMasks[pawnSq] & plt::knightMasks[emyKingSq] & plt::knightMasks[knightSq] & ~myKing) and
+      !(myKing & plt::pawnCaptureMasks[emySide][pawnSq]) and
+       (emyKing & ~CornerSquares)
+    ) return true;
+
+    if ((defKingPromoDist == 1) and
+        (chebyshevDistance(emyKingSq, promoSq) > 2)
+    ) return true;
+
+    if (kingInROS and
+       ((chebyshevDistance(emyKingSq, pawnSq) > 5)
+     or (chebyshevDistance(emyKingSq, promoSq) == 4))
+    ) return true;
+
     // Everything else falls through: the pawn is advanced and the defence is not
     // in a recognized holding pattern -- treat as decided and defer to search.
+    return false;
+  }
+
+  return false;
+}
+
+template <>
+inline bool
+Endgame<Endgames::KPRK>(const ChessBoard& pos)
+{
+  // Look from the PAWN side -- the defender fighting to hold the draw against the
+  // rook. Like KPQK/KPNK this covers both material configs: the opposite-side
+  // KP-vs-KR case (each side one non-king man) carries the draw logic; same-side
+  // KPR-vs-K falls through to the terminal return false (trivial win -- a safe
+  // missed-draw gap).
+  const Color side    = pos.count<WHITE, PAWN>() ? WHITE : BLACK;   // pawn (defender)
+  const Color emySide = ~side;                                      // rook (attacker)
+
+  const Bitboard  myKing = pos.getPiece(side   , KING);
+  const Bitboard emyKing = pos.getPiece(emySide, KING);
+
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    const Bitboard pawn = pos.getPiece(side   , PAWN);
+    const Bitboard rook = pos.getPiece(emySide, ROOK);
+
+    const Square    pawnSq = squareNo(pawn   );
+    const Square    rookSq = squareNo(rook   );
+    const Square  myKingSq = squareNo(myKing );
+    const Square emyKingSq = squareNo(emyKing);
+
+    const int pawnR = pawnSq >> 3;
+    const int pawnF = pawnSq &  7;
+
+    const Square promoSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
+
+    // Rank of the pawn counted from its own side, 2..7 (7 == one step from promoting).
+    const int pawnRel = (side == WHITE) ? (pawnR + 1) : (8 - pawnR);
+
+    const int dkPromoD = chebyshevDistance(myKingSq , promoSq);
+    const int akPromoD = chebyshevDistance(emyKingSq, promoSq);
+    const int  dkPawnD = chebyshevDistance(myKingSq ,  pawnSq);
+    const int  akPawnD = chebyshevDistance(emyKingSq,  pawnSq);
+    const int   rPawnD = chebyshevDistance(rookSq   ,  pawnSq);
+
+    // Self-block draw. The defending king sits on (or beside) its own queening
+    // square with the pawn two ranks back -- so it stands in the way of the very
+    // pawn it is escorting and the pawn side can never make progress; the rook
+    // simply shuffles. The akPawnD floor keeps the attacking king too far away to
+    // turn the position into a win instead, and it steps with dkPromoD because a
+    // king one square off the promotion square needs the extra tempo.
+    if (dkPromoD <= 1 and dkPawnD == 2 and akPawnD >= 5 + dkPromoD)
+      return true;
+
+    // Same self-block shape (defending king on/beside the queening square, pawn two
+    // ranks back), but fenced by where the *attacker* stands rather than by its
+    // distance to the pawn: the rook king is a full board away from the queening
+    // square, so it can never join in. The two rook exclusions are the positions
+    // where the pawn side, on move, actually breaks through -- with the rook either
+    // level with the attacking king's distance or two files short of it, it lacks the
+    // tempo to both check and return, and the pawn queens.
+    if (dkPromoD <= 1 and pawnRel == 6 and akPromoD >= 6
+        and rPawnD != akPromoD and rPawnD != akPromoD - 2)
+      return true;
+
     return false;
   }
 
@@ -709,6 +841,9 @@ isTheoreticalDraw(const ChessBoard& pos)
 
     if (isEndgame<Endgames::KPNK>(pos))
       return Endgame<Endgames::KPNK>(pos);
+
+    if (isEndgame<Endgames::KPRK>(pos))
+      return Endgame<Endgames::KPRK>(pos);
   }
 
   return false;

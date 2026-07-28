@@ -27,6 +27,20 @@ Score
 checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }
 
+// True when `score` encodes a forced mate rather than a normal evaluation.
+// The band must match checkmateScore()'s 20-points-per-ply step: the old
+// threshold (VALUE_MATE - MAX_PLY = 15960) assumed 1 point per ply and so only
+// recognized mates at ply <= 2 — a mate at ply 3 (-15940) fell through and the
+// guards built on this predicate were effectively dead. MATE_BOUND = 15200
+// covers the full 0..MAX_PLY range.
+bool
+isMateScore(Score score)
+{ return __abs(score) >= int(MATE_BOUND); }
+
+int
+nullReduction(Depth depth)
+{ return 3 + depth / 4; }
+
 bool
 lmrOk(Move move, Depth depth, size_t moveNo)
 {
