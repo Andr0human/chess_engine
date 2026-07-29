@@ -456,6 +456,17 @@ class SearchData
 size_t
 orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
 
+/**
+ * @brief SEE-orders a pure capture list for quiescence search.
+ *
+ * @param pos board position
+ * @param movesArray capture-only move list, reordered in place (SEE descending)
+ * @param floor moves to keep even when their SEE is negative
+ * @return count of leading moves worth searching
+ */
+size_t
+orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor);
+
 Score
 seeScore(const ChessBoard& pos, Move move);
 

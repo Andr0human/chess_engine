@@ -71,18 +71,22 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
 
-  if constexpr (USE_MOVE_ORDER)
-    orderMoves(pos, movesArray, MType::CAPTURES, 0);
+  // Keep the single best capture at thin nodes, the top 3 otherwise, even if
+  // they lose material -- otherwise a node with only losing captures would
+  // collapse to its stand-pat score.
+  const size_t floor = movesArray.size() < 4 ? 1 : 3;
+
+  // orderCaptures() sorts SEE-descending and hands back the prune boundary, so
+  // the loop below never needs a per-move SEE check of its own. Without move
+  // ordering the list is unsorted and no such boundary exists -- search it all.
+  const size_t moveCount = USE_MOVE_ORDER
+    ? orderCaptures(pos, movesArray, floor) : movesArray.size();
 
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-  const size_t LMP_THRESHOLD = movesArray.size() < 4 ? 1 : 3;
-
-  for (size_t moveNo = 0; moveNo < movesArray.size(); ++moveNo)
+  for (size_t moveNo = 0; moveNo < moveCount; ++moveNo)
   {
     Move captureMove = movesArray[moveNo];
-    if (moveNo >= LMP_THRESHOLD and seeScore(pos, captureMove) < 0)
-      continue;
 
     pos.makeMove(captureMove);
     Score score = -quiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
