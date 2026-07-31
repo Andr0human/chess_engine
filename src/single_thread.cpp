@@ -605,7 +605,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
       withinValWindow = true;
       valWindowCnt = 0;
 
-      info.addResult(board, eval, pvArray);
+      info.addResult(board, eval, pvArray, depth);
       if (debug)
         info.showLastDepthResult(board, writer);
 

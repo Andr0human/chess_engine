@@ -20,7 +20,7 @@ TranspositionTable tt;
 // converted back on probe. Non-mate scores are path-independent and pass through
 // untouched — which is what keeps this change inert outside the mate window.
 //
-// Range: the largest magnitude ever stored is VALUE_MATE + 20*MAX_PLY = 16800,
+// Range: the largest magnitude ever stored is VALUE_MATE + 20*MAX_PLY = 17000,
 // comfortably inside the 16-bit signed eval field (see ZobristHashKey::pack).
 static Score
 valueToTt(Score eval, Ply ply) noexcept
@@ -164,17 +164,30 @@ TranspositionTable::lookupPosition
 }
 
 Move
-TranspositionTable::probeMove(uint64_t hashValue) const noexcept
+TranspositionTable::probePvMove(uint64_t hashValue, Depth minDepth) const noexcept
 {
+  // Only an exact-bound entry proved its move to be *the* move. HASH_ALPHA
+  // entries store whatever survived a node where everything failed low, and
+  // HASH_BETA entries store a refutation that is only known to be good enough,
+  // not best. Handing either to the PV printer manufactures analysis: it takes
+  // one bogus link for every probe past it to be asking about a position that
+  // was never on the line at all.
+  const auto probe = [&] (const ZobristHashKey& key) -> Move
+  {
+    if (key.hashValue != hashValue)
+      return NULL_MOVE;
+    if (key.flag() != Flag::HASH_EXACT or key.depth() < minDepth)
+      return NULL_MOVE;
+    return key.bestMove();
+  };
+
   size_t index = hashValue % TT_SIZE;
 
-  if (ttPrimary[index].hashValue == hashValue)
-    return ttPrimary[index].bestMove();
+  Move move = probe(ttPrimary[index]);
+  if (move != NULL_MOVE)
+    return move;
 
-  if (ttSecondary[index].hashValue == hashValue)
-    return ttSecondary[index].bestMove();
-
-  return NULL_MOVE;
+  return probe(ttSecondary[index]);
 }
 
 void

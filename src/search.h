@@ -172,10 +172,18 @@ class SearchData
   // every node beyond it, written by whichever iteration searched them for real.
   // So walk the table's best moves onward from the position the raw PV ended at.
   //
+  // The walk is *verified*: probePvMove() only answers from an exact-bound entry
+  // searched to at least the depth still remaining at that point in the line, so
+  // the tail stops at the first link the table cannot vouch for. An unverified
+  // walk chains — one unproven move and every later probe describes a position
+  // that was never on the PV, which is how this used to print a whole fabricated
+  // queen trade off the end of a nine-ply line. A short honest tail beats a long
+  // invented one; see docs/pv-reconstruction.md.
+  //
   // The appended moves are for display only — see pvSearchedLen for why they
   // are fenced off from isPartOfPv().
   void
-  extendPvFromTt(ChessBoard pos)
+  extendPvFromTt(ChessBoard pos, Depth rootDepth)
   {
     // With the TT disabled there is no table to walk — and TT_SIZE is 0, so
     // probeMove()'s `hash % TT_SIZE` would divide by zero.
@@ -202,10 +210,21 @@ class SearchData
 
     while (pvLine.size() < pvLine.capacity())
     {
-      const Move move = tt.probeMove(pos.hashValue);
+      // Depth still owed at this point in the line. pvLine.size() is exactly the
+      // ply we are standing on (the prefix moves have all been made on `pos`), so
+      // a node genuinely on this iteration's PV was searched at `rootDepth - ply`
+      // -- extensions only ever push that higher, and reductions never apply on
+      // the PV, so demanding at least this much admits the real entries and
+      // rejects leftovers from shallower iterations.
+      const Depth remaining = rootDepth - Depth(pvLine.size());
+      if (remaining < 1)
+        break;
 
-      // No entry (the position was never stored, e.g. a terminal node), or the
-      // entry belongs to a 64-bit key collision and its move is nonsense here.
+      const Move move = tt.probePvMove(pos.hashValue, remaining);
+
+      // No entry (the position was never stored, e.g. a terminal node), no entry
+      // the table will vouch for at this depth/bound, or the entry belongs to a
+      // 64-bit key collision and its move is nonsense here.
       if (move == NULL_MOVE or !isLegalMoveForPosition(move, pos))
         break;
 
@@ -279,7 +298,7 @@ class SearchData
   }
 
   void
-  addResult(ChessBoard pos, Score eval, Move pv[])
+  addResult(ChessBoard pos, Score eval, Move pv[], Depth depth)
   {
     pvLine.clear();
 
@@ -301,7 +320,9 @@ class SearchData
 
     // `pos` now sits at the end of the raw line — walk the TT onward from here
     // to recover the moves an early-returning node never wrote to pvArray.
-    extendPvFromTt(pos);
+    // `depth` is the iteration that produced this line; the walk needs it to
+    // know how much search each recovered move still has to be backed by.
+    extendPvFromTt(pos, depth);
 
     moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
   }
