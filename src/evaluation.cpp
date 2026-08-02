@@ -9,22 +9,14 @@ using std::min;
 
 EvalWeights evalWeights;
 
+// Table lookups -- see the metric note in lookup_table.h. `distance` is the
+// evaluation's long-standing name for the manhattan metric.
+using plt::chebyshevDistance;
+using plt::manhattanDistance;
+
 static int
 distance(Square s, Square t)
-{
-  int rank1 = s >> 3, file1 = s & 7;
-  int rank2 = t >> 3, file2 = t & 7;
-
-  return abs(rank1 - rank2) + abs(file1 - file2);
-}
-
-static int
-chebyshevDistance(Square s1, Square s2)
-{
-  int rank1 = s1 >> 3, file1 = s1 & 7;
-  int rank2 = s2 >> 3, file2 = s2 & 7;
-  return std::max(abs(rank1 - rank2), abs(file1 - file2));
-}
+{ return manhattanDistance(s, t); }
 
 #ifndef THREATS
 

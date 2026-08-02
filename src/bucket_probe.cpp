@@ -252,6 +252,26 @@ mineSums(const BucketTally& cube, size_t maxL0)
   return out;
 }
 
+// The ceiling on any search over this cube, printed in both report headers. No
+// rule expressible in these features can claim more than the draws the cube
+// holds, and none is admissible where the decided positions sit -- so a run that
+// scores 0 is only news once you can see how much was on the table to begin with.
+std::string
+cubeCeiling(const BucketTally& cube)
+{
+  uint64_t draws = 0, decided = 0;
+  for (const BucketTally::Bucket& b : cube.buckets())
+  {
+    draws   += b.draws;
+    decided += b.decided;
+  }
+
+  std::ostringstream os;
+  os << "  ceiling: " << draws << " draws vs " << decided
+     << " decided -- no rule over this pool can claim more than the draws\n";
+  return os.str();
+}
+
 }   // namespace
 
 std::vector<BucketTally::Bucket>
@@ -407,6 +427,7 @@ reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
       << "   (" << n << " features)\n";
   out << "  cube  : " << cube.bucketCount() << " distinct full-vector buckets over "
       << cube.positionCount() << " call-set positions\n";
+  out << cubeCeiling(cube);
   out << "  score = draws claimable from that subset's PURE-DRAW buckets"
          " (higher = better recall)\n";
   out << "  subsets of size 1.." << maxK << ", top " << topN << " per size.\n\n";
@@ -518,6 +539,7 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
       << cube.featureCount() << " emitted)\n";
   out << "  cube  : " << cube.bucketCount() << " distinct full-vector buckets over "
       << cube.positionCount() << " call-set positions\n";
+  out << cubeCeiling(cube);
   out << "  rule  = a signed sum vs a threshold; score = draws on the claimed side,\n"
          "          which is admissible only if that side holds zero decided positions\n";
   out << "  L0 = nonzero coefficients, 1.." << mined.byL0.size() << ", top " << topN
