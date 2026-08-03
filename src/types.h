@@ -24,6 +24,7 @@ enum SearchFlag: bool
   USE_LMR = true,
   USE_EXTENSIONS = true,
   USE_MOVE_ORDER = true,
+  USE_PVS = true,
   USE_NMP = true,
   USE_RFP = true,
   USE_RAZOR = true,

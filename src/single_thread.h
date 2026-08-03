@@ -37,15 +37,22 @@ search(
 
 /**
  * @brief Returns the evaluation of a board at a given depth
- * 
+ *
+ * @tparam PvNode true when this node lies on the principal variation — the
+ *   root, plus the first move searched at every PV node above it. Never a
+ *   runtime value: a child is passed either its parent's PvNode or a literal
+ *   `false`, so the distinction is resolved at compile time and the two node
+ *   kinds specialize into separate functions (same shape Stockfish uses).
+ *   A PV node declines TT cutoffs so it always writes its pvArray row.
  * @param board ChessBoard to evaluate
  * @param depth depth of the search
- * @param alpha 
- * @param beta 
+ * @param alpha
+ * @param beta
  * @param ply distance from the root
- * @param pvIndex 
- * @return Score 
+ * @param pvIndex
+ * @return Score
  */
+template <bool PvNode>
 Score
 alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull = true);
 
