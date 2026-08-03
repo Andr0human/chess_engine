@@ -117,6 +117,20 @@ class SearchData
   //   hashMoveCutoffs  — of those, the hash move alone produced a beta cutoff
   uint64_t ttMoveProvided = 0, hashMoveInList = 0, hashMoveCutoffs = 0;
 
+  // PV-node instrumentation: nodes that had a usable TT cutoff available but
+  // declined it because they were on the principal variation. This is the
+  // entire cost of the PV-node rule — each one is a node that searched its
+  // moves instead of returning a stored score. Compare against ttCutoffs to
+  // see what fraction of the table's work we gave up.
+  uint64_t pvTtCutoffsDeclined = 0;
+
+  // PVS instrumentation, accumulated over the whole search:
+  //   pvsScouts     — non-first moves searched with a null window
+  //   pvsResearches — of those, the scout beat alpha and forced a full re-search
+  // A high researches/scouts ratio means move ordering is feeding PVS bad
+  // first moves — that ratio is the signal to watch.
+  uint64_t pvsScouts = 0, pvsResearches = 0;
+
   private:
 
   Varray<Move, MAX_PLY> pvLine;
@@ -178,7 +192,7 @@ class SearchData
   // walk chains — one unproven move and every later probe describes a position
   // that was never on the PV, which is how this used to print a whole fabricated
   // queen trade off the end of a nine-ply line. A short honest tail beats a long
-  // invented one; see docs/pv-reconstruction.md.
+  // invented one.
   //
   // The appended moves are for display only — see pvSearchedLen for why they
   // are fenced off from isPartOfPv().
@@ -216,6 +230,11 @@ class SearchData
       // -- extensions only ever push that higher, and reductions never apply on
       // the PV, so demanding at least this much admits the real entries and
       // rejects leftovers from shallower iterations.
+      //
+      // Do NOT clamp this to 1 to keep the walk going past rootDepth. Stopping
+      // early in extension-saturated lines is the lesser evil: a floor of 1
+      // re-admits depth-1 entries, which is exactly what let the fabricated
+      // tail through.
       const Depth remaining = rootDepth - Depth(pvLine.size());
       if (remaining < 1)
         break;
