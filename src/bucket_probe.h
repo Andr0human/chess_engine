@@ -20,7 +20,7 @@
 // engine headers (bitboard.h, types.h, ...). Only two translation units include
 // it:
 //
-//   * the recognizer (endgame.cpp): at its verdict point,
+//   * the recognizer (endgame_probe.cpp): at its verdict point,
 //       if (BucketProbe::enabled)
 //         BucketProbe::emit({{"feat0", v0}, {"feat1", v1}, ...});
 //     Each feature is named inline, so the column labels live next to the

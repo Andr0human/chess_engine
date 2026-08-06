@@ -6,15 +6,15 @@
 #include "lookup_table.h"
 
 // ============================================================================
-//  Endgame utilities -- shared plumbing for the theoretical-draw recognizers
-//  (endgame.cpp) and the endgame probe (endgame_probe.cpp).
+//  Endgame utilities -- shared plumbing for the endgame probe
+//  (endgame_probe.cpp), which owns every recognizer.
 //
 //  Two groups live here:
 //    1. Geometry helpers + color-relative rank tables used inside recognizer
 //       bodies.
-//    2. isEndgame<> -- material-signature detection. The verdict logic
-//       (Endgame<> / probeEndgame) differs per consumer, but "which endgame is
-//       this?" is identical, so it is shared.
+//    2. isEndgame<> -- material-signature detection, kept separate from the
+//       verdict logic (Endgame<> / probeEndgame) because "which endgame is
+//       this?" is a question the validation harness asks on its own.
 // ============================================================================
 
 

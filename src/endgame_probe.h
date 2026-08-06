@@ -3,6 +3,7 @@
 #define ENDGAME_PROBE_H
 
 #include "bitboard.h"
+#include "lookup_table.h"
 
 struct EndgameProbe
 {
@@ -14,6 +15,10 @@ struct EndgameProbe
 
 
 EndgameProbe probeEndgame(const ChessBoard& pos);
+
+// Draw-only view of the probe, kept for the call sites (search, `isDraw`,
+// egvalidate) that only ask "is this a theoretical draw?".
+bool isTheoreticalDraw(const ChessBoard& pos);
 
 #endif
 

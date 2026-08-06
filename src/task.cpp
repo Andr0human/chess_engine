@@ -6,7 +6,7 @@
 #include "single_thread.h"
 #include "test_positions.h"
 #include "tuner.h"
-#include "endgame.h"
+#include "endgame_probe.h"
 #include "endgame_validation.h"
 
 void

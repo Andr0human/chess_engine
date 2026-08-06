@@ -17,7 +17,7 @@
 #include "endgame_solver.h"
 #include "bitboard.h"
 #include "bucket_probe.h"
-#include "endgame.h"
+#include "endgame_probe.h"
 #include "movegen.h"
 #include "move_utils.h"
 #include "base_utils.h"

@@ -8,7 +8,7 @@
 
 /**
  * @brief Dev-only harness for validating the hand-written endgame verdicts in
- * endgame.cpp (currently isTheoreticalDraw) against ground truth.
+ * endgame_probe.cpp (currently isTheoreticalDraw) against ground truth.
  *
  * It exhaustively enumerates every legal position of a small material signature
  * and tallies what isTheoreticalDraw says about each. With the `oracle` option it
