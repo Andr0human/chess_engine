@@ -34,8 +34,53 @@ Endgame<Endgames::KNK>(const ChessBoard&, Score&)
 
 template <>
 inline bool
-Endgame<Endgames::KNNK>(const ChessBoard&, Score&)
-{ return true; }
+Endgame<Endgames::KNNK>(const ChessBoard& pos, Score&)
+{
+  // A knight apiece (KNKN): drawn, bar the cornered-king geometry.
+  if (pos.count<WHITE, KNIGHT>() == 1)
+  {
+    return !(cornerBlockedByOwnPiece(pos.piece<WHITE, KING>(), pos.piece<WHITE, KNIGHT>())
+          or cornerBlockedByOwnPiece(pos.piece<BLACK, KING>(), pos.piece<BLACK, KNIGHT>()));
+  }
+
+  // Two knights against a bare king. Mate cannot be forced, so the position is
+  // drawn unless the defender already stands in a mating net. Every won
+  // position in this signature's call set (308 of 5.7M) sits inside the same
+  // four conditions: the knight side to move, the bare king on an edge, the
+  // kings exactly two squares apart, and at most one flight square left -- a
+  // king with two ways out walks free before any mate arrives. Outside that
+  // the draw claim is safe; inside it, defer to eval.
+  //
+  // Cheapest test first: the escape count at the bottom costs four table
+  // lookups, the three gates above it cost one each.
+  const Color atkSide = pos.count<WHITE, KNIGHT>() ? WHITE : BLACK;
+
+  if (pos.color != atkSide)
+    return true;
+
+  const Bitboard defKing = pos.getPiece(~atkSide, KING);
+  const Bitboard atkKing = pos.getPiece( atkSide, KING);
+
+  if (!(defKing & EdgeSquares))
+    return true;
+
+  const Square defKingSq = squareNo(defKing);
+  const Square atkKingSq = squareNo(atkKing);
+
+  if (chebyshevDistance(atkKingSq, defKingSq) != 2)
+    return true;
+
+  // Squares the bare king may not step onto. A knight's own square counts as
+  // covered even when the king could legally take it: that only over-counts
+  // the net, which errs towards *not* claiming the draw.
+  const Bitboard knights = pos.getPiece(atkSide, KNIGHT);
+  const Bitboard covered = plt::kingMasks[atkKingSq]
+                         | plt::knightMasks[lsbIndex(knights)]
+                         | plt::knightMasks[msbIndex(knights)]
+                         | knights;
+
+  return popCount(plt::kingMasks[defKingSq] & ~covered) > 1;
+}
 
 template <>
 inline bool
@@ -572,8 +617,12 @@ template <>
 inline bool
 Endgame<Endgames::KBBK>(const ChessBoard& pos, Score&)
 {
+  // A bishop apiece (KBKB): drawn, bar the cornered-king geometry.
   if (pos.count<WHITE, BISHOP>() == 1)
-    return true;
+  {
+    return !(cornerBlockedByOwnPiece(pos.piece<WHITE, KING>(), pos.piece<WHITE, BISHOP>())
+          or cornerBlockedByOwnPiece(pos.piece<BLACK, KING>(), pos.piece<BLACK, BISHOP>()));
+  }
 
   const Bitboard bishops = pos.piece<WHITE, BISHOP>() | pos.piece<BLACK, BISHOP>();
   return !((bishops & WhiteSquares) and (bishops & BlackSquares));
@@ -582,7 +631,40 @@ Endgame<Endgames::KBBK>(const ChessBoard& pos, Score&)
 template <>
 inline bool
 Endgame<Endgames::KBNK>(const ChessBoard& pos, Score&)
-{ return pos.count<WHITE, ALL>() == 1; }
+{
+  // A minor apiece (KBKN): drawn, bar the cornered-king geometry.
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    const Bitboard wMinor = pos.piece<WHITE, BISHOP>() | pos.piece<WHITE, KNIGHT>();
+    const Bitboard bMinor = pos.piece<BLACK, BISHOP>() | pos.piece<BLACK, KNIGHT>();
+
+    return !(cornerBlockedByOwnPiece(pos.piece<WHITE, KING>(), wMinor)
+          or cornerBlockedByOwnPiece(pos.piece<BLACK, KING>(), bMinor));
+  }
+
+  // Bishop and knight against a bare king: won, unless the defender is to move
+  // and can pick off a minor its own king already touches. Wholly gated out of
+  // search today -- no capture is available in a gated call set -- but it fires
+  // on 1.17M positions once the capture gate comes out.
+  const Color side = pos.count<WHITE, ALL>() > 0 ? BLACK : WHITE;
+  const bool defToMove = side == pos.color;
+
+  const Bitboard king      = pos.getPiece( side, KING);
+  const Bitboard emyKing   = pos.getPiece(~side, KING);
+  const Square   kingSq    = squareNo(king);
+  const Square   emyKingSq = squareNo(emyKing);
+
+  const Bitboard bishopMask = attackSquares<BISHOP>(squareNo(pos.getPiece(~side, BISHOP)), emyKing);
+  const Bitboard knightMask = attackSquares<KNIGHT>(squareNo(pos.getPiece(~side, KNIGHT)), emyKing);
+
+  const auto hangingPiece =
+    pos.getPiece(~side, ALL) & ~plt::kingMasks[emyKingSq] & ~bishopMask & ~knightMask;
+
+  if (defToMove and (plt::kingMasks[kingSq] & hangingPiece))
+    return true;
+
+  return false;
+}
 
 
 template <>

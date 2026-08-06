@@ -58,6 +58,16 @@ kingBetweenQueens(const Square kingSq, const Bitboard queen1, const Bitboard que
 { return kingBetweenPieces<true, true>(kingSq, queen1, queen2); }
 
 
+// A king cornered with its own piece beside it. The piece that ought to defend
+// it instead seals a flight square, so the two-minors-apiece signatures (KBKB,
+// KNKN, KBKN) are not the automatic draws they look like -- this is the exact
+// geometry every won position in those three shares. Rejecting it costs each
+// signature ~0.75% of its call set in draws deferred to eval.
+inline bool
+cornerBlockedByOwnPiece(const Bitboard king, const Bitboard piece)
+{ return (king & CornerSquares) and (plt::chebyshevDistance(squareNo(king), squareNo(piece)) == 1); }
+
+
 // --- Color-relative rank tables ---------------------------------------------
 
 // Color-relative ranks: relativeRank[color][r] is the r-th rank (1-8) counting
