@@ -69,6 +69,49 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   return (hasFlag(mTypes, MType::QUIET)) ? movesArray.size() : start;
 }
 
+// Capture ordering for quiescence search. Unlike orderMoves(), every move here
+// is already known to be a capture, so the prioritize/killer/PV staging is dead
+// weight -- all that's left is the SEE sort. Scoring once into a parallel array
+// instead of inside a comparator cuts seeScore() calls from ~2n*log(n) to n.
+//
+// Returns the number of leading moves worth searching: every SEE >= 0 capture,
+// plus `floor` moves regardless, so a node whose captures all lose material
+// still searches its best try rather than collapsing to stand-pat.
+size_t
+orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor)
+{
+  const size_t n = movesArray.size();
+  array<Score, MAX_MOVES> scores;
+
+  for (size_t i = 0; i < n; i++)
+    scores[i] = seeScore(pos, movesArray[i]);
+
+  // Insertion sort, descending, moving scores[] in lockstep. Capture lists are
+  // short (rarely past a dozen), where this beats std::sort's setup cost.
+  for (size_t i = 1; i < n; i++)
+  {
+    const Move  move  = movesArray[i];
+    const Score score = scores[i];
+    size_t j = i;
+
+    while (j > 0 and scores[j - 1] < score)
+    {
+      movesArray[j] = movesArray[j - 1];
+      scores[j]     = scores[j - 1];
+      --j;
+    }
+
+    movesArray[j] = move;
+    scores[j]     = score;
+  }
+
+  size_t winning = 0;
+  while (winning < n and scores[winning] >= 0)
+    ++winning;
+
+  return std::max(winning, std::min(floor, n));
+}
+
 Score
 see(const ChessBoard& pos, Square square, Color side, PieceType capturedPiece, Bitboard removedPieces)
 {

@@ -24,6 +24,7 @@ enum SearchFlag: bool
   USE_LMR = true,
   USE_EXTENSIONS = true,
   USE_MOVE_ORDER = true,
+  USE_PVS = true,
   USE_NMP = true,
   USE_RFP = true,
   USE_RAZOR = true,
@@ -59,8 +60,8 @@ enum Search
   HASH_INDEXES_SIZE = 855,
 
   MAX_MOVES = 256,
-  MAX_PLY = 40,
-  MAX_DEPTH = 36,
+  MAX_PLY = 50,
+  MAX_DEPTH = 40,
   LMR_LIMIT = 4,
   EXTENSION_LIMIT = 8,
   NMP_MIN_DEPTH = 3,
@@ -71,10 +72,32 @@ enum Search
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   MAX_THREADS = 12,
-  MAX_PV_ARRAY_SIZE = (MAX_PLY * (MAX_PLY + 1)) / 2,
+  // The triangular PV rows need (MAX_PLY * (MAX_PLY + 1)) / 2 words; the +1 is a
+  // spare slot that is never part of any row. quiescenceSearch writes
+  // pvArray[pvIndex] = NULL_MOVE unguarded, and the pvIndex it hands its children
+  // at the last row is exactly the triangular size -- one past the end. Unlike the
+  // alphaBeta overflow above, that is not fixable by sizing MAX_PLY: qsearch ply is
+  // bounded by capture-chain length, not by depth, so the last row is reachable for
+  // any MAX_PLY. The spare word absorbs that write instead of clobbering whatever
+  // follows pvArray in BSS (killerMoves).
+  MAX_PV_ARRAY_SIZE = (MAX_PLY * (MAX_PLY + 1)) / 2 + 1,
 
   NULL_MOVE = 0,
 };
+
+// alphaBeta has no ply bound of its own: depth falls by 1 per ply, but
+// searchExtension adds it back up to EXTENSION_LIMIT, so the deepest node a
+// root search can reach sits at ply MAX_DEPTH + EXTENSION_LIMIT. Both per-ply
+// tables are sized by MAX_PLY -- killerMoves has MAX_PLY entries, and the
+// triangular pvArray's row for ply k starts at MAX_PLY*k - k*(k-1)/2, which at
+// k == MAX_PLY is past the last row. Let ply reach MAX_PLY and the
+// PV-update movcpy runs with source = target - 1 and n = MAX_PLY - ply - 1 =
+// -1: an overlapping copy that never meets a NULL_MOVE terminator, smearing one
+// move through memory until it walks off the end and faults (0xC0000005 at root
+// depth 33, when MAX_PLY was 40). Keep the strict inequality.
+static_assert(MAX_PLY > MAX_DEPTH + EXTENSION_LIMIT,
+              "MAX_PLY must exceed MAX_DEPTH + EXTENSION_LIMIT, or an "
+              "extension-saturated search indexes pvArray out of bounds");
 
 enum class Flag: uint8_t
 {
@@ -106,7 +129,7 @@ enum Value: Score
 
   // Lower edge of the mate band. Mates are encoded ply-relative at 20 points
   // per ply (checkmateScore = -VALUE_MATE + 20 * ply), so the deepest
-  // representable mate (ply == MAX_PLY) scores +/-15200. Any |score| at or
+  // representable mate (ply == MAX_PLY) scores +/-15000. Any |score| at or
   // above this is a forced mate, anything below is a normal eval. Single
   // source of truth for isMateScore() and the RFP / razoring / futility
   // mate-window gates, which used to open-code it.

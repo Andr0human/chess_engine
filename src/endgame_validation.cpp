@@ -198,6 +198,7 @@ struct Walker
   const EgSolver*           oracle   = nullptr;
   bool                      wantDump = false;
   bool                      wantSamples = false;   // keep example FENs per bucket
+  bool                      capGate  = true;       // false = keep has-capture positions
 
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
@@ -257,11 +258,20 @@ struct Walker
     // non-terminal positions with no captures available for the side to move
     // (single_thread.cpp:51, :331). Positions the search would never hand to the
     // recognizer must not pollute the tally.
+    //
+    // `capGate = false` (CLI `nocapgate`) relaxes only the capture half of that
+    // gate: has-capture positions stay in the call set and are still counted in
+    // rejCaptures, so the tally shows what the recognizer *would* say on the
+    // superset the search never asks about. Terminal positions stay excluded
+    // either way -- search resolves mate/stalemate before the recognizer runs.
     const MoveList moves = generateMoves(pos);
     if (!moves.anyMove())
     { ++t.rejTerminal; return; }            // checkmate / stalemate
     if (moves.exists<MType::CAPTURES>(pos))
-    { ++t.rejCaptures; return; }            // a capture is available
+    {
+      ++t.rejCaptures;                      // a capture is available
+      if (capGate) return;
+    }
 
     ++t.quiet;
     (stm == WHITE ? t.quietW : t.quietB)++;
@@ -388,6 +398,7 @@ struct Generator
   int maxKingFile = 3;         // 3 = folded (a-d); 7 = allfiles self-check
   bool wantDump = false;
   bool wantSamples = false;
+  bool capGate = true;         // false = has-capture positions stay in the call set
   const EgSolver* oracle = nullptr;
 
   std::array<int, 16> prevSame{}; // nearest earlier slot with same fenChar, or -1
@@ -441,6 +452,7 @@ struct Generator
       w.oracle    = oracle;
       w.wantDump  = wantDump;
       w.wantSamples = wantSamples;
+      w.capGate   = capGate;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
       w.place(BK);                          // white king fixed; recurse from black king down
@@ -479,8 +491,12 @@ reportColouring(const Generator& g, const string& pieceStr)
        << ", stm Black " << g.t.legalB << ")\n";
   cout << "  rejected (terminal)   : " << g.t.rejTerminal
        << "  (checkmate / stalemate -- no moves)\n";
-  cout << "  rejected (has capture): " << g.t.rejCaptures
-       << "  (search skips the recognizer here)\n";
+  if (g.capGate)
+    cout << "  rejected (has capture): " << g.t.rejCaptures
+         << "  (search skips the recognizer here)\n";
+  else
+    cout << "  KEPT     (has capture): " << g.t.rejCaptures
+         << "  (** capture gate disabled -- search never asks about these **)\n";
   cout << "Recognizer call set     : " << g.t.quiet
        << "  (stm White " << g.t.quietW
        << ", stm Black " << g.t.quietB << ")\n";
@@ -509,6 +525,10 @@ reportScorecard(const Generator& g, const string& pieceStr)
 
   cout << "--- Oracle scorecard " << signatureOf(pieceStr)
        << " (pieces " << pieceStr << ") ---\n";
+  if (!g.capGate)
+    cout << "** capture gate DISABLED: the call set includes has-capture positions,\n"
+            "   which the search never hands to the recognizer. A FALSE-DRAW below is\n"
+            "   hypothetical, not a live bug. **\n";
   cout << "Call-set positions scored : " << total << '\n';
   cout << "Oracle WDL (side-to-move)  : win " << g.t.oWin
        << ", draw " << g.t.oDraw << ", loss " << g.t.oLoss;
@@ -543,7 +563,8 @@ reportScorecard(const Generator& g, const string& pieceStr)
 void
 validateEndgame(const vector<string>& args)
 {
-  // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]
+  // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles]
+  //                 [nocapgate] [dump <file>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
@@ -600,6 +621,13 @@ validateEndgame(const vector<string>& args)
   }
   const bool noCache  = utils::hasArg(args, "nocache");
   const int maxKingFile = noFold ? 7 : 3;
+
+  // `nocapgate` drops the capture half of the engine's call gate, so the call set
+  // becomes every legal non-terminal position. The recognizer is never actually
+  // consulted on has-capture positions, so this is a diagnostic (how the
+  // recognizer behaves on the superset), not a correctness sweep -- any FALSE-DRAW
+  // it surfaces is unreachable from search until that gate changes.
+  const bool noCapGate = utils::hasArg(args, "nocapgate");
 
   // `combos` automates the feature-set search: instead of hand-editing the emit
   // to one candidate vector and re-sweeping per combination, the recognizer emits
@@ -736,6 +764,7 @@ validateEndgame(const vector<string>& args)
 
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
+    g.capGate = !noCapGate;
 
     // Sample FENs serve the per-bucket table, which none of the searches print --
     // and a whole-pool cube has buckets by the hundred thousand, so collecting
@@ -798,6 +827,10 @@ validateEndgame(const vector<string>& args)
                   : "white king folded to files a-d")
        << ", both sides to move; " << usingThreads << " thread"
        << (usingThreads == 1 ? "" : "s") << ")\n";
+  if (noCapGate)
+    cout << "Capture gate DISABLED ('nocapgate'): call set = every legal "
+            "non-terminal position,\n  including the has-capture ones the search "
+            "never hands to the recognizer.\n";
   if (haveMirror)
     cout << "Colourings: " << pieceArg << " (" << signatureOf(pieceArg)
          << ") and colour-mirror " << mirror

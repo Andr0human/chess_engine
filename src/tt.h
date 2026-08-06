@@ -125,10 +125,14 @@ class TranspositionTable
   int
   lookupPosition(uint64_t hashValue, Depth depth, Ply ply, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
 
-  // Fetch just the stored best move for a position — no flag/eval/depth logic,
-  // no terminal dependency. Used to try the hash move before full move generation.
+  // Fetch a stored best move that is trustworthy enough to *display* as part of
+  // a principal variation. Returns NULL_MOVE unless the entry actually proved
+  // the move: HASH_EXACT (a fail-low entry's move was never proven best — it is
+  // just whatever was left standing) and searched to at least `minDepth`.
+  // Both those conditions are checked per table, so a primary entry that fails
+  // them still falls through to the secondary.
   Move
-  probeMove(uint64_t hashValue) const noexcept;
+  probePvMove(uint64_t hashValue, Depth minDepth) const noexcept;
 };
 
 

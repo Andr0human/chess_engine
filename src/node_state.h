@@ -20,6 +20,11 @@ struct NodeState
   Ply ply;
   int pvIndex;
   int numExtensions;
+
+  // NOTE: PV-ness is deliberately *not* stored here. It is a compile-time
+  // property (`template <bool PvNode>` on alphaBeta and the play* helpers),
+  // since a node is only ever handed its parent's PvNode or a literal false.
+
   Flag hashf = Flag::HASH_ALPHA;
 
   // Node static eval, computed at most once per node (lazy) and reused across

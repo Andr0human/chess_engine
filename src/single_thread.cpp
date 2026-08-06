@@ -71,18 +71,22 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
 
-  if constexpr (USE_MOVE_ORDER)
-    orderMoves(pos, movesArray, MType::CAPTURES, 0);
+  // Keep the single best capture at thin nodes, the top 3 otherwise, even if
+  // they lose material -- otherwise a node with only losing captures would
+  // collapse to its stand-pat score.
+  const size_t floor = movesArray.size() < 4 ? 1 : 3;
+
+  // orderCaptures() sorts SEE-descending and hands back the prune boundary, so
+  // the loop below never needs a per-move SEE check of its own. Without move
+  // ordering the list is unsorted and no such boundary exists -- search it all.
+  const size_t moveCount = USE_MOVE_ORDER
+    ? orderCaptures(pos, movesArray, floor) : movesArray.size();
 
   int pvNextIndex = pvIndex + MAX_PLY - ply;
 
-  const size_t LMP_THRESHOLD = movesArray.size() < 4 ? 1 : 3;
-
-  for (size_t moveNo = 0; moveNo < movesArray.size(); ++moveNo)
+  for (size_t moveNo = 0; moveNo < moveCount; ++moveNo)
   {
     Move captureMove = movesArray[moveNo];
-    if (moveNo >= LMP_THRESHOLD and seeScore(pos, captureMove) < 0)
-      continue;
 
     pos.makeMove(captureMove);
     Score score = -quiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
@@ -110,7 +114,27 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   return alpha;
 }
 
-template <ReductionFunc reductionFunction>
+// Full-window child search with an optional LMR reduction, used on the
+// non-PVS path. ChildPv is a template parameter rather than a bool argument
+// so the child's PV-ness stays compile-time all the way down; the caller
+// resolves the runtime `moveNo == 0` test into one of the two instantiations.
+template <bool ChildPv>
+static Score
+searchChild(
+  ChessBoard& pos, Depth depth, Score alpha, Score beta,
+  Ply ply, int pvNextIndex, int numExtensions, int R
+)
+{
+  Score eval = -alphaBeta<ChildPv>(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+
+  // if timed-out, eval will be highly negative thus following code won't execute
+  if (R > 0 and eval > alpha)
+    eval = -alphaBeta<ChildPv>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+
+  return eval;
+}
+
+template <ReductionFunc reductionFunction, bool PvNode>
 static Score
 playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
 {
@@ -122,37 +146,81 @@ playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
   const int   numExtensions = ns.numExtensions;
 
   Score eval = VALUE_ZERO;
+  pos.makeMove(move);
 
-  if (USE_LMR and lmrOk(move, depth, moveNo))
+  if constexpr (USE_PVS)
   {
-    int R = reductionFunction(depth, moveNo);
-
-    pos.makeMove(move);
-    eval = -alphaBeta(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-    pos.unmakeMove();
-
-    // if timed-out, eval will be highly negative thus following code won't execute
-    if ((eval > alpha) and (R > 0))
+    // `moveNo == 0` is the first move searched at this node (the hash-move fast
+    // path bumps moveNoBias so its successors arrive with moveNo >= 1) — i.e.
+    // the PV candidate. It gets the full window; every later move is scouted
+    // with a null window [alpha, alpha+1] on the assumption it's worse, and
+    // only re-searched at full depth + full window if the scout beats alpha.
+    if (moveNo == 0)
     {
-      pos.makeMove(move);
-      eval = -alphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-      pos.unmakeMove();
+      eval = -alphaBeta<PvNode>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+    }
+    else
+    {
+      const int R = (USE_LMR and lmrOk(move, depth, moveNo)) ? reductionFunction(depth, moveNo) : 0;
+
+      // A scout is a null-window search: its score is a bound, never the real
+      // thing, so it is never a PV node however this node is labelled.
+      info.pvsScouts++;
+      eval = -alphaBeta<false>(pos, depth - 1 - R, -alpha - 1, -alpha, ply + 1, pvNextIndex, numExtensions);
+
+      // Scout beat alpha (and timeout didn't drive it negative): re-search at
+      // full depth + full window for the true score. One step undoes both the
+      // null window and any LMR reduction.
+      //
+      // The `R > 0` term is essential and easy to miss: at a null-window node
+      // (beta == alpha+1) a reduced scout that fails high gives eval == beta, so
+      // `eval < beta` is false and, without `R > 0`, we'd take a beta cutoff on
+      // the word of a shallow LMR-reduced scout — never verifying it at full
+      // depth. That unverified-reduction cutoff is a correctness bug (it lets
+      // reductions hide tactics). When R == 0 the scout is already full depth,
+      // so `eval < beta` alone is the right (pure-PVS) condition.
+      //
+      // The re-search inherits PvNode rather than `false`: a move that beat
+      // alpha at a PV node *is* on the principal variation, so this is where the
+      // "first move is the PV" guess gets corrected. Without it a later move
+      // taking over would leave a truncated pvArray row behind it, which is the
+      // reason proper PV collection wants PVS.
+      if (eval > alpha and (eval < beta or R > 0))
+      {
+        info.pvsResearches++;
+        eval = -alphaBeta<PvNode>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+      }
     }
   }
   else
   {
-    // No Reduction
-    pos.makeMove(move);
-    eval = -alphaBeta(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
-    pos.unmakeMove();
+    const int R = (USE_LMR and lmrOk(move, depth, moveNo)) ? reductionFunction(depth, moveNo) : 0;
+
+    // The first move searched at a PV node is the PV candidate, so it inherits
+    // PV status; its siblings are assumed worse and searched as ordinary nodes.
+    // Unlike the PVS path above — where first-move-vs-scout is already a
+    // structural split — the test is on the runtime `moveNo`, so it has to be
+    // spelled out here to pick the right searchChild instantiation.
+    if constexpr (PvNode)
+    {
+      eval = moveNo == 0
+        ? searchChild<true >(pos, depth, alpha, beta, ply, pvNextIndex, numExtensions, R)
+        : searchChild<false>(pos, depth, alpha, beta, ply, pvNextIndex, numExtensions, R);
+    }
+    else
+    {
+      eval = searchChild<false>(pos, depth, alpha, beta, ply, pvNextIndex, numExtensions, R);
+    }
   }
 
+  pos.unmakeMove();
   return eval;
 }
 
 // Searches the TT-suggested move first at the node's full (boosted) depth so
 // it gets the same effective ply budget as every other move. A beta cutoff
 // here returns without ever running GEN_CHECKS or orderMoves downstream.
+template <bool PvNode>
 static HashMoveOutcome
 playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
 {
@@ -166,8 +234,10 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
 
   const int pvNextIndex = ns.pvNextIndex();
 
+  // The hash move is move 0 at this node, so it carries the node's PV status
+  // down (same rule as playMove's `moveNo == 0`).
   pos.makeMove(hashMove);
-  Score eval = -alphaBeta(pos, ns.depth - 1, -ns.beta, -ns.alpha, ns.ply + 1, pvNextIndex, ns.numExtensions);
+  Score eval = -alphaBeta<PvNode>(pos, ns.depth - 1, -ns.beta, -ns.alpha, ns.ply + 1, pvNextIndex, ns.numExtensions);
   pos.unmakeMove();
 
   if (info.shouldStop())
@@ -197,6 +267,7 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
   return out;
 }
 
+template <bool PvNode>
 static Move
 playSubsetMoves(
   ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
@@ -232,7 +303,7 @@ playSubsetMoves(
     if (bestMove == NULL_MOVE)
       bestMove = filter(move);
 
-    Score eval = playMove<reduction>(pos, move, moveNo + moveNoBias, ns);
+    Score eval = playMove<reduction, PvNode>(pos, move, moveNo + moveNoBias, ns);
 
     // No time left! Flag the node as aborted so the caller skips the TT store.
     if (info.shouldStop())
@@ -268,7 +339,8 @@ playSubsetMoves(
   return bestMove;
 }
 
-template <int moveGen, MType orderType, MType... rest>
+// PvNode leads the parameter list because `rest` is a pack and must come last.
+template <bool PvNode, int moveGen, MType orderType, MType... rest>
 static Move
 playAllMoves(
   ChessBoard& pos, MoveList& myMoves,
@@ -288,15 +360,15 @@ playAllMoves(
 
   // Only the residual QUIET stage may futility-prune; earlier stages (captures,
   // promotions, checks, PV, killers) always search their moves.
-  bestMove = playSubsetMoves(pos, myMoves, movesArray, start, end, ns, bestMove,
-                             orderType == MType::QUIET);
+  bestMove = playSubsetMoves<PvNode>(pos, myMoves, movesArray, start, end, ns, bestMove,
+                                     orderType == MType::QUIET);
 
   // Out of time — don't walk the remaining stages just to abort in each of them.
   if (ns.hashf == Flag::HASH_BETA or ns.aborted)
     return bestMove;
 
   if constexpr (sizeof...(rest) > 0)
-    return playAllMoves<moveGen + 1, rest...>(pos, myMoves, movesArray, end, ns, bestMove);
+    return playAllMoves<PvNode, moveGen + 1, rest...>(pos, myMoves, movesArray, end, ns, bestMove);
 
   return bestMove;
 }
@@ -312,6 +384,7 @@ nodeStaticEval(ChessBoard& pos, NodeState& ns)
   return *ns.staticEval;
 }
 
+template <bool PvNode>
 Score
 alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull)
 {
@@ -345,9 +418,20 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     info.ttProbes++;
     if (ttHit) info.ttHits++;
 
+    // A PV node declines the cutoff and searches on. Returning a bare score
+    // here leaves this node's pvArray row NULL_MOVE, and the whole line below
+    // it is lost to the display — the measured cause of a 7-ply PV printed on
+    // a 37-ply search. The hash move is kept
+    // either way: lookupPosition() surfaces it before the depth test, so
+    // ordering still gets its best-move hint and only the *early return* is
+    // given up. Non-PV nodes are untouched, so the cost is bounded to one node
+    // per ply on the leftmost path.
     if (ttValue != VALUE_UNKNOWN) {
-      info.ttCutoffs++;
-      return ttValue;
+      if constexpr (!PvNode) {
+        info.ttCutoffs++;
+        return ttValue;
+      }
+      else info.pvTtCutoffsDeclined++;
     }
 
     if (hashMove != NULL_MOVE)
@@ -442,9 +526,10 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
       const int pvNextIndex = pvIndex + MAX_PLY - ply;
 
       pos.makeNullMove();
-      Score nullScore = -alphaBeta(pos, nullDepth, -beta, -beta + 1,
-                                   ply + 1, pvNextIndex, numExtensions,
-                                   /*doNull=*/false);
+      // Null-window probe around beta — never a PV node, whatever this node is.
+      Score nullScore = -alphaBeta<false>(pos, nullDepth, -beta, -beta + 1,
+                                          ply + 1, pvNextIndex, numExtensions,
+                                          /*doNull=*/false);
       pos.unmakeNullMove();
 
       if (info.shouldStop())
@@ -492,7 +577,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   Move bestMove = NULL_MOVE;
 
-  HashMoveOutcome hashOutcome = playHashMove(pos, hashMove, ns, bestMove);
+  HashMoveOutcome hashOutcome = playHashMove<PvNode>(pos, hashMove, ns, bestMove);
   if (hashOutcome.result.has_value())
     return *hashOutcome.result;
 
@@ -509,7 +594,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // playSubsetMoves — the hash-move fast-path's removeMove() call already
   // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
   MoveArray movesArray;
-  bestMove = playAllMoves<0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
+  bestMove = playAllMoves<PvNode, 0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
     (pos, myMoves, movesArray, 0, ns, bestMove);
 
   // Skip the store on an aborted node: ns.alpha is a partial bound over however
@@ -523,6 +608,11 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   return ns.alpha;
 }
+
+// alphaBeta is declared in the header but only ever called from this TU, so
+// the two instantiations are named here rather than exposing the definition.
+template Score alphaBeta<true >(ChessBoard&, Depth, Score, Score, Ply, int, int, bool);
+template Score alphaBeta<false>(ChessBoard&, Depth, Score, Score, Ply, int, int, bool);
 
 Score
 rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
@@ -539,7 +629,9 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
   {
     Move move = myMoves[moveNo];
 
-    Score eval = playMove<rootReduction>(pos, move, moveNo, ns);
+    // The root is a PV node by definition — every PV node below it is reached
+    // by taking first moves from here down.
+    Score eval = playMove<rootReduction, true>(pos, move, moveNo, ns);
 
     info.insertMoveToList(moveNo);
 
@@ -601,7 +693,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
       withinValWindow = true;
       valWindowCnt = 0;
 
-      info.addResult(board, eval, pvArray);
+      info.addResult(board, eval, pvArray, depth);
       if (debug)
         info.showLastDepthResult(board, writer);
 
@@ -658,6 +750,17 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     writer << "Hash move: ttProvided=" << info.ttMoveProvided
            << " inList=" << info.hashMoveInList << " (" << std::fixed << std::setprecision(1) << availRate << "%)"
            << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
+
+    writer << "PV nodes: ttCutoffsDeclined=" << info.pvTtCutoffsDeclined << endl;
+
+    if constexpr (USE_PVS)
+    {
+      double researchRate = info.pvsScouts
+        ? 100.0 * double(info.pvsResearches) / double(info.pvsScouts) : 0.0;
+      writer << "PVS: scouts=" << info.pvsScouts
+             << " researches=" << info.pvsResearches
+             << " (" << std::fixed << std::setprecision(1) << researchRate << "% of scouts)" << endl;
+    }
 
     writer << "Nodes: " << info.totalSearchedNodes()
            << " | Time: " << std::fixed << std::setprecision(2) << info.timeSpent() << "s"

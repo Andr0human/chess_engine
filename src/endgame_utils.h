@@ -19,14 +19,11 @@
 
 
 // --- Geometry helpers -------------------------------------------------------
-
-inline int
-chebyshevDistance(Square s1, Square s2)
-{
-  int rank1 = s1 >> 3, file1 = s1 & 7;
-  int rank2 = s2 >> 3, file2 = s2 & 7;
-  return std::max(abs(rank1 - rank2), abs(file1 - file2));
-}
+//
+// Distance metrics are NOT here: plt::chebyshevDistance / plt::manhattanDistance
+// are constexpr 64x64 tables in lookup_table.h. Pull them in with a
+// `using plt::...` at the top of the consuming .cpp -- redeclaring either one in
+// the global namespace makes every unqualified call ambiguous.
 
 // Is the king on a ray strictly between piece1 and piece2 (one on each side)?
 // lineCheck scans the rank/file rays, diagCheck the diagonals -- pick per attacker:

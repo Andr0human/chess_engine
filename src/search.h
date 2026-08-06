@@ -117,6 +117,20 @@ class SearchData
   //   hashMoveCutoffs  — of those, the hash move alone produced a beta cutoff
   uint64_t ttMoveProvided = 0, hashMoveInList = 0, hashMoveCutoffs = 0;
 
+  // PV-node instrumentation: nodes that had a usable TT cutoff available but
+  // declined it because they were on the principal variation. This is the
+  // entire cost of the PV-node rule — each one is a node that searched its
+  // moves instead of returning a stored score. Compare against ttCutoffs to
+  // see what fraction of the table's work we gave up.
+  uint64_t pvTtCutoffsDeclined = 0;
+
+  // PVS instrumentation, accumulated over the whole search:
+  //   pvsScouts     — non-first moves searched with a null window
+  //   pvsResearches — of those, the scout beat alpha and forced a full re-search
+  // A high researches/scouts ratio means move ordering is feeding PVS bad
+  // first moves — that ratio is the signal to watch.
+  uint64_t pvsScouts = 0, pvsResearches = 0;
+
   private:
 
   Varray<Move, MAX_PLY> pvLine;
@@ -172,10 +186,18 @@ class SearchData
   // every node beyond it, written by whichever iteration searched them for real.
   // So walk the table's best moves onward from the position the raw PV ended at.
   //
+  // The walk is *verified*: probePvMove() only answers from an exact-bound entry
+  // searched to at least the depth still remaining at that point in the line, so
+  // the tail stops at the first link the table cannot vouch for. An unverified
+  // walk chains — one unproven move and every later probe describes a position
+  // that was never on the PV, which is how this used to print a whole fabricated
+  // queen trade off the end of a nine-ply line. A short honest tail beats a long
+  // invented one.
+  //
   // The appended moves are for display only — see pvSearchedLen for why they
   // are fenced off from isPartOfPv().
   void
-  extendPvFromTt(ChessBoard pos)
+  extendPvFromTt(ChessBoard pos, Depth rootDepth)
   {
     // With the TT disabled there is no table to walk — and TT_SIZE is 0, so
     // probeMove()'s `hash % TT_SIZE` would divide by zero.
@@ -202,10 +224,26 @@ class SearchData
 
     while (pvLine.size() < pvLine.capacity())
     {
-      const Move move = tt.probeMove(pos.hashValue);
+      // Depth still owed at this point in the line. pvLine.size() is exactly the
+      // ply we are standing on (the prefix moves have all been made on `pos`), so
+      // a node genuinely on this iteration's PV was searched at `rootDepth - ply`
+      // -- extensions only ever push that higher, and reductions never apply on
+      // the PV, so demanding at least this much admits the real entries and
+      // rejects leftovers from shallower iterations.
+      //
+      // Do NOT clamp this to 1 to keep the walk going past rootDepth. Stopping
+      // early in extension-saturated lines is the lesser evil: a floor of 1
+      // re-admits depth-1 entries, which is exactly what let the fabricated
+      // tail through.
+      const Depth remaining = rootDepth - Depth(pvLine.size());
+      if (remaining < 1)
+        break;
 
-      // No entry (the position was never stored, e.g. a terminal node), or the
-      // entry belongs to a 64-bit key collision and its move is nonsense here.
+      const Move move = tt.probePvMove(pos.hashValue, remaining);
+
+      // No entry (the position was never stored, e.g. a terminal node), no entry
+      // the table will vouch for at this depth/bound, or the entry belongs to a
+      // 64-bit key collision and its move is nonsense here.
       if (move == NULL_MOVE or !isLegalMoveForPosition(move, pos))
         break;
 
@@ -279,7 +317,7 @@ class SearchData
   }
 
   void
-  addResult(ChessBoard pos, Score eval, Move pv[])
+  addResult(ChessBoard pos, Score eval, Move pv[], Depth depth)
   {
     pvLine.clear();
 
@@ -301,7 +339,9 @@ class SearchData
 
     // `pos` now sits at the end of the raw line — walk the TT onward from here
     // to recover the moves an early-returning node never wrote to pvArray.
-    extendPvFromTt(pos);
+    // `depth` is the iteration that produced this line; the walk needs it to
+    // know how much search each recovered move still has to be backed by.
+    extendPvFromTt(pos, depth);
 
     moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
   }
@@ -455,6 +495,17 @@ class SearchData
 
 size_t
 orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
+
+/**
+ * @brief SEE-orders a pure capture list for quiescence search.
+ *
+ * @param pos board position
+ * @param movesArray capture-only move list, reordered in place (SEE descending)
+ * @param floor moves to keep even when their SEE is negative
+ * @return count of leading moves worth searching
+ */
+size_t
+orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor);
 
 Score
 seeScore(const ChessBoard& pos, Move move);

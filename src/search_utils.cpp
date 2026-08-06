@@ -31,7 +31,7 @@ checkmateScore(Ply ply)
 // The band must match checkmateScore()'s 20-points-per-ply step: the old
 // threshold (VALUE_MATE - MAX_PLY = 15960) assumed 1 point per ply and so only
 // recognized mates at ply <= 2 — a mate at ply 3 (-15940) fell through and the
-// guards built on this predicate were effectively dead. MATE_BOUND = 15200
+// guards built on this predicate were effectively dead. MATE_BOUND = 15000
 // covers the full 0..MAX_PLY range.
 bool
 isMateScore(Score score)

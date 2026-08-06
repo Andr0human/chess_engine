@@ -5,6 +5,9 @@
 
 using plt::passedPawnMasks;
 
+// Table lookups -- see the metric note in lookup_table.h.
+using plt::chebyshevDistance;
+
 template <Endgames e>
 inline bool
 Endgame(const ChessBoard& pos, Score& dirScore) = delete;

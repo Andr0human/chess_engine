@@ -6,6 +6,10 @@
 using plt::passedPawnMasks;
 using plt::ruleOfSquares;
 
+// Table lookups -- see the metric note in lookup_table.h.
+using plt::chebyshevDistance;
+using plt::manhattanDistance;
+
 
 // TODO: KRRK, KRNK
 
@@ -160,6 +164,21 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
     Bitboard extEmyKingCapMask = 0;
 
+    // Hanging bishop. The rest of this block reasons about a bishop that is still
+    // on the board, so a bishop the pawn side can simply take is out of scope --
+    // defer to eval rather than claim the draw.
+    //
+    // Both qualifiers are load-bearing. Only the pawn side to move can execute
+    // the capture, and a bishop its own king defends cannot be taken by the bare
+    // king at all; without either test the guard fires on positions where nothing
+    // is actually hanging and costs 196,638 correctly-recognized draws inside the
+    // call gate. With them it is exactly inert there (the gate already drops every
+    // position it fires on) and still clears the whole 208,415 gate-off residue.
+    if ((side2move == emySide) and
+       ((bishop & plt::pawnCaptureMasks[emySide][pawnSq]) or
+        (bishop & emyKingCapMask & ~kingCapMask)))
+      return false;
+
     {
       const Bitboard emyKingLegalMask = emyKingCapMask & ~(occupied | bishopCapMask | kingCapMask);
       if ((emyKingLegalMask == 0) and
@@ -288,7 +307,6 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
   const Color emySide = ~side;
 
   const int sideAdvantage = int(side2move == side);
-  const int incFactor = 2 * side - 1;
 
   const Bitboard occupied = pos.all();
   const Bitboard myKing   = pos.getPiece(side   ,  KING);
@@ -317,18 +335,31 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
     const int    pawnR = pawnSq    >> 3;
     const int   queenF = queenSq    & 7;
     const int   queenR = queenSq   >> 3;
-    const Square promoSq = pawnSq + 8 * incFactor;
+    const Square promoSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
 
     const bool pawnOnRank7 = !!(pawn & relativeRank[side][7]);
     const bool kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
     const int  distanceBtwKings = chebyshevDistance(kingSq, emyKingSq);
 
-    // The square the pawn actually promotes on (promoSq above is only the
-    // square directly in front of it, which coincides only from the 7th).
-    const Square promoSquare  = Square(pawnF + (side == WHITE ? 56 : 0));
-    const int    dkPromoDist  = chebyshevDistance(kingSq   , promoSquare);
-    const int    daPromoDist  = chebyshevDistance(emyKingSq, promoSquare);
+    const int    dkPromoDist  = chebyshevDistance(kingSq   , promoSq);
+    const int    daPromoDist  = chebyshevDistance(emyKingSq, promoSq);
     const int    pawnEdgeFile = std::min(pawnF, 7 - pawnF);
+
+    // Hanging queen -- the KPQK member of the guard family. Everything below
+    // reasons about a queen that stays on the board, so defer to eval when the
+    // defending king or pawn can just take it.
+    //
+    // Unlike the KPBK/KRKB/KPKN/KPRK guards this one carries neither qualifier:
+    // no side-to-move test and no defended-piece test. Measured, it does not
+    // need them -- adding both leaves the gated tallies bit-identical
+    // (242,454 / 136,604 / FALSE-DRAW 0) and recovers all of 32 draws gate-off,
+    // so the extra tests would be noise. The reason the qualifiers carry no
+    // weight here is that the queen side is a bare king: a queen its own king
+    // defends is still a queen for nothing, and the defender's king and pawn
+    // between them cover so little of the board that the unqualified form
+    // barely over-fires.
+    if (queen & (plt::kingMasks[kingSq] | plt::pawnCaptureMasks[side][pawnSq]))
+      return false;
 
     // Rook-/bishop-pawn fortress. With the pawn on the 7th and its own king
     // holding the promotion square, the queen alone cannot make progress: an
@@ -468,20 +499,41 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
         (abs(pawnF - emyKingF)   > 2)
     ) return true;      // 2729
 
-    if (!sideAdvantage and
-       (myKing & CornerSquares) and
-       (kingMask & pawn) and
-       ((kingMask ^ (kingMask & (queenMask | pawn))) == 0) and
-       (distanceBtwKings > (chebyshevDistance(kingSq, queenSq))) and
-       (distanceBtwKings > 4)
-    ) return true;
-
     if (pawnOnRank7 and
         sideAdvantage and
        (myKing & (relativeRank[side][7] | relativeRank[side][8])) and
        (chebyshevDistance(pawnSq, emyKingSq) > 2) and
        (((pawn & FileC) and (myKing & (FileA | FileB)))
      or ((pawn & FileF) and (myKing & (FileG | FileH))))
+    ) return true;
+
+    // Two files towards the centre from the king. The guard below admits a king
+    // on the b-/g-file as well as the rook file, so keying the direction off
+    // `myKing & FileA` steps the wrong way there: b8 - 2 leaves the rank
+    // entirely (h7) and b1 - 2 is a negative shift. Key it off the board half.
+    const int toReachSq = kingSq + (myKingF <= 3 ? 2 : -2);
+
+    if ((pawn & FileAH) and
+        (myKing & relativeRank[side][8]) and
+        (chebyshevDistance(pawnSq, kingSq) < 2) and
+        (chebyshevDistance(pawnSq, emyKingSq) > 4 + !sideAdvantage) and
+       !(queenMask & (1ULL << toReachSq))
+    ) return true;
+
+    // Pawn on the 7th, its own king beside the promotion square, the queen not
+    // yet bearing on that king, and the attacking king far away: the defence
+    // simply shuffles between the pawn and the promotion square, and the lone
+    // queen has no way to gain a tempo before its king arrives. The distance is
+    // manhattan, not chebyshev: what makes the position holdable is the total
+    // walk the attacking king still owes, so a diagonal approach must count as
+    // nearer than a straight one of the same chebyshev length.
+    //
+    // Oracle-mined with bucket-probing over the residual: ten PURE-DRAW buckets
+    // (4,655 draws, zero decided) forming one contiguous band in mdKK >= 5.
+    if (sideAdvantage and pawnOnRank7 and
+        (dkPromoDist == 1) and
+       !(queenMask & myKing) and
+        (manhattanDistance(kingSq, emyKingSq) >= 5)
     ) return true;
 
     return false;
@@ -543,11 +595,27 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   const int distBtwKingAndBish = chebyshevDistance(kingSq, bishopSq );
 
   const Bitboard bishopMask  = attackSquares<BISHOP>(bishopSq , king);
-  const Bitboard rookMask    = attackSquares< ROOK >(rookSq   , emyKing); 
+  const Bitboard rookMask    = attackSquares< ROOK >(rookSq   , emyKing);
+  const Bitboard kingMask    = attackSquares< KING >(kingSq   , 0);
   const Bitboard emyKingMask = attackSquares< KING >(emyKingSq, 0);
 
   const Bitboard rookDiag = attackSquares<BISHOP>(rookSq, 0);
   const bool rookHitsBishop = attackSquares<ROOK>(rookSq, 0) & bishop;
+
+  // Hanging bishop -- the KRKB analogue of the KPBK guard. Everything below
+  // reasons about a bishop that stays on the board, so a bishop the rook side
+  // can simply take is out of scope: defer to eval instead of claiming the draw.
+  //
+  // Both qualifiers matter. Only the rook side to move can execute the capture,
+  // and a bishop its own king defends is not worth taking -- the recapture
+  // leaves K vs K. Measured over the full oracle: exactly inert inside the call
+  // gate (tallies identical to no guard) while clearing the whole
+  // 102,228-position gate-off residue, and it costs no gate-off draw either --
+  // every claim it removes was a false one.
+  if (!sideAdvantage and
+     (rookMask & bishop) and
+    !(kingMask & bishop)
+  ) return false;
 
   if (sideAdvantage and (rookDiag & emyKing))
   {
@@ -660,6 +728,30 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
     // Pawn advancement counted from the ATTACKER's back rank: 2..7, higher = closer to promotion.
     const int  pawnRel = (emySide == WHITE) ? pawnR + 1 : 8 - pawnR;
 
+    Bitboard kingCapMask    = attackSquares<KING>(myKingSq , 0);
+    Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
+
+    // Hanging knight -- the KPKN analogue of the KPBK guard, same two qualifiers:
+    // only the pawn side to move can execute the capture, and a knight its own
+    // king defends cannot be taken by the bare king at all.
+    //
+    // Unlike the KPBK and KRKB versions this one is NOT free gate-off. Bucketed
+    // against the oracle by (claiming rule, hanging), every non-hanging bucket is
+    // pure draw and the hanging ones hold all 20,533 gate-off FALSE-DRAWs -- but
+    // also 92,786 genuine draws, because rules 1/2/7/8 below are king-based and
+    // mostly survive losing the knight (they are 73-97% draw when it hangs; only
+    // rule 5, the knight-forks-the-promotion-square rule, is 94% decided and
+    // genuinely needs the knight). Splitting them apart needs a "drawn as bare
+    // KPK" test, which is a coverage project, not a correctness one.
+    //
+    // Shipped as-is because it is exactly inert inside the call gate (gated
+    // tallies bit-identical to no guard) and takes the gate-off FALSE-DRAW count
+    // to 0, trading a bug for a safe missed-draw gap.
+    if (!(defToMove) and
+      ((knight & plt::pawnCaptureMasks[emySide][pawnSq]) or
+      (knight & emyKingCapMask & ~kingCapMask))
+    ) return false;
+
     const Square promoSq = static_cast<Square>((emySide == WHITE ? 56 : 0) + pawnF);
     const int defKingPromoDist = chebyshevDistance(myKingSq, promoSq);
     const int defKingPawnDist  = chebyshevDistance(myKingSq, pawnSq);
@@ -672,7 +764,9 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
       ~(attackSquares<KING>(emyKingSq, 0) | plt::pawnCaptureMasks[emySide][pawnSq])) != 0;
 
     // --- Draw rules first: claim the known draws before any carve-out filter, so
-    // a filter can never steal a genuine draw from a rule below it. ---
+    // a filter can never steal a genuine draw from a rule below it. The
+    // hanging-knight guard above is the one deliberate exception -- see its note
+    // for what it costs the rules below. ---
 
     // Defender king blockades the promotion square (any pawn rank): the pawn can
     // never queen, so a held draw. Oracle-mined FALSE-DRAW-free.
@@ -744,6 +838,7 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
   // missed-draw gap).
   const Color side    = pos.count<WHITE, PAWN>() ? WHITE : BLACK;   // pawn (defender)
   const Color emySide = ~side;                                      // rook (attacker)
+  const auto defToMove = int(side == pos.color);
 
   const Bitboard  myKing = pos.getPiece(side   , KING);
   const Bitboard emyKing = pos.getPiece(emySide, KING);
@@ -766,11 +861,49 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
     // Rank of the pawn counted from its own side, 2..7 (7 == one step from promoting).
     const int pawnRel = (side == WHITE) ? (pawnR + 1) : (8 - pawnR);
 
+    const Bitboard rookMask  = attackSquares<ROOK>(rookSq, emyKing) & ~emyKing;
+    const Bitboard kingCapMask    = attackSquares<KING>(myKingSq , 0);
+    const Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
+
+    // Hanging-piece guards -- the KPRK pair of the KPKB/KRKB/KPKN family, one per
+    // side, because here BOTH men can hang: the defender is K+P (not a bare king)
+    // and the attacker's rook is capturable in turn.
+    //
+    // Free as written, on both paths (measured): gated tallies are bit-identical
+    // to no guard -- the capture gate already drops every position these fire on
+    // -- and gate-off they remove 13,011 claims, all 13,011 of them false draws,
+    // leaving agree-draw and missed-draw untouched. Contrast KPKN, where the same
+    // shape also cost 92,786 genuine draws.
+    if (defToMove and
+       ((rook & plt::pawnCaptureMasks[side][pawnSq]) or
+       (rook & kingCapMask & ~emyKingCapMask))
+    ) return false;
+
+    if (!defToMove and
+      (rookMask & pawn & ~kingCapMask)
+    ) return false;
+
     const int dkPromoD = chebyshevDistance(myKingSq , promoSq);
     const int akPromoD = chebyshevDistance(emyKingSq, promoSq);
     const int  dkPawnD = chebyshevDistance(myKingSq ,  pawnSq);
     const int  akPawnD = chebyshevDistance(emyKingSq,  pawnSq);
     const int   rPawnD = chebyshevDistance(rookSq   ,  pawnSq);
+
+    // Rook-sac lever, hoisted out of the third rule so the probe can gate on it:
+    // can the rook reach the queening line on a square neither the defending king
+    // nor the pawn covers?
+    const Bitboard reachMask = plt::lineMasks[promoSq]
+                             & ~(plt::kingMasks[myKingSq] | plt::pawnCaptureMasks[side][pawnSq]);
+    const bool rookReach = (rookMask & reachMask) != 0;
+
+    // Pawn one step from queening with the rook side to move. The defending king
+    // covers the queening square (dkPromoD <= 2) and the attacking king is too far
+    // from the pawn to help (akPawnD >= 4), so the rook is on its own: it must
+    // either give itself up for the pawn or let it queen and be skewered. Either
+    // way the game ends in bare kings. Exhaustively pure over the call set.
+    if (rookReach and defToMove == 0 and pawnRel == 7
+        and dkPromoD <= 2 and akPawnD >= 4)
+      return true;
 
     // Self-block draw. The defending king sits on (or beside) its own queening
     // square with the pawn two ranks back -- so it stands in the way of the very
@@ -789,8 +922,16 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
     // level with the attacking king's distance or two files short of it, it lacks the
     // tempo to both check and return, and the pawn queens.
     if (dkPromoD <= 1 and pawnRel == 6 and akPromoD >= 6
-        and rPawnD != akPromoD and rPawnD != akPromoD - 2)
-      return true;
+        and rPawnD != akPromoD and rPawnD != akPromoD - 2
+    ) return true;
+
+    if ((dkPromoD + chebyshevDistance(pawnSq, promoSq) < akPromoD) and
+        (dkPawnD == 1) and (rPawnD > 1 + defToMove) and (pawnRel < 8 - defToMove)
+        and (akPawnD > 3 + !defToMove) and ((myKingSq & 7) != (pawnSq & 7))
+    ) {
+      if (rookReach)
+        return true;
+    }
 
     return false;
   }
