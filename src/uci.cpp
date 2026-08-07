@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -22,6 +23,10 @@ using std::stringstream;
 
 namespace
 {
+
+// Serialises every write to stdout. See uciSend() in uci.h for why std::cout
+// has no lock of its own here.
+std::mutex g_outMutex;
 
 // Persistent board across commands within a session.
 ChessBoard g_board(START_FEN);
@@ -49,9 +54,9 @@ stopAndJoin()
 void
 sendId()
 {
-  cout << "id name Elsa" << endl;
-  cout << "id author Andr0human" << endl;
-  cout << "uciok" << endl;
+  uciSend("id name Elsa");
+  uciSend("id author Andr0human");
+  uciSend("uciok");
 }
 
 void
@@ -212,7 +217,7 @@ handleGo(stringstream& ss)
   g_worker = std::thread([board = g_board, maxDepth, moveTimeSec]() {
     std::ostringstream sink;
     search(board, maxDepth, moveTimeSec, sink, false, true);
-    cout << "bestmove " << moveToUci(info.lastIterationResult().first) << endl;
+    uciSend("bestmove " + moveToUci(info.lastIterationResult().first));
   });
 }
 
@@ -228,6 +233,13 @@ handleUciNewGame()
 }
 
 } // namespace
+
+void
+uciSend(const string& line)
+{
+  std::lock_guard<std::mutex> lock(g_outMutex);
+  cout << line << endl;
+}
 
 void
 uciLoop()
@@ -246,7 +258,7 @@ uciLoop()
     }
     else if (cmd == "isready")
     {
-      cout << "readyok" << endl;
+      uciSend("readyok");
     }
     else if (cmd == "ucinewgame")
     {
