@@ -13,6 +13,115 @@ using plt::manhattanDistance;
 
 // TODO: KRRK, KRNK
 
+
+// --- Won-side scoring -------------------------------------------------------
+//
+// A recognizer that proves a win reports how good the win is, not merely that
+// one exists. The number *replaces* the evaluation rather than adding to it, so
+// the base is the material the win converts into, and every term around it
+// exists only to order one won position against another.
+//
+// That ordering is the point. Without it every won KPK scores the same, search
+// sees no reason to prefer promoting now over shuffling, and a proven win turns
+// into a 50-move draw. The spread is deliberately small (~100cp against a
+// four-figure base): it has to break ties between won positions without ever
+// coming close to making one look drawn.
+//
+// A recipe is a base plus a list of terms, and both are template arguments. The
+// recognizer that calls in was selected *by* material, so everything the
+// material fixes -- what the win is worth, which terms even apply -- is already
+// known at compile time and none of it should cost a runtime test. The base is
+// what the winner ends up holding; the terms are the spread around it. A term
+// left off the list is not merely skipped, it is never compiled.
+
+
+// The square the pawn is walking to.
+inline Square
+promotionSquare(const Color side, const Square pawnSq)
+{ return static_cast<Square>((side == WHITE ? 56 : 0) + (pawnSq & 7)); }
+
+// Winner-relative to side-to-move relative, matching alphaBeta's negamax and
+// evaluate()'s `* (2 * pos.color - 1)`. Applied once, by the fold below, so no
+// recognizer and no term has to get the sign right itself.
+inline Score
+relativeToMover(const ChessBoard& pos, const Color side, const Score score)
+{ return (side == pos.color) ? score : -score; }
+
+
+// Unqualified here only -- it keeps a recipe readable at the call site, and the
+// scoped names stay scoped everywhere else. DirectionalTerm itself is in types.h
+// alongside Endgames.
+using enum DirectionalTerm;
+
+// One term, one question. Every term is winner-relative (bigger is better for
+// `side`) and bounded well inside the material base -- keeping them on a common
+// scale is what lets one beta-cut threshold mean the same thing in every
+// signature. A term reads whatever it needs off `pos` itself rather than taking
+// derived arguments, so recipes stay a flat list with no ordering rules.
+//
+// The primary is deleted: naming a term that has no body is a build error, not
+// a silent zero.
+template <DirectionalTerm t>
+inline Score
+termScore(const ChessBoard&, const Color) = delete;
+
+// The pawn is on the queening square's file, so the distance left to travel is
+// just ranks: 1 on the 7th, 6 on the 2nd.
+template <>
+inline Score
+termScore<PAWN_MARCH>(const ChessBoard& pos, const Color side)
+{
+  const Square pawnSq = squareNo(pos.getPiece(side, PAWN));
+
+  return 10 * (7 - chebyshevDistance(pawnSq, promotionSquare(side, pawnSq)));
+}
+
+// Reward the defender being far from the queening square, penalize the escort
+// still being far from it. Weighted below PAWN_MARCH -- a rank of pawn advance
+// outweighs two squares of king travel, the right priority once the promotion
+// is known to be safe.
+template <>
+inline Score
+termScore<KING_RACE>(const ChessBoard& pos, const Color side)
+{
+  const Square   pawnSq = squareNo(pos.getPiece(side, PAWN));
+  const Square  queenSq = promotionSquare(side, pawnSq);
+  const Square  myKingSq = squareNo(pos.getPiece( side, KING));
+  const Square emyKingSq = squareNo(pos.getPiece(~side, KING));
+
+  return 4 * chebyshevDistance(emyKingSq, queenSq)
+       - 2 * chebyshevDistance( myKingSq, queenSq);
+}
+
+// The mating-net term: a forced mate is the winner's king closing on the
+// loser's, so reward them being close. No signature composes this yet -- it is
+// what the pawnless wins (KBBK, KBNK, KRBK) will want, over a base near
+// VALUE_MATE rather than a piece sum, once any of them proves a win.
+template <>
+inline Score
+termScore<KING_PROXIMITY>(const ChessBoard& pos, const Color side)
+{
+  const Square  myKingSq = squareNo(pos.getPiece( side, KING));
+  const Square emyKingSq = squareNo(pos.getPiece(~side, KING));
+
+  return 10 * (7 - chebyshevDistance(myKingSq, emyKingSq));
+}
+
+
+// Base a KPK proven win is scored from, before the recipe's terms adjust it.
+// QueenValueMg says what the position is worth once the pawn queens; the terms
+// then spread roughly +/-50 around it to order won positions against each other.
+constexpr Score KPK_WIN_BASE = QueenValueMg;
+
+// calcDirectionalScore<base, terms...>(pos, side) -- the one call a recognizer
+// makes on a path where it has *proven* `side` wins. It names its recipe and
+// nothing else: no metric is invoked by hand, no weight is repeated, and the
+// sign is handled here. An empty term list folds to the bare base.
+template <Score base, DirectionalTerm... terms>
+inline Score
+calcDirectionalScore(const ChessBoard& pos, const Color side)
+{ return relativeToMover(pos, side, (base + ... + termScore<terms>(pos, side))); }
+
 // Endgame<E>(pos, dirScore) -- the per-signature verdict. The return value is the
 // probe's positionHit: true == this exact position is a known theoretical draw.
 // dirScore is the won-side score, written only when the recognizer proves the
@@ -129,8 +238,9 @@ Endgame<Endgames::KPK>(const ChessBoard& pos, Score& dirScore)
 
   const int ruleOfSquareIndex = getRuleOfSquareIndex(pos, side, pawnSq);
 
+  // Defender outside the rule of the square: the pawn walks in unescorted.
   if (emyKing & ~plt::ruleOfSquares[side][ruleOfSquareIndex]) {
-    dirScore = 0  /* directionalScore calculation */;
+    dirScore = calcDirectionalScore<KPK_WIN_BASE, PAWN_MARCH, KING_RACE>(pos, side);
     return false;
   }
 
@@ -156,9 +266,11 @@ Endgame<Endgames::KPK>(const ChessBoard& pos, Score& dirScore)
     ) return true;
   }
 
+  // Own king two ranks ahead on the pawn's file: the key squares are taken and
+  // the defender can be outflanked whichever way it steps.
   if ((myKingR == pawnR + 2 * incFactor) and (myKingF == pawnF))
   {
-    dirScore = 0  /* directionalScore calculation */;
+    dirScore = calcDirectionalScore<KPK_WIN_BASE, PAWN_MARCH, KING_RACE>(pos, side);
     return false;
   }
 
@@ -193,7 +305,7 @@ Endgame<Endgames::KPK>(const ChessBoard& pos, Score& dirScore)
   // move, since it gains a tempo (sideAdvantage == 1 => needs mdq - edq >= 2).
   if (pawn & FileAH)
   {
-    const Square queenSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
+    const Square queenSq = promotionSquare(side, pawnSq);
     const int edq = chebyshevDistance(emyKingSq, queenSq);   // defender -> corner
     const int mdq = chebyshevDistance(myKingSq,  queenSq);   // attacker -> corner
     if (mdq - edq >= 1 + sideAdvantage)
@@ -405,7 +517,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos, Score&)
     const int    pawnR = pawnSq    >> 3;
     const int   queenF = queenSq    & 7;
     const int   queenR = queenSq   >> 3;
-    const Square promoSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
+    const Square promoSq = promotionSquare(side, pawnSq);
 
     const bool pawnOnRank7 = !!(pawn & relativeRank[side][7]);
     const bool kingNotOnPromoSq = !(myKing & (1ULL << promoSq));
@@ -961,9 +1073,8 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos, Score&)
     const Square emyKingSq = squareNo(emyKing);
 
     const int pawnR = pawnSq >> 3;
-    const int pawnF = pawnSq &  7;
 
-    const Square promoSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
+    const Square promoSq = promotionSquare(side, pawnSq);
 
     // Rank of the pawn counted from its own side, 2..7 (7 == one step from promoting).
     const int pawnRel = (side == WHITE) ? (pawnR + 1) : (8 - pawnR);
@@ -1046,6 +1157,23 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos, Score&)
   return false;
 }
 
+// Which recognizers' directionalScore is trustworthy enough to fail high on.
+// A signature qualifies only if a nonzero score means the win is *proven* by the
+// recognizer itself -- KPK's two scoring paths are the enemy king outside the
+// rule of the square and the key-square opposition, both terminal facts. Where
+// the score is merely a heuristic lean, leave the signature out: it can still
+// raise alpha, but cutting on it would let search return a bound it cannot back
+// up. Default is false, so a new recognizer opts in rather than out.
+template <Endgames e>
+constexpr bool
+cutsBeta()
+{
+  for (const auto eg : { Endgames::KPK })
+    if (eg == e) return true;
+
+  return false;
+}
+
 
 // Signature test + verdict in one step: if pos has material signature E, mark the
 // probe as a signature hit and run the recognizer. Returns whether E claimed the
@@ -1057,8 +1185,9 @@ tryEndgame(const ChessBoard& pos, EndgameProbe& egp)
   if (!isEndgame<e>(pos))
     return false;
 
-  egp.signatureHit = true;
-  egp.positionHit  = Endgame<e>(pos, egp.directionalScore);
+  egp.signatureHit   = true;
+  egp.scoreCutsBeta  = cutsBeta<e>();
+  egp.positionHit    = Endgame<e>(pos, egp.directionalScore);
   return true;
 }
 
@@ -1106,28 +1235,3 @@ probeEndgame(const ChessBoard& pos)
 bool
 isTheoreticalDraw(const ChessBoard& pos)
 { return probeEndgame(pos).positionHit; }
-
-
-Score
-calcPromotionScore(const ChessBoard& pos, Color winningSide)
-{
-  Bitboard pawns = pos.getPiece(winningSide, PAWN);
-  Score score = 0;
-  while (pawns)
-  {
-    const Square pawnSq = nextSquare(pawns);
-    const int pawnR = pawnSq >> 3;
-    score += winningSide == WHITE ? (40 * pawnR) : -(40 * (7 - pawnR));
-  }
-  return score;
-}
-
-Score
-calcDirectionScore(const ChessBoard& pos, Color winningSide)
-{
-  const Score pawnPromotionScore = calcPromotionScore(pos, winningSide);
-
-  // calcPromotionScore is white-relative (positive => good for white); folding in
-  // the winner's sign strips that back to a positive winner-relative magnitude.
-  return pawnPromotionScore * (2 * winningSide - 1);
-}

@@ -369,9 +369,21 @@ isDrawCheck(const vector<string>& args)
     return;
   }
 
-  const bool draw = isTheoreticalDraw(pos);
-  cout << "isTheoreticalDraw = " << (draw ? "true   (theoretical draw)"
-                                          : "false  (not a theoretical draw)")
+  const EndgameProbe egp = probeEndgame(pos);
+
+  cout << "isTheoreticalDraw = " << (egp.positionHit ? "true   (theoretical draw)"
+                                                     : "false  (not a theoretical draw)")
+       << '\n';
+
+  // The rest of the probe. directionalScore is the only way to tell the two
+  // meanings of `false` apart: a proven win (nonzero, side-to-move relative)
+  // from a position the recognizer simply has nothing to say about (zero).
+  cout << "signatureHit      = " << (egp.signatureHit ? "true" : "false") << '\n'
+       << "scoreCutsBeta     = " << (egp.scoreCutsBeta ? "true" : "false") << '\n'
+       << "directionalScore  = " << egp.directionalScore
+       << (egp.directionalScore ? "   (proven win for the side to move,"
+                                  " relative to it)"
+                                : "      (no win claimed)")
        << '\n';
 }
 

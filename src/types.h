@@ -29,6 +29,26 @@ enum SearchFlag: bool
   USE_RFP = true,
   USE_RAZOR = true,
   USE_FUTILITY = true,
+  // The two ways search can spend a won-side endgame-probe score. Independent
+  // switches so all four combinations are measurable; both false reproduces the
+  // draw-only behaviour the probe had before directionalScore existed.
+  //
+  // They are one mechanism, not two: raising alpha at a parent becomes beta at
+  // its children, and each child's own probe raises its alpha to within ~10cp of
+  // that, so the child searches a near-zero window over a subtree whose scores
+  // all sit within +/-20cp. CUT is the explicit form of the cutoff RAISE already
+  // causes by that window inversion -- which is why CUT adds only 5-7x on top of
+  // RAISE rather than a step change, and why CUT *alone* is worse than no probe
+  // score at all (it caps subtree scores without RAISE's savings to pay for it).
+  //
+  // Both therefore end the subtree, and the mate distance is what searching that
+  // subtree would have produced: a won KPK that read 155.80 now reads 11.02.
+  // Conversion is unaffected (verified by playout) but the mate line is gone.
+  // Lowering the base does not buy it back -- the score tracks the base exactly
+  // linearly and node counts do not move, because the plateau is self-consistent
+  // at any level.
+  USE_EG_SCORE_CUT = true,    // return the score when it already beats beta
+  USE_EG_SCORE_RAISE = true,  // otherwise use it as a floor on alpha
 };
 
 enum Color: uint8_t
@@ -118,6 +138,17 @@ enum class Endgames: uint8_t
   KRBK,
   KPNK,
   KPRK,
+};
+
+// Terms an endgame recognizer composes into the won-side score it reports back
+// through EndgameProbe::directionalScore. Each is one question about the
+// position; the recipes that pick them, and the arithmetic behind each, live in
+// endgame_probe.cpp.
+enum class DirectionalTerm: uint8_t
+{
+  PAWN_MARCH,      // how far the winner's pawn still has to walk
+  KING_RACE,       // the two kings measured against the queening square
+  KING_PROXIMITY,  // the two kings measured against each other
 };
 
 enum Value: Score

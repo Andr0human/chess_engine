@@ -29,6 +29,68 @@ bulkCount(ChessBoard& pos, Depth depth)
   return answer;
 }
 
+// What the endgame probe wants search to do at this node.
+//
+// `result` set means "stop here and return this" -- either the recognizer proved
+// a draw, or it proved a win already worth more than the node's beta. Otherwise
+// the node searches on, possibly with `alpha` lifted to the proven-win score;
+// `raisedAlpha` records that, because a fail-low at a *lifted* alpha is not a
+// bound the search measured and must not reach the TT.
+struct ProbeOutcome
+{
+  std::optional<Score> result;
+  bool raisedAlpha = false;
+};
+
+// Shared by both call sites (qsearch and alphaBeta) so the two can never drift
+// apart on what a probe verdict means. Caller has already established that the
+// position is non-terminal and that the capture gate is open.
+//
+// Both ways of spending the score end the subtree, so neither leaves a mate
+// distance behind: the won-side score is a flat plateau, and a node that accepts
+// it stops looking for the mate underneath. That is a deliberate trade, not an
+// oversight -- see the USE_EG_SCORE_* comments in types.h.
+static ProbeOutcome
+applyEndgameProbe(const ChessBoard& pos, Score& alpha, Score beta)
+{
+  ProbeOutcome out;
+
+  const EndgameProbe egp = probeEndgame(pos);
+
+  if (!egp.signatureHit)
+    return out;
+
+  if (egp.positionHit)
+  {
+    out.result = VALUE_DRAW;
+    return out;
+  }
+
+  // Zero is "no claim", not "even". positionHit == false only says the
+  // recognizer could not prove a draw; only a nonzero score means it proved a
+  // win, so everything below is gated on that.
+  if (egp.directionalScore == 0)
+    return out;
+
+  // scoreCutsBeta is the recognizer's own opinion on whether its score is solid
+  // enough to end a node on. A recognizer that can prove a win but not size it
+  // (a forced mate it scores as a piece count, say) opts out and still gets the
+  // alpha floor below.
+  if (USE_EG_SCORE_CUT and egp.scoreCutsBeta and egp.directionalScore >= beta)
+  {
+    out.result = egp.directionalScore;
+    return out;
+  }
+
+  if (USE_EG_SCORE_RAISE and egp.directionalScore > alpha)
+  {
+    alpha = egp.directionalScore;
+    out.raisedAlpha = true;
+  }
+
+  return out;
+}
+
 template <bool leafnode = 0>
 static Score
 quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
@@ -48,8 +110,18 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
-    return VALUE_DRAW;
+  // No capture available: the recognizer's gate. Worth more here than the draw
+  // return alone suggests -- with no captures there is nothing to search, so
+  // this node is about to collapse to its stand-pat score, and a static eval of
+  // a won KPK reads one pawn where the probe reads a queen. The raised alpha
+  // survives to the `return alpha` below, past a stand-pat that can only lift it
+  // further.
+  if (!myMoves.exists<MType::CAPTURES>(pos))
+  {
+    const ProbeOutcome probe = applyEndgameProbe(pos, alpha, beta);
+    if (probe.result.has_value())
+      return *probe.result;
+  }
 
   info.addQNode();
 
@@ -504,8 +576,21 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
-    return VALUE_DRAW;
+  // Same gate as in quiescenceSearch. ns already carries the incoming window,
+  // and everything downstream (futility, playAllMoves, the TT store) reads ns
+  // rather than the locals, so a raised alpha has to land in both.
+  bool probeRaisedAlpha = false;
+
+  if (!myMoves.exists<MType::CAPTURES>(pos))
+  {
+    const ProbeOutcome probe = applyEndgameProbe(pos, alpha, beta);
+
+    if (probe.result.has_value())
+      return *probe.result;
+
+    probeRaisedAlpha = probe.raisedAlpha;
+    ns.alpha = alpha;
+  }
 
   // --- Null-move pruning (NMP) ---
   // Hand the opponent a free tempo and search their reply at reduced depth
@@ -601,8 +686,13 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // many moves fit in the remaining time, and writing it at full `depth` would
   // pollute the table for the next iteration *and* the next move of the game
   // (the TT is not cleared between moves).
+  // Skip the store when the probe lifted alpha and no move then beat it. The
+  // node returns the probe's score, but HASH_ALPHA asserts "true value <= this"
+  // — a bound nothing here measured, and one pointing the wrong way, since the
+  // recognizer proved the value is at *least* that. Every other fail-low is an
+  // honest report on the window the parent handed down; this one is not.
   if constexpr (USE_TT) {
-    if (!ns.aborted)
+    if (!ns.aborted and !(probeRaisedAlpha and ns.hashf == Flag::HASH_ALPHA))
       tt.recordPosition(pos.hashValue, depth, ply, ns.alpha, ns.hashf, bestMove);
   }
 
