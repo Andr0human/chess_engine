@@ -2,7 +2,9 @@
 #include "single_thread.h"
 #include "move_utils.h"
 #include "node_state.h"
+#include "uci.h"
 #include <iostream>
+#include <sstream>
 
 uint64_t
 bulkCount(ChessBoard& pos, Depth depth)
@@ -789,8 +791,13 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
 
       if (emitUciInfo)
       {
+        // Built into a string and handed to uciSend() rather than streamed
+        // straight to std::cout: this runs on the search worker while the UCI
+        // loop may be answering `isready` on the main thread, and the two share
+        // one unsynchronised streambuf (see uciSend in uci.h).
         long long timeMs = static_cast<long long>(info.timeSpent() * 1000.0);
-        std::cout << "info depth " << int(depth)
+        std::ostringstream line;
+        line      << "info depth " << int(depth)
                   << " score cp " << int(eval)
                   << " nodes " << info.totalSearchedNodes()
                   << " nps " << info.nps()
@@ -805,9 +812,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
         for (const Move m : info.getPvLine())
         {
           if (m & quiescenceMove()) break;
-          std::cout << " " << moveToUci(m);
+          line << " " << moveToUci(m);
         }
-        std::cout << std::endl;
+        uciSend(line.str());
       }
 
       info.resetNodeCount();
