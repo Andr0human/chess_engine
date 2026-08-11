@@ -228,6 +228,11 @@ Endgame<Endgames::KPK>(const ChessBoard& pos, Score& dirScore)
   );
 
   if (!sideAdvantage and
+     (chebyshevDistance(emyKingSq, pawnSq) == 1) and
+     (chebyshevDistance(myKingSq, pawnSq) > 1)
+  ) return true;
+
+  if (!sideAdvantage and
      (pawn & FileAH) and
      (myKing & (passedPawnMasks[side][pawnSq] & plt::lineMasks[pawnSq])) and
      (abs(kingFileDiff) == 2 or abs(kingFileDiff) == 3) and
@@ -268,7 +273,14 @@ Endgame<Endgames::KPK>(const ChessBoard& pos, Score& dirScore)
 
   // Own king two ranks ahead on the pawn's file: the key squares are taken and
   // the defender can be outflanked whichever way it steps.
-  if ((myKingR == pawnR + 2 * incFactor) and (myKingF == pawnF))
+  //
+  // Not for a rook pawn. There the king in front of its own pawn is the losing
+  // -- rather, the *drawing* -- pattern: the defender only has to reach the
+  // corner, and the file-fold means there is no side to be outflanked from. All
+  // 112 drawn positions this test admits are a-pawns, so the gate is exact, and
+  // it lets those fall through to the rook-pawn corner draw below, which is the
+  // rule that judges them correctly.
+  if (!(pawn & FileAH) and (myKingR == pawnR + 2 * incFactor) and (myKingF == pawnF))
   {
     dirScore = calcDirectionalScore<KPK_WIN_BASE, PAWN_MARCH, KING_RACE>(pos, side);
     return false;
@@ -1159,11 +1171,27 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos, Score&)
 
 // Which recognizers' directionalScore is trustworthy enough to fail high on.
 // A signature qualifies only if a nonzero score means the win is *proven* by the
-// recognizer itself -- KPK's two scoring paths are the enemy king outside the
-// rule of the square and the key-square opposition, both terminal facts. Where
-// the score is merely a heuristic lean, leave the signature out: it can still
-// raise alpha, but cutting on it would let search return a bound it cannot back
-// up. Default is false, so a new recognizer opts in rather than out.
+// recognizer itself. Where the score is merely a heuristic lean, leave the
+// signature out: it can still raise alpha, but cutting on it would let search
+// return a bound it cannot back up. Default is false, so a new recognizer opts
+// in rather than out.
+//
+// "Proven" is a measurement, not the author's reading of the branch. `egvalidate`
+// checks draw verdicts only, so a `dirScore = ...; return false` is a win claim
+// nothing validates -- a false one lands in the missed-draw bucket, which is
+// allowed to be enormous. To audit one branch, flip its `return false` to
+// `return true` and re-run `egvalidate pieces <sig> oracle`: FALSE-DRAW is then
+// exactly the positions it really wins, and any rise in agree-draw over the same
+// build un-flipped is exactly the positions it gets wrong. Run it both gated and
+// `nocapgate`, and re-run it after touching any earlier `return true`, which
+// changes what reaches the branch at all.
+//
+// KPK is in because both its scoring paths measure clean, 0 false claims in both
+// call sets: the enemy king outside the rule of the square (85,888 proven wins),
+// and the key-square opposition (801). Neither was clean when it was first
+// whitelisted -- the key-square test claimed 70 drawn rook-pawn positions until
+// it was gated on `!(pawn & FileAH)`, and the rule-of-square test claimed 599
+// ungated until the hanging-pawn draw at the top of Endgame<KPK> caught them.
 template <Endgames e>
 constexpr bool
 cutsBeta()
