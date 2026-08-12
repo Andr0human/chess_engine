@@ -158,13 +158,15 @@ helper()
 
   puts("** To validate the draw recognizer over a material signature, type:\n");
   puts("** elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]\n");
-  puts("**                  [nocapgate] [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]\n");
+  puts("**                  [nocapgate] [mine <draw|win|loss>] [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]\n");
   puts("**   e.g. 'elsa egvalidate pieces Pb oracle threads 4'  (KPKB vs perfect WDL, 4 threads)\n");
   puts("**        add 'mirror' to also run the colour-mirror (KBKP) colour-symmetry self-check\n");
   puts("**        'nocapgate' keeps has-capture positions in the call set (diagnostic: search never asks there)\n");
   puts("**        oracle tables cache under output/egcache/ (sub-second reload); 'nocache' forces a fresh solve\n");
   puts("**        bucket-probe searches (need 'oracle'): combos=feature subsets, sums=signed inequalities,\n");
   puts("**        frozen=inequalities as coordinates; maxk/top bound them, freeze <n> sets frozen slots\n");
+  puts("**        'mine win' (needs 'oracle') points those searches at proven wins instead of draws,\n");
+  puts("**        stated relative to the side holding the men 'pieces' spelled in upper case\n");
 
   puts("** For tuning evaluation weights (Texel), type:\n");
   puts("** elsa tune [data <path.epd>] [iters <n>]\n");

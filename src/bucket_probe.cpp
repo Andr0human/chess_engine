@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cctype>
 #include <cstdlib>
 #include <iomanip>
 #include <ostream>
@@ -60,6 +61,16 @@ reportNoTerms(std::ostream& out, const std::string& title)
          "      BucketProbe::emit({{\"pawnR\", pawnR, BucketProbe::TERM}, ...});\n\n";
 }
 
+// "PURE-DRAW" / "PURE-WIN" / "PURE-LOSS" -- the verdict for a bucket holding
+// nothing but the target class, and the label the searches score by.
+std::string
+pureLabel(BucketTally::Result r)
+{
+  std::string s = BucketTally::resultName(r);
+  for (char& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  return "PURE-" + s;
+}
+
 // Render a signed sum as the rule it stands for: "+pawnR -kPromoD >= 4".
 std::string
 ruleString(const std::vector<std::string>& termNames, const std::vector<int>& sigma,
@@ -86,7 +97,7 @@ struct SumCand
   std::vector<int> sigma;          // coefficient per TERM, in {-1,0,+1}
   int              t     = 0;
   bool             upper = true;   // claim `sum >= t` vs `sum <= t`
-  uint64_t         score = 0;      // draws claimable on that side
+  uint64_t         score = 0;      // target-class positions claimable on that side
 };
 
 // Everything the sum search learns from one cube: the TERM pool it drew on, and
@@ -142,7 +153,7 @@ mineSums(const BucketTally& cube, size_t maxL0)
   const size_t                           R   = all.size();
 
   std::vector<int>      vals(R * m);
-  std::vector<uint64_t> drawOf(R), decOf(R);
+  std::vector<uint64_t> claimOf(R), ctrOf(R);
   int                   maxAbs = 0;
   for (size_t r = 0; r < R; ++r)
   {
@@ -152,8 +163,8 @@ mineSums(const BucketTally& cube, size_t maxL0)
       vals[r * m + j] = v;
       maxAbs = std::max(maxAbs, std::abs(v));
     }
-    drawOf[r] = all[r].draws;
-    decOf[r]  = all[r].decided;
+    claimOf[r] = all[r].claimed;
+    ctrOf[r]   = all[r].counter;
   }
 
   // A sum of maxL0 terms is bounded by maxL0 * maxAbs either way, so the whole
@@ -161,7 +172,7 @@ mineSums(const BucketTally& cube, size_t maxL0)
   const int    off  = static_cast<int>(maxL0) * maxAbs;
   const size_t span = static_cast<size_t>(2 * off + 1);
 
-  std::vector<uint64_t> dr(span), dc(span);
+  std::vector<uint64_t> sumClaim(span), sumCtr(span);
   out.byL0.resize(maxL0);
 
   for (size_t k = 1; k <= maxL0; ++k)
@@ -187,8 +198,8 @@ mineSums(const BucketTally& cube, size_t maxL0)
           sigma[bits[b]] =
             (b == 0 || ((sgn >> (b - 1)) & 1) == 0) ? 1 : -1;
 
-        std::fill(dr.begin(), dr.end(), 0);
-        std::fill(dc.begin(), dc.end(), 0);
+        std::fill(sumClaim.begin(), sumClaim.end(), 0);
+        std::fill(sumCtr.begin(),   sumCtr.end(),   0);
         size_t loIdx = span, hiIdx = 0;
 
         for (size_t r = 0; r < R; ++r)
@@ -198,50 +209,52 @@ mineSums(const BucketTally& cube, size_t maxL0)
             s += sigma[b] * vals[r * m + b];
 
           const size_t idx = static_cast<size_t>(s + off);
-          dr[idx] += drawOf[r];
-          dc[idx] += decOf[r];
+          sumClaim[idx] += claimOf[r];
+          sumCtr[idx]   += ctrOf[r];
           loIdx = std::min(loIdx, idx);
           hiIdx = std::max(hiIdx, idx);
         }
 
-        // Where the decided positions stop is where the rule may start. Claiming
-        // `sum >= t` is admissible exactly for t above the highest decided sum.
-        size_t hiDec = loIdx, loDec = hiIdx;
-        bool   anyDec = false;
+        // Where the counterexamples stop is where the rule may start. Claiming
+        // `sum >= t` is admissible exactly for t above the highest counter sum.
+        size_t hiCtr = loIdx, loCtr = hiIdx;
+        bool   anyCtr = false;
         for (size_t i = loIdx; i <= hiIdx; ++i)
-          if (dc[i] != 0)
+          if (sumCtr[i] != 0)
           {
-            if (!anyDec) loDec = i;
-            hiDec  = i;
-            anyDec = true;
+            if (!anyCtr) loCtr = i;
+            hiCtr  = i;
+            anyCtr = true;
           }
 
         auto claim = [&](bool upper, size_t from, size_t to, int t) {
           uint64_t sc = 0;
           for (size_t i = from; i <= to; ++i)
-            sc += dr[i];
+            sc += sumClaim[i];
           if (sc != 0)
             cands.push_back({sigma, t, upper, sc});
         };
 
-        if (!anyDec)
+        if (!anyCtr)
         {
-          // No decided position anywhere: the whole call set of this recognizer is
-          // drawn, so the sum discriminates nothing. One degenerate row says that
-          // without pretending the two directions are distinct rules.
+          // No counterexample anywhere: every position this recognizer is asked
+          // about is of the target class, so the sum discriminates nothing. One
+          // degenerate row says that without pretending the two directions are
+          // distinct rules.
           claim(true, loIdx, hiIdx, static_cast<int>(loIdx) - off);
           continue;
         }
 
-        if (hiDec < hiIdx)
-          claim(true, hiDec + 1, hiIdx, static_cast<int>(hiDec + 1) - off);
-        if (loDec > loIdx)
-          claim(false, loIdx, loDec - 1, static_cast<int>(loDec - 1) - off);
+        if (hiCtr < hiIdx)
+          claim(true, hiCtr + 1, hiIdx, static_cast<int>(hiCtr + 1) - off);
+        if (loCtr > loIdx)
+          claim(false, loIdx, loCtr - 1, static_cast<int>(loCtr - 1) - off);
       }
     }
 
-    // Best recall first, then a deterministic order: the bucket-count tiebreak the
-    // subset search uses is meaningless here (a halfspace is always two buckets).
+    // Best recall first, then a deterministic order: the bucket-count tiebreak
+    // the subset search uses is meaningless here (a halfspace is always two
+    // buckets).
     std::sort(cands.begin(), cands.end(), [](const SumCand& a, const SumCand& b) {
       if (a.score != b.score) return a.score > b.score;
       if (a.sigma != b.sigma) return a.sigma < b.sigma;
@@ -252,35 +265,53 @@ mineSums(const BucketTally& cube, size_t maxL0)
   return out;
 }
 
-// The ceiling on any search over this cube, printed in both report headers. No
-// rule expressible in these features can claim more than the draws the cube
-// holds, and none is admissible where the decided positions sit -- so a run that
-// scores 0 is only news once you can see how much was on the table to begin with.
+// The ceiling on any search over this cube, printed in every report header. No
+// rule expressible in these features can claim more than the target-class
+// positions the cube holds, and none is admissible where the counterexamples sit
+// -- so a run that scores 0 is only news once you can see how much was on the
+// table to begin with.
 std::string
 cubeCeiling(const BucketTally& cube)
 {
-  uint64_t draws = 0, decided = 0;
+  uint64_t claimed = 0, counter = 0;
   for (const BucketTally::Bucket& b : cube.buckets())
   {
-    draws   += b.draws;
-    decided += b.decided;
+    claimed += b.claimed;
+    counter += b.counter;
   }
 
+  const std::string tgt = BucketTally::resultName(cube.target());
+
   std::ostringstream os;
-  os << "  ceiling: " << draws << " draws vs " << decided
-     << " decided -- no rule over this pool can claim more than the draws\n";
+  os << "  target : " << tgt << "  (score counts " << tgt
+     << "s; every other class is a counterexample)\n";
+  os << "  ceiling: " << claimed << ' ' << tgt << "s vs " << counter
+     << " counter -- no rule over this pool can claim more than the " << tgt << "s\n";
   return os.str();
 }
 
 }   // namespace
 
+const char*
+BucketTally::resultName(Result r)
+{
+  switch (r)
+  {
+    case WIN:  return "win";
+    case LOSS: return "loss";
+    default:   return "draw";
+  }
+}
+
 std::vector<BucketTally::Bucket>
 BucketTally::buckets() const
 {
+  const int t = static_cast<int>(tgt);
+
   std::vector<Bucket> out;
   out.reserve(rows.size());
   for (const auto& [key, r] : rows)
-    out.push_back({key, r.n[1], r.n[0] + r.n[2]});
+    out.push_back({key, r.n[t], r.n[0] + r.n[1] + r.n[2] - r.n[t]});
   return out;
 }
 
@@ -296,9 +327,10 @@ BucketTally::positionCount() const
   return n;
 }
 
-// A part's draw example is still a draw of the union, and likewise for the decided
-// class, so samples carry across every re-key unchanged -- remap() handles that.
-// In practice they are empty here: `combos`, the only caller, turns sampling off.
+// A part's target-class example is still one of the union, and likewise for the
+// counterexamples, so samples carry across every re-key unchanged -- remap()
+// handles that. In practice they are empty here: `combos`, the only caller,
+// turns sampling off.
 BucketTally
 BucketTally::project(const std::vector<size_t>& featIdx) const
 {
@@ -324,17 +356,19 @@ BucketTally::project(const std::vector<size_t>& featIdx) const
 BucketTally::Summary
 BucketTally::summarize() const
 {
+  const int t = static_cast<int>(tgt);
+
   Summary s;
   for (const auto& [key, r] : rows)
   {
     (void)key;
-    const uint64_t draw = r.n[1];
-    const uint64_t decided = r.n[0] + r.n[2];
+    const uint64_t claimed = r.n[t];
+    const uint64_t counter = r.n[0] + r.n[1] + r.n[2] - claimed;
     ++s.totalBuckets;
-    if (decided == 0 && draw != 0)
+    if (counter == 0 && claimed != 0)
     {
-      ++s.pureDrawBuckets;
-      s.pureDrawDraws += draw;
+      ++s.pureBuckets;
+      s.pureClaimed += claimed;
     }
   }
   return s;
@@ -349,6 +383,10 @@ BucketTally::report(std::ostream& out, const std::string& title) const
     return;
   }
 
+  const int         t     = static_cast<int>(tgt);
+  const std::string tName = resultName(tgt);
+  const std::string pure  = pureLabel(tgt);
+
   out << "--- " << title << " ---\n";
 
   out << "  key = (";
@@ -356,30 +394,33 @@ BucketTally::report(std::ostream& out, const std::string& title) const
     out << names[i] << (i + 1 < names.size() ? ", " : "");
   out << ")\n";
 
+  out << "  target = " << tName
+      << "   (a bucket is claimable iff it holds no other class)\n";
   out << "  bucket                 win      draw      loss"
-         "   decided  dec:draw   verdict\n";
+         "   counter   ctr:tgt   verdict\n";
 
-  uint64_t pureDrawTotal = 0;   // sum of draw column over PURE-DRAW buckets
+  uint64_t pureTotal = 0;   // target-class positions over the pure buckets
 
   for (const auto& [key, r] : rows)
   {
     const uint64_t win = r.n[0], draw = r.n[1], loss = r.n[2];
-    const uint64_t decided = win + loss;   // false-draws if this bucket is claimed
-    const bool pureDraw    = (decided == 0 && draw != 0);
-    const bool pureDecided = (draw == 0 && decided != 0);
+    const uint64_t claimed = r.n[t];
+    const uint64_t counter = win + draw + loss - claimed;   // every other class
+    const bool     isPure  = (counter == 0 && claimed != 0);
+    const bool     isVoid  = (claimed == 0 && counter != 0);
 
-    if (pureDraw)
-      pureDrawTotal += draw;
+    if (isPure)
+      pureTotal += claimed;
 
-    // Decided-to-draw ratio: carve-out efficiency (false-draws killed per draw
-    // sacrificed if this whole bucket is turned into a return-false). A pure-
-    // decided bucket (no draws) is infinitely favourable -> "inf".
+    // Counter-to-target ratio: carve-out efficiency (bad claims killed per good
+    // one sacrificed if this whole bucket is excluded from the rule). A bucket
+    // with no target-class position is infinitely favourable -> "inf".
     std::ostringstream ratioStr;
-    if (draw == 0)
-      ratioStr << (decided == 0 ? "0.00" : "inf");
+    if (claimed == 0)
+      ratioStr << (counter == 0 ? "0.00" : "inf");
     else
       ratioStr << std::fixed << std::setprecision(2)
-               << (static_cast<double>(decided) / static_cast<double>(draw));
+               << (static_cast<double>(counter) / static_cast<double>(claimed));
 
     std::string keyStr = "(";
     for (size_t i = 0; i < key.size(); ++i)
@@ -390,20 +431,19 @@ BucketTally::report(std::ostream& out, const std::string& title) const
         << std::setw(10) << win
         << std::setw(10) << draw
         << std::setw(10) << loss
-        << std::setw(10) << decided
+        << std::setw(10) << counter
         << std::setw(10) << ratioStr.str()
-        << "   " << (pureDraw ? "PURE-DRAW"
-                    : pureDecided ? "PURE-DECIDED" : "mixed") << '\n';
+        << "   " << (isPure ? pure : isVoid ? "PURE-OTHER" : "mixed") << '\n';
 
     // Examples of each class beneath their bucket. On a `mixed` bucket, reading
     // the two lists against each other is what reveals the missing feature.
-    for (const std::string& f : r.drawFens)
-      out << "      draw> " << f << '\n';
-    for (const std::string& f : r.decFens)
-      out << "      dec > " << f << '\n';
+    for (const std::string& f : r.hitFens)
+      out << "      " << std::left << std::setw(4) << tName << "> " << f << '\n';
+    for (const std::string& f : r.missFens)
+      out << "      ctr > " << f << '\n';
   }
 
-  out << "  PURE-DRAW total draws  : " << pureDrawTotal << '\n';
+  out << "  " << pure << " total " << tName << "s : " << pureTotal << '\n';
   out << '\n';
 }
 
@@ -428,8 +468,9 @@ reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
   out << "  cube  : " << cube.bucketCount() << " distinct full-vector buckets over "
       << cube.positionCount() << " call-set positions\n";
   out << cubeCeiling(cube);
-  out << "  score = draws claimable from that subset's PURE-DRAW buckets"
-         " (higher = better recall)\n";
+  out << "  score = " << BucketTally::resultName(cube.target())
+      << "s claimable from that subset's " << pureLabel(cube.target())
+      << " buckets (higher = better recall)\n";
   out << "  subsets of size 1.." << maxK << ", top " << topN << " per size.\n\n";
 
   // One candidate subset's score. `idx` are indices into the emitted pool.
@@ -462,8 +503,8 @@ reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
           c.idx.push_back(i);
 
       const BucketTally::Summary s = cube.project(c.idx).summarize();
-      c.score        = s.pureDrawDraws;
-      c.pureBuckets  = s.pureDrawBuckets;
+      c.score        = s.pureClaimed;
+      c.pureBuckets  = s.pureBuckets;
       c.totalBuckets = s.totalBuckets;
       cands.push_back(std::move(c));
     }
@@ -540,8 +581,10 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
   out << "  cube  : " << cube.bucketCount() << " distinct full-vector buckets over "
       << cube.positionCount() << " call-set positions\n";
   out << cubeCeiling(cube);
-  out << "  rule  = a signed sum vs a threshold; score = draws on the claimed side,\n"
-         "          which is admissible only if that side holds zero decided positions\n";
+  out << "  rule  = a signed sum vs a threshold; score = "
+      << BucketTally::resultName(cube.target())
+      << "s on the claimed side,\n"
+         "          which is admissible only if that side holds zero counterexamples\n";
   out << "  L0 = nonzero coefficients, 1.." << mined.byL0.size() << ", top " << topN
       << " per L0.\n\n";
 
@@ -553,12 +596,12 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
     const std::vector<SumCand>& cands = mined.byL0[k - 1];
 
     // Unlike the subset search, an empty size is a real and common outcome here: a
-    // halfspace claims an entire tail, so one decided position at either extreme
+    // halfspace claims an entire tail, so one counterexample at either extreme
     // sinks every threshold. Say so -- silence reads as a broken search.
     if (cands.empty())
     {
       out << "  L0=" << k << "   no admissible rule: every halfspace at this size"
-             " holds decided positions on both sides.\n\n";
+             " holds counterexamples on both sides.\n\n";
       continue;
     }
 
@@ -578,7 +621,7 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
 
     // The full sweep behind the winner: one re-key of the cube by its sum, which
     // is what remap() is for. Reading down it shows the threshold as a fact rather
-    // than a fitted number -- the row where PURE-DRAW stops *is* the constant.
+    // than a fitted number -- the row where the pure verdict stops *is* the constant.
     const SumCand& best = cands[0];
     const std::vector<int>& sigma = best.sigma;
     cube.remap(
@@ -656,7 +699,8 @@ reportFrozenSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
   for (const SumCand& f : frozen)
     out << "    " << std::left << std::setw(46)
         << ruleString(mined.termNames, f.sigma, f.upper, f.t) << std::right
-        << "claims " << f.score << " draws\n";
+        << "claims " << f.score << ' ' << BucketTally::resultName(cube.target())
+        << "s\n";
   out << '\n';
 
   // Append the frozen halfspaces as coordinates. Bucket count is unchanged -- each

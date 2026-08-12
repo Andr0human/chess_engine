@@ -200,6 +200,11 @@ struct Walker
   bool                      wantSamples = false;   // keep example FENs per bucket
   bool                      capGate  = true;       // false = keep has-capture positions
 
+  // Reference colour the bucket table's W/D/L axis is stated in -- see the fold
+  // in leaf(). WHITE for the primary colouring, BLACK for the colour-mirror, so
+  // both enumerate the same question and must tally identically.
+  Color refSide = WHITE;
+
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
 
@@ -311,12 +316,21 @@ struct Walker
       }
 
       // Per-bucket WDL: fold this position's oracle result into its feature
-      // bucket so the harness can tell which buckets are pure-draw.
+      // bucket so the harness can tell which buckets are pure.
+      //
+      // The oracle speaks side-to-move relative, but "who wins" is a property of
+      // the position, not of whose turn it is -- left as-is, a single win class
+      // splits across both stm values and no feature set can reunite it unless
+      // the recognizer happens to emit a side-to-move flag. So restate the verdict
+      // relative to refSide before bucketing: one axis, both stm slices on it.
+      // DRAW is frame-invariant, so this costs draw mining nothing.
       if (BucketProbe::enabled && BucketProbe::fired())
       {
-        const BucketTally::Result r = (truth == Wdl::WIN)  ? BucketTally::WIN
-                                    : (truth == Wdl::DRAW) ? BucketTally::DRAW
-                                                           : BucketTally::LOSS;
+        const bool flip = (stm != refSide);
+        const BucketTally::Result r =
+            (truth == Wdl::DRAW) ? BucketTally::DRAW
+          : (truth == Wdl::WIN)  ? (flip ? BucketTally::LOSS : BucketTally::WIN)
+                                 : (flip ? BucketTally::WIN  : BucketTally::LOSS);
         buckets.add(BucketProbe::current(), r, isDraw,
                     wantSamples ? &fen : nullptr);
         buckets.setNames(BucketProbe::names());
@@ -401,6 +415,15 @@ struct Generator
   bool capGate = true;         // false = has-capture positions stay in the call set
   const EgSolver* oracle = nullptr;
 
+  // The mining question, and the colour it is asked about. `target` picks which
+  // class the bucket searches try to fence off; `refSide` is the colour WIN/LOSS
+  // are stated relative to (WHITE for the primary colouring, BLACK for the
+  // mirror, so the two colourings stay comparable). Both are pushed onto every
+  // worker in run() -- add() splits its sample FENs by target, so a worker left
+  // on the default would file its examples under the wrong heading.
+  BucketTally::Result target  = BucketTally::DRAW;
+  Color               refSide = WHITE;
+
   std::array<int, 16> prevSame{}; // nearest earlier slot with same fenChar, or -1
 
   // Merged results (summed / concatenated from the workers in task order).
@@ -431,6 +454,7 @@ struct Generator
   run()
   {
     computePrevSame();
+    buckets.setTarget(target);
 
     struct Task { Color stm; int wkSq; };
     vector<Task> tasks;
@@ -453,6 +477,8 @@ struct Generator
       w.wantDump  = wantDump;
       w.wantSamples = wantSamples;
       w.capGate   = capGate;
+      w.refSide   = refSide;
+      w.buckets.setTarget(target);
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
       w.place(BK);                          // white king fixed; recurse from black king down
@@ -530,6 +556,10 @@ reportScorecard(const Generator& g, const string& pieceStr)
             "   which the search never hands to the recognizer. A FALSE-DRAW below is\n"
             "   hypothetical, not a live bug. **\n";
   cout << "Call-set positions scored : " << total << '\n';
+  // Side-to-move relative, and deliberately not folded: this line is the raw
+  // oracle census of the call set. The bucket table below states its W/D/L
+  // relative to a fixed reference colour instead (see the fold in Walker::leaf),
+  // so the two win/loss columns will not match -- only their sum does.
   cout << "Oracle WDL (side-to-move)  : win " << g.t.oWin
        << ", draw " << g.t.oDraw << ", loss " << g.t.oLoss;
   if (g.t.oBad)
@@ -564,7 +594,7 @@ void
 validateEndgame(const vector<string>& args)
 {
   // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles]
-  //                 [nocapgate] [dump <file>]
+  //                 [nocapgate] [dump <file>] [mine <draw|win|loss>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
@@ -670,6 +700,36 @@ validateEndgame(const vector<string>& args)
   // emitted pool, whose cube runs to hundreds of thousands of rows.
   const bool wantSearch = wantCombos || wantSums || wantFrozen;
 
+  // `mine <draw|win|loss>` picks which class the bucket table and the three
+  // searches fence off. A recognizer makes two kinds of claim -- `return true`
+  // (proven draw) and `dirScore = ...` (proven win for one side) -- and both are
+  // mined from the same cube, so the only thing that changes is the question.
+  //
+  // Default draw: that is the claim the confusion matrix scores, so a run with no
+  // `mine` keeps meaning exactly what it used to.
+  BucketTally::Result mineTarget = BucketTally::DRAW;
+  if (utils::hasArg(args, "mine"))
+  {
+    const string what = utils::argValue(args, "mine");
+    if      (what == "draw") mineTarget = BucketTally::DRAW;
+    else if (what == "win")  mineTarget = BucketTally::WIN;
+    else if (what == "loss") mineTarget = BucketTally::LOSS;
+    else
+    {
+      cout << "Unknown 'mine " << what << "': expected draw, win or loss.\n";
+      return;
+    }
+
+    // Win/loss buckets are scored against the oracle just as draw ones are, and
+    // without it every position would tally as the same unknown class.
+    if (!wantOracle)
+    {
+      cout << "mine requires oracle (the class of a position is the oracle's "
+              "verdict); pass 'oracle'.\n";
+      return;
+    }
+  }
+
   size_t combosMaxK = 4;
   if (utils::hasArg(args, "maxk"))
   {
@@ -750,8 +810,10 @@ validateEndgame(const vector<string>& args)
 
   vector<Generator> gens;
   vector<std::unique_ptr<EgSolver>> solvers;   // keep oracles alive for reporting
-  for (const string& cs : colourings)
+  for (size_t ci = 0; ci < colourings.size(); ++ci)
   {
+    const string& cs = colourings[ci];
+
     Generator g;
     g.slots.push_back({'K', false}); // white king
     g.slots.push_back({'k', false}); // black king
@@ -765,6 +827,15 @@ validateEndgame(const vector<string>& args)
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
     g.capGate = !noCapGate;
+    g.target = mineTarget;
+
+    // Which colour WIN/LOSS are stated relative to. The mirror colouring is the
+    // primary one with the colours swapped, so its reference side is BLACK --
+    // that keeps "the side holding the material `pieces` gave to white" the
+    // subject in both runs, and with it the colour-symmetry self-check. Naming
+    // white outright would make the mirror mine the opposite question and the
+    // two tables would (correctly, uselessly) disagree.
+    g.refSide = (ci == 0) ? WHITE : BLACK;
 
     // Sample FENs serve the per-bucket table, which none of the searches print --
     // and a whole-pool cube has buckets by the hundred thousand, so collecting
@@ -831,6 +902,15 @@ validateEndgame(const vector<string>& args)
     cout << "Capture gate DISABLED ('nocapgate'): call set = every legal "
             "non-terminal position,\n  including the has-capture ones the search "
             "never hands to the recognizer.\n";
+  if (wantOracle)
+  {
+    cout << "Mining target: " << BucketTally::resultName(mineTarget)
+         << "  (the class the bucket table and the searches try to fence off)\n";
+    if (mineTarget != BucketTally::DRAW)
+      cout << "  WIN/LOSS in the bucket table are relative to the side holding "
+              "the '" << pieceArg << "' men,\n  not to the side to move -- the "
+              "scorecard's WDL line below stays side-to-move relative.\n";
+  }
   if (haveMirror)
     cout << "Colourings: " << pieceArg << " (" << signatureOf(pieceArg)
          << ") and colour-mirror " << mirror

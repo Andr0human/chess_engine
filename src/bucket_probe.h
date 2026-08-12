@@ -99,9 +99,19 @@ class BucketProbe
 };
 
 // Accumulates, per feature vector, the oracle WDL split of the call-set positions
-// landing in it, plus how many the recognizer already labels draw. A bucket with
-// zero wins and zero losses is a pure-draw class -- a candidate to recognize
-// wholesale; any win/loss makes it MIXED (cannot blanket-claim draw).
+// landing in it, plus how many the recognizer already labels draw. A bucket that
+// holds only the TARGET class is a pure class -- a candidate to recognize
+// wholesale; any position of another class makes it MIXED.
+//
+// The target is selectable (setTarget), because a recognizer has two kinds of
+// claim to mine: a `return true` (proven draw) and a `dirScore = ...` (proven
+// win for one side). Everything downstream -- the verdicts, the three searches,
+// the ceiling -- reads the target rather than hard-coding DRAW, so the same cube
+// answers both questions.
+//
+// WIN and LOSS are only meaningful relative to a fixed side, so a tally targeting
+// either assumes the harness folded the oracle's side-to-move-relative verdict
+// onto one reference colour before calling add(). DRAW needs no such fold.
 class BucketTally
 {
   public:
@@ -110,24 +120,34 @@ class BucketTally
 
   enum Result { WIN = 0, DRAW = 1, LOSS = 2 };
 
-  // Example FENs kept per bucket, per class (draw / decided). Enough to eyeball a
-  // mixed bucket and spot the missing discriminator; small enough to be free.
+  // "win" / "draw" / "loss" -- for report headers, so a mining log says which
+  // question it answered instead of leaving the reader to remember.
+  static const char* resultName(Result r);
+
+  // Example FENs kept per bucket, split target vs counterexample. Enough to
+  // eyeball a mixed bucket and spot the missing discriminator; small enough to
+  // be free.
   static constexpr size_t MAX_SAMPLE = 3;
 
   // Scoring summary of a whole tally, used to rank one feature subset against
-  // another. pureDrawDraws is the recall-mining objective: the draws that become
-  // claimable if every PURE-DRAW bucket of this feature set is turned into a
-  // `return true`.
+  // another. pureClaimed is the recall-mining objective: the target-class
+  // positions that become claimable if every pure bucket of this feature set is
+  // turned into a claim.
   struct Summary
   {
-    uint64_t pureDrawDraws   = 0;
-    uint64_t pureDrawBuckets = 0;
-    uint64_t totalBuckets    = 0;
+    uint64_t pureClaimed  = 0;
+    uint64_t pureBuckets  = 0;
+    uint64_t totalBuckets = 0;
   };
 
+  // Which class the verdicts and the searches mine for. Set it before add() so
+  // the sample FENs are split along the same line as the counts.
+  void   setTarget(Result r) { tgt = r; }
+  Result target() const      { return tgt; }
+
   // Fold one call-set position into its bucket. Pass `fen` to keep it as an
-  // example of its class (draw vs decided) if the bucket still has room; pass
-  // nullptr to tally counts only -- see wantSamples in the harness.
+  // example of its class (target vs counterexample) if the bucket still has
+  // room; pass nullptr to tally counts only -- see wantSamples in the harness.
   void
   add(const Key& key, Result result, bool heurDraw, const std::string* fen = nullptr)
   {
@@ -138,7 +158,7 @@ class BucketTally
     if (fen == nullptr)
       return;
 
-    std::vector<std::string>& s = (result == DRAW) ? r.drawFens : r.decFens;
+    std::vector<std::string>& s = (result == tgt) ? r.hitFens : r.missFens;
     if (s.size() < MAX_SAMPLE)
       s.push_back(*fen);
   }
@@ -152,7 +172,9 @@ class BucketTally
   setRoles(const std::vector<Role>& r) { if (roles.empty()) roles = r; }
 
   // Merge another tally (worker -> generator reduction). Order-independent, so
-  // the parallel total equals the serial total exactly.
+  // the parallel total equals the serial total exactly. The target is the
+  // destination's -- the harness sets one target on every tally it hands out, so
+  // a merge that had to reconcile two would be a bug, not a case to handle.
   void
   merge(const BucketTally& other)
   {
@@ -162,8 +184,8 @@ class BucketTally
     {
       Row& dst = rows[k];
       for (int i = 0; i < 4; ++i) dst.n[i] += r.n[i];
-      takeSamples(dst.drawFens, r.drawFens);
-      takeSamples(dst.decFens,  r.decFens);
+      takeSamples(dst.hitFens,  r.hitFens);
+      takeSamples(dst.missFens, r.missFens);
     }
   }
 
@@ -191,9 +213,11 @@ class BucketTally
   // Total call-set positions folded in (win + draw + loss over every bucket).
   uint64_t positionCount() const;
 
-  // One bucket flattened down to what every verdict actually rests on: draws vs
-  // decided. A bucket is claimable exactly when decided == 0.
-  struct Bucket { Key key; uint64_t draws = 0; uint64_t decided = 0; };
+  // One bucket flattened down to what every verdict actually rests on: the
+  // target class vs everything else. A bucket is claimable exactly when
+  // counter == 0. For the DRAW target that reads as draws vs decided; for WIN it
+  // reads as wins vs (draws + losses), which is the same test on a different axis.
+  struct Bucket { Key key; uint64_t claimed = 0; uint64_t counter = 0; };
 
   // Every bucket, in key order. The sum search needs to rescan the cube's TERM
   // coordinates thousands of times (once per sign vector), which remap() cannot
@@ -218,6 +242,7 @@ class BucketTally
         const std::vector<Role>& newRoles = {}) const
   {
     BucketTally out;
+    out.tgt   = tgt;   // a re-key changes the coordinates, never the question
     out.names = newNames;
     out.roles = newRoles.empty()
                   ? std::vector<Role>(newNames.size(), BucketProbe::FLAG)
@@ -227,8 +252,8 @@ class BucketTally
     {
       Row& dst = out.rows[keyFn(key)];
       for (int i = 0; i < 4; ++i) dst.n[i] += r.n[i];
-      takeSamples(dst.drawFens, r.drawFens);
-      takeSamples(dst.decFens,  r.decFens);
+      takeSamples(dst.hitFens,  r.hitFens);
+      takeSamples(dst.missFens, r.missFens);
     }
     return out;
   }
@@ -251,8 +276,8 @@ class BucketTally
   struct Row
   {
     std::array<uint64_t, 4>  n{};        // win, draw, loss, heurDraw
-    std::vector<std::string> drawFens;   // <= MAX_SAMPLE draw examples
-    std::vector<std::string> decFens;    // <= MAX_SAMPLE win/loss examples
+    std::vector<std::string> hitFens;    // <= MAX_SAMPLE target-class examples
+    std::vector<std::string> missFens;   // <= MAX_SAMPLE counterexamples
   };
 
   // Drain examples from `src` into `dst` until the cap. Callers merge in task
@@ -270,18 +295,19 @@ class BucketTally
   std::map<Key, Row>       rows;
   std::vector<std::string> names;
   std::vector<Role>        roles;
+  Result                   tgt = DRAW;   // the class the searches mine for
 };
 
 // Automated feature-set search. Given a `cube` tallied over the recognizer's full
 // candidate feature pool, marginalize onto every feature subset of size 1..maxK
-// and print, per size k, the `topN` subsets by claimable PURE-DRAW draws together
-// with the best score's gain over size k-1.
+// and print, per size k, the `topN` subsets by claimable target-class positions
+// together with the best score's gain over size k-1.
 //
 // Ranking is grouped by k rather than flat because the score is monotone --
-// adding a feature only splits buckets finer, and a split can never make a
-// PURE-DRAW bucket impure, only rescue pure fragments out of mixed ones. So the
-// full pool always wins a flat leaderboard, and the real question is where the
-// marginal gain stops paying for the extra feature.
+// adding a feature only splits buckets finer, and a split can never make a pure
+// bucket impure, only rescue pure fragments out of mixed ones. So the full pool
+// always wins a flat leaderboard, and the real question is where the marginal
+// gain stops paying for the extra feature.
 void
 reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
                    size_t topN, const std::string& title);
@@ -289,7 +315,7 @@ reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
 // Automated signed-sum search: mine rules of the shape `+a -b -c >= t` over the
 // features the recognizer tagged TERM. For each sign vector in {-1,0,+1}^m the
 // cube is re-keyed by the raw sum, and the sweep scanned for the extreme
-// threshold past which no bucket holds a decided position -- that row *is* the
+// threshold past which no bucket holds a counterexample -- that row *is* the
 // constant, so one pass yields the whole threshold range instead of one guess.
 // The sum is kept raw, never clamped: clamping merges the end buckets, which is
 // precisely where a threshold outside the assumed window would show itself.
