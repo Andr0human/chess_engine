@@ -4,6 +4,7 @@
 #include "task.h"
 #include "search.h"
 #include "single_thread.h"
+#include "uci.h"
 
 void
 init(const vector<string>& args)
@@ -319,10 +320,12 @@ readyOk()
 void
 task(const vector<string>& args)
 {
+  // No arguments means a GUI or match runner launched us: enter the UCI loop.
+  // Later releases do the same, so both binaries are started identically by
+  // cutechess-cli / fastchess with no extra argument in the engine config.
   if (args.empty())
   {
-    puts("No Task Found!");
-    puts("Type : \'elsa help\' to view command list.\n");
+    uciLoop();
     return;
   }
 
@@ -337,7 +340,8 @@ task(const vector<string>& args)
     {"movegen",  [](const auto& arguments){ debugMoveGenerator(arguments); }},
     {"static",   [](const auto& arguments){ staticEval(arguments); }},
     {"bestmove", [](const auto& arguments){ bestMoveSearch(arguments); }},
-    {"readyOk",  [](const auto&){ readyOk(); }}
+    {"readyOk",  [](const auto&){ readyOk(); }},
+    {"uci",      [](const auto&){ uciLoop(); }}
   };
 
   // Search for any command in the args
