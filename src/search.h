@@ -210,20 +210,26 @@ class SearchData
     if (pvLine.size() > 0 and (pvLine.back() & quiescenceMove()))
       return;
 
-    // Repetition guard. Two positions can each store the other's move as best
-    // (a king/rook shuffle), and the walk would happily bounce between them
-    // until it filled the line to capacity with a fake PV.
-    Varray<uint64_t, MAX_PLY + 1> seen;
-    seen.add(pos.hashValue);
-
-    const auto alreadySeen = [&seen] (uint64_t key) {
-      for (const uint64_t k : seen)
-        if (k == key) return true;
-      return false;
-    };
-
     while (pvLine.size() < pvLine.capacity())
     {
+      // The game ends here, so the line does. The table cannot tell us this:
+      // the Zobrist key encodes neither the halfmove clock nor the game
+      // history, so an entry stored on a low-clock path legitimately answers a
+      // probe made on a dead-clock one and probePvMove()'s depth/bound
+      // verification waves it straight through. Without this the walk appended
+      // four plies to a line the 50-move rule ends after nine (running the
+      // counter 99 -> 103), and re-played a repetition cycle the search had
+      // just scored as a draw.
+      //
+      // This also subsumes the walk's own repetition guard (two positions can
+      // each store the other's move as best — a king/rook shuffle — and the
+      // walk would bounce between them until it filled the line to capacity
+      // with a fake PV). `pos` is a by-value copy carrying the whole undoInfo
+      // stack, so threeMoveRepetition() sees the searched prefix and the
+      // pre-root game history too, not just the moves made below.
+      if (pos.fiftyMoveDraw() or pos.threeMoveRepetition())
+        break;
+
       // Depth still owed at this point in the line. pvLine.size() is exactly the
       // ply we are standing on (the prefix moves have all been made on `pos`), so
       // a node genuinely on this iteration's PV was searched at `rootDepth - ply`
@@ -249,10 +255,6 @@ class SearchData
 
       pvLine.add(move);
       pos.makeMove(move);
-
-      if (alreadySeen(pos.hashValue))
-        break;
-      seen.add(pos.hashValue);
     }
   }
 

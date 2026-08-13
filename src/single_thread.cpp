@@ -50,6 +50,21 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
+  // Repetition / 50-move draws, at the leaf only — `leafnode` is set exactly on
+  // the entry calls from alphaBeta, so the recursive instantiation compiles this
+  // away. Without it an already-drawn leaf came back as a static eval (+3.75 on a
+  // dead-drawn KRN-vs-KR at halfmove 100) and the draw only surfaced an iteration
+  // later, once the same position sat at an interior node. One test here covers
+  // the whole capture tree below: qsearch only searches captures, which are
+  // irreversible and reset the halfmove clock, so neither draw can arise deeper.
+  // It sits *after* the mate/stalemate test above because checkmate outranks the
+  // 50-move rule — movegen has already run by here, so that costs nothing.
+  if constexpr (leafnode)
+  {
+    if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
+      return VALUE_DRAW;
+  }
+
   if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
     return VALUE_DRAW;
 
@@ -405,7 +420,9 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // SearchData::extendPvFromTt() rebuild a *real* tail from the table.
   pvArray[pvIndex] = NULL_MOVE;
 
-  // Cheap repetition / 50-move draws — no movegen needed.
+  // Cheap repetition / 50-move draws — no movegen needed. Leaf nodes (depth <= 0)
+  // are handed off above and run the same test inside quiescenceSearch, where it
+  // sits after move generation so mate takes precedence over the 50-move rule.
   if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
     return VALUE_DRAW;
 
