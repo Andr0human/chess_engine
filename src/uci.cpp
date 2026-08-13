@@ -54,7 +54,7 @@ stopAndJoin()
 void
 sendId()
 {
-  uciSend("id name Elsa");
+  uciSend("id name " + ENGINE_NAME + " " + ENGINE_VERSION);
   uciSend("id author Andr0human");
   uciSend("uciok");
 }
