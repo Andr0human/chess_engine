@@ -768,8 +768,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     // If found a checkmate
     if (withinValWindow and (__abs(eval) >= VALUE_INF - 500)) break;
 
-    // Sort Moves according to time it took to explore the move.
-    info.sortMovesOnNodes(pvArray[0]);
+    // Put this iteration's best move first for the next one. pvArray[0] is
+    // NULL_MOVE on an aspiration fail-low; promoteBestMove handles that itself.
+    info.promoteBestMove(pvArray[0]);
   }
 
   info.searchCompleted();

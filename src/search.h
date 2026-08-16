@@ -82,6 +82,18 @@ class TestPosition
 // rebuilt by copy-assignment (`info = SearchData(...)`) on every search.
 extern std::atomic<bool> searchStop;
 
+// Declared ahead of SearchData because its constructor calls this to seed the
+// root move order. A member body defined inline inside the class can't see a
+// namespace-scope name declared later in the file, so this block must stay
+// above the class.
+//
+// `useHistory` gates only the residual-QUIET history sort: pass false when the
+// caller already knows the stage will break on its first move (quiet futility),
+// so the sort isn't paid for a band nothing will read.
+size_t
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply,
+           size_t start = 0, bool useHistory = true);
+
 class SearchData
 {
   // Set the starting point for clock
@@ -267,9 +279,32 @@ class SearchData
   : startTime(perf::now()), side(pos.color), nodes(0), qNodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
-    const MoveList myMoves = generateMoves(pos);
+    // generateChecksData: MType::CHECK ordering below is silently a no-op
+    // without it — is_type<MType::CHECK> reads data only GEN_CHECKS fills.
+    const MoveList myMoves = generateMoves(pos, true);
     MoveArray movesArray;
     myMoves.getMoves(pos, movesArray);
+
+    // Iteration 1 has no search results to order by, so seed the root list with
+    // the same static ordering the rest of the tree uses. Written as successive
+    // per-stage calls rather than one combined mask, mirroring playAllMoves: a
+    // combined mask would skip bad-capture demotion (gated on
+    // `mTypes == MType::CAPTURES` exactly) and SEE-sort captures/promotions/
+    // checks as one band instead of three.
+    //
+    // Two stages are deliberately absent:
+    //   PV     — is_type<MType::PV> reads the *global* `info`, which is still
+    //            the previous search's object until our caller assigns over it,
+    //            and resetPvLine() doesn't clear it. There is no PV for this
+    //            position yet anyway.
+    //   KILLER — clearKillers() runs immediately before us; the table is empty.
+    // History is likewise cleared, hence useHistory=false throughout: the sort
+    // would be a provable no-op over all-zero scores.
+    size_t start = 0;
+    start = orderMoves(pos, movesArray, MType::CAPTURES,  0, start, false);
+    start = orderMoves(pos, movesArray, MType::PROMOTION, 0, start, false);
+            orderMoves(pos, movesArray, MType::CHECK,     0, start, false);
+
     Move zeroMove = movesArray[0];
     moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
 
@@ -436,26 +471,49 @@ class SearchData
            << " | " << "PV" << "\n";
   }
 
-  // Reorder root moves for the next iteration: keep the PV move first, then
-  // order the rest by descending subtree size (2*nodes + qNodes) so the
-  // hardest-to-resolve moves are searched earliest.
+  // Reorder root moves for the next iteration: move `bestMove` to the front and
+  // leave every other move where it is.
+  //
+  // The tail used to be re-sorted by descending subtree size (2*nodes + qNodes),
+  // on the theory that the hardest-to-resolve moves deserve the earliest slots.
+  // That fights move ordering rather than helping it: node count measures how
+  // expensive a move was to refute, not how good it is, so a cheap-subtree move
+  // — a move refuted quickly *because* it is bad, but also a strong move whose
+  // subtree collapsed on a cutoff — gets buried at the back. Root LMR is keyed
+  // on list index (rootReduction, up to R=3 at depth >= 6), so burial costs
+  // search depth, not just order; that is the mechanism behind the measured
+  // 4-ply tactic delay. The node counts are still recorded — insertMoveToList /
+  // totalNodes / print all read them — they just no longer drive ordering.
   void
-  sortMovesOnNodes(Move bestMove)
+  promoteBestMove(Move bestMove)
   {
+    // Aspiration fail-low: rootAlphaBeta returns without ever writing
+    // pvArray[0], since by definition no move beat alpha. Fall back to the last
+    // completed iteration's best move — moveEvals is seeded in the constructor
+    // and only appended on completed iterations, so back() is always a legal
+    // move of this position. (With the node sort gone this is belt-and-braces:
+    // pinning nothing now leaves the list untouched, and the previous iteration
+    // already put its best move in slot 0. It matters the moment anything
+    // reorders the tail again.)
+    if (bestMove == NULL_MOVE)
+    {
+      if (moveEvals.size() == 0)
+        return;
+      bestMove = moveEvals.back().first;
+    }
+
     for (size_t i = 0; i < moveNodes.size(); i++)
     {
       if (filter(bestMove) == filter(moveNodes[i].first))
       {
-        std::swap(moveNodes[i], moveNodes[0]);
+        // Rotate, not swap. With the sort gone the tail carries meaningful
+        // order, and std::swap would fling whatever held slot 0 out to
+        // position i. rotate(begin, begin+i, begin+i+1) lifts element i to the
+        // front, shifts 0..i-1 right by one, and leaves everything past i alone.
+        std::rotate(moveNodes.begin(), moveNodes.begin() + i, moveNodes.begin() + i + 1);
         break;
       }
     }
-
-    std::sort(moveNodes.begin() + 1, moveNodes.end(), [](const auto &a, const auto &b) {
-      Nodes n1 = 2 * a.second.first + a.second.second;
-      Nodes n2 = 2 * b.second.first + b.second.second;
-      return n1 > n2;
-    });
   }
 
   void
@@ -494,13 +552,6 @@ class SearchData
     return movesArray;
   }
 };
-
-// `useHistory` gates only the residual-QUIET history sort: pass false when the
-// caller already knows the stage will break on its first move (quiet futility),
-// so the sort isn't paid for a band nothing will read.
-size_t
-orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply,
-           size_t start = 0, bool useHistory = true);
 
 /**
  * @brief SEE-orders a pure capture list for quiescence search.
