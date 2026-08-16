@@ -338,7 +338,11 @@ playSubsetMoves(
       bestMove = filter(move);
 
       if (is_type<MType::QUIET>(move))
+      {
         killerMoves[ns.ply].addKillerMove(move);
+        if constexpr (USE_HISTORY)
+          updateHistory(pos.color, move, ns.depth);
+      }
       break;
     }
 
@@ -371,9 +375,17 @@ playAllMoves(
   if constexpr (moveGen == 1)
     myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
-  size_t end = orderType == MType::QUIET
-    ? movesArray.size()
-    : orderMoves(pos, movesArray, orderType, ns.ply, start);
+  // The residual QUIET stage used to short-circuit to movesArray.size() here.
+  // That was only ever an optimization: with mTypes == MType::QUIET every
+  // prioritize/sort/killer branch inside orderMoves is gated off and it returns
+  // movesArray.size() anyway. Routing the stage through orderMoves gives the
+  // history sort somewhere to live.
+  //
+  // Don't pay for that sort when playSubsetMoves is about to break on move 0:
+  // this is the same predicate it tests there, and it's true on a large minority
+  // of shallow quiet stages.
+  const bool useHistory = !(ns.quietFutile and bestMove != NULL_MOVE);
+  size_t end = orderMoves(pos, movesArray, orderType, ns.ply, start, useHistory);
 
   // Only the residual QUIET stage may futility-prune; earlier stages (captures,
   // promotions, checks, PV, killers) always search their moves.
@@ -612,6 +624,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // LMR bias is now derived from myMoves.removedMoves() inside
   // playSubsetMoves — the hash-move fast-path's removeMove() call already
   // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
+
   MoveArray movesArray;
   bestMove = playAllMoves<PvNode, 0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
     (pos, myMoves, movesArray, 0, ns, bestMove);
@@ -673,6 +686,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
 {
   resetPvLine();
   clearKillers();
+  clearHistory();
 
   if (!generateMoves(board).anyMove())
   {

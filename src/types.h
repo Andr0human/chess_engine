@@ -1,4 +1,4 @@
-
+﻿
 #ifndef TYPES_H
 #define TYPES_H
 
@@ -35,6 +35,7 @@ enum SearchFlag: bool
   USE_RFP = true,
   USE_RAZOR = true,
   USE_FUTILITY = true,
+  USE_HISTORY = true,
 };
 
 enum Color: uint8_t
@@ -69,6 +70,11 @@ enum Search
   MAX_PLY = 50,
   MAX_DEPTH = 40,
   LMR_LIMIT = 4,
+  // Saturation point of the butterfly history table. The gravity update
+  // (h += bonus - h*bonus/MAX_HISTORY) keeps every entry inside
+  // (-MAX_HISTORY, MAX_HISTORY) by construction, so there is no overflow sweep
+  // to schedule. Keep it inside int16 range if the table is ever narrowed.
+  MAX_HISTORY = 16384,
   EXTENSION_LIMIT = 8,
   NMP_MIN_DEPTH = 3,
   VAL_WINDOW = 16,

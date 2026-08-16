@@ -495,8 +495,12 @@ class SearchData
   }
 };
 
+// `useHistory` gates only the residual-QUIET history sort: pass false when the
+// caller already knows the stage will break on its first move (quiet futility),
+// so the sort isn't paid for a band nothing will read.
 size_t
-orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply, size_t start = 0);
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply,
+           size_t start = 0, bool useHistory = true);
 
 /**
  * @brief SEE-orders a pure capture list for quiescence search.
