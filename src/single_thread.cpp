@@ -312,7 +312,7 @@ playSubsetMoves(
     // / checks / PV / killers ran in earlier stages), so every move here is
     // already quiet & non-check — no per-move type test needed. Unverified bet
     // (cf. razoring's qsearch check); the depth-scaled margin is the safety.
-    if (futilityStage and ns.quietFutile and bestMove != NULL_MOVE)
+    if (futilityStage and ns.skipsQuiets(bestMove))
       break;
 
     // HASH_ALPHA fallback: remember the first searched move at this node so
@@ -381,10 +381,12 @@ playAllMoves(
   // movesArray.size() anyway. Routing the stage through orderMoves gives the
   // history sort somewhere to live.
   //
-  // Don't pay for that sort when playSubsetMoves is about to break on move 0:
-  // this is the same predicate it tests there, and it's true on a large minority
-  // of shallow quiet stages.
-  const bool useHistory = !(ns.quietFutile and bestMove != NULL_MOVE);
+  // Don't pay for that sort when playSubsetMoves is about to break on move 0 --
+  // literally its own break condition (ns.skipsQuiets), evaluated one call
+  // earlier on the same unchanged state, and true on a large minority of
+  // shallow quiet stages. The stage test mirrors the `futilityStage` argument
+  // below, so the two predicates stay identical by construction.
+  const bool useHistory = !(orderType == MType::QUIET and ns.skipsQuiets(bestMove));
   size_t end = orderMoves(pos, movesArray, orderType, ns.ply, start, useHistory);
 
   // Only the residual QUIET stage may futility-prune; earlier stages (captures,
