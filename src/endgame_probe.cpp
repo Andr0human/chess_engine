@@ -1381,16 +1381,17 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos, Score&)
 // allowed to be enormous. To audit one branch, flip its `return false` to
 // `return true` and re-run `egvalidate pieces <sig> oracle`: FALSE-DRAW is then
 // exactly the positions it really wins, and any rise in agree-draw over the same
-// build un-flipped is exactly the positions it gets wrong. Run it both gated and
-// `nocapgate`, and re-run it after touching any earlier `return true`, which
-// changes what reaches the branch at all.
+// build un-flipped is exactly the positions it gets wrong. Re-run it after
+// touching any earlier `return true`, which changes what reaches the branch
+// at all.
 //
-// KPK is in because both its scoring paths measure clean, 0 false claims in both
-// call sets: the enemy king outside the rule of the square (85,888 proven wins),
-// and the key-square opposition (801). Neither was clean when it was first
-// whitelisted -- the key-square test claimed 70 drawn rook-pawn positions until
-// it was gated on `!(pawn & FileAH)`, and the rule-of-square test claimed 599
-// ungated until the hanging-pawn draw at the top of Endgame<KPK> caught them.
+// KPK is in because both its scoring paths measured clean, 0 false claims, at
+// the last audit (88e06b2): the enemy king outside the rule of the square
+// (85,888 proven wins), and the key-square opposition (801). Neither was clean
+// when it was first whitelisted -- the key-square test claimed 70 drawn
+// rook-pawn positions until it was gated on `!(pawn & FileAH)`, and the
+// rule-of-square test claimed 599 more until the hanging-pawn draw at the top
+// of Endgame<KPK> caught them.
 template <Endgames e>
 constexpr bool
 cutsBeta()

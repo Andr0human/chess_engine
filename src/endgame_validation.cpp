@@ -158,8 +158,8 @@ struct Tally
   // Enumeration counters.
   uint64_t geom = 0, rejInCheck = 0;
   uint64_t legal = 0, legalW = 0, legalB = 0;
-  uint64_t rejTerminal = 0, rejCaptures = 0;
-  uint64_t quiet = 0, quietW = 0, quietB = 0;
+  uint64_t rejTerminal = 0;
+  uint64_t callSet = 0, callSetW = 0, callSetB = 0;
   uint64_t heurDraw = 0, heurNonDraw = 0, heurDrawW = 0, heurDrawB = 0;
 
   // Oracle scorecard (only when an oracle is present). The 4-bucket confusion
@@ -173,8 +173,8 @@ struct Tally
   {
     geom += o.geom; rejInCheck += o.rejInCheck;
     legal += o.legal; legalW += o.legalW; legalB += o.legalB;
-    rejTerminal += o.rejTerminal; rejCaptures += o.rejCaptures;
-    quiet += o.quiet; quietW += o.quietW; quietB += o.quietB;
+    rejTerminal += o.rejTerminal;
+    callSet += o.callSet; callSetW += o.callSetW; callSetB += o.callSetB;
     heurDraw += o.heurDraw; heurNonDraw += o.heurNonDraw;
     heurDrawW += o.heurDrawW; heurDrawB += o.heurDrawB;
     agreeDraw += o.agreeDraw; agreeNondraw += o.agreeNondraw;
@@ -198,7 +198,6 @@ struct Walker
   const EgSolver*           oracle   = nullptr;
   bool                      wantDump = false;
   bool                      wantSamples = false;   // keep example FENs per bucket
-  bool                      capGate  = true;       // false = keep has-capture positions
 
   // Reference colour the bucket table's W/D/L axis is stated in -- see the fold
   // in leaf(). WHITE for the primary colouring, BLACK for the colour-mirror, so
@@ -259,27 +258,22 @@ struct Walker
     ++t.legal;
     (stm == WHITE ? t.legalW : t.legalB)++;
 
-    // Match the engine's gate exactly: isTheoreticalDraw is consulted only on
-    // non-terminal positions with no captures available for the side to move
-    // (single_thread.cpp:51, :331). Positions the search would never hand to the
-    // recognizer must not pollute the tally.
+    // The call set is every legal *non-terminal* position. Search resolves
+    // checkmate and stalemate before it ever consults the recognizer, so a
+    // terminal position is one the probe is genuinely never handed -- that
+    // exclusion is real and must stay.
     //
-    // `capGate = false` (CLI `nocapgate`) relaxes only the capture half of that
-    // gate: has-capture positions stay in the call set and are still counted in
-    // rejCaptures, so the tally shows what the recognizer *would* say on the
-    // superset the search never asks about. Terminal positions stay excluded
-    // either way -- search resolves mate/stalemate before the recognizer runs.
+    // Nothing else is excluded. Search used to gate the probe behind "no
+    // capture available for the side to move" as well, and this sweep mirrored
+    // it; that gate was removed as Elo-neutral (0318edc), so a has-capture
+    // position is now a live call site like any other and a FALSE-DRAW on one
+    // is a real bug, not a hypothetical.
     const MoveList moves = generateMoves(pos);
     if (!moves.anyMove())
     { ++t.rejTerminal; return; }            // checkmate / stalemate
-    if (moves.exists<MType::CAPTURES>(pos))
-    {
-      ++t.rejCaptures;                      // a capture is available
-      if (capGate) return;
-    }
 
-    ++t.quiet;
-    (stm == WHITE ? t.quietW : t.quietB)++;
+    ++t.callSet;
+    (stm == WHITE ? t.callSetW : t.callSetB)++;
 
     BucketProbe::reset();   // recognizer emits iff it buckets this position
     const bool isDraw = isTheoreticalDraw(pos);
@@ -412,7 +406,6 @@ struct Generator
   int maxKingFile = 3;         // 3 = folded (a-d); 7 = allfiles self-check
   bool wantDump = false;
   bool wantSamples = false;
-  bool capGate = true;         // false = has-capture positions stay in the call set
   const EgSolver* oracle = nullptr;
 
   // The mining question, and the colour it is asked about. `target` picks which
@@ -476,7 +469,6 @@ struct Generator
       w.oracle    = oracle;
       w.wantDump  = wantDump;
       w.wantSamples = wantSamples;
-      w.capGate   = capGate;
       w.refSide   = refSide;
       w.buckets.setTarget(target);
       w.stm       = tasks[static_cast<size_t>(i)].stm;
@@ -517,19 +509,13 @@ reportColouring(const Generator& g, const string& pieceStr)
        << ", stm Black " << g.t.legalB << ")\n";
   cout << "  rejected (terminal)   : " << g.t.rejTerminal
        << "  (checkmate / stalemate -- no moves)\n";
-  if (g.capGate)
-    cout << "  rejected (has capture): " << g.t.rejCaptures
-         << "  (search skips the recognizer here)\n";
-  else
-    cout << "  KEPT     (has capture): " << g.t.rejCaptures
-         << "  (** capture gate disabled -- search never asks about these **)\n";
-  cout << "Recognizer call set     : " << g.t.quiet
-       << "  (stm White " << g.t.quietW
-       << ", stm Black " << g.t.quietB << ")\n";
+  cout << "Recognizer call set     : " << g.t.callSet
+       << "  (stm White " << g.t.callSetW
+       << ", stm Black " << g.t.callSetB << ")\n";
 
   const auto pct = [&] (uint64_t n) {
-    return g.t.quiet
-      ? (100.0 * static_cast<double>(n) / static_cast<double>(g.t.quiet))
+    return g.t.callSet
+      ? (100.0 * static_cast<double>(n) / static_cast<double>(g.t.callSet))
       : 0.0;
   };
 
@@ -551,10 +537,6 @@ reportScorecard(const Generator& g, const string& pieceStr)
 
   cout << "--- Oracle scorecard " << signatureOf(pieceStr)
        << " (pieces " << pieceStr << ") ---\n";
-  if (!g.capGate)
-    cout << "** capture gate DISABLED: the call set includes has-capture positions,\n"
-            "   which the search never hands to the recognizer. A FALSE-DRAW below is\n"
-            "   hypothetical, not a live bug. **\n";
   cout << "Call-set positions scored : " << total << '\n';
   // Side-to-move relative, and deliberately not folded: this line is the raw
   // oracle census of the call set. The bucket table below states its W/D/L
@@ -594,12 +576,12 @@ void
 validateEndgame(const vector<string>& args)
 {
   // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles]
-  //                 [nocapgate] [dump <file>] [mine <draw|win|loss>]
+  //                 [dump <file>] [mine <draw|win|loss>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
   // `pieces` -- and tally isTheoreticalDraw over the recognizer's call set
-  // (legal, non-terminal, no capture available; see single_thread.cpp:51,331).
+  // (every legal, non-terminal position).
   //
   //   pieces P    -> white pawn                  (KPK)
   //   pieces Pb   -> white pawn + black bishop    (KPKB, the default)
@@ -651,13 +633,6 @@ validateEndgame(const vector<string>& args)
   }
   const bool noCache  = utils::hasArg(args, "nocache");
   const int maxKingFile = noFold ? 7 : 3;
-
-  // `nocapgate` drops the capture half of the engine's call gate, so the call set
-  // becomes every legal non-terminal position. The recognizer is never actually
-  // consulted on has-capture positions, so this is a diagnostic (how the
-  // recognizer behaves on the superset), not a correctness sweep -- any FALSE-DRAW
-  // it surfaces is unreachable from search until that gate changes.
-  const bool noCapGate = utils::hasArg(args, "nocapgate");
 
   // `combos` automates the feature-set search: instead of hand-editing the emit
   // to one candidate vector and re-sweeping per combination, the recognizer emits
@@ -826,7 +801,6 @@ validateEndgame(const vector<string>& args)
 
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
-    g.capGate = !noCapGate;
     g.target = mineTarget;
 
     // Which colour WIN/LOSS are stated relative to. The mirror colouring is the
@@ -898,10 +872,6 @@ validateEndgame(const vector<string>& args)
                   : "white king folded to files a-d")
        << ", both sides to move; " << usingThreads << " thread"
        << (usingThreads == 1 ? "" : "s") << ")\n";
-  if (noCapGate)
-    cout << "Capture gate DISABLED ('nocapgate'): call set = every legal "
-            "non-terminal position,\n  including the has-capture ones the search "
-            "never hands to the recognizer.\n";
   if (wantOracle)
   {
     cout << "Mining target: " << BucketTally::resultName(mineTarget)
@@ -928,14 +898,14 @@ validateEndgame(const vector<string>& args)
     reportColouring(gens[i], colourings[i]);
 
   // Colour-symmetry self-check: the two colourings are colour-swap + rank-flip
-  // images, a bijection preserving legality, the call gate, and the true
+  // images, a bijection preserving legality, the call set, and the true
   // result -- so a colour-symmetric recognizer must tally identically.
   if (haveMirror)
   {
-    const bool callOk = gens[0].t.quiet    == gens[1].t.quiet;
+    const bool callOk = gens[0].t.callSet  == gens[1].t.callSet;
     const bool drawOk = gens[0].t.heurDraw == gens[1].t.heurDraw;
     cout << "Colour-symmetry self-check (the two colourings must tally identically):\n";
-    cout << "  call set : " << gens[0].t.quiet << " vs " << gens[1].t.quiet
+    cout << "  call set : " << gens[0].t.callSet << " vs " << gens[1].t.callSet
          << "   " << (callOk ? "OK" : "MISMATCH") << '\n';
     cout << "  draws    : " << gens[0].t.heurDraw << " vs " << gens[1].t.heurDraw
          << "   " << (drawOk ? "OK" : "MISMATCH") << '\n';
