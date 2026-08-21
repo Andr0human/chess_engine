@@ -18,6 +18,12 @@ using   Weight =  int32_t;
 
 const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+// Reported in the UCI `id name` line, which is how GUIs, tournament managers and
+// rating lists label the engine — without it, games from two different builds are
+// indistinguishable in an arena log. Bump this in the commit that gets tagged.
+const std::string ENGINE_NAME = "Elsa";
+const std::string ENGINE_VERSION = "2.0.0";
+
 enum SearchFlag: bool
 {
   USE_TT = true,

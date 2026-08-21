@@ -353,21 +353,16 @@ isDrawCheck(const vector<string>& args)
 
   cout << "Fen = " << fen << '\n';
 
-  // Mirror the search gate exactly (single_thread.cpp:51, :331): the recognizer
-  // is consulted only on non-terminal positions with no capture available for
-  // the side to move. Report which branch the position falls into.
+  // Mirror the search gate exactly: the recognizer is consulted on every
+  // non-terminal position. The capture gate that used to sit here as well is
+  // gone -- every recognizer is clean over the ungated call set -- so a capture
+  // being available no longer changes the answer.
   const MoveList moves = generateMoves(pos);
 
   if (!moves.anyMove())
   {
     cout << (moves.checkers ? "Terminal: checkmate" : "Terminal: stalemate")
          << "  (recognizer not consulted)\n";
-    return;
-  }
-
-  if (moves.exists<MType::CAPTURES>(pos))
-  {
-    cout << "Capture available  (search skips the recognizer here)\n";
     return;
   }
 

@@ -46,7 +46,9 @@ struct ProbeOutcome
 
 // Shared by both call sites (qsearch and alphaBeta) so the two can never drift
 // apart on what a probe verdict means. Caller has already established that the
-// position is non-terminal and that the capture gate is open.
+// position is non-terminal; there is no capture gate any more -- every
+// recognizer is clean over the ungated call set, so the probe runs on
+// every non-terminal node.
 //
 // Both ways of spending the score end the subtree, so neither leaves a mate
 // distance behind: the won-side score is a flat plateau, and a node that accepts
@@ -112,18 +114,32 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  // No capture available: the recognizer's gate. Worth more here than the draw
-  // return alone suggests -- with no captures there is nothing to search, so
-  // this node is about to collapse to its stand-pat score, and a static eval of
-  // a won KPK reads one pawn where the probe reads a queen. The raised alpha
-  // survives to the `return alpha` below, past a stand-pat that can only lift it
-  // further.
-  if (!myMoves.exists<MType::CAPTURES>(pos))
+  // Repetition / 50-move draws, at the leaf only — `leafnode` is set exactly on
+  // the entry calls from alphaBeta, so the recursive instantiation compiles this
+  // away. Without it an already-drawn leaf came back as a static eval (+3.75 on a
+  // dead-drawn KRN-vs-KR at halfmove 100) and the draw only surfaced an iteration
+  // later, once the same position sat at an interior node. One test here covers
+  // the whole capture tree below: qsearch only searches captures, which are
+  // irreversible and reset the halfmove clock, so neither draw can arise deeper.
+  // It sits *after* the mate/stalemate test above because checkmate outranks the
+  // 50-move rule — movegen has already run by here, so that costs nothing.
+  if constexpr (leafnode)
   {
-    const ProbeOutcome probe = applyEndgameProbe(pos, alpha, beta);
-    if (probe.result.has_value())
-      return *probe.result;
+    if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
+      return VALUE_DRAW;
   }
+
+  // The endgame probe. Worth more here than the draw return alone suggests --
+  // a node with no captures is about to collapse to its stand-pat score, and a
+  // static eval of a won KPK reads one pawn where the probe reads a queen. A
+  // raised alpha survives to the `return alpha` below, past a stand-pat that can
+  // only lift it further; qsearch never stores to the TT, so the
+  // fail-low-at-a-lifted-alpha caveat that `raisedAlpha` exists for cannot bite
+  // here and the flag is dropped.
+  const ProbeOutcome probe = applyEndgameProbe(pos, alpha, beta);
+
+  if (probe.result.has_value())
+    return *probe.result;
 
   info.addQNode();
 
@@ -477,7 +493,9 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // SearchData::extendPvFromTt() rebuild a *real* tail from the table.
   pvArray[pvIndex] = NULL_MOVE;
 
-  // Cheap repetition / 50-move draws — no movegen needed.
+  // Cheap repetition / 50-move draws — no movegen needed. Leaf nodes (depth <= 0)
+  // are handed off above and run the same test inside quiescenceSearch, where it
+  // sits after move generation so mate takes precedence over the 50-move rule.
   if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
     return VALUE_DRAW;
 
@@ -578,21 +596,16 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  // Same gate as in quiescenceSearch. ns already carries the incoming window,
+  // Same probe as in quiescenceSearch. ns already carries the incoming window,
   // and everything downstream (futility, playAllMoves, the TT store) reads ns
   // rather than the locals, so a raised alpha has to land in both.
-  bool probeRaisedAlpha = false;
+  const ProbeOutcome probe = applyEndgameProbe(pos, alpha, beta);
 
-  if (!myMoves.exists<MType::CAPTURES>(pos))
-  {
-    const ProbeOutcome probe = applyEndgameProbe(pos, alpha, beta);
+  if (probe.result.has_value())
+    return *probe.result;
 
-    if (probe.result.has_value())
-      return *probe.result;
-
-    probeRaisedAlpha = probe.raisedAlpha;
-    ns.alpha = alpha;
-  }
+  const bool probeRaisedAlpha = probe.raisedAlpha;
+  ns.alpha = alpha;
 
   // --- Null-move pruning (NMP) ---
   // Hand the opponent a free tempo and search their reply at reduced depth
