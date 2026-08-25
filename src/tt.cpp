@@ -115,7 +115,7 @@ TranspositionTable::recordPosition
 
   size_t index = hashValue % TT_SIZE;
 
-  if (depth > ttPrimary[index].depth())
+  if (depth >= ttPrimary[index].depth())
     addEntry(ttPrimary[index]);
 
   addEntry(ttSecondary[index]);
