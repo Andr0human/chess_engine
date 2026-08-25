@@ -65,7 +65,7 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
       return VALUE_DRAW;
   }
 
-  if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
+  if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
 
   info.addQNode();
@@ -537,7 +537,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  if (!myMoves.exists<MType::CAPTURES>(pos) and isTheoreticalDraw(pos))
+  if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
 
   // --- Null-move pruning (NMP) ---

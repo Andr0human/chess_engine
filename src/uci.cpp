@@ -159,6 +159,13 @@ decideSearchTime(long long sideTimeMs, long long sideIncMs)
   return std::max(searchTime, 0.001);
 }
 
+// Stand-in for "no time limit": a budget so large the clock can never end the
+// search, leaving `stop` (or the depth limit) as the only terminator. Used for
+// `go infinite` and for any `go` that names no time constraint at all. Kept as
+// a finite number of seconds rather than an infinity so the duration_cast in
+// SearchData stays well-defined; 1e9 s is ~1e18 ns, comfortably inside int64.
+constexpr double NO_TIME_LIMIT = 1e9;  // seconds
+
 void
 handleGo(stringstream& ss)
 {
@@ -167,6 +174,7 @@ handleGo(stringstream& ss)
   Depth maxDepth = MAX_DEPTH;
 
   long long wtime = -1, btime = -1, winc = 0, binc = 0;
+  bool sawClock = false;
 
   string token;
   while (ss >> token)
@@ -177,8 +185,8 @@ handleGo(stringstream& ss)
       ss >> ms;
       moveTimeSec = double(ms) / 1000.0;
     }
-    else if (token == "wtime") { ss >> wtime; }
-    else if (token == "btime") { ss >> btime; }
+    else if (token == "wtime") { ss >> wtime; sawClock = true; }
+    else if (token == "btime") { ss >> btime; sawClock = true; }
     else if (token == "winc")  { ss >> winc;  }
     else if (token == "binc")  { ss >> binc;  }
     else if (token == "depth")
@@ -189,21 +197,32 @@ handleGo(stringstream& ss)
     }
     else if (token == "infinite")
     {
-      moveTimeSec = 1e9;
+      moveTimeSec = NO_TIME_LIMIT;
     }
     // Unknown tokens are ignored silently.
   }
 
   if (moveTimeSec < 0)
   {
-    // No explicit movetime: derive a search budget from the side-to-move's
-    // clock (or fall back to the default if no clock was provided).
+    // No explicit movetime. A time budget is only appropriate when the GUI
+    // actually gave us a time constraint: with a clock we manage it ourselves,
+    // but `go depth <n>` (and a bare `go`) name no time at all and must run
+    // until the depth limit or an async `stop` — capping those at a default
+    // makes the GUI's setting silently inert. En Croissant's analysis pane
+    // sends exactly these forms (`go depth 20` ... `stop`), and under the old
+    // 1s fallback a 20-ply request returned at depth 12.
     long long sideTime = (g_board.color == WHITE) ? wtime : btime;
     long long sideInc  = (g_board.color == WHITE) ? winc  : binc;
 
-    moveTimeSec = (sideTime > 0)
-        ? decideSearchTime(sideTime, sideInc)
-        : double(DEFAULT_SEARCH_TIME);
+    if (sideTime > 0)
+      moveTimeSec = decideSearchTime(sideTime, sideInc);
+    else if (sawClock)
+      // A clock was sent but the side to move has none left (flagged, or a
+      // malformed value). Nothing to manage; answer with the floor rather than
+      // thinking forever on a lost clock.
+      moveTimeSec = double(DEFAULT_SEARCH_TIME);
+    else
+      moveTimeSec = NO_TIME_LIMIT;
   }
 
   // Stop any prior search and launch this one on the worker. The board is
