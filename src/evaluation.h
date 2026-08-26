@@ -8,42 +8,41 @@
 
 class EvalData
 {
-    private:
+  private:
 
-    template <Color cMy>
-    void materialCount(const ChessBoard& pos)
-    {
-        pieces[cMy] =
-        pos.count<cMy, BISHOP>()
-            + pos.count<cMy, KNIGHT>()
-            + pos.count<cMy, ROOK  >()
-            + pos.count<cMy, QUEEN >();
-    }
-
+  template <Color cMy>
+  void materialCount(const ChessBoard& pos)
+  {
+    pieces[cMy] =
+    pos.count<cMy, BISHOP>()
+      + pos.count<cMy, KNIGHT>()
+      + pos.count<cMy, ROOK  >()
+      + pos.count<cMy, QUEEN >();
+  }
 
 	public:
 
-	int  pieces[COLOR_NB];
+  int pieces[COLOR_NB];
 
-	int boardWeight;
-	float phase;
+  int boardWeight;
+  float phase;
 
-	EvalData(const ChessBoard& pos)
-	{
-		materialCount<WHITE>(pos);
-		materialCount<BLACK>(pos);
+  EvalData(const ChessBoard& pos)
+  {
+  	materialCount<WHITE>(pos);
+  	materialCount<BLACK>(pos);
 
-		boardWeight = pos.boardWeight;
-		phase = float(boardWeight) / float(GamePhaseLimit);
-	}
+  	boardWeight = pos.boardWeight;
+  	phase = float(boardWeight) / float(GamePhaseLimit);
+  }
 
-	bool
-	noWhitePiecesOnBoard(const ChessBoard& pos) const noexcept
-	{ return pos.count<WHITE, PAWN>() + pieces[WHITE] == 0; }
+  bool
+  noWhitePiecesOnBoard(const ChessBoard& pos) const noexcept
+  { return pos.count<WHITE, PAWN>() + pieces[WHITE] == 0; }
 
-	bool
-	noBlackPiecesOnBoard(const ChessBoard& pos) const noexcept
-	{ return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
+  bool
+  noBlackPiecesOnBoard(const ChessBoard& pos) const noexcept
+  { return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
 // Runtime-tunable evaluation blend weights (mg/eg split). Each weight scales a
@@ -58,26 +57,26 @@ class EvalData
 // previous single mobilityWeightMg), so default eval is unchanged.
 struct EvalWeights
 {
-	float materialWeightMg      = 1.0f;
-	float materialWeightEg      = 1.0f;
-	float pieceTableWeightMg    = 1.2f;
-	float pieceTableWeightEg    = 1.8f;
-	float pawnStructureWeightMg = 0.05f;
-	float pawnStructureWeightEg = 0.7f;
-	float mobBishopWeightMg     = 8.0f;  // midgame-only
-	float mobKnightWeightMg     = 9.5f;  // midgame-only (absorbs the legacy 2x factor)
-	float mobRookWeightMg       = 6.0f;  // midgame-only
-	float mobQueenWeightMg      = 4.5f;  // midgame-only
-	float threatsWeightMg       = 0.7f;  // midgame-only
-	float distanceWeightEg      = 1.0f;  // endgame-only king-distance term
-	// --- eval batch (bishop pair / rook-file / isolated pawns), Texel-tuned 2026-07-12 ---
-	// Cross-dataset unanimous signal; adopted low-end of each range (rookFile tempered
-	// below tuned ~23 to offset overlap with the standing rook-mobility term).
-	float bishopPairWeightMg    =  40.0f;
-	float bishopPairWeightEg    =  55.0f;  // pair worth more in open endgames
-	float rookFileWeightMg      =  16.0f;  // x units: open~32cp, semi-open~16cp (mg-only)
-	float isolatedPawnWeightMg  = -16.0f;  // penalty; weight carries the sign
-	float isolatedPawnWeightEg  =  -4.0f;  // tuner: eg isolani much milder than mg
+  float materialWeightMg      = 1.0f;
+  float materialWeightEg      = 1.0f;
+  float pieceTableWeightMg    = 1.2f;
+  float pieceTableWeightEg    = 1.8f;
+  float pawnStructureWeightMg = 0.05f;
+  float pawnStructureWeightEg = 0.7f;
+  float mobBishopWeightMg     = 8.0f;  // midgame-only
+  float mobKnightWeightMg     = 9.5f;  // midgame-only (absorbs the legacy 2x factor)
+  float mobRookWeightMg       = 6.0f;  // midgame-only
+  float mobQueenWeightMg      = 4.5f;  // midgame-only
+  float threatsWeightMg       = 0.7f;  // midgame-only
+  float distanceWeightEg      = 1.0f;  // endgame-only king-distance term
+  // --- eval batch (bishop pair / rook-file / isolated pawns), Texel-tuned 2026-07-12 ---
+  // Cross-dataset unanimous signal; adopted low-end of each range (rookFile tempered
+  // below tuned ~23 to offset overlap with the standing rook-mobility term).
+  float bishopPairWeightMg    =  40.0f;
+  float bishopPairWeightEg    =  55.0f;  // pair worth more in open endgames
+  float rookFileWeightMg      =  16.0f;  // x units: open~32cp, semi-open~16cp (mg-only)
+  float isolatedPawnWeightMg  = -16.0f;  // penalty; weight carries the sign
+  float isolatedPawnWeightEg  =  -4.0f;  // tuner: eg isolani much milder than mg
 };
 
 extern EvalWeights evalWeights;
@@ -98,19 +97,19 @@ evaluate(const ChessBoard& pos);
 // (loneKing / bishopPawn) which bypass the weighted eval — those must be skipped.
 struct EvalComponents
 {
-	bool  tunable = false;
-	float phase   = 0.0f;
-	// midgame components. Mobility is stored per piece type; raw popcount sums (no
-	// 2x knight bake-in) so the tuner sees an unbiased per-piece subtotal.
-	float matMg = 0.0f, ptMg = 0.0f, pawnMg = 0.0f, threats = 0.0f;
-	float mobBishop = 0.0f, mobKnight = 0.0f, mobRook = 0.0f, mobQueen = 0.0f;
-	// eval batch: bishopPair (-1/0/+1) and isolated (whiteIso-blackIso) feed BOTH
-	// phases; rookFileMg is mg-only. All white-relative unit diffs.
-	float bishopPair = 0.0f, rookFileMg = 0.0f, isolated = 0.0f;
-	// endgame components; pawnEg is the endgame pawn-structure subtotal
-	// (passers / king-escort / safe-promote + doubled), distinct from the midgame
-	// pawnMg (doubled-pawn penalty only)
-	float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
+  bool  tunable = false;
+  float phase   = 0.0f;
+  // midgame components. Mobility is stored per piece type; raw popcount sums (no
+  // 2x knight bake-in) so the tuner sees an unbiased per-piece subtotal.
+  float matMg = 0.0f, ptMg = 0.0f, pawnMg = 0.0f, threats = 0.0f;
+  float mobBishop = 0.0f, mobKnight = 0.0f, mobRook = 0.0f, mobQueen = 0.0f;
+  // eval batch: bishopPair (-1/0/+1) and isolated (whiteIso-blackIso) feed BOTH
+  // phases; rookFileMg is mg-only. All white-relative unit diffs.
+  float bishopPair = 0.0f, rookFileMg = 0.0f, isolated = 0.0f;
+  // endgame components; pawnEg is the endgame pawn-structure subtotal
+  // (passers / king-escort / safe-promote + doubled), distinct from the midgame
+  // pawnMg (doubled-pawn penalty only)
+  float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
 };
 
 // Extract the white-relative component subtotals for a position.
