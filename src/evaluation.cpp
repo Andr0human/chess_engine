@@ -443,25 +443,6 @@ canSafelyPromote(const ChessBoard& pos, Square pawnSq)
   return false;
 }
 
-template <Color cMy>
-static Score
-pawnStructureScoreMidgame(const ChessBoard& pos)
-{
-  Bitboard  pawns = pos.piece<cMy , PAWN>();
-  Bitboard column = FileA;
-  Score score = 0;
-
-  // Punish Double Pawns on same column
-  for (int i = 0; i < 8; i++)
-  {
-    int p = popCount(column & pawns);
-    score -= 36 * p * (p - 1);
-    column <<= 1;
-  }
-
-  return score;
-}
-
 template<bool debug>
 static Score
 midGameScore(const ChessBoard& pos, float /*phase*/)
@@ -469,8 +450,6 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
   Score materialScore   = materialDiffereceMidGame(pos);
   Score pieceTableScore = pieceTableStrengthMidGame(pos);
   MobilityDiffs mob     = mobilityDiffs(pos);
-  Score pawnStructure   = pawnStructureScoreMidgame<WHITE>(pos)
-                        - pawnStructureScoreMidgame<BLACK>(pos);
   Score threatsScore    = threats<debug>(pos);
 
   int   bishopPair = bishopPairDiff(pos);
@@ -486,7 +465,6 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
       << "\nmobKnight       = " << mob.knight
       << "\nmobRook         = " << mob.rook
       << "\nmobQueen        = " << mob.queen
-      << "\npawnStructure   = " << pawnStructure
       << "\nthreatsScore    = " << threatsScore
       << "\nbishopPair      = " << bishopPair
       << "\nrookFile        = " << rookFile
@@ -498,7 +476,6 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
       evalWeights.materialWeightMg      * float(materialScore)
     + evalWeights.pieceTableWeightMg    * float(pieceTableScore)
     + mob.weighted(evalWeights)
-    + evalWeights.pawnStructureWeightMg * float(pawnStructure)
     + evalWeights.threatsWeightMg       * float(threatsScore)
     + evalWeights.bishopPairWeightMg    * float(bishopPair)
     + evalWeights.rookFileWeightMg      * float(rookFile)
@@ -801,8 +778,6 @@ extractEvalComponents(const ChessBoard& pos)
   ec.mobKnight = mob.knight;
   ec.mobRook   = mob.rook;
   ec.mobQueen  = mob.queen;
-  ec.pawnMg    = float(pawnStructureScoreMidgame<WHITE>(pos)
-               - pawnStructureScoreMidgame<BLACK>(pos));
   ec.threats   = float(threats<false>(pos));
 
   ec.matEg    = float(materialDiffereceEndGame(pos));
@@ -827,7 +802,6 @@ evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
       w.materialWeightMg      * ec.matMg
     + w.pieceTableWeightMg    * ec.ptMg
     + mob.weighted(w)
-    + w.pawnStructureWeightMg * ec.pawnMg
     + w.threatsWeightMg       * ec.threats
     + w.bishopPairWeightMg    * ec.bishopPair
     + w.rookFileWeightMg      * ec.rookFileMg

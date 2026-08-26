@@ -61,8 +61,9 @@ struct EvalWeights
   float materialWeightEg      = 1.0f;
   float pieceTableWeightMg    = 1.2f;
   float pieceTableWeightEg    = 1.8f;
-  float pawnStructureWeightMg = 0.05f;
-  float pawnStructureWeightEg = 0.7f;
+  float pawnStructureWeightEg = 0.7f;  // endgame-only; the midgame doubled-pawn
+                                       // term was removed (1.8cp of signal for
+                                       // 4.5% of NPS)
   float mobBishopWeightMg     = 8.0f;  // midgame-only
   float mobKnightWeightMg     = 9.5f;  // midgame-only (absorbs the legacy 2x factor)
   float mobRookWeightMg       = 6.0f;  // midgame-only
@@ -101,14 +102,14 @@ struct EvalComponents
   float phase   = 0.0f;
   // midgame components. Mobility is stored per piece type; raw popcount sums (no
   // 2x knight bake-in) so the tuner sees an unbiased per-piece subtotal.
-  float matMg = 0.0f, ptMg = 0.0f, pawnMg = 0.0f, threats = 0.0f;
+  float matMg = 0.0f, ptMg = 0.0f, threats = 0.0f;
   float mobBishop = 0.0f, mobKnight = 0.0f, mobRook = 0.0f, mobQueen = 0.0f;
   // eval batch: bishopPair (-1/0/+1) and isolated (whiteIso-blackIso) feed BOTH
   // phases; rookFileMg is mg-only. All white-relative unit diffs.
   float bishopPair = 0.0f, rookFileMg = 0.0f, isolated = 0.0f;
   // endgame components; pawnEg is the endgame pawn-structure subtotal
-  // (passers / king-escort / safe-promote + doubled), distinct from the midgame
-  // pawnMg (doubled-pawn penalty only)
+  // (passers / king-escort / safe-promote + doubled). No midgame counterpart --
+  // the mg doubled-pawn term was removed.
   float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
 };
 
