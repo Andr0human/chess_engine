@@ -70,8 +70,14 @@ is_type(Move m)
   if constexpr (mt == MType::CHECK)
     return (m >> 23) & 1;
 
+  // Bits 20 (CAPTURES) and 21 (PROMOTION) only -- a quiet move is one that is
+  // neither. The mask must NOT reach bit 22: that is the color bit, set on
+  // every move of the side whose Color is 1, and Color is BLACK = 0,
+  // WHITE = 1. Masking it in made this return false for all of White's moves,
+  // which silently emptied historyTable[WHITE] and White's killer slots (the
+  // sole call site gates both).
   if constexpr (mt == MType::QUIET)
-    return ((m >> 20) & 7) == 0;
+    return ((m >> 20) & 3) == 0;
 
   if constexpr (mt == MType::CAPTURES)
     return (m >> 20) & 1;
