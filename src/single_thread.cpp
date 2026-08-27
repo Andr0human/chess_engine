@@ -55,10 +55,11 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   // away. Without it an already-drawn leaf came back as a static eval (+3.75 on a
   // dead-drawn KRN-vs-KR at halfmove 100) and the draw only surfaced an iteration
   // later, once the same position sat at an interior node. One test here covers
-  // the whole capture tree below: qsearch only searches captures, which are
-  // irreversible and reset the halfmove clock, so neither draw can arise deeper.
-  // It sits *after* the mate/stalemate test above because checkmate outranks the
-  // 50-move rule — movegen has already run by here, so that costs nothing.
+  // the whole tree below: qsearch searches only captures and quiet promotions,
+  // and both are irreversible and reset the halfmove clock — a promotion is a
+  // pawn move — so neither draw can arise deeper. It sits *after* the
+  // mate/stalemate test above because checkmate outranks the 50-move rule —
+  // movegen has already run by here, so that costs nothing.
   if constexpr (leafnode)
   {
     if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
@@ -82,20 +83,41 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (standPat > alpha) alpha = standPat;
 
-  if (!myMoves.exists<MType::CAPTURES>(pos))
+  // A pawn one push from queening is worth ~800cp more than the static eval
+  // says it is, and a CAPTURES-only move list never sees the push. Promotion-
+  // *captures* carry the capture bit and so arrive with the rest, but a quiet
+  // promotion is emitted under the QUIET bucket. That left every leaf holding a
+  // pawn on the 7th with a clear square ahead of it evaluated as though the
+  // pawn were staying a pawn -- and a leaf is exactly where the search has no
+  // remaining line to discover the truth by other means.
+  //
+  // Not written as `if constexpr`: the runtime `and` folds away just the same
+  // when the flag is off, but both branches still get type-checked, so flipping
+  // USE_QSEARCH_PROMO can never fail to compile the way an untaken
+  // `if constexpr` branch silently can.
+  const bool promoExists = USE_QSEARCH_PROMO and myMoves.exists<MType::PROMOTION>(pos);
+
+  if (!myMoves.exists<MType::CAPTURES>(pos) and !promoExists)
     return alpha;
 
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
 
-  // Keep the single best capture at thin nodes, the top 3 otherwise, even if
-  // they lose material -- otherwise a node with only losing captures would
-  // collapse to its stand-pat score.
+  if (promoExists)
+    myMoves.getMoves<MType::PROMOTION>(pos, movesArray);
+
+  // Keep the single best move at thin nodes, the top 3 otherwise, even if they
+  // lose material -- otherwise a node with only losing captures would collapse
+  // to its stand-pat score.
   const size_t floor = movesArray.size() < 4 ? 1 : 3;
 
   // orderCaptures() sorts SEE-descending and hands back the prune boundary, so
   // the loop below never needs a per-move SEE check of its own. Without move
   // ordering the list is unsorted and no such boundary exists -- search it all.
+  // Quiet promotions rank on the same SEE scale as the captures: seeScore()
+  // credits the promoted piece minus the pawn, so an undefended queening is
+  // 810 and sorts above every capture, while one that just hangs the new piece
+  // falls below zero and prunes with the losing captures.
   const size_t moveCount = USE_MOVE_ORDER
     ? orderCaptures(pos, movesArray, floor) : movesArray.size();
 
@@ -103,9 +125,9 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   for (size_t moveNo = 0; moveNo < moveCount; ++moveNo)
   {
-    Move captureMove = movesArray[moveNo];
+    Move qMove = movesArray[moveNo];
 
-    pos.makeMove(captureMove);
+    pos.makeMove(qMove);
     Score score = -quiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
     pos.unmakeMove();
 
@@ -121,7 +143,7 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
       if (ply < MAX_PLY)
       {
-        pvArray[pvIndex] = filter(captureMove) | quiescenceMove();
+        pvArray[pvIndex] = filter(qMove) | quiescenceMove();
         movcpy (pvArray + pvIndex + 1,
                 pvArray + pvNextIndex, MAX_PLY - ply - 1);
       }

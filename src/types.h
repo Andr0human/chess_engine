@@ -36,6 +36,7 @@ enum SearchFlag: bool
   USE_RAZOR = true,
   USE_FUTILITY = true,
   USE_HISTORY = true,
+  USE_QSEARCH_PROMO = true,
 };
 
 enum Color: uint8_t
