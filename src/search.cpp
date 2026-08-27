@@ -190,11 +190,23 @@ seeScore(const ChessBoard& pos, Move move)
   const PieceType fpt = PieceType((move >> 15) & 7);
 
   const Color side = ~pos.color;
-  const Score initialValue =
+  Score initialValue =
     (is_type<MType::CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
 
   Bitboard removedPieces = 1ULL << ip;
   PieceType pieceOnSquare = type_of(pos.pieceOnSquare(ip));
+
+  // A promotion swaps the pawn for the promoted piece before the opponent can
+  // recapture. Credit that material gain, and hand see() the piece that
+  // actually lands on `fp` rather than the pawn that left `ip` -- otherwise
+  // every flavor of a promotion scores identically (0 undefended, -100
+  // defended), so the PROMOTION ordering stage cannot tell a queen from a
+  // bishop and capture-promotions sort by victim alone.
+  if (is_type<MType::PROMOTION>(move))
+  {
+    pieceOnSquare = PieceType(((move >> 18) & 3) + 2);
+    initialValue += pieceValues[pieceOnSquare] - pieceValues[PAWN];
+  }
 
   Score seeScore = initialValue - see(pos, fp, side, pieceOnSquare, removedPieces);
   return seeScore;
