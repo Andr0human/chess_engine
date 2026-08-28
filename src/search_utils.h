@@ -44,9 +44,21 @@ clearHistory();
 void
 updateHistory(Color c, Move move, Depth depth);
 
+// Punish a quiet move that was searched at `depth` and did *not* cut off, while
+// a later quiet did. Without it the table only ever learns which moves are
+// good; the malus is what lets it learn which are bad, and it is what makes the
+// scores comparable between two moves that have both cut off a few times.
+//
+// Same gravity construction as updateHistory, sign-flipped -- see the .cpp for
+// why the algebra is `-= malus + h*malus/MAX` and not `-= malus - ...`.
+void
+penalizeHistory(Color c, Move move, Depth depth);
+
 // Ordering key for the residual QUIET stage. Never updated for captures, so a
-// SEE<0 capture demoted into that band by orderMoves() scores 0 and sinks below
-// every quiet that has ever cut off — which is the intended treatment.
+// SEE<0 capture demoted into that band by orderMoves() scores 0: it sinks below
+// every quiet that has ever cut off, and — once malus is on — floats above
+// every quiet that has been refuted into the negatives. Both are intended; a
+// bad capture is a better try than a quiet that has repeatedly failed.
 inline int32_t
 historyScore(Color c, Move move)
 { return historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))]; }

@@ -363,10 +363,28 @@ playSubsetMoves(
       {
         killerMoves[ns.ply].addKillerMove(move);
         if constexpr (USE_HISTORY)
+        {
           updateHistory(pos.color, move, ns.depth);
+
+          // Malus: every quiet that was searched at this node and failed to cut
+          // off gets pushed down by the same depth weight that lifts the winner.
+          // Kept inside the QUIET guard on purpose -- a capture cutoff leaves
+          // the table untouched on both the reward and the penalty side, so
+          // history stays a quiet-only statistic.
+          if constexpr (USE_HISTORY_MALUS)
+            for (Move tried : ns.triedQuiets)
+              penalizeHistory(pos.color, tried, ns.depth);
+        }
       }
       break;
     }
+
+    // Register the failure. Placed *after* the cutoff break, so the winner is
+    // never in its own penalty list, and *after* the shouldStop() check above,
+    // because a timed-out move's score is garbage -- it did not really fail.
+    if constexpr (USE_HISTORY and USE_HISTORY_MALUS)
+      if (is_type<MType::QUIET>(move))
+        ns.triedQuiets.add(move);
 
     // Better move found, update the result
     if (eval > ns.alpha) {

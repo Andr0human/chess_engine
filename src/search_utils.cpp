@@ -45,6 +45,22 @@ updateHistory(Color c, Move move, Depth depth)
   h += int32_t(bonus - int(h) * bonus / int(MAX_HISTORY));
 }
 
+void
+penalizeHistory(Color c, Move move, Depth depth)
+{
+  const int malus = int(depth) * int(depth);
+  int32_t& h = historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))];
+
+  // The mirror of the bonus is `-= malus + h*malus/MAX`, NOT `-= malus - ...`.
+  // Work the sign through: with h negative, `h*malus/MAX` is negative, so the
+  // `+` shrinks the decrement as h approaches -MAX_HISTORY (the asymptote the
+  // bonus form has at +MAX_HISTORY). Writing `-` instead makes the decrement
+  // *grow* the more negative h gets -- an unbounded runaway that eventually
+  // overflows int32 and, long before that, stops the ordering key from being
+  // comparable between moves. There is no compile error for getting it wrong.
+  h -= int32_t(malus + int(h) * malus / int(MAX_HISTORY));
+}
+
 Score
 checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }

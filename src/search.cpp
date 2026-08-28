@@ -32,9 +32,9 @@ prioritizeMoves(MoveArray& movesArray, size_t start)
 // Scored once into a parallel array rather than inside a comparator (the
 // orderCaptures pattern) — the band averages ~26 moves, so a comparator would
 // redo the same three-level lookup ~2n*log(n) times. The insertion sort is
-// stable under `<`, which matters: v1 never applies malus, so every move that
-// has not yet cut off sits at 0, and those keep their emission order instead of
-// being shuffled arbitrarily among themselves.
+// stable under `<`, which matters: moves that have neither cut off nor been
+// refuted all sit at 0, and those keep their emission order instead of being
+// shuffled arbitrarily among themselves.
 static void
 sortByHistory(Color color, MoveArray& movesArray, size_t start)
 {
