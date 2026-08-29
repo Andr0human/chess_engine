@@ -18,79 +18,146 @@ static int
 distance(Square s, Square t)
 { return manhattanDistance(s, t); }
 
-#ifndef THREATS
+
+// ---------------------------------------------------------------------------
+// Internal eval types. Implementation details of evaluate() -- the header exposes
+// only what callers and the tuner need (EvalData / EvalWeights / EvalComponents).
+// ---------------------------------------------------------------------------
 
 // Fixed-point denominator for the king-safety chain.
 //
-// openFilesScore and lackOfSafety are ratios whose integer division used to truncate:
+// openFilesScore and lackOfSafety are ratios whose integer division truncates:
 // `lackOfSafety = 2 * openFiles * (4 - kingMobility) / (defenders + 1)` evaluates to
-// 4/9 for a castled king behind an intact pawn shield, i.e. 0, which zeroes the whole
-// `attackValue * lackOfSafety` channel -- every "my pieces are aimed at their king"
-// term vanishes for exactly the positions where the attack is being built. Carrying
-// those quantities in KS_SCALE-ths and dividing out once, at the end of threats(),
-// makes the chain continuous.
+// 4/9 for a castled king behind an intact pawn shield, i.e. 0, which would zero the
+// whole `attackValue * lackOfSafety` channel -- every "my pieces are aimed at their
+// king" term vanishing for exactly the positions where the attack is being built.
+// Carrying those quantities in KS_SCALE-ths and dividing out once, at the end of
+// threats(), keeps the chain continuous.
 //
-// attackValue's own `/ 4` is deliberately left truncating (see attackValue() below):
-// fixing it is a scale change, not a precision fix. With that one exception the
-// emitted threatsScore keeps its original scale, so the Texel-tuned threatsWeightMg
-// still applies. Worst-case intermediate is ~4e7, well inside int32.
-//
-// Measured +15.5 Elo +/- 6.3 vs master (2000 games, 1s+0.1s, LOS 99.3%).
+// attackValue's own `/ 4` is deliberately left truncating (see sideAttacks()): fixing
+// it is a scale change, not a precision fix. With that one exception threatsScore
+// keeps its original scale, so the tuned threatsWeightMg still applies. Worst-case
+// intermediate is ~4e7, well inside int32.
 constexpr Score KS_SCALE = 64;
 
-template <Color cMy, PieceType pt, const MaskTable& mask, Score increment>
-static Score
-attacksKing(const ChessBoard& pos)
+// Per-colour attack summary, built once per eval and shared by king safety, king
+// mobility and the mobility subtotals. All three consumers want the same attack sets
+// over the same `pos.all()` occupancy, so one pass feeds them all: 14 magic lookups
+// at full midgame material instead of the ~56 a per-consumer pass would cost.
+struct AttackInfo
 {
-  Score score = VALUE_ZERO;
+  Bitboard bishop, knight, rook, queen;  // per-type unions -- mobility scores each type
+  Bitboard all;                          // ... plus pawns and king, for king mobility
+  Score attackValue;                     // king-ring pressure, in KS_SCALE-ths
+};
+
+struct EvalAttacks
+{
+  AttackInfo side[COLOR_NB];  // indexed by Color (BLACK = 0, WHITE = 1)
+};
+
+// White-relative piece-count differences, computed once and consumed by the midgame
+// material score, the endgame material score and the king-distance term.
+struct MaterialDiffs
+{
+  int pawn, bishop, knight, rook, queen;
+};
+
+// Subtotals that BOTH phases consume, so midGameScore() and endGameScore() share one
+// computation rather than each doing its own.
+struct SharedTerms
+{
+  MaterialDiffs material;
+  int bishopPair;
+  int isolated;
+};
+
+// White-relative per-piece-type mobility subtotals (raw popcount diffs, no per-piece
+// scaling -- the EvalWeights scalars do that). Used by both the live eval and the
+// Texel cache so the two stay in lockstep.
+struct MobilityDiffs
+{
+  float bishop, knight, rook, queen;
+
+  float weighted(const EvalWeights& w) const
+  {
+    return w.mobBishopWeightMg * bishop
+         + w.mobKnightWeightMg * knight
+         + w.mobRookWeightMg   * rook
+         + w.mobQueenWeightMg  * queen;
+  }
+};
+
+
+#ifndef THREATS
+
+// One pass over the pieces of type `pt`: unions their attack sets and scores king-ring
+// pressure at the same time. kingOuterMasks is built as the outer ring with kingMasks
+// and the king square removed (lookup_table.cpp, buildKingOuterTable), so the two rings
+// are disjoint and one attack set can be tested against both.
+template <Color cMy, PieceType pt, Score incInner, Score incOuter>
+static Bitboard
+collectAttacks(const ChessBoard& pos, Bitboard occupied, Square kingSqEmy, Score& ksValue)
+{
+  Bitboard squares = 0;
   Bitboard pieceBb = pos.piece<cMy, pt>();
-  Bitboard occupied = pos.all();
-  Square kingSqEmy = squareNo(pos.piece<~cMy, KING>());
 
   while (pieceBb != 0)
   {
-    Square sq = nextSquare(pieceBb);
-    if ((attackSquares<pt>(sq, occupied) & mask[kingSqEmy]) != 0)
-      score += increment;
+    Bitboard attacks = attackSquares<pt>(nextSquare(pieceBb), occupied);
+    squares |= attacks;
+
+    if ((attacks & plt::kingMasks[kingSqEmy]) != 0)      ksValue += incInner;
+    if ((attacks & plt::kingOuterMasks[kingSqEmy]) != 0) ksValue += incOuter;
   }
 
-  return score;
+  return squares;
 }
 
 template <Color cMy>
-static Score
-attackValue(const ChessBoard& pos)
+static AttackInfo
+sideAttacks(const ChessBoard& pos)
 {
-  using plt::kingMasks;
-  using plt::kingOuterMasks;
+  const Bitboard occupied  = pos.all();
+  const Square   kingSqMy  = squareNo(pos.piece< cMy, KING>());
+  const Square   kingSqEmy = squareNo(pos.piece<~cMy, KING>());
 
-  Score attackValue = VALUE_ZERO;
+  Score ksValue = VALUE_ZERO;
+  AttackInfo info;
 
-  attackValue += attacksKing<cMy, KNIGHT, kingMasks, 2>(pos);
-  attackValue += attacksKing<cMy, BISHOP, kingMasks, 3>(pos);
-  attackValue += attacksKing<cMy, ROOK  , kingMasks, 4>(pos);
-  attackValue += attacksKing<cMy, QUEEN , kingMasks, 6>(pos);
+  info.knight = collectAttacks<cMy, KNIGHT, 2, 1>(pos, occupied, kingSqEmy, ksValue);
+  info.bishop = collectAttacks<cMy, BISHOP, 3, 2>(pos, occupied, kingSqEmy, ksValue);
+  info.rook   = collectAttacks<cMy, ROOK  , 4, 3>(pos, occupied, kingSqEmy, ksValue);
+  info.queen  = collectAttacks<cMy, QUEEN , 6, 4>(pos, occupied, kingSqEmy, ksValue);
 
-  attackValue += attacksKing<cMy, KNIGHT, kingOuterMasks, 1>(pos);
-  attackValue += attacksKing<cMy, BISHOP, kingOuterMasks, 2>(pos);
-  attackValue += attacksKing<cMy, ROOK  , kingOuterMasks, 3>(pos);
-  attackValue += attacksKing<cMy, QUEEN , kingOuterMasks, 4>(pos);
+  info.all = info.knight | info.bishop | info.rook | info.queen
+           | pawnAttackSquares<cMy>(pos)
+           | attackSquares<KING>(kingSqMy, occupied);
 
   // Deliberately keeps the original integer `/ 4` before lifting into KS_SCALE-ths.
-  // Removing this truncation too was measured as a ~75% relative jump in a quantity
-  // that multiplies lackOfSafety (which reaches ~260 for an exposed king), i.e. a
-  // scale change the Texel-tuned threatsWeightMg no longer fits -- it cost 5 positions
-  // on docs/test-positions.md. Recovering it needs a retune; that is a separate change.
-  return (attackValue / 4) * KS_SCALE;
+  // Dropping this truncation too is a scale change, not a precision fix: it inflates a
+  // quantity that multiplies lackOfSafety (which reaches ~260 for an exposed king) by
+  // ~75%, which the tuned threatsWeightMg no longer fits. It needs a retune first.
+  info.attackValue = (ksValue / 4) * KS_SCALE;
+
+  return info;
+}
+
+static EvalAttacks
+computeAttacks(const ChessBoard& pos)
+{
+  EvalAttacks atk;
+  atk.side[WHITE] = sideAttacks<WHITE>(pos);
+  atk.side[BLACK] = sideAttacks<BLACK>(pos);
+  return atk;
 }
 
 
 template <Color cMy, PieceType pt, int pieceVal>
 static Score
-calcDistanceScore(const ChessBoard& pos)
+calcDistanceScore(const ChessBoard& pos, Square emyKingSq)
 {
   Bitboard pieceBb = pos.piece<cMy, pt>();
-  Square emyKingSq = squareNo(pos.piece<~cMy, KING>());
 
   Score score = VALUE_ZERO;
 
@@ -104,13 +171,15 @@ template <Color cMy>
 static Score
 attackDistanceScore(const ChessBoard& pos)
 {
+  // Hoisted: shared by all five calls below.
+  const Square emyKingSq = squareNo(pos.piece<~cMy, KING>());
   Score distanceScore = VALUE_ZERO;
 
-  distanceScore += calcDistanceScore<cMy, PAWN  , 1>(pos);
-  distanceScore += calcDistanceScore<cMy, KNIGHT, 2>(pos);
-  distanceScore += calcDistanceScore<cMy, BISHOP, 3>(pos);
-  distanceScore += calcDistanceScore<cMy, ROOK  , 4>(pos);
-  distanceScore += calcDistanceScore<cMy, QUEEN , 6>(pos);
+  distanceScore += calcDistanceScore<cMy, PAWN  , 1>(pos, emyKingSq);
+  distanceScore += calcDistanceScore<cMy, KNIGHT, 2>(pos, emyKingSq);
+  distanceScore += calcDistanceScore<cMy, BISHOP, 3>(pos, emyKingSq);
+  distanceScore += calcDistanceScore<cMy, ROOK  , 4>(pos, emyKingSq);
+  distanceScore += calcDistanceScore<cMy, QUEEN , 6>(pos, emyKingSq);
 
   return distanceScore;
 }
@@ -138,36 +207,15 @@ openFilesScore(const ChessBoard& pos)
   return (score * KS_SCALE) / 4 + KS_SCALE;
 }
 
-template <Color cMy, PieceType pt>
-static Bitboard
-genAttackedSquares(const ChessBoard& pos)
-{
-  Bitboard squares = 0;
-  Bitboard pieceBb = pos.piece<cMy, pt>();
-  Bitboard occupied = pos.all();
-
-  while (pieceBb != 0)
-    squares |= attackSquares<pt>(nextSquare(pieceBb), occupied);
-  return squares;
-}
-
+// `emyAttacks` is the opposing colour attack union, already built by sideAttacks().
 template <Color cMy>
 static Score
-kingMobilityScore(const ChessBoard& pos)
+kingMobilityScore(const ChessBoard& pos, const AttackInfo& emyAttacks)
 {
-  const Color cEmy = ~cMy;
   Square kSq = squareNo(pos.piece<cMy, KING>());
   Bitboard piecesMy = pos.piece<cMy, ALL>();
-  Bitboard attackedSquares = 0;
 
-  attackedSquares |= pawnAttackSquares<cEmy>(pos);
-  attackedSquares |= genAttackedSquares<cEmy, BISHOP>(pos);
-  attackedSquares |= genAttackedSquares<cEmy, KNIGHT>(pos);
-  attackedSquares |= genAttackedSquares<cEmy, ROOK>(pos);
-  attackedSquares |= genAttackedSquares<cEmy, QUEEN>(pos);
-  attackedSquares |= genAttackedSquares<cEmy, KING>(pos);
-
-  int x = popCount(attackSquares<KING>(kSq, 0) & ~(piecesMy | attackedSquares));
+  int x = popCount(attackSquares<KING>(kSq, 0) & ~(piecesMy | emyAttacks.all));
   return min(x, 3);
 }
 
@@ -198,8 +246,8 @@ defendersCount(const ChessBoard& pos)
 }
 
 template <bool debug>
-Score
-threats(const ChessBoard& pos)
+static Score
+threatsImpl(const ChessBoard& pos, const EvalAttacks& atk)
 {
   // Attack Value Currently
   //    - Distance of pieces from king
@@ -215,14 +263,14 @@ threats(const ChessBoard& pos)
   // Increase Attack Value if lack of KIngSafety
   // Threat = Attack_Value * Lack_Of_Safety + Long_Term_Prospects
 
-  Score attackValueWhite = attackValue<WHITE>(pos);
-  Score attackValueBlack = attackValue<BLACK>(pos);
+  Score attackValueWhite = atk.side[WHITE].attackValue;
+  Score attackValueBlack = atk.side[BLACK].attackValue;
 
   Score distanceScoreWhite = attackDistanceScore<WHITE>(pos);
   Score distanceScoreBlack = attackDistanceScore<BLACK>(pos);
 
-  Score kingMobilityWhite = kingMobilityScore<WHITE>(pos);
-  Score kingMobilityBlack = kingMobilityScore<BLACK>(pos);
+  Score kingMobilityWhite = kingMobilityScore<WHITE>(pos, atk.side[BLACK]);
+  Score kingMobilityBlack = kingMobilityScore<BLACK>(pos, atk.side[WHITE]);
 
   Score openFileDeductionWhite = openFilesScore<WHITE>(pos);
   Score openFileDeductionBlack = openFilesScore<BLACK>(pos);
@@ -281,6 +329,13 @@ threats(const ChessBoard& pos)
   return threatsScore;
 }
 
+// Public entry point (evaluation.h): builds the attack maps itself. evaluate() calls
+// threatsImpl() directly so it can share the maps with mobility and king safety.
+template <bool debug>
+Score
+threats(const ChessBoard& pos)
+{ return threatsImpl<debug>(pos, computeAttacks(pos)); }
+
 
 #endif
 
@@ -307,11 +362,10 @@ bishopPairDiff(const ChessBoard& pos)
 // Rook-file "units": +2 per rook on a fully-open file, +1 per semi-open file.
 template <Color cMy>
 static Score
-rookFileUnits(const ChessBoard& pos)
+rookFileUnits(const ChessBoard& pos, Bitboard allPawns)
 {
   Bitboard rooks    = pos.piece<cMy, ROOK>();
   Bitboard myPawns  = pos.piece<cMy, PAWN>();
-  Bitboard allPawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
   Score units = 0;
 
   while (rooks != 0)
@@ -338,14 +392,26 @@ isolatedPawnCount(const ChessBoard& pos)
   return popCount(pawns & ~neighbors);
 }
 
-static Score
-materialDiffereceMidGame(const ChessBoard& pos)
+static MaterialDiffs
+materialDiffs(const ChessBoard& pos)
 {
-  return PawnValueMg * (pos.count<WHITE, PAWN  >() - pos.count<BLACK, PAWN  >())
-     + BishopValueMg * (pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>())
-     + KnightValueMg * (pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>())
-     +   RookValueMg * (pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >())
-     +  QueenValueMg * (pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >());
+  return {
+    pos.count<WHITE, PAWN  >() - pos.count<BLACK, PAWN  >(),
+    pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>(),
+    pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>(),
+    pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >(),
+    pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >(),
+  };
+}
+
+static Score
+materialDiffereceMidGame(const MaterialDiffs& md)
+{
+  return PawnValueMg * md.pawn
+     + BishopValueMg * md.bishop
+     + KnightValueMg * md.knight
+     +   RookValueMg * md.rook
+     +  QueenValueMg * md.queen;
 }
 
 template<Color cMy, PieceType pt, const ScoreTable& strTable>
@@ -377,65 +443,35 @@ pieceTableStrengthMidGame(const ChessBoard& pos)
   return pawns + bishops + knights + rooks + king;
 }
 
-template <Color cMy, PieceType pt>
-static Score
-addMobilityScore(const ChessBoard& pos)
-{
-  Bitboard pieceBb = pos.piece<cMy, pt>();
-  Bitboard occupied = pos.all();
-  Bitboard squares  = 0;
-
-  while (pieceBb > 0)
-    squares |= attackSquares<pt>(nextSquare(pieceBb), occupied);
-
-  return popCount(squares);
-}
-
-// White-relative per-piece-type mobility subtotals (raw popcount diffs, no per-piece
-// scaling — the EvalWeights scalars do that). Used by both the live eval and the
-// Texel cache so the two stay in lockstep.
-struct MobilityDiffs
-{
-  float bishop, knight, rook, queen;
-
-  float weighted(const EvalWeights& w) const
-  {
-    return w.mobBishopWeightMg * bishop
-         + w.mobKnightWeightMg * knight
-         + w.mobRookWeightMg   * rook
-         + w.mobQueenWeightMg  * queen;
-  }
-};
-
+// Reads the per-type attack unions built by sideAttacks().
 static MobilityDiffs
-mobilityDiffs(const ChessBoard& pos)
+mobilityDiffs(const EvalAttacks& atk)
 {
+  const AttackInfo& w = atk.side[WHITE];
+  const AttackInfo& b = atk.side[BLACK];
+
   return {
-    float(addMobilityScore<WHITE, BISHOP>(pos) - addMobilityScore<BLACK, BISHOP>(pos)),
-    float(addMobilityScore<WHITE, KNIGHT>(pos) - addMobilityScore<BLACK, KNIGHT>(pos)),
-    float(addMobilityScore<WHITE, ROOK  >(pos) - addMobilityScore<BLACK, ROOK  >(pos)),
-    float(addMobilityScore<WHITE, QUEEN >(pos) - addMobilityScore<BLACK, QUEEN >(pos)),
+    float(popCount(w.bishop) - popCount(b.bishop)),
+    float(popCount(w.knight) - popCount(b.knight)),
+    float(popCount(w.rook  ) - popCount(b.rook  )),
+    float(popCount(w.queen ) - popCount(b.queen )),
   };
 }
 
+// Board-wide inputs are hoisted above the caller pawn loop and passed in, rather
+// than re-derived for every pawn.
 template <Color cMy>
 static bool
-isPassedPawn(const ChessBoard& pos, Square pawnSq)
+isPassedPawn(Bitboard emyPawns, Square pawnSq)
 {
-  const Color cEmy = ~cMy;
-  const Bitboard emyPawns = pos.piece<cEmy, PAWN>();
-
   return (plt::passedPawnMasks[cMy][pawnSq] & emyPawns) == 0;
 }
 
 template <Color cMy>
 static bool
-canSafelyPromote(const ChessBoard& pos, Square pawnSq)
+canSafelyPromote(Square emykingSq, int emyKingToMove, Square pawnSq)
 {
-  Square emykingSq = squareNo(pos.piece<~cMy, KING>());
-  Square   promoSq = Square(int(SQ_A8) * int(cMy)) + (pawnSq & 7);
-
-  int emyKingToMove = cMy != pos.color;
+  Square promoSq = Square(int(SQ_A8) * int(cMy)) + (pawnSq & 7);
 
   if (min(5, chebyshevDistance(pawnSq, promoSq)) < chebyshevDistance(emykingSq, promoSq) - emyKingToMove)
     return true;
@@ -445,16 +481,18 @@ canSafelyPromote(const ChessBoard& pos, Square pawnSq)
 
 template<bool debug>
 static Score
-midGameScore(const ChessBoard& pos, float /*phase*/)
+midGameScore(const ChessBoard& pos, const EvalAttacks& atk, const SharedTerms& shared)
 {
-  Score materialScore   = materialDiffereceMidGame(pos);
+  Score materialScore   = materialDiffereceMidGame(shared.material);
   Score pieceTableScore = pieceTableStrengthMidGame(pos);
-  MobilityDiffs mob     = mobilityDiffs(pos);
-  Score threatsScore    = threats<debug>(pos);
+  MobilityDiffs mob     = mobilityDiffs(atk);
+  Score threatsScore    = threatsImpl<debug>(pos, atk);
 
-  int   bishopPair = bishopPairDiff(pos);
-  Score rookFile   = rookFileUnits<WHITE>(pos) - rookFileUnits<BLACK>(pos);
-  int   isolated   = isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos);
+  const Bitboard allPawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
+
+  int   bishopPair = shared.bishopPair;
+  Score rookFile   = rookFileUnits<WHITE>(pos, allPawns) - rookFileUnits<BLACK>(pos, allPawns);
+  int   isolated   = shared.isolated;
 
   if (debug)
   {
@@ -490,26 +528,26 @@ midGameScore(const ChessBoard& pos, float /*phase*/)
 #ifndef ENDGAME
 
 static Score
-materialDiffereceEndGame(const ChessBoard& pos)
+materialDiffereceEndGame(const MaterialDiffs& md)
 {
-  return PawnValueEg * (pos.count<WHITE, PAWN  >() - pos.count<BLACK, PAWN  >())
-     + BishopValueEg * (pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>())
-     + KnightValueEg * (pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>())
-     +   RookValueEg * (pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >())
-     +  QueenValueEg * (pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >());
+  return PawnValueEg * md.pawn
+     + BishopValueEg * md.bishop
+     + KnightValueEg * md.knight
+     +   RookValueEg * md.rook
+     +  QueenValueEg * md.queen;
 }
 
 static Score
-distanceBetweenKingsScore(const ChessBoard& pos)
+distanceBetweenKingsScore(const ChessBoard& pos, const MaterialDiffs& md)
 {
   Square wkSq = squareNo(pos.piece<WHITE, KING>());
   Square bkSq = squareNo(pos.piece<BLACK, KING>());
 
   int materialDiff =
-    + 3 * (pos.count<WHITE, BISHOP>() - pos.count<BLACK, BISHOP>())
-    + 3 * (pos.count<WHITE, KNIGHT>() - pos.count<BLACK, KNIGHT>())
-    + 5 * (pos.count<WHITE, ROOK  >() - pos.count<BLACK, ROOK  >())
-    + 9 * (pos.count<WHITE, QUEEN >() - pos.count<BLACK, QUEEN >());
+    + 3 * md.bishop
+    + 3 * md.knight
+    + 5 * md.rook
+    + 9 * md.queen;
 
   int dist = 14 - distance(wkSq, bkSq);
   Score score = (dist / 4) * (dist + 2) * materialDiff;
@@ -518,7 +556,7 @@ distanceBetweenKingsScore(const ChessBoard& pos)
 
 template <Color winningSide, bool debug>
 static Score
-loneKingEndGame(const ChessBoard& pos)
+loneKingEndGame(const ChessBoard& pos, const MaterialDiffs& md)
 {
   /**
     * Evaluates the score for an endgame position where the
@@ -544,9 +582,9 @@ loneKingEndGame(const ChessBoard& pos)
   Score winningSideCorrectionFactor = 2 * winningSide - 1;
   Score  losingSideCorrectionFactor = 2 *  losingSide - 1;
 
-  Score distanceScore = distanceBetweenKingsScore(pos);
+  Score distanceScore = distanceBetweenKingsScore(pos, md);
   Score centreScore   = loneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
-  Score materialScore = materialDiffereceEndGame(pos);
+  Score materialScore = materialDiffereceEndGame(md);
 
   if (pos.count<BISHOP>() == 1 and pos.count<KNIGHT>() == 1)
   {
@@ -608,25 +646,28 @@ pawnStructureScoreEndgame(const ChessBoard& pos, const EvalData& ed)
     column <<= 1;
   }
 
+  // Loop invariants: neither these nor the passed-pawn helper inputs vary per pawn.
+  const Bitboard emyPawns = pos.piece<cEmy, PAWN>();
+  const Square       kpos = squareNo(pos.piece< cMy, KING>());
+  const Square      ekpos = squareNo(pos.piece<cEmy, KING>());
+  const int emyKingToMove = cMy != pos.color;
+
   while (pawns != 0)
   {
     Square pawnSq = nextSquare(pawns);
 
-    if (isPassedPawn<cMy>(pos, pawnSq))
+    if (isPassedPawn<cMy>(emyPawns, pawnSq))
     {
       // Reward for passed pawn
       Score rankProgress = (7 * (cMy ^ 1)) + (pawnSq >> 3) * (2 * cMy - 1);
       score += 3 * rankProgress * rankProgress;
 
-      if (canSafelyPromote<cMy>(pos, pawnSq))
+      if (canSafelyPromote<cMy>(ekpos, emyKingToMove, pawnSq))
       {
         Score reward = ed.pieces[cEmy] == 0 ? QueenValueEg : PawnValueEg >> 2;
         score += reward + 3 * rankProgress * rankProgress;
       }
     }
-
-    Square  kpos = squareNo(pos.piece< cMy, KING>());
-    Square ekpos = squareNo(pos.piece<cEmy, KING>());
 
     // TODO: More points for being close to pawn which is closer to promotion
     // Add score for king close to passed pawn and
@@ -640,21 +681,21 @@ pawnStructureScoreEndgame(const ChessBoard& pos, const EvalData& ed)
 
 template<bool debug>
 static Score
-endGameScore(const ChessBoard& pos, const EvalData& ed, float /*phase*/)
+endGameScore(const ChessBoard& pos, const EvalData& ed, const SharedTerms& shared)
 {
   // Distance between kings
   // King in corners
   // BN endgames
   // Rule of Square (2n1k1r1/p7/3B1Rp1/2P2pKp/8/4P1P1/5P1P/8 w - - 17 45)
 
-  Score materialScore   = materialDiffereceEndGame(pos);
+  Score materialScore   = materialDiffereceEndGame(shared.material);
   Score pieceTableScore = pieceTableStrengthEndGame(pos);
   Score pawnStructure   = pawnStructureScoreEndgame<WHITE>(pos, ed)
                         - pawnStructureScoreEndgame<BLACK>(pos, ed);
-  Score distanceScore   = distanceBetweenKingsScore(pos);
+  Score distanceScore   = distanceBetweenKingsScore(pos, shared.material);
 
-  int bishopPair = bishopPairDiff(pos);
-  int isolated   = isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos);
+  int bishopPair = shared.bishopPair;
+  int isolated   = shared.isolated;
 
   if (debug)
   {
@@ -713,15 +754,28 @@ evaluate(const ChessBoard& pos)
     cout << "Phase = " << phase << endl;
   }
 
+  const MaterialDiffs material = materialDiffs(pos);
+
   // Special Piece EndGames
   if ((pos.count<PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))
   {
-    Score score = (ed.pieces[WHITE] > 0) ? loneKingEndGame<WHITE, debug>(pos) : loneKingEndGame<BLACK, debug>(pos);
+    Score score = (ed.pieces[WHITE] > 0)
+      ? loneKingEndGame<WHITE, debug>(pos, material)
+      : loneKingEndGame<BLACK, debug>(pos, material);
     return score * side2move;
   }
 
-  Score mgScore = midGameScore<debug>(pos, phase);
-  Score egScore = endGameScore<debug>(pos, ed, 1 - phase);
+  // Built once and shared: the attack maps feed king safety AND mobility; bishopPair
+  // and isolated feed both the midgame and the endgame subscore.
+  const EvalAttacks atk = computeAttacks(pos);
+  const SharedTerms shared = {
+    material,
+    bishopPairDiff(pos),
+    isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos)
+  };
+
+  Score mgScore = midGameScore<debug>(pos, atk, shared);
+  Score egScore = endGameScore<debug>(pos, ed, shared);
 
   Score score = Score( phase * float(mgScore) + (1 - phase) * float(egScore) );
 
@@ -770,24 +824,29 @@ extractEvalComponents(const ChessBoard& pos)
   ec.tunable = true;
   ec.phase   = phase;
 
-  MobilityDiffs mob = mobilityDiffs(pos);
+  const MaterialDiffs material = materialDiffs(pos);
+  const EvalAttacks   atk      = computeAttacks(pos);
 
-  ec.matMg     = float(materialDiffereceMidGame(pos));
+  MobilityDiffs mob = mobilityDiffs(atk);
+
+  ec.matMg     = float(materialDiffereceMidGame(material));
   ec.ptMg      = float(pieceTableStrengthMidGame(pos));
   ec.mobBishop = mob.bishop;
   ec.mobKnight = mob.knight;
   ec.mobRook   = mob.rook;
   ec.mobQueen  = mob.queen;
-  ec.threats   = float(threats<false>(pos));
+  ec.threats   = float(threatsImpl<false>(pos, atk));
 
-  ec.matEg    = float(materialDiffereceEndGame(pos));
+  ec.matEg    = float(materialDiffereceEndGame(material));
   ec.ptEg     = float(pieceTableStrengthEndGame(pos));
   ec.pawnEg   = float(pawnStructureScoreEndgame<WHITE>(pos, ed)
               - pawnStructureScoreEndgame<BLACK>(pos, ed));
-  ec.distance = float(distanceBetweenKingsScore(pos));
+  ec.distance = float(distanceBetweenKingsScore(pos, material));
+
+  const Bitboard allPawns = pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>();
 
   ec.bishopPair = float(bishopPairDiff(pos));
-  ec.rookFileMg = float(rookFileUnits<WHITE>(pos) - rookFileUnits<BLACK>(pos));
+  ec.rookFileMg = float(rookFileUnits<WHITE>(pos, allPawns) - rookFileUnits<BLACK>(pos, allPawns));
   ec.isolated   = float(isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos));
 
   return ec;

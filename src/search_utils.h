@@ -28,9 +28,8 @@ resetPvLine();
 void
 clearKillers();
 
-// Zero the history table. Called per search alongside clearKillers(), so v1
-// carries no state between moves of a game — keeping (or halving) it across
-// moves is a separate knob, deliberately not bundled into the first A/B.
+// Zero the history table. Called per search alongside clearKillers(), so no state
+// carries between moves of a game.
 void
 clearHistory();
 
