@@ -3,6 +3,7 @@
 #define NODE_STATE_H
 
 #include "types.h"
+#include "varray.h"
 #include <optional>
 
 
@@ -44,7 +45,25 @@ struct NodeState
   // the abort costs no extra clock read on the hot path.
   bool aborted = false;
 
+  // Quiet moves searched at this node that did NOT cause a cutoff -- the malus
+  // list. Filled across *all* stages (quiet checks, killers, residual quiets)
+  // because playAllMoves threads one NodeState& through the stage recursion;
+  // a per-stage span would be free but a QUIET-stage cutoff would then never
+  // penalize the killers that failed ahead of it, which are the node's
+  // highest-information failures. Drained exactly once, by the move that cuts
+  // off. Fixed capacity: Varray::add() bounds-checks itself, so overflow
+  // silently stops recording -- it costs a penalty, never correctness.
+  Varray<Move, 64> triedQuiets{};
+
   constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
+
+  // The quiet-futility skip test, in one place because two sites must agree on
+  // it: playSubsetMoves breaks out of the QUIET stage on it, and playAllMoves
+  // reads it to decide whether ordering that stage is worth paying for. Let the
+  // two expressions drift apart and the failure isn't a wasted sort — it's an
+  // unsorted band that does get searched, i.e. a silent move-ordering change.
+  constexpr bool skipsQuiets(Move bestMove) const noexcept
+  { return quietFutile and bestMove != NULL_MOVE; }
 };
 
 

@@ -294,6 +294,18 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
 {
   const Move colorBit = Move(color) << 22;
 
+  // MType::PROMOTION as an mt1 *selector* means "the quiet pawn moves that land
+  // on the last rank" -- the subset getMoves<QUIET> already emits with bit 21
+  // set, and the one qsearch was missing (promotion-captures carry bit 20 and
+  // so arrive with CAPTURES). The fills below still run as MType::QUIET, so the
+  // emitted encoding is bit-identical to the normal quiet path: fillPawns ORs
+  // in the promotion bit itself for Rank18 destinations. Only the destination
+  // mask and the skipped piece/king loops differ.
+  constexpr bool quietPawns = hasFlag(mt1, MType::QUIET) or hasFlag(mt1, MType::PROMOTION);
+  constexpr bool pieceMoves = hasFlag(mt1, MType::QUIET) or hasFlag(mt1, MType::CAPTURES);
+  constexpr Bitboard quietMask =
+    hasFlag(mt1, MType::QUIET) ? Bitboard(AllSquares) : Bitboard(Rank18);
+
   // fix pawns
   Bitboard emyPieces = pos.getPiece(~color, ALL);
   Bitboard kingMask  = pos.getPiece(color, KING) & initSquares;
@@ -307,10 +319,12 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
       fillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[0], 7 - 16 * color);
       fillShiftPawns<MType::CAPTURES, mt2>(pos, movesArray, pawnDestSquares[1], 9 - 16 * color);
     }
-    if (hasFlag(mt1, MType::QUIET))
+    if constexpr (quietPawns)
     {
-      fillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[2], 16 - 32 * color);
-      fillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[3],  8 - 16 * color);
+      // A double push can never land on the last rank, so PROMOTION skips it.
+      if constexpr (hasFlag(mt1, MType::QUIET))
+        fillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[2], 16 - 32 * color);
+      fillShiftPawns<MType::QUIET, mt2>(pos, movesArray, pawnDestSquares[3] & quietMask, 8 - 16 * color);
     }
 
     while (pawnMask > 0)
@@ -326,15 +340,15 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
       if (hasFlag(mt1, MType::CAPTURES))
         fillPawns<MType::CAPTURES, mt2>(pos, movesArray,  captSquares, baseMove);
 
-      if (hasFlag(mt1, MType::QUIET))
-        fillPawns<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
+      if constexpr (quietPawns)
+        fillPawns<MType::QUIET, mt2>(pos, movesArray, quietSquares & quietMask, baseMove);
     }
   }
 
   if (hasFlag(mt1, MType::CAPTURES))
     fillEnpassantPawns<mt1, mt2>(pos, movesArray);
 
-  while (pieceMask > 0)
+  while (pieceMoves and pieceMask > 0)
   {
     Square     ip = nextSquare(pieceMask);
     PieceType ipt = type_of(pos.pieceOnSquare(ip));
@@ -354,7 +368,7 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
       fillMoves<MType::QUIET, mt2>(pos, movesArray, quietSquares, baseMove);
   }
 
-  if (kingMask)
+  if (pieceMoves and kingMask)
   {
     Square     ip = squareNo(kingMask);
     Move baseMove = colorBit | (Move(KING) << 12) | ip;
@@ -397,6 +411,45 @@ MoveList::exists<MType::CAPTURES>(const ChessBoard& pos) const noexcept
 {
   Bitboard emyPieces = pos.getPiece(~color, ALL);
   return (myAttackedSquares & emyPieces) or enpassantPawns;
+}
+
+template <>
+bool
+MoveList::exists<MType::PROMOTION>(const ChessBoard& pos) const noexcept
+{
+  // Quiet promotions only -- promotion-captures already answer to
+  // exists<CAPTURES>, since they carry the capture bit. Mirrors the PROMOTION
+  // branch of getMoves: pawn sources only, single pushes only, Rank18 only.
+
+  // Cheapest possible reject first: no pawn one rank from promoting. Color is
+  // BLACK = 0, WHITE = 1, and BLACK pushes toward Rank1 -- hence Rank2 in slot
+  // 0 and Rank7 in slot 1, not the other way round.
+  constexpr Bitboard prePromoRank[COLOR_NB] = { Rank2, Rank7 };
+  if ((myPawns & prePromoRank[color]) == 0)
+    return false;
+
+  // Load-bearing, not an optimization: in double check pieceMovement() never
+  // runs, so pawnDestSquares[] is left uninitialized (the constructor zeroes
+  // checkers/initSquares/enpassantPawns but not the dest arrays). getMoves
+  // guards its own pawn section the same way. Reading slot 3 below is only
+  // safe once this has returned.
+  if (checkers >= 2)
+    return false;
+
+  if (pawnDestSquares[3] & Rank18)
+    return true;
+
+  Bitboard emyPieces = pos.getPiece(~color, ALL);
+  Bitboard pawnMask  = myPawns & initSquares;
+
+  while (pawnMask > 0)
+  {
+    Square ip = nextSquare(pawnMask);
+    if (destSquares[ip] & Rank18 & ~emyPieces)
+      return true;
+  }
+
+  return false;
 }
 
 template <>
@@ -592,3 +645,5 @@ template void MoveList::getMoves<MType(2), MType(0)>(const ChessBoard&, MoveArra
 template void MoveList::getMoves<MType(2), MType(4)>(const ChessBoard&, MoveArray&) const noexcept;
 template void MoveList::getMoves<MType(3), MType(0)>(const ChessBoard&, MoveArray&) const noexcept;
 template void MoveList::getMoves<MType(3), MType(4)>(const ChessBoard&, MoveArray&) const noexcept;
+// MType(8) == PROMOTION: quiet promotions only, for the quiescence search.
+template void MoveList::getMoves<MType(8), MType(0)>(const ChessBoard&, MoveArray&) const noexcept;

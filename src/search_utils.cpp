@@ -4,6 +4,7 @@
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
 array<Varray<Move, 2>, MAX_PLY> killerMoves;
+array<array<array<int32_t, SQUARE_NB>, SQUARE_NB>, COLOR_NB> historyTable;
 
 void
 movcpy(Move* pTarget, const Move* pSource, int n)
@@ -21,6 +22,43 @@ clearKillers()
 {
   for (auto& slot : killerMoves)
     slot.clearKillerMoves();
+}
+
+void
+clearHistory()
+{
+  for (auto& byColor : historyTable)
+    for (auto& byFrom : byColor)
+      byFrom.fill(0);
+}
+
+void
+updateHistory(Color c, Move move, Depth depth)
+{
+  // depth is >= 1 here: alphaBeta hands depth <= 0 to quiescenceSearch before
+  // any move is staged, so the bonus is always positive.
+  const int bonus = int(depth) * int(depth);
+  int32_t& h = historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))];
+
+  // h is bounded by MAX_HISTORY and bonus by (MAX_DEPTH + EXTENSION_LIMIT)^2,
+  // so the product stays far inside int32.
+  h += int32_t(bonus - int(h) * bonus / int(MAX_HISTORY));
+}
+
+void
+penalizeHistory(Color c, Move move, Depth depth)
+{
+  const int malus = int(depth) * int(depth);
+  int32_t& h = historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))];
+
+  // The mirror of the bonus is `-= malus + h*malus/MAX`, NOT `-= malus - ...`.
+  // Work the sign through: with h negative, `h*malus/MAX` is negative, so the
+  // `+` shrinks the decrement as h approaches -MAX_HISTORY (the asymptote the
+  // bonus form has at +MAX_HISTORY). Writing `-` instead makes the decrement
+  // *grow* the more negative h gets -- an unbounded runaway that eventually
+  // overflows int32 and, long before that, stops the ordering key from being
+  // comparable between moves. There is no compile error for getting it wrong.
+  h -= int32_t(malus + int(h) * malus / int(MAX_HISTORY));
 }
 
 Score

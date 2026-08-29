@@ -119,10 +119,11 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   // away. Without it an already-drawn leaf came back as a static eval (+3.75 on a
   // dead-drawn KRN-vs-KR at halfmove 100) and the draw only surfaced an iteration
   // later, once the same position sat at an interior node. One test here covers
-  // the whole capture tree below: qsearch only searches captures, which are
-  // irreversible and reset the halfmove clock, so neither draw can arise deeper.
-  // It sits *after* the mate/stalemate test above because checkmate outranks the
-  // 50-move rule — movegen has already run by here, so that costs nothing.
+  // the whole tree below: qsearch searches only captures and quiet promotions,
+  // and both are irreversible and reset the halfmove clock — a promotion is a
+  // pawn move — so neither draw can arise deeper. It sits *after* the
+  // mate/stalemate test above because checkmate outranks the 50-move rule —
+  // movegen has already run by here, so that costs nothing.
   if constexpr (leafnode)
   {
     if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
@@ -155,20 +156,41 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (standPat > alpha) alpha = standPat;
 
-  if (!myMoves.exists<MType::CAPTURES>(pos))
+  // A pawn one push from queening is worth ~800cp more than the static eval
+  // says it is, and a CAPTURES-only move list never sees the push. Promotion-
+  // *captures* carry the capture bit and so arrive with the rest, but a quiet
+  // promotion is emitted under the QUIET bucket. That left every leaf holding a
+  // pawn on the 7th with a clear square ahead of it evaluated as though the
+  // pawn were staying a pawn -- and a leaf is exactly where the search has no
+  // remaining line to discover the truth by other means.
+  //
+  // Not written as `if constexpr`: the runtime `and` folds away just the same
+  // when the flag is off, but both branches still get type-checked, so flipping
+  // USE_QSEARCH_PROMO can never fail to compile the way an untaken
+  // `if constexpr` branch silently can.
+  const bool promoExists = USE_QSEARCH_PROMO and myMoves.exists<MType::PROMOTION>(pos);
+
+  if (!myMoves.exists<MType::CAPTURES>(pos) and !promoExists)
     return alpha;
 
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
 
-  // Keep the single best capture at thin nodes, the top 3 otherwise, even if
-  // they lose material -- otherwise a node with only losing captures would
-  // collapse to its stand-pat score.
+  if (promoExists)
+    myMoves.getMoves<MType::PROMOTION>(pos, movesArray);
+
+  // Keep the single best move at thin nodes, the top 3 otherwise, even if they
+  // lose material -- otherwise a node with only losing captures would collapse
+  // to its stand-pat score.
   const size_t floor = movesArray.size() < 4 ? 1 : 3;
 
   // orderCaptures() sorts SEE-descending and hands back the prune boundary, so
   // the loop below never needs a per-move SEE check of its own. Without move
   // ordering the list is unsorted and no such boundary exists -- search it all.
+  // Quiet promotions rank on the same SEE scale as the captures: seeScore()
+  // credits the promoted piece minus the pawn, so an undefended queening is
+  // 810 and sorts above every capture, while one that just hangs the new piece
+  // falls below zero and prunes with the losing captures.
   const size_t moveCount = USE_MOVE_ORDER
     ? orderCaptures(pos, movesArray, floor) : movesArray.size();
 
@@ -176,9 +198,9 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   for (size_t moveNo = 0; moveNo < moveCount; ++moveNo)
   {
-    Move captureMove = movesArray[moveNo];
+    Move qMove = movesArray[moveNo];
 
-    pos.makeMove(captureMove);
+    pos.makeMove(qMove);
     Score score = -quiescenceSearch(pos, -beta, -alpha, ply + 1, pvNextIndex);
     pos.unmakeMove();
 
@@ -194,7 +216,7 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
       if (ply < MAX_PLY)
       {
-        pvArray[pvIndex] = filter(captureMove) | quiescenceMove();
+        pvArray[pvIndex] = filter(qMove) | quiescenceMove();
         movcpy (pvArray + pvIndex + 1,
                 pvArray + pvNextIndex, MAX_PLY - ply - 1);
       }
@@ -385,7 +407,7 @@ playSubsetMoves(
     // / checks / PV / killers ran in earlier stages), so every move here is
     // already quiet & non-check — no per-move type test needed. Unverified bet
     // (cf. razoring's qsearch check); the depth-scaled margin is the safety.
-    if (futilityStage and ns.quietFutile and bestMove != NULL_MOVE)
+    if (futilityStage and ns.skipsQuiets(bestMove))
       break;
 
     // HASH_ALPHA fallback: remember the first searched move at this node so
@@ -411,9 +433,31 @@ playSubsetMoves(
       bestMove = filter(move);
 
       if (is_type<MType::QUIET>(move))
+      {
         killerMoves[ns.ply].addKillerMove(move);
+        if constexpr (USE_HISTORY)
+        {
+          updateHistory(pos.color, move, ns.depth);
+
+          // Malus: every quiet that was searched at this node and failed to cut
+          // off gets pushed down by the same depth weight that lifts the winner.
+          // Kept inside the QUIET guard on purpose -- a capture cutoff leaves
+          // the table untouched on both the reward and the penalty side, so
+          // history stays a quiet-only statistic.
+          if constexpr (USE_HISTORY_MALUS)
+            for (Move tried : ns.triedQuiets)
+              penalizeHistory(pos.color, tried, ns.depth);
+        }
+      }
       break;
     }
+
+    // Register the failure. Placed *after* the cutoff break, so the winner is
+    // never in its own penalty list, and *after* the shouldStop() check above,
+    // because a timed-out move's score is garbage -- it did not really fail.
+    if constexpr (USE_HISTORY and USE_HISTORY_MALUS)
+      if (is_type<MType::QUIET>(move))
+        ns.triedQuiets.add(move);
 
     // Better move found, update the result
     if (eval > ns.alpha) {
@@ -444,9 +488,19 @@ playAllMoves(
   if constexpr (moveGen == 1)
     myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
-  size_t end = orderType == MType::QUIET
-    ? movesArray.size()
-    : orderMoves(pos, movesArray, orderType, ns.ply, start);
+  // The residual QUIET stage used to short-circuit to movesArray.size() here.
+  // That was only ever an optimization: with mTypes == MType::QUIET every
+  // prioritize/sort/killer branch inside orderMoves is gated off and it returns
+  // movesArray.size() anyway. Routing the stage through orderMoves gives the
+  // history sort somewhere to live.
+  //
+  // Don't pay for that sort when playSubsetMoves is about to break on move 0 --
+  // literally its own break condition (ns.skipsQuiets), evaluated one call
+  // earlier on the same unchanged state, and true on a large minority of
+  // shallow quiet stages. The stage test mirrors the `futilityStage` argument
+  // below, so the two predicates stay identical by construction.
+  const bool useHistory = !(orderType == MType::QUIET and ns.skipsQuiets(bestMove));
+  size_t end = orderMoves(pos, movesArray, orderType, ns.ply, start, useHistory);
 
   // Only the residual QUIET stage may futility-prune; earlier stages (captures,
   // promotions, checks, PV, killers) always search their moves.
@@ -693,6 +747,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // LMR bias is now derived from myMoves.removedMoves() inside
   // playSubsetMoves — the hash-move fast-path's removeMove() call already
   // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
+
   MoveArray movesArray;
   bestMove = playAllMoves<PvNode, 0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
     (pos, myMoves, movesArray, 0, ns, bestMove);
@@ -759,6 +814,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
 {
   resetPvLine();
   clearKillers();
+  clearHistory();
 
   if (!generateMoves(board).anyMove())
   {
@@ -838,8 +894,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     // If found a checkmate
     if (withinValWindow and (__abs(eval) >= VALUE_INF - 500)) break;
 
-    // Sort Moves according to time it took to explore the move.
-    info.sortMovesOnNodes(pvArray[0]);
+    // Put this iteration's best move first for the next one. pvArray[0] is
+    // NULL_MOVE on an aspiration fail-low; promoteBestMove handles that itself.
+    info.promoteBestMove(pvArray[0]);
   }
 
   info.searchCompleted();

@@ -1,4 +1,4 @@
-
+﻿
 #ifndef TYPES_H
 #define TYPES_H
 
@@ -35,6 +35,18 @@ enum SearchFlag: bool
   USE_RFP = true,
   USE_RAZOR = true,
   USE_FUTILITY = true,
+  USE_HISTORY = true,
+
+  // History malus: penalize every quiet searched at a node that did NOT cut
+  // off, while a later quiet did. Without it the table only ever learns which
+  // moves are good, and two moves that have each cut off a few times are not
+  // comparable -- a quiet that cuts off once in ten visits reads the same as
+  // one that cuts off every time. Depends on USE_HISTORY; inert, not wrong,
+  // with it off.
+  USE_HISTORY_MALUS = true,
+
+  USE_QSEARCH_PROMO = true,
+
   // The two ways search can spend a won-side endgame-probe score. Independent
   // switches so all four combinations are measurable; both false reproduces the
   // draw-only behaviour the probe had before directionalScore existed.
@@ -89,6 +101,11 @@ enum Search
   MAX_PLY = 50,
   MAX_DEPTH = 40,
   LMR_LIMIT = 4,
+  // Saturation point of the butterfly history table. The gravity update
+  // (h += bonus - h*bonus/MAX_HISTORY) keeps every entry inside
+  // (-MAX_HISTORY, MAX_HISTORY) by construction, so there is no overflow sweep
+  // to schedule. Keep it inside int16 range if the table is ever narrowed.
+  MAX_HISTORY = 16384,
   EXTENSION_LIMIT = 8,
   NMP_MIN_DEPTH = 3,
   VAL_WINDOW = 16,

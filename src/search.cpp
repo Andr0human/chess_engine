@@ -27,8 +27,45 @@ prioritizeMoves(MoveArray& movesArray, size_t start)
   return start;
 }
 
+// Order the residual QUIET band by history score, descending.
+//
+// Scored once into a parallel array rather than inside a comparator (the
+// orderCaptures pattern) — the band averages ~26 moves, so a comparator would
+// redo the same three-level lookup ~2n*log(n) times. The insertion sort is
+// stable under `<`, which matters: moves that have neither cut off nor been
+// refuted all sit at 0, and those keep their emission order instead of being
+// shuffled arbitrarily among themselves.
+static void
+sortByHistory(Color color, MoveArray& movesArray, size_t start)
+{
+  const size_t n = movesArray.size();
+  if (n - start < 2)
+    return;
+
+  array<int32_t, MAX_MOVES> scores;
+  for (size_t i = start; i < n; i++)
+    scores[i] = historyScore(color, movesArray[i]);
+
+  for (size_t i = start + 1; i < n; i++)
+  {
+    const Move    move  = movesArray[i];
+    const int32_t score = scores[i];
+    size_t j = i;
+
+    while (j > start and scores[j - 1] < score)
+    {
+      movesArray[j] = movesArray[j - 1];
+      scores[j]     = scores[j - 1];
+      --j;
+    }
+
+    movesArray[j] = move;
+    scores[j]     = score;
+  }
+}
+
 size_t
-orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start)
+orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, size_t start, bool useHistory)
 {
   const auto seeComparator = [&pos] (Move move1, Move move2)
   { return seeScore(pos, move1) > seeScore(pos, move2); };
@@ -64,6 +101,20 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
       if (killerMoves[ply].search(movesArray[i]))
         std::swap(movesArray[i], movesArray[start++]);
     }
+  }
+
+  // History ordering of the residual QUIET band. Placed after the killer
+  // partition so killers keep their slot ahead of history, and only on the
+  // QUIET stage — the earlier stages are already ordered by SEE and would be
+  // scrambled by a key that only means anything for quiets.
+  //
+  // `useHistory` is the call site's veto: it knows (and orderMoves doesn't) when
+  // the stage is about to break on move 0 under quiet futility, where the sort
+  // is pure waste — measured at ~29% of shallow quiet stages.
+  if constexpr (USE_HISTORY)
+  {
+    if (hasFlag(mTypes, MType::QUIET) and useHistory)
+      sortByHistory(pos.color, movesArray, start);
   }
 
   return (hasFlag(mTypes, MType::QUIET)) ? movesArray.size() : start;
@@ -139,11 +190,23 @@ seeScore(const ChessBoard& pos, Move move)
   const PieceType fpt = PieceType((move >> 15) & 7);
 
   const Color side = ~pos.color;
-  const Score initialValue =
+  Score initialValue =
     (is_type<MType::CAPTURES>(move) and fpt == NONE) ? pieceValues[PAWN] : pieceValues[fpt];
 
   Bitboard removedPieces = 1ULL << ip;
   PieceType pieceOnSquare = type_of(pos.pieceOnSquare(ip));
+
+  // A promotion swaps the pawn for the promoted piece before the opponent can
+  // recapture. Credit that material gain, and hand see() the piece that
+  // actually lands on `fp` rather than the pawn that left `ip` -- otherwise
+  // every flavor of a promotion scores identically (0 undefended, -100
+  // defended), so the PROMOTION ordering stage cannot tell a queen from a
+  // bishop and capture-promotions sort by victim alone.
+  if (is_type<MType::PROMOTION>(move))
+  {
+    pieceOnSquare = PieceType(((move >> 18) & 3) + 2);
+    initialValue += pieceValues[pieceOnSquare] - pieceValues[PAWN];
+  }
 
   Score seeScore = initialValue - see(pos, fp, side, pieceOnSquare, removedPieces);
   return seeScore;
