@@ -159,6 +159,13 @@ class ChessBoard
   enPassantSquare() const
   { return Square(csep & 0x7f); }
 
+  // Plies since the last capture or pawn move. Public because the perpetual
+  // prover keys its cache on it: hashValue does not cover the clock, and the
+  // 50-move rule is one of that search's terminals.
+  constexpr int
+  halfMoveClock() const noexcept
+  { return halfmove; }
+
   constexpr Piece
   pieceOnSquare(Square sq) const noexcept
   { return board[sq]; }

@@ -1,6 +1,8 @@
 ﻿
 #include <unordered_map>
 #include <functional>
+#include <algorithm>
+#include <cmath>
 #include "task.h"
 #include "search.h"
 #include "single_thread.h"
@@ -8,6 +10,7 @@
 #include "tuner.h"
 #include "endgame.h"
 #include "endgame_validation.h"
+#include "perpetual.h"
 
 void
 init(const vector<string>& args)
@@ -376,6 +379,158 @@ isDrawCheck(const vector<string>& args)
 }
 
 static void
+perpetualCheck(const vector<string>& args)
+{
+  // elsa perpetual [fen <fen>] [nodes <n>] [maxply <n>] [step <n>] [hist]
+  //                 [nocache] [cache <entries>] [order near|far|none]
+  //                 [evorder capture|flee|both|approach|none]
+  //
+  // Standalone driver for the perpetual-check prover. Not wired into search --
+  // this exists to answer "does the proof work, and what does it cost?" in
+  // isolation, before the gate question is put to an arena.
+  //
+  // Runs the prover once per ply cap, deepening by `step`, the way iterative
+  // deepening does -- so the growth of the proof tree is readable off the
+  // table rather than inferred from a single terminal number. `hist` adds the
+  // per-ply node histogram of the deepest run.
+  //
+  // The cache is on by default; `nocache` turns it off for an A/B, and `cache`
+  // caps how many distinct positions it holds. Each ply cap builds its own
+  // table, which keeps the runs independent and the table above readable.
+  // Carrying one across caps would be sound -- a FALSE entry stores the ply
+  // ROOM it was established with, not the cap -- but it is deliberately not
+  // done here, because it would make every row depend on the rows above it.
+  //
+  // `order` picks how the attacker's checks are sorted -- see CheckOrder. It
+  // can only move the cost, never the verdict, so a run where two orders
+  // disagree on `proven` at the SAME cap is a bug and not a result. Judge an
+  // ordering on the `nocache` numbers: with the cache on, a bad order is partly
+  // absorbed by memoising the subtrees it wastes, which flatters it.
+  //
+  // `evorder` is the same knob on the other layer -- see EvasionOrder. The
+  // prediction was that it would earn little, on the grounds that an AND node
+  // only exits early when an evasion BREAKS OUT and the deep search is made of
+  // nodes where none does. That was wrong, and instructively so: `approach`
+  // buys ~8x on the Rxf2 fortress, and the win shows up in `ghi%` (31-40 where
+  // movegen order sat at 90-95), not in the branching factor. Finding the
+  // refutation sooner means finding it WITHOUT closing a repetition cycle, so
+  // the proof is storable instead of path-bound. Ordering here is feeding the
+  // cache, not pruning the tree.
+  //
+  // The defaults are `near` + `approach`, measured on one position. Both were
+  // beaten by their opposites at some caps before the full ladder was run, so
+  // re-measure rather than trusting them on a new fortress.
+
+  const string fen = utils::getFen(args, START_FEN);
+  ChessBoard pos(fen);
+
+  auto intArg = [&](const string& flag, long long fallback) -> long long {
+    const string v = utils::argValue(args, flag);
+    if (v.empty()) return fallback;
+    try { return std::stoll(v); } catch (...) { return fallback; }
+  };
+
+  const uint64_t nodeBudget = uint64_t(intArg("nodes", (long long)PERPETUAL_MAX_NODES));
+  const int      plyCap     = int(intArg("maxply", PERPETUAL_MAX_PLY));
+  const int      step       = std::max(1, int(intArg("step", 1)));
+  const uint64_t cacheCap   = uint64_t(intArg("cache", (long long)PERPETUAL_MAX_CACHE));
+
+  auto hasFlag = [&](const string& flag) {
+    return std::find(args.begin(), args.end(), flag) != args.end();
+  };
+
+  const bool showHist = hasFlag("hist");
+  const bool useCache = !hasFlag("nocache");
+
+  const string orderArg = utils::argValue(args, "order");
+  const CheckOrder order = orderArg == "none" ? CheckOrder::NONE
+                         : orderArg == "far"  ? CheckOrder::FAR
+                         :                      CheckOrder::NEAR;
+
+  const string evArg = utils::argValue(args, "evorder");
+  const EvasionOrder evasion = evArg == "capture" ? EvasionOrder::CAPTURE
+                             : evArg == "flee"    ? EvasionOrder::FLEE
+                             : evArg == "both"    ? EvasionOrder::BOTH
+                             : evArg == "none"    ? EvasionOrder::NONE
+                             :                      EvasionOrder::APPROACH;
+
+  cout << "Fen = " << fen << endl;
+  cout << "Side to move (the attacker) = "
+       << (pos.color == WHITE ? "white" : "black") << endl;
+  cout << "Node budget per run = " << nodeBudget << endl;
+  cout << "Cache = " << (useCache ? "on" : "off");
+  if (useCache)
+    cout << ", capped at " << cacheCap << " positions";
+  cout << endl;
+  cout << "Check order = "
+       << (order == CheckOrder::NONE ? "movegen order"
+         : order == CheckOrder::NEAR ? "nearest king first"
+         :                             "farthest from king first") << endl;
+  cout << "Evasion order = "
+       << (evasion == EvasionOrder::NONE    ? "movegen order"
+         : evasion == EvasionOrder::CAPTURE ? "capture the checker first"
+         : evasion == EvasionOrder::FLEE    ? "farthest from checker first"
+         : evasion == EvasionOrder::APPROACH ? "nearest the checker first"
+         :                                    "capture, then farthest") << endl << endl;
+
+  cout << " | plyCap |        nodes |  ratio |  ebf | maxPly |      cached | hit% | ghi% | proven | budget |     time |" << endl;
+  cout << " |--------|--------------|--------|------|--------|-------------|------|------|--------|--------|----------|" << endl;
+
+  PerpetualStats deepest;
+  uint64_t prevNodes = 0;
+
+  for (int cap = step; cap <= plyCap; cap += step)
+  {
+    PerpetualStats st;
+    const perf_clock start  = perf::now();
+    const bool       proven =
+      provesPerpetual(pos, st, nodeBudget, cap, useCache, cacheCap, order, evasion);
+    const double     secs   = perf_time(perf::now() - start).count();
+
+    // Growth per deepening step, and the same figure normalised to one ply so
+    // caps taken with step > 1 stay comparable.
+    const double ratio = prevNodes ? double(st.nodes) / double(prevNodes) : 0.0;
+    const double ebf   = ratio > 0.0 ? std::pow(ratio, 1.0 / double(step)) : 0.0;
+
+    // Share of node visits the cache answered, and the share of proofs the
+    // graph-history rule refused to store. When the first disappoints, the
+    // second is the place to look before blaming the hash.
+    const uint64_t visits = st.nodes + st.cacheHits;
+    const uint64_t proofs = st.cacheStores + st.truePathBound;
+    const double   hitPct = visits ? 100.0 * double(st.cacheHits) / double(visits) : 0.0;
+    const double   ghiPct = proofs ? 100.0 * double(st.truePathBound) / double(proofs) : 0.0;
+
+    printf(" | %6d | %12llu | %6.2f | %4.2f | %6d | %11llu | %4.1f | %4.1f | %-6s | %-6s | %7.3fs |\n",
+           cap, (unsigned long long)st.nodes, ratio, ebf, st.maxPly,
+           (unsigned long long)st.cacheEntries, hitPct, ghiPct,
+           proven ? "TRUE" : "-", st.budgetHit ? "hit" : "-", secs);
+    fflush(stdout);
+
+    deepest   = st;
+    prevNodes = st.nodes;
+
+    // Once proven, deeper caps can only re-derive the same proof.
+    if (proven) break;
+  }
+
+  if (showHist)
+  {
+    cout << endl << " per-ply node histogram (deepest run)" << endl;
+    cout << " |  ply |        nodes |  ratio | node |" << endl;
+    cout << " |------|--------------|--------|------|" << endl;
+    for (int p = 0; p <= deepest.maxPly and p < PERPETUAL_PLY_LIMIT; ++p)
+    {
+      const uint64_t n = deepest.nodesAtPly[p];
+      if (n == 0) continue;
+      const uint64_t prev  = p > 0 ? deepest.nodesAtPly[p - 1] : 0;
+      const double   ratio = prev ? double(n) / double(prev) : 0.0;
+      printf(" | %4d | %12llu | %6.2f | %-4s |\n",
+             p, (unsigned long long)n, ratio, (p % 2 == 0) ? "OR" : "AND");
+    }
+  }
+}
+
+static void
 readyOk()
 {
   // Argument : elsa readyOk
@@ -409,6 +564,7 @@ task(const vector<string>& args)
     {"bestmove",  [](const auto& arguments){ bestMoveSearch(arguments); }},
     {"readyOk",   [](const auto&){ readyOk(); }},
     {"isDraw",    [](const auto& arguments){ isDrawCheck(arguments); }},
+    {"perpetual", [](const auto& arguments){ perpetualCheck(arguments); }},
     {"tune",      [](const auto& arguments){ tuneEval(arguments); }},
     {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }}
   };
