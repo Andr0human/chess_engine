@@ -282,18 +282,24 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
 
     pos.unmakeMove();
 
-    anyTaint = anyTaint or childTaint;
-
     if (orNode ? childOk : !childOk)  // one check that holds / one escape that breaks out
     {
       // Decisive child. The conclusion rests on this one alone, so it inherits
-      // that child's dependency and not the dead siblings'.
-      result  = childOk;
-      bestDep = childDep;
+      // that child's dependency -- and its taint -- and not the dead siblings'.
+      // A sibling that ran out of budget says nothing about a conclusion that
+      // does not rest on it, and letting it poison this one discards sound
+      // FALSEs: precisely the AND node whose defender found a clean escape.
+      result   = childOk;
+      bestDep  = childDep;
+      anyTaint = childTaint;
       break;
     }
 
-    bestDep = std::min(bestDep, childDep);
+    // No decisive child yet, so the fall-through conclusion -- OR to FALSE, AND
+    // to TRUE -- will rest on ALL of them, and an unknown among them is an
+    // unknown in it.
+    anyTaint = anyTaint or childTaint;
+    bestDep  = std::min(bestDep, childDep);
   }
 
   tainted = anyTaint;
