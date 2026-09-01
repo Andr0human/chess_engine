@@ -862,7 +862,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   // Once, not per iteration: the prover reads game history off the board's
   // undoInfo stack, and at the root that history is fixed, so the verdict
   // cannot change between iterations. Deferred to the first iteration deep
-  // enough to be worth it, which keeps the 20k-node probe off the 1ms
+  // enough to be worth it, which keeps the probe off the shortest
   // `difficulty beginner` searches.
   Move rootPerpMove = NULL_MOVE;
   bool perpTried    = false;

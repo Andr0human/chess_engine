@@ -229,6 +229,17 @@ setParamswithDifficulty(string difficulty, double& searchTime, Depth& searchDept
   }
 }
 
+static CheckOrder
+checkOrderFromName(const string& name, CheckOrder fallback)
+{
+  return name == "none"      ? CheckOrder::NONE
+       : name == "near"      ? CheckOrder::NEAR
+       : name == "far"       ? CheckOrder::FAR
+       : name == "heavy"     ? CheckOrder::HEAVY
+       : name == "heavynear" ? CheckOrder::HEAVY_NEAR
+       :                       fallback;
+}
+
 static void
 directSearch(const vector<string> &args)
 {
@@ -382,7 +393,8 @@ static void
 perpetualCheck(const vector<string>& args)
 {
   // elsa perpetual [fen <fen>] [nodes <n>] [maxply <n>] [step <n>] [hist]
-  //                 [nocache] [cache <entries>] [order near|far|none]
+  //                 [nocache] [cache <entries>]
+  //                 [order near|far|heavy|heavynear|none]
   //                 [evorder capture|flee|both|approach|none]
   //
   // Standalone driver for the perpetual-check prover. Not wired into search --
@@ -411,15 +423,14 @@ perpetualCheck(const vector<string>& args)
   // prediction was that it would earn little, on the grounds that an AND node
   // only exits early when an evasion BREAKS OUT and the deep search is made of
   // nodes where none does. That was wrong, and instructively so: `approach`
-  // buys ~8x on the Rxf2 fortress, and the win shows up in `ghi%` (31-40 where
-  // movegen order sat at 90-95), not in the branching factor. Finding the
-  // refutation sooner means finding it WITHOUT closing a repetition cycle, so
-  // the proof is storable instead of path-bound. Ordering here is feeding the
-  // cache, not pruning the tree.
+  // buys a large multiple, and the win shows up in `ghi%`, not in the branching
+  // factor. Finding the refutation sooner means finding it WITHOUT closing a
+  // repetition cycle, so the proof is storable instead of path-bound. Ordering
+  // here is feeding the cache, not pruning the tree.
   //
-  // The defaults are `near` + `approach`, measured on one position. Both were
-  // beaten by their opposites at some caps before the full ladder was run, so
-  // re-measure rather than trusting them on a new fortress.
+  // The standalone defaults are `near` + `approach`. Both were beaten by their
+  // opposites at some caps before the full ladder was run, so re-measure rather
+  // than trusting them on a new position.
 
   const string fen = utils::getFen(args, START_FEN);
   ChessBoard pos(fen);
@@ -443,9 +454,7 @@ perpetualCheck(const vector<string>& args)
   const bool useCache = !hasFlag("nocache");
 
   const string orderArg = utils::argValue(args, "order");
-  const CheckOrder order = orderArg == "none" ? CheckOrder::NONE
-                         : orderArg == "far"  ? CheckOrder::FAR
-                         :                      CheckOrder::NEAR;
+  const CheckOrder order = checkOrderFromName(orderArg, CheckOrder::NEAR);
 
   const string evArg = utils::argValue(args, "evorder");
   const EvasionOrder evasion = evArg == "capture" ? EvasionOrder::CAPTURE
@@ -463,9 +472,11 @@ perpetualCheck(const vector<string>& args)
     cout << ", capped at " << cacheCap << " positions";
   cout << endl;
   cout << "Check order = "
-       << (order == CheckOrder::NONE ? "movegen order"
-         : order == CheckOrder::NEAR ? "nearest king first"
-         :                             "farthest from king first") << endl;
+       << (order == CheckOrder::NONE       ? "movegen order"
+         : order == CheckOrder::NEAR       ? "nearest king first"
+         : order == CheckOrder::HEAVY      ? "heaviest checker first"
+         : order == CheckOrder::HEAVY_NEAR ? "heaviest checker first, then nearest king"
+         :                                   "farthest from king first") << endl;
   cout << "Evasion order = "
        << (evasion == EvasionOrder::NONE    ? "movegen order"
          : evasion == EvasionOrder::CAPTURE ? "capture the checker first"

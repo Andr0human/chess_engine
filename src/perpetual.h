@@ -80,16 +80,38 @@ constexpr int      PERPETUAL_MAX_PLY   = 100;
  * by the defender"), which is a separate experiment.
  *
  * Splitting the near band on whether the check is a CAPTURE was tried and
- * dropped: near-quiet > near-capture > far and near-quiet > far > near-capture
- * both landed within a few percent of plain NEAR on the Rxf2 fortress, with the
- * sign flipping between ply caps. The near/far half of that split could not
- * contribute at all there -- the attacker is a lone rook, so every check lands
- * on the king's rank or file, where chebyshev and manhattan distance coincide
- * and any "near band" is just a prefix of the plain NEAR order. Worth retrying
- * only on a fortress whose attacker checks off-line (knight, queen diagonal).
+ * dropped: ranking near-quiet above near-capture, and the reverse, both landed
+ * on top of plain NEAR, with the sign flipping between ply caps. Note that the
+ * near/far half of such a split cannot contribute at all when the attacker
+ * checks only along the king's rank or file -- there chebyshev and manhattan
+ * distance coincide and any "near band" is just a prefix of the plain NEAR
+ * order. Worth retrying only where the attacker checks off-line (knight, queen
+ * diagonal).
  *
-*/
-enum class CheckOrder { NONE, NEAR, FAR };
+ * HEAVY/HEAVY_NEAR are a different key entirely: rank the checks by the VALUE
+ * of the piece delivering them, heaviest first, on the reasoning that a
+ * perpetual is normally driven by a queen or rook -- the pieces that can go on
+ * checking from squares the king cannot close and that the defender cannot
+ * profitably capture. HEAVY leaves movegen order inside a value class;
+ * HEAVY_NEAR breaks those ties with the NEAR key.
+ *
+ * HEAVY_NEAR is the shipped default: it proves more nodes on fewer prover
+ * nodes than either key alone. Compare orderings at FIXED depth, not fixed
+ * time -- time-based arms search different trees and their totals are
+ * meaningless -- and judge on proofs AND nodes, never nodes alone: the budget
+ * is finite, so an order that gives up earlier looks cheap while proving less
+ * (that is exactly how FAR reads).
+ *
+ * The two keys are COMPLEMENTS, not substitutes: HEAVY alone is worse than
+ * NEAR on both axes. Value picks the piece that can sustain a perpetual;
+ * distance picks where to check with it. Neither half works alone.
+ *
+ * The mover's value is a lie in one case, and checkerValue() returns 0 there
+ * rather than guessing: a KING move flagged as a check is by definition a
+ * DISCOVERED check, so the real checker is some other piece. Same caveat the
+ * distance key carries (see the EvasionOrder note below).
+ */
+enum class CheckOrder { NONE, NEAR, FAR, HEAVY, HEAVY_NEAR };
 
 /**
  * How the defender's evasions are ordered at an AND node.
@@ -111,12 +133,12 @@ enum class CheckOrder { NONE, NEAR, FAR };
  *   BOTH     CAPTURE, then FLEE among the rest
  *   APPROACH nearest the checker first -- FLEE's mirror, and the one that works
  *
- * Measured on the Rxf2 fortress, FLEE costs 8x the nodes of movegen order and
- * CAPTURE is bit-identical to it (in a rook perpetual the checker is never
- * capturable, so the key is constant). That FLEE is that much WORSE is the
- * useful part: distance-to-checker is a real signal read backwards. Walking
- * away from a rook does not escape it, so FLEE front-loads exactly the moves
- * that stay trapped; APPROACH is the same key with the comparator flipped.
+ * FLEE costs many times the nodes of movegen order, and CAPTURE collapses onto
+ * movegen order wherever the checker is never capturable (the key is constant
+ * there). That FLEE is that much WORSE is the useful part: distance-to-checker
+ * is a real signal read backwards. Walking away from a rook does not escape
+ * it, so FLEE front-loads exactly the moves that stay trapped; APPROACH is the
+ * same key with the comparator flipped.
  */
 enum class EvasionOrder { NONE, CAPTURE, FLEE, BOTH, APPROACH };
 
@@ -126,28 +148,27 @@ enum class EvasionOrder { NONE, CAPTURE, FLEE, BOTH, APPROACH };
  * time to find out", here it is "can I refute this line cheaply".
  *
  * The ply cap does the work, not the node budget -- a loose cap lets the
- * failing branches run to full depth before the winning one closes, so cap 30
- * proves the reference node below in 41k nodes where cap 50 needs 8.3M.
+ * failing branches run to full depth before the winning one closes, so a
+ * tighter cap can prove, cheaply, a node that a looser one gives up on.
  *
  * The cap is also what keeps the probe inside ChessBoard's 256-entry undoInfo
  * stack. Game history is bounded by the halfmove clock (undoInfoPush resets on
  * every capture and pawn move when !inSearch), so the worst case is 100 game
  * plies + MAX_PLY search plies + this cap, which must stay under 256.
  *
- * Cap 25 and CAPTURE ordering are measured on the Qxe8 reference node, and the
- * cap is a knife edge there rather than a plateau: caps 25 and 26 prove it in
- * 9.0k and 12.8k nodes, cap 24 and caps 28+ do not prove it inside 20k at all.
- * The standalone defaults (cap 100, APPROACH) prove NOTHING at this budget --
- * APPROACH fails at every cap from 20 to 30. That flip is not a contradiction
- * of the standalone measurements, it is the same finding read at a budget 3
- * orders of magnitude smaller: APPROACH was tuned on the Rxf2 fortress, where
- * the checking rook is never capturable and the key is therefore constant.
- * Here the attacker's queen checks ARE capturable, so "take the checker" is
- * live information and "walk toward it" is noise.
+ * The cap is a knife edge rather than a plateau: a ply either side of the
+ * shipped value can lose a proof the shipped value finds cheaply, so do not
+ * treat it as a tunable with a smooth gradient. The standalone defaults (a far
+ * looser cap, APPROACH) prove nothing at this budget. That flip is not a
+ * contradiction of the standalone tuning, it is the same finding read at a far
+ * smaller budget: APPROACH was tuned where the checking piece is never
+ * capturable and the key is therefore constant. Here the attacker's checks ARE
+ * capturable, so "take the checker" is live information and "walk toward it"
+ * is noise.
  */
 constexpr uint64_t     PERPETUAL_SEARCH_NODES   = 20000;
 constexpr int          PERPETUAL_SEARCH_PLY_CAP = 25;
-constexpr CheckOrder   PERPETUAL_SEARCH_ORDER   = CheckOrder::NEAR;
+constexpr CheckOrder   PERPETUAL_SEARCH_ORDER   = CheckOrder::HEAVY_NEAR;
 constexpr EvasionOrder PERPETUAL_SEARCH_EVASION = EvasionOrder::CAPTURE;
 
 // Cap on distinct cached positions. The table is an unordered_map, so budget

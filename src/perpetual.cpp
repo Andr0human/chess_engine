@@ -15,6 +15,43 @@ constexpr int NO_PATH_DEP = INT_MAX;
 
 
 /**
+ * Sort rank for CheckOrder::HEAVY at an OR node -- the value of the piece that
+ * delivers the check, heaviest first.
+ *
+ * Coarse on purpose. All this has to induce is the classes queen > rook >
+ * minor > pawn; bishop and knight are left equal so the secondary key (or, for
+ * plain HEAVY, movegen order) decides between them.
+ *
+ * Two moves where the key is a guess rather than a fact:
+ *   - a PROMOTION checks with the piece it becomes, not with the pawn, so the
+ *     promoted piece is decoded and ranked instead;
+ *   - a KING move that gives check is by definition a DISCOVERED check, so the
+ *     checker is some other piece entirely and the moving piece's value says
+ *     nothing about it. Ranked last rather than probed for -- the same trade
+ *     the distance key already makes for discoveries.
+ */
+int
+checkerValue(Move move)
+{
+  PieceType pt = PieceType((move >> 12) & 7);
+
+  // Promo piece is encoded as (type - 2) in bits 18-19: 0=B 1=N 2=R 3=Q.
+  if (pt == PAWN and ((1ULL << to_sq(move)) & Rank18))
+    pt = PieceType(((move >> 18) & 3) + 2);
+
+  switch (pt)
+  {
+    case QUEEN:  return 9;
+    case ROOK:   return 5;
+    case KNIGHT: return 3;
+    case BISHOP: return 3;
+    case PAWN:   return 1;
+    default:     return 0;  // KING -- discovered check, checker unknown
+  }
+}
+
+
+/**
  * One resolved position.
  *
  * TRUE entries are unconditional. A forced repetition is proven or it is not,
@@ -224,9 +261,23 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
       // that keeps NONE a strict prefix-preserving baseline for the A/B.
       const Square emyKingSq  = squareNo(pos.getPiece(~pos.color, KING));
       const bool   farFirst   = (ctx.order == CheckOrder::FAR);
+      const bool   heavyFirst = (ctx.order == CheckOrder::HEAVY
+                              or ctx.order == CheckOrder::HEAVY_NEAR);
+      const bool   nearFirst  = (ctx.order == CheckOrder::NEAR
+                              or ctx.order == CheckOrder::HEAVY_NEAR);
 
       std::stable_sort(movesArray.begin(), movesArray.end(),
-        [emyKingSq, farFirst](Move a, Move b) {
+        [emyKingSq, farFirst, nearFirst, heavyFirst](Move a, Move b) {
+          if (heavyFirst)
+          {
+            const int va = checkerValue(a);
+            const int vb = checkerValue(b);
+            if (va != vb) return va > vb;
+          }
+          // Plain HEAVY stops here: equal value keeps movegen order, which is
+          // what makes it comparable against NONE rather than against NEAR.
+          if (!nearFirst and !farFirst) return false;
+
           const int da = plt::manhattanDistance(to_sq(a), emyKingSq);
           const int db = plt::manhattanDistance(to_sq(b), emyKingSq);
           return farFirst ? (da > db) : (da < db);
