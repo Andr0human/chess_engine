@@ -292,6 +292,14 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
       result   = childOk;
       bestDep  = childDep;
       anyTaint = childTaint;
+
+      // Name the move only at the prover's root, and only for the attacker --
+      // that is the one caller (the root probe in search()) that has to PLAY
+      // the proof rather than merely score it. Recording it deeper would cost
+      // a store per node for something nothing reads.
+      if (ply == 0 and orNode)
+        st.proofMove = move;
+
       break;
     }
 

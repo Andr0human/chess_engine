@@ -46,6 +46,17 @@ enum SearchFlag: bool
   USE_HISTORY_MALUS = true,
 
   USE_QSEARCH_PROMO = true,
+
+  // Perpetual-check probe: at a node where the side to move is losing badly
+  // enough that a draw would cut off, ask the standalone AND/OR prover whether
+  // that side can force an unending check sequence. Proving one is a hard
+  // lower bound of "draw", which is a beta cutoff in exactly that window.
+  //
+  // The prover fails closed (budget exhaustion returns "unknown", never a draw
+  // claim), so turning this on can only ever ADD cutoffs that are true; it can
+  // never invent one. What it can cost is time, which is what the gate below
+  // and the arena are for.
+  USE_PERPETUAL = true,
 };
 
 enum Color: uint8_t
@@ -91,6 +102,10 @@ enum Search
   RFP_MAX_DEPTH = 6,
   RAZOR_MAX_DEPTH = 3,
   FUTILITY_MAX_DEPTH = 4,
+  // Don't pay ~20k prover nodes to replace a subtree smaller than that. The
+  // probe is all-or-nothing -- it returns a cutoff or it returns nothing --
+  // so unlike a reduction there is no partial credit at shallow depth.
+  PERPETUAL_MIN_DEPTH = 5,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   MAX_THREADS = 12,
@@ -162,6 +177,11 @@ enum Value: Score
   RFP_MARGIN = 110,
   RAZOR_MARGIN = 240,
   FUTILITY_MARGIN = 120,
+  // How far below a draw the static eval must sit before the perpetual probe
+  // is worth running. A perpetual is a SAVING resource: if the side to move is
+  // already doing fine, proving it can force a draw is not news, and the
+  // cutoff it produces would have come from a real move anyway.
+  PERPETUAL_MARGIN = 200,
   VALUE_TRANSPOSITION_TABLE_SEED = 1557,
 
 

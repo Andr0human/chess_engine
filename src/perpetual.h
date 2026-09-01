@@ -38,6 +38,13 @@ struct PerpetualStats
   int      maxPly    = 0;      // deepest ply reached, from the prover root
   bool     budgetHit = false;  // did any branch bail on the node/ply cap?
 
+  // The attacker's proving move at the prover's root, or NULL_MOVE. Only set
+  // when the run returned TRUE and the proof rests on an actual move -- a root
+  // stalemate is a draw with no move to name. Filled at ply 0 only; the deeper
+  // OR nodes' choices are not recorded, so this names the first move of a
+  // proof, not the whole line.
+  Move proofMove = NULL_MOVE;
+
   uint64_t cacheHits     = 0;  // node visits answered without expanding
   uint64_t cacheStores   = 0;  // entries written or upgraded
   uint64_t cacheEntries  = 0;  // distinct keys held at the end of the run
@@ -80,7 +87,8 @@ constexpr int      PERPETUAL_MAX_PLY   = 100;
  * on the king's rank or file, where chebyshev and manhattan distance coincide
  * and any "near band" is just a prefix of the plain NEAR order. Worth retrying
  * only on a fortress whose attacker checks off-line (knight, queen diagonal).
- */
+ *
+*/
 enum class CheckOrder { NONE, NEAR, FAR };
 
 /**
@@ -111,6 +119,36 @@ enum class CheckOrder { NONE, NEAR, FAR };
  * that stay trapped; APPROACH is the same key with the comparator flipped.
  */
 enum class EvasionOrder { NONE, CAPTURE, FLEE, BOTH, APPROACH };
+
+/**
+ * Budgets for the in-search probe (alphaBeta), which is a different question
+ * from the standalone one: there the ask is "is this position a draw, given
+ * time to find out", here it is "can I refute this line cheaply".
+ *
+ * The ply cap does the work, not the node budget -- a loose cap lets the
+ * failing branches run to full depth before the winning one closes, so cap 30
+ * proves the reference node below in 41k nodes where cap 50 needs 8.3M.
+ *
+ * The cap is also what keeps the probe inside ChessBoard's 256-entry undoInfo
+ * stack. Game history is bounded by the halfmove clock (undoInfoPush resets on
+ * every capture and pawn move when !inSearch), so the worst case is 100 game
+ * plies + MAX_PLY search plies + this cap, which must stay under 256.
+ *
+ * Cap 25 and CAPTURE ordering are measured on the Qxe8 reference node, and the
+ * cap is a knife edge there rather than a plateau: caps 25 and 26 prove it in
+ * 9.0k and 12.8k nodes, cap 24 and caps 28+ do not prove it inside 20k at all.
+ * The standalone defaults (cap 100, APPROACH) prove NOTHING at this budget --
+ * APPROACH fails at every cap from 20 to 30. That flip is not a contradiction
+ * of the standalone measurements, it is the same finding read at a budget 3
+ * orders of magnitude smaller: APPROACH was tuned on the Rxf2 fortress, where
+ * the checking rook is never capturable and the key is therefore constant.
+ * Here the attacker's queen checks ARE capturable, so "take the checker" is
+ * live information and "walk toward it" is noise.
+ */
+constexpr uint64_t     PERPETUAL_SEARCH_NODES   = 20000;
+constexpr int          PERPETUAL_SEARCH_PLY_CAP = 25;
+constexpr CheckOrder   PERPETUAL_SEARCH_ORDER   = CheckOrder::NEAR;
+constexpr EvasionOrder PERPETUAL_SEARCH_EVASION = EvasionOrder::CAPTURE;
 
 // Cap on distinct cached positions. The table is an unordered_map, so budget
 // roughly 48 bytes per entry -- 4M entries is a bit under 200 MB. Once full it

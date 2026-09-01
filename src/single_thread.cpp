@@ -2,6 +2,7 @@
 #include "single_thread.h"
 #include "move_utils.h"
 #include "node_state.h"
+#include "perpetual.h"
 #include "uci.h"
 #include <iostream>
 #include <sstream>
@@ -519,6 +520,10 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   MoveList myMoves;
   stagedGenerateMoves<GEN_METADATA>(pos, myMoves);
 
+  // GEN_CHECKS is normally deferred to just above playAllMoves, but the
+  // perpetual probe needs it earlier. Whoever gets there first runs it.
+  bool checksGenerated = false;
+
   // Per-node search state. Built here, before RFP, so the node's static eval
   // can be cached in it once (via nodeStaticEval) and reused by every
   // heuristic in the node. depth / numExtensions are pre-extension at this
@@ -579,6 +584,86 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
+
+  // --- Perpetual-check probe ---
+  // Ask the standalone AND/OR prover (perpetual.cpp) whether the side to move
+  // can force an unending check sequence. A proof is a hard LOWER bound of
+  // "draw" -- it says the attacker can hold at least VALUE_DRAW, not that the
+  // position IS drawn, since the attacker may also be winning outright. So the
+  // only sound way to spend it without searching on is a fail-high, which is
+  // why the gate insists on `beta <= VALUE_DRAW`: in that window a draw is
+  // already good enough to cut off.
+  //
+  // That single condition is also the whole reason the feature exists. The
+  // motivating shape is a move INTO an opponent perpetual: at the node after it
+  // the side to move is nominally several pawns down, so the window handed down
+  // already sits below a draw, and the cutoff fires where the search would
+  // otherwise have to find the repetition by brute depth.
+  //
+  // Deliberately NOT stored in the TT. The prover's repetition terminal reads
+  // ChessBoard's undoInfo stack, which is the real game history plus the search
+  // path above this node -- so a proof is path-dependent, and a sibling
+  // arriving at the same position by another route has not earned it. Same
+  // no-store rule as RFP and razoring above, for a different reason.
+  //
+  // Mate windows are NOT excluded, unlike RFP/razoring/futility. A forced draw
+  // genuinely refutes "I am getting mated here", the bound is sound whatever
+  // beta encodes, and escaping a mate net by perpetual is the single most
+  // valuable thing this probe can do.
+  if constexpr (USE_PERPETUAL)
+  {
+    // Cheapest first: window, then depth, then material, and only then the
+    // static eval (which nodeStaticEval may have to compute).
+    if (beta <= VALUE_DRAW
+      and depth >= PERPETUAL_MIN_DEPTH
+      // No queen and no rook, no check chain. A knight or pawn perpetual is
+      // possible but vanishingly rare, and this test is one OR of two bitboards.
+      and (pos.getPiece(pos.color, QUEEN) | pos.getPiece(pos.color, ROOK)) != 0
+      and nodeStaticEval(pos, ns) <= VALUE_DRAW - PERPETUAL_MARGIN)
+    {
+      // No check here, no check chain from here. The prover's own root reaches
+      // the same verdict, but only after rebuilding GEN_METADATA + GEN_MOVES
+      // from scratch and paying for a PerpetualStats (a 2 KB zeroed histogram)
+      // and its cache -- whereas this node has the metadata already, so the
+      // question costs one GEN_CHECKS plus one getMoves.
+      //
+      // Two node types this fences off, both common enough to dominate a probe
+      // trace even though they are nearly free individually: the side to move
+      // is in check (every "check" it gives must also be an evasion), and the
+      // side to move just recaptured into a position with nothing to check with.
+      if (!checksGenerated)
+      {
+        stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
+        checksGenerated = true;
+      }
+
+      MoveArray checkArray;
+      myMoves.getMoves<MType::CAPTURES | MType::QUIET, MType::CHECK>(pos, checkArray);
+
+      size_t checkCount = 0;
+      for (size_t i = 0; i < checkArray.size(); ++i)
+        checkCount += size_t(is_type<MType::CHECK>(checkArray[i]));
+
+      if (checkCount != 0)
+      {
+        PerpetualStats st;
+        const bool proven = provesPerpetual(pos, st, PERPETUAL_SEARCH_NODES,
+                                            PERPETUAL_SEARCH_PLY_CAP, /*useCache=*/true,
+                                            PERPETUAL_MAX_CACHE,
+                                            PERPETUAL_SEARCH_ORDER,
+                                            PERPETUAL_SEARCH_EVASION);
+
+        info.perpetualProbes++;
+        info.perpetualNodes += st.nodes;
+
+        if (proven)
+        {
+          info.perpetualProofs++;
+          return VALUE_DRAW;
+        }
+      }
+    }
+  }
 
   // --- Null-move pruning (NMP) ---
   // Hand the opponent a free tempo and search their reply at reduced depth
@@ -655,7 +740,11 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
     return *hashOutcome.result;
 
   // Need check-giving-square data for MType::CHECK ordering downstream.
-  stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
+  if (!checksGenerated)
+  {
+    stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
+    checksGenerated = true;
+  }
 
   // Drop the already-searched hash move so subsequent getMoves<>() calls in
   // playAllMoves don't re-emit it. Both branches now feed the same uniform
@@ -689,7 +778,7 @@ template Score alphaBeta<true >(ChessBoard&, Depth, Score, Score, Ply, int, int,
 template Score alphaBeta<false>(ChessBoard&, Depth, Score, Score, Ply, int, int, bool);
 
 Score
-rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
+rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth, Move perpMove)
 {
   int ply{0}, pvIndex{0};
 
@@ -698,6 +787,28 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
   pvArray[pvIndex] = NULL_MOVE; // no pv yet
 
   NodeState ns{alpha, beta, depth, Ply(ply), pvIndex, 0};
+
+  // A proven perpetual is a hard lower bound of VALUE_DRAW: whatever the search
+  // makes of the position, this side can always take the draw. Interior nodes
+  // spend that bound as a fail-high and return; the root cannot, because it owes
+  // the caller a MOVE. So it is spent the other way -- raise alpha to the bound
+  // and put the proving move in the PV. Any line the search likes better than a
+  // draw still wins the slot; if none does, the pre-seeded move is played and
+  // the score reported is VALUE_DRAW instead of the material count the search
+  // would otherwise believe.
+  //
+  // Raising alpha is also the point where this earns its keep as a search
+  // improvement rather than a display fix: in a position bad enough to want a
+  // perpetual, a root alpha of VALUE_DRAW cuts off nearly everything.
+  if (perpMove != NULL_MOVE and ns.alpha < VALUE_DRAW)
+  {
+    ns.alpha = VALUE_DRAW;
+    pvArray[pvIndex] = filter(perpMove);
+    // Terminate the line. Only the root's own slot is known; the continuation
+    // still holds the previous iteration's PV, and printing the proving move
+    // followed by a line that does not start with it would be a lie.
+    pvArray[pvIndex + 1] = NULL_MOVE;
+  }
 
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
@@ -742,12 +853,57 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   Score alpha = -VALUE_INF, beta = VALUE_INF;
   int valWindowCnt = 0;
 
+  // Root perpetual probe. The in-node probe in alphaBeta() can only spend a
+  // proof as a fail-high, which the root has no way to use -- so a position
+  // that IS a perpetual draw at the root gets scored on material by every
+  // iteration, however many proofs fire underneath it. This asks the question
+  // once, at the one node that owes the caller a move.
+  //
+  // Once, not per iteration: the prover reads game history off the board's
+  // undoInfo stack, and at the root that history is fixed, so the verdict
+  // cannot change between iterations. Deferred to the first iteration deep
+  // enough to be worth it, which keeps the 20k-node probe off the 1ms
+  // `difficulty beginner` searches.
+  Move rootPerpMove = NULL_MOVE;
+  bool perpTried    = false;
+
   if (debug)
     info.showHeader(writer);
 
   for (Depth depth = 1; depth <= mDepth;)
   {
-    Score eval = rootAlphaBeta(board, alpha, beta, depth);
+    if constexpr (USE_PERPETUAL)
+    {
+      if (!perpTried and depth >= PERPETUAL_MIN_DEPTH)
+      {
+        perpTried = true;
+
+        // Same static-eval gate as the in-node probe: a proof bounds the score
+        // from BELOW, so it is worth nothing at a root we already like.
+        if (evaluate(board) <= VALUE_DRAW - PERPETUAL_MARGIN)
+        {
+          PerpetualStats st;
+          const bool proven = provesPerpetual(board, st, PERPETUAL_SEARCH_NODES,
+                                              PERPETUAL_SEARCH_PLY_CAP, /*useCache=*/true,
+                                              PERPETUAL_MAX_CACHE,
+                                              PERPETUAL_SEARCH_ORDER,
+                                              PERPETUAL_SEARCH_EVASION);
+
+          info.perpetualProbes++;
+          info.perpetualNodes += st.nodes;
+
+          // A root stalemate proves a draw with no move to name; there is
+          // nothing to seed the PV with, so treat it as no proof at all.
+          if (proven and st.proofMove != NULL_MOVE)
+          {
+            info.perpetualProofs++;
+            rootPerpMove = st.proofMove;
+          }
+        }
+      }
+    }
+
+    Score eval = rootAlphaBeta(board, alpha, beta, depth, rootPerpMove);
 
     if (info.shouldStop())
       break;
@@ -833,6 +989,21 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
            << " cutoffs=" << info.hashMoveCutoffs << " (" << cutoffRate << "% of inList)" << endl;
 
     writer << "PV nodes: ttCutoffsDeclined=" << info.pvTtCutoffsDeclined << endl;
+
+    if constexpr (USE_PERPETUAL)
+    {
+      double proofRate = info.perpetualProbes
+        ? 100.0 * double(info.perpetualProofs) / double(info.perpetualProbes) : 0.0;
+      double nodeShare = info.totalSearchedNodes()
+        ? 100.0 * double(info.perpetualNodes) / double(info.totalSearchedNodes()) : 0.0;
+      writer << "Perpetual: root=" << (rootPerpMove == NULL_MOVE ? std::string("-")
+                                        : printMove(rootPerpMove, board)) << endl;
+      writer << "Perpetual: probes=" << info.perpetualProbes
+             << " proofs=" << info.perpetualProofs
+             << " (" << std::fixed << std::setprecision(1) << proofRate << "%)"
+             << " proverNodes=" << info.perpetualNodes
+             << " (" << nodeShare << "% of search nodes)" << endl;
+    }
 
     if constexpr (USE_PVS)
     {

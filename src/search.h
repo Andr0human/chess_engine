@@ -143,6 +143,15 @@ class SearchData
   // first moves — that ratio is the signal to watch.
   uint64_t pvsScouts = 0, pvsResearches = 0;
 
+  // Perpetual-check prover instrumentation, accumulated over the whole search:
+  //   perpetualProbes — nodes that passed the gate and ran the prover
+  //   perpetualProofs — of those, a perpetual was proven, i.e. a beta cutoff
+  //   perpetualNodes  — prover nodes consumed, the entire cost of the feature
+  // Read the first two as a hit rate and the third against totalSearchedNodes:
+  // the probe is all-or-nothing, so a low hit rate means the gate is spending
+  // real nodes on positions that were never going to prove.
+  uint64_t perpetualProbes = 0, perpetualProofs = 0, perpetualNodes = 0;
+
   private:
 
   Varray<Move, MAX_PLY> pvLine;
