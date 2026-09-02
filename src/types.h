@@ -102,10 +102,7 @@ enum Search
   RFP_MAX_DEPTH = 6,
   RAZOR_MAX_DEPTH = 3,
   FUTILITY_MAX_DEPTH = 4,
-  // Don't pay ~20k prover nodes to replace a subtree smaller than that. The
-  // probe is all-or-nothing -- it returns a cutoff or it returns nothing --
-  // so unlike a reduction there is no partial credit at shallow depth.
-  PERPETUAL_MIN_DEPTH = 5,
+  PERPETUAL_MIN_DEPTH = 8,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   MAX_THREADS = 12,
