@@ -152,6 +152,11 @@ class SearchData
   // real nodes on positions that were never going to prove.
   uint64_t perpetualProbes = 0, perpetualProofs = 0, perpetualNodes = 0;
 
+  // Probes skipped because PerpetualFailCache already held a failure for that
+  // position (perpetual.h). Read as suppressed / (suppressed + probes): that
+  // ratio is the re-probe rate the cache exists to collapse.
+  uint64_t perpetualSuppressed = 0;
+
   private:
 
   Varray<Move, MAX_PLY> pvLine;

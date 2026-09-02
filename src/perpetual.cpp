@@ -444,3 +444,14 @@ provesPerpetual(ChessBoard& pos, PerpetualStats& stats,
 
   return proven;
 }
+
+
+// The one instance. 256 KB of BSS, zero-initialised, so an untouched search
+// starts with every slot empty without paying for a clear.
+PerpetualFailCache perpetualFailCache;
+
+void
+PerpetualFailCache::clear() noexcept
+{
+  table.fill(0);
+}
