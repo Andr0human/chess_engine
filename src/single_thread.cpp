@@ -32,6 +32,26 @@ bulkCount(ChessBoard& pos, Depth depth)
   return answer;
 }
 
+/**
+ * Tally a proof that came back as a forced mate rather than a draw.
+ *
+ * Called only on a proof, so `mateDist` is either PERPETUAL_NO_MATE or a real
+ * distance. Clamped rather than asserted: the histogram is sized for the
+ * search probe's ply cap, and a standalone caller with a looser cap should
+ * land in the last bucket instead of writing off the end.
+ */
+static void
+recordPerpetualMate(const PerpetualStats& st)
+{
+  if (st.mateDist == PERPETUAL_NO_MATE)
+    return;
+
+  info.perpetualMates++;
+  info.perpetualMateDist[std::min(size_t(st.mateDist),
+                                  info.perpetualMateDist.size() - 1)]++;
+}
+
+
 template <bool leafnode = 0>
 static Score
 quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
@@ -673,6 +693,12 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
           if (proven)
           {
             info.perpetualProofs++;
+            recordPerpetualMate(st);
+
+            // Still VALUE_DRAW even when st.mateDist says this was a mate: the
+            // sharper bound is only being COUNTED for now, not claimed. Reading
+            // it here would mean returning a mate score from a node the search
+            // never verified, which is a change of kind, not of degree.
             return VALUE_DRAW;
           }
 
@@ -923,6 +949,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
           if (proven and st.proofMove != NULL_MOVE)
           {
             info.perpetualProofs++;
+            recordPerpetualMate(st);
             rootPerpMove = st.proofMove;
           }
         }
@@ -1037,6 +1064,25 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
              << " (" << std::fixed << std::setprecision(1) << proofRate << "%)"
              << " proverNodes=" << info.perpetualNodes
              << " (" << nodeShare << "% of search nodes)" << endl;
+
+      // The frequency question the mate work is gated on. A floor, twice over:
+      // proofs the OR short-circuit never looked past, and cache hits that
+      // replayed a TRUE stored without a mate. See SearchData::perpetualMates.
+      double mateRate = info.perpetualProofs
+        ? 100.0 * double(info.perpetualMates) / double(info.perpetualProofs) : 0.0;
+
+      writer << "Perpetual: mates=" << info.perpetualMates
+             << " (" << std::fixed << std::setprecision(1) << mateRate
+             << "% of proofs)";
+
+      if (info.perpetualMates != 0)
+      {
+        writer << " dist=";
+        for (size_t d = 0; d < info.perpetualMateDist.size(); ++d)
+          if (info.perpetualMateDist[d] != 0)
+            writer << ' ' << d << ':' << info.perpetualMateDist[d];
+      }
+      writer << endl;
     }
 
     if constexpr (USE_PVS)

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <climits>
 #include <unordered_map>
 
@@ -63,11 +64,20 @@ checkerValue(Move move)
  * is <= this. Same idea as a transposition table's depth field, counted from
  * the other end -- and it is what lets one iterative-deepening pass reuse the
  * shallower passes instead of only itself.
+ *
+ * `mateDist` rides along on TRUE entries (PERPETUAL_NO_MATE on the rest). A
+ * mate distance is absolute -- plies below this node -- so it is as
+ * cap-independent as the TRUE it belongs to. Note that a TRUE stored WITHOUT a
+ * mate permanently suppresses mate detection at every later transposition into
+ * it: a cache hit returns before the node is expanded, and there is no upgrade
+ * path back. That is the undercount compounding, and it is deliberate -- every
+ * route out of it costs nodes, which this design spends none of.
  */
 struct CacheEntry
 {
   bool    result;
   int16_t remaining;
+  int16_t mateDist;
 };
 
 
@@ -149,16 +159,24 @@ repetitionOwner(const ChessBoard& pos, const ProveContext& ctx, int ply)
  *                 TRUE -- see the discharge rule at the bottom.
  * @param tainted  out: the result was reached with the node budget already
  *                 spent, so it means "unknown" rather than "refuted".
+ * @param mateDist out: plies to forced mate, or PERPETUAL_NO_MATE. Only
+ *                 meaningful when the result is TRUE. Costs no extra nodes --
+ *                 it rides the existing traversal and inherits at exactly the
+ *                 sites `dep` and `tainted` do -- and therefore under-reports
+ *                 wherever an OR node stopped on a drawing check before
+ *                 reaching a mating one. See PerpetualStats::mateDist.
  * @param lastTo   destination of the move that reached this node, or SQUARE_NB
  *                 at the root. At an AND node that is the checking piece's
  *                 square, which is the key the evasion ordering sorts on.
  */
 static bool
 proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
-         PerpetualStats& st, int& dep, bool& tainted, Square lastTo)
+         PerpetualStats& st, int& dep, bool& tainted, int& mateDist,
+         Square lastTo)
 {
-  dep     = NO_PATH_DEP;
-  tainted = false;
+  dep      = NO_PATH_DEP;
+  tainted  = false;
+  mateDist = PERPETUAL_NO_MATE;
 
   if (ply > st.maxPly)
     st.maxPly = ply;
@@ -191,6 +209,7 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
         and (it->second.result or remaining <= it->second.remaining))
     {
       ++st.cacheHits;
+      mateDist = it->second.mateDist;
       return it->second.result;
     }
   }
@@ -224,8 +243,13 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
   {
     if (myMoves.checkers == 0)
       return true;                    // stalemate -- the draw this idea is about
+
     // Checkmate. Against the attacker it is a loss; against the defender the
-    // attacker has done better than draw, which still satisfies the claim.
+    // attacker has done better than draw, which still satisfies the claim --
+    // and is the one TRUE terminal worth telling the caller apart from a draw.
+    if (!orNode)
+      mateDist = 0;
+
     return !orNode;
   }
 
@@ -318,6 +342,13 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
   int  bestDep  = NO_PATH_DEP;
   bool anyTaint = false;
 
+  // For the AND-node fall-through below, where no reply broke out: this node
+  // mates only if EVERY reply does, and the distance is the LONGEST of them --
+  // the defender is entitled to the best defence. Unused at an OR node, which
+  // either stops on a child or fails.
+  bool allMate   = true;
+  int  worstMate = 0;
+
   for (const Move move : movesArray)
   {
     // At an OR node every survivor of the filter above is a check, so there is
@@ -328,8 +359,10 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
 
     int  childDep   = NO_PATH_DEP;
     bool childTaint = false;
+    int  childMate  = PERPETUAL_NO_MATE;
     const bool childOk =
-      proveRec(pos, ctx, ply + 1, st, childDep, childTaint, to_sq(move));
+      proveRec(pos, ctx, ply + 1, st, childDep, childTaint, childMate,
+               to_sq(move));
 
     pos.unmakeMove();
 
@@ -344,6 +377,12 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
       bestDep  = childDep;
       anyTaint = childTaint;
 
+      // Inherited on exactly the same grounds as the two above: the conclusion
+      // IS this child's. Which is also why an OR node that stopped on a
+      // drawing check never learns that a later check would have mated.
+      mateDist = (childOk and childMate != PERPETUAL_NO_MATE)
+               ? childMate + 1 : PERPETUAL_NO_MATE;
+
       // Name the move only at the prover's root, and only for the attacker --
       // that is the one caller (the root probe in search()) that has to PLAY
       // the proof rather than merely score it. Recording it deeper would cost
@@ -357,11 +396,26 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
     // No decisive child yet, so the fall-through conclusion -- OR to FALSE, AND
     // to TRUE -- will rest on ALL of them, and an unknown among them is an
     // unknown in it.
-    anyTaint = anyTaint or childTaint;
-    bestDep  = std::min(bestDep, childDep);
+    anyTaint  = anyTaint or childTaint;
+    bestDep   = std::min(bestDep, childDep);
+    allMate   = allMate and (childMate != PERPETUAL_NO_MATE);
+    worstMate = std::max(worstMate, childMate);
   }
 
+  // Reached only when no child was decisive, so `result` still holds its
+  // fall-through value and the guards below pick out the one case that can
+  // mate: an AND node every one of whose replies stayed mated. An OR node
+  // failing, or an AND node with an escape, both leave `result` false.
+  if (!orNode and result and allMate and movesArray.size() != 0)
+    mateDist = worstMate + 1;
+
   tainted = anyTaint;
+
+  // A mate is reached only through checkmate terminals -- one repeating reply
+  // at an AND node erases it -- so it can lean on no repetition, and the GHI
+  // machinery below must always find it free. One predictable compare per node
+  // against a movegen-bound loop; cheap enough to pin the invariant with.
+  assert(mateDist == PERPETUAL_NO_MATE or bestDep == NO_PATH_DEP);
 
   // Graph-history interaction, the whole reason this is not a plain
   // transposition table. A TRUE that leaned on a repetition closing onto an
@@ -399,7 +453,7 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
   // that is not there. Losing proofs is the direction this prover is allowed to
   // err in; inventing them is not.
   const Key        key = cacheKey(pos);
-  const CacheEntry fresh{result, int16_t(remaining)};
+  const CacheEntry fresh{result, int16_t(remaining), int16_t(mateDist)};
 
   auto it = ctx.resolved.find(key);
 
@@ -435,12 +489,15 @@ provesPerpetual(ChessBoard& pos, PerpetualStats& stats,
                    std::min(plyCap, PERPETUAL_PLY_LIMIT),
                    useCache, cacheCap, order, evasion, {}, {}};
 
-  int  dep     = NO_PATH_DEP;
-  bool tainted = false;
+  int  dep      = NO_PATH_DEP;
+  bool tainted  = false;
+  int  mateDist = PERPETUAL_NO_MATE;
 
-  const bool proven = proveRec(pos, ctx, 0, stats, dep, tainted, SQUARE_NB);
+  const bool proven =
+    proveRec(pos, ctx, 0, stats, dep, tainted, mateDist, SQUARE_NB);
 
   stats.cacheEntries = ctx.resolved.size();
+  stats.mateDist     = proven ? mateDist : PERPETUAL_NO_MATE;
 
   return proven;
 }

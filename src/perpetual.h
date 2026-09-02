@@ -10,6 +10,11 @@
 // (bitboard.h). provesPerpetual() clamps any plyCap it is handed to this.
 constexpr int PERPETUAL_PLY_LIMIT = 256;
 
+// PerpetualStats::mateDist when the proof is an ordinary draw (repetition,
+// stalemate, 50-move) rather than a forced mate. Any value >= 0 is a proven
+// mate in that many plies from the prover's root.
+constexpr int PERPETUAL_NO_MATE = -1;
+
 /**
  * Statistics from one provesPerpetual() run.
  *
@@ -31,6 +36,29 @@ struct PerpetualStats
   // on a TRUE run that rests on a move (a root stalemate names none), and only
   // at ply 0 -- the first move of a proof, not the whole line.
   Move proofMove = NULL_MOVE;
+
+  // Plies to a forced mate at the prover's root, or PERPETUAL_NO_MATE.
+  //
+  // The TRUE terminal set already includes "the defender is checkmated": the
+  // attacker did better than a draw, which still satisfies a claim that was
+  // only ever a LOWER bound of VALUE_DRAW. This field is what lets a caller
+  // use the sharper fact instead of flattening it to VALUE_DRAW.
+  //
+  // Both directions of imprecision run the safe way, by construction:
+  //   - it UNDER-reports. An OR node stops at the first check that holds, so a
+  //     mate is seen only where the decisive check happened to be the mating
+  //     one -- and that must hold at EVERY OR node of the proof tree, since an
+  //     AND node needs all of its children to mate. What this reports is a
+  //     floor on the real rate, never a ceiling.
+  //   - the distance is an UPPER bound, for the same reason: it measures the
+  //     line that was found, not the shortest one. So VALUE_MATE - mateDist
+  //     remains a valid lower bound on the score.
+  //
+  // A mate verdict cannot rest on a repetition terminal -- an AND node ANDs
+  // over all of its children, so a single repeating reply erases it -- so
+  // unlike every draw proof in this system it carries no graph-history
+  // dependency, and is storable without the GHI gate.
+  int mateDist = PERPETUAL_NO_MATE;
 
   uint64_t cacheHits     = 0;  // node visits answered without expanding
   uint64_t cacheStores   = 0;  // entries written or upgraded (> cacheEntries)

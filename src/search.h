@@ -2,6 +2,7 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
+#include <array>
 #include <iomanip>
 #include <atomic>
 #include "perf.h"
@@ -156,6 +157,17 @@ class SearchData
   // position (perpetual.h). Read as suppressed / (suppressed + probes): that
   // ratio is the re-probe rate the cache exists to collapse.
   uint64_t perpetualSuppressed = 0;
+
+  // Of the proofs above, how many came back as a forced MATE rather than a
+  // repetition/stalemate draw (PerpetualStats::mateDist), and their distance
+  // histogram in plies. This is the frequency measurement that decides whether
+  // a dedicated mate pass is worth building: the prover finds these for free,
+  // but only where its OR-node short-circuit happened to land on the mating
+  // check at every node of the tree, so BOTH figures are floors on the truth.
+  // Read `perpetualMates / perpetualProofs` as "how much sharper could the
+  // claim have been", not as "how many mates are there".
+  uint64_t perpetualMates = 0;
+  std::array<uint32_t, 64> perpetualMateDist{};
 
   private:
 

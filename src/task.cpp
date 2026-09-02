@@ -511,10 +511,19 @@ perpetualCheck(const vector<string>& args)
     const double   hitPct = visits ? 100.0 * double(st.cacheHits) / double(visits) : 0.0;
     const double   ghiPct = proofs ? 100.0 * double(st.truePathBound) / double(proofs) : 0.0;
 
+    // A proof whose terminals were all checkmate is reported as the mate it is.
+    // Under-reported by construction (PerpetualStats::mateDist), so "TRUE" here
+    // means "a draw at least" -- never "and demonstrably not a mate".
+    char verdict[8] = "-";
+    if (proven and st.mateDist == PERPETUAL_NO_MATE)
+      snprintf(verdict, sizeof(verdict), "TRUE");
+    else if (proven)
+      snprintf(verdict, sizeof(verdict), "M%d", st.mateDist);
+
     printf(" | %6d | %12llu | %6.2f | %4.2f | %6d | %11llu | %4.1f | %4.1f | %-6s | %-6s | %7.3fs |\n",
            cap, (unsigned long long)st.nodes, ratio, ebf, st.maxPly,
            (unsigned long long)st.cacheEntries, hitPct, ghiPct,
-           proven ? "TRUE" : "-", st.budgetHit ? "hit" : "-", secs);
+           verdict, st.budgetHit ? "hit" : "-", secs);
     fflush(stdout);
 
     deepest   = st;
