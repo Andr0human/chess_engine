@@ -158,6 +158,37 @@ constexpr EvasionOrder PERPETUAL_SEARCH_EVASION = EvasionOrder::CAPTURE;
 // stops taking new keys but keeps upgrading the ones it has.
 constexpr uint64_t PERPETUAL_MAX_CACHE = 4000000;
 
+/**
+ * Rate limiter on the in-search probe: prover nodes may not exceed
+ * PERPETUAL_FREE_NODES + searchedNodes / PERPETUAL_NODE_SHARE_DIV.
+ *
+ * A per-PROBE budget is the wrong knob: lowering PERPETUAL_SEARCH_NODES just
+ * trades cost-per-probe for probe count, because the faster search reaches more
+ * gate-passing nodes. This is a different quantity -- a ceiling on the feature's
+ * share of the WHOLE search.
+ *
+ * It exists because the prover's cost across positions is a thin tail, not a
+ * level charge. The large majority of positions probe near-free; a small
+ * minority, rich in checks, spend several times the search itself. The limiter
+ * leaves the first group untouched and clips the second.
+ *
+ * Self-regulating rather than a hard stop: probing switches off while the
+ * prover is ahead of its allowance and back on as the search catches up, so a
+ * long search is never permanently locked out by one expensive early probe.
+ *
+ * The free floor is one full probe budget, so the first probe of a search
+ * always runs (searchedNodes is ~0 at the root probe, and a ratio test alone
+ * would make the limiter meaningless there).
+ *
+ * The divisor is deliberately loose. Throttling is not free: where the prover
+ * is proving, its cutoffs prune whole subtrees and pay for themselves, so a
+ * tight cap buys nodes/sec and loses depth. The share is set high enough that
+ * the positions whose prover cost is already negligible search bit-identically,
+ * and only the tail this was built for is clipped.
+ */
+constexpr uint64_t PERPETUAL_NODE_SHARE_DIV = 5;                       // <= 20%
+constexpr uint64_t PERPETUAL_FREE_NODES     = PERPETUAL_SEARCH_NODES;
+
 
 /**
  * The proof cache for one provesPerpetual() run.

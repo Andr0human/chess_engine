@@ -158,6 +158,15 @@ class SearchData
   // ratio is the re-probe rate the cache exists to collapse.
   uint64_t perpetualSuppressed = 0;
 
+  // Probes skipped because the prover was already over its share of the search
+  // (PERPETUAL_NODE_SHARE_DIV, perpetual.h). Counted BEFORE the static-eval
+  // test -- which is the expensive half of the gate and the whole reason the
+  // limiter sits ahead of it -- so this is an upper bound on the probes the
+  // limiter actually cost, not an exact count. A nonzero value on ordinary
+  // positions means the limiter is biting, which is what it is for; a large
+  // one relative to perpetualProbes means the share is set too low.
+  uint64_t perpetualThrottled = 0;
+
   // Of the proofs above, how many came back as a forced MATE rather than a
   // repetition/stalemate draw (PerpetualStats::mateDist), and their distance
   // histogram in plies. This is the frequency measurement that decides whether

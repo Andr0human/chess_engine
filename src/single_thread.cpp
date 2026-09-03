@@ -643,22 +643,33 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // Ask the standalone AND/OR prover (perpetual.cpp) whether the side to move
   // can force an unending check sequence. A proof is a hard LOWER bound of
   // "draw" -- it says the attacker can hold at least VALUE_DRAW, not that the
-  // position IS drawn, since the attacker may also be winning outright. So the
-  // only sound way to spend it without searching on is a fail-high, which is
-  // why the gate insists on `beta <= VALUE_DRAW`: in that window a draw is
-  // already good enough to cut off.
+  // position IS drawn, since the attacker may also be winning outright.
   //
-  // That single condition is also the whole reason the feature exists. The
-  // motivating shape is a move INTO an opponent perpetual: at the node after it
-  // the side to move is nominally several pawns down, so the window handed down
-  // already sits below a draw, and the cutoff fires where the search would
-  // otherwise have to find the repetition by brute depth.
+  // The bound is spent one way only: `proof >= beta`, fail high, return. That
+  // is the motivating shape -- a move INTO an opponent perpetual hands the node
+  // below it a window already sitting under a draw, and the cutoff fires where
+  // the search would otherwise have to find the repetition by brute depth.
+  //
+  // The obvious second spend, "raise alpha to the bound and search on" the way
+  // rootAlphaBeta does with `perpMove`, was built and removed: under fail-hard
+  // PVS it has no reachable set. A raise needs alpha < proof < beta, i.e. a
+  // window straddling VALUE_DRAW, and every scouted node has beta == alpha + 1,
+  // so it cannot straddle anything -- on those nodes `alpha < VALUE_DRAW` and
+  // `beta <= VALUE_DRAW` are the same test and the fail-high branch always
+  // wins. Only a genuine PV node has room, and its window is the root
+  // aspiration window (VAL_WINDOW wide) negated ply by ply, so it straddles a
+  // draw only when the ROOT already scores within that window of one -- where
+  // the root probe has the position anyway. The gate below therefore stays at
+  // `beta <= VALUE_DRAW`; widening it to `alpha < VALUE_DRAW` adds probe cost
+  // and cannot add a raise.
   //
   // Deliberately NOT stored in the TT. The prover's repetition terminal reads
   // ChessBoard's undoInfo stack, which is the real game history plus the search
   // path above this node -- so a proof is path-dependent, and a sibling
   // arriving at the same position by another route has not earned it. Same
-  // no-store rule as RFP and razoring above, for a different reason.
+  // no-store rule as RFP and razoring above, for a different reason. Nothing
+  // extra is needed at the store site: a proof always leaves through the
+  // `return` above, so ns.alpha never carries one.
   //
   // Mate windows are NOT excluded, unlike RFP/razoring/futility. A forced draw
   // genuinely refutes "I am getting mated here", the bound is sound whatever
@@ -666,88 +677,101 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // valuable thing this probe can do.
   if constexpr (USE_PERPETUAL)
   {
-    // Cheapest first: window, then depth, then material, and only then the
-    // static eval (which nodeStaticEval may have to compute).
+    // Cheapest first: window, then depth, then material, then the rate limiter,
+    // and only then the static eval (which nodeStaticEval may have to compute).
     if (beta <= VALUE_DRAW
       and depth >= PERPETUAL_MIN_DEPTH
       // No queen and no rook, no check chain. A knight or pawn perpetual is
       // possible but vanishingly rare, and this test is one OR of two bitboards.
-      and (pos.getPiece(pos.color, QUEEN) | pos.getPiece(pos.color, ROOK)) != 0
-      and nodeStaticEval(pos, ns) <= VALUE_DRAW - PERPETUAL_MARGIN)
+      and (pos.getPiece(pos.color, QUEEN) | pos.getPiece(pos.color, ROOK)) != 0)
     {
-      // Cheaper than every test above it, but it goes last because it is the
-      // only one that can be WRONG in a way worth avoiding: a hit skips a probe
-      // that might have proven, so there is no point paying that risk at nodes
-      // the earlier conditions would have fenced off anyway.
-      //
-      // Ahead of GEN_CHECKS, though, so a suppressed node pays no movegen
-      // either. That is not redundant with the unconditional GEN_CHECKS further
-      // down: nodes that cut off at NMP never reach it.
-      if (perpetualFailCache.failed(pos.hashValue))
+      // The prover's share of the whole search (PERPETUAL_NODE_SHARE_DIV).
+      // Ahead of the static eval because that is the expensive half of the gate
+      // and a throttled node should not pay for it; behind the three constant-
+      // time tests because they fence off far more nodes than this one does.
+      if (info.perpetualNodes > PERPETUAL_FREE_NODES
+            + info.totalSearchedNodes() / PERPETUAL_NODE_SHARE_DIV)
       {
-        info.perpetualSuppressed++;
+        info.perpetualThrottled++;
       }
-      else
+      else if (nodeStaticEval(pos, ns) <= VALUE_DRAW - PERPETUAL_MARGIN)
       {
-        // No check here, no check chain from here. The prover's own root reaches
-        // the same verdict, but only after rebuilding GEN_METADATA + GEN_MOVES
-        // from scratch and paying for a PerpetualStats (a 2 KB zeroed histogram)
-        // and its cache -- whereas this node has the metadata already, so the
-        // question costs one GEN_CHECKS plus one getMoves.
+        // Cheaper than every test above it, but it goes last because it is the
+        // only one that can be WRONG in a way worth avoiding: a hit skips a probe
+        // that might have proven, so there is no point paying that risk at nodes
+        // the earlier conditions would have fenced off anyway.
         //
-        // Two node types this fences off, both common enough to dominate a probe
-        // trace even though they are nearly free individually: the side to move
-        // is in check (every "check" it gives must also be an evasion), and the
-        // side to move just recaptured into a position with nothing to check with.
-        if (!checksGenerated)
+        // Ahead of GEN_CHECKS, though, so a suppressed node pays no movegen
+        // either. That is not redundant with the unconditional GEN_CHECKS further
+        // down: nodes that cut off at NMP never reach it.
+        if (perpetualFailCache.failed(pos.hashValue))
         {
-          stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
-          checksGenerated = true;
+          info.perpetualSuppressed++;
         }
-
-        MoveArray checkArray;
-        myMoves.getMoves<MType::CAPTURES | MType::QUIET, MType::CHECK>(pos, checkArray);
-
-        size_t checkCount = 0;
-        for (size_t i = 0; i < checkArray.size(); ++i)
-          checkCount += size_t(is_type<MType::CHECK>(checkArray[i]));
-
-        if (checkCount != 0)
+        else
         {
-          PerpetualStats st;
-          const bool proven = provesPerpetual(pos, st, PERPETUAL_SEARCH_NODES,
-                                              PERPETUAL_SEARCH_PLY_CAP, /*useCache=*/true,
-                                              PERPETUAL_MAX_CACHE,
-                                              PERPETUAL_SEARCH_ORDER,
-                                              PERPETUAL_SEARCH_EVASION);
-
-          info.perpetualProbes++;
-          info.perpetualNodes += st.nodes;
-
-          if (proven)
+          // No check here, no check chain from here. The prover's own root reaches
+          // the same verdict, but only after rebuilding GEN_METADATA + GEN_MOVES
+          // from scratch and paying for a PerpetualStats (a 2 KB zeroed histogram)
+          // and its cache -- whereas this node has the metadata already, so the
+          // question costs one GEN_CHECKS plus one getMoves.
+          //
+          // Two node types this fences off, both common enough to dominate a probe
+          // trace even though they are nearly free individually: the side to move
+          // is in check (every "check" it gives must also be an evasion), and the
+          // side to move just recaptured into a position with nothing to check with.
+          if (!checksGenerated)
           {
-            info.perpetualProofs++;
-            recordPerpetualMate(st);
-
-            // VALUE_DRAW for an ordinary perpetual, the mate score when the
-            // proof was a forced mate. Not a display nicety: the gate fires
-            // BEFORE the move loop, so at a node with mate in one this used to
-            // return VALUE_DRAW where searching on would have returned the
-            // mate -- both cut, but only one carries the score, which made the
-            // probe strictly worse than not probing at exactly the nodes it
-            // had the most to say about.
-            return perpetualProofScore(st, ply);
+            stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
+            checksGenerated = true;
           }
 
-          // Store the failure, never the proof. The proof leans on this node's
-          // path and belongs to no other; the failure is reusable because extra
-          // path history can only move a verdict toward TRUE, so reusing a FALSE
-          // is at worst pessimistic. See PerpetualFailCache in perpetual.h.
-          //
-          // Only the checkCount != 0 branch stores: the no-checks case is already
-          // fenced off for free above, so spending a slot on it would evict a
-          // real failure to cache something a GEN_CHECKS re-derives.
-          perpetualFailCache.recordFail(pos.hashValue);
+          MoveArray checkArray;
+          myMoves.getMoves<MType::CAPTURES | MType::QUIET, MType::CHECK>(pos, checkArray);
+
+          size_t checkCount = 0;
+          for (size_t i = 0; i < checkArray.size(); ++i)
+            checkCount += size_t(is_type<MType::CHECK>(checkArray[i]));
+
+          if (checkCount != 0)
+          {
+            PerpetualStats st;
+            const bool proven = provesPerpetual(pos, st, PERPETUAL_SEARCH_NODES,
+                                                PERPETUAL_SEARCH_PLY_CAP, /*useCache=*/true,
+                                                PERPETUAL_MAX_CACHE,
+                                                PERPETUAL_SEARCH_ORDER,
+                                                PERPETUAL_SEARCH_EVASION);
+
+            info.perpetualProbes++;
+            info.perpetualNodes += st.nodes;
+
+            if (proven)
+            {
+              info.perpetualProofs++;
+              recordPerpetualMate(st);
+
+              // VALUE_DRAW for an ordinary perpetual, the mate score when the
+              // proof was a forced mate. Not a display nicety: the probe fires
+              // BEFORE the move loop, so at a node with mate in one this used to
+              // return VALUE_DRAW where searching on would have returned the
+              // mate -- both cut, but only one carries the score, which made the
+              // probe strictly worse than not probing at exactly the nodes it
+              // had the most to say about.
+              return perpetualProofScore(st, ply);
+            }
+            else
+            {
+              // Store the failure, never the proof. The proof leans on this node's
+              // path and belongs to no other; the failure is reusable because extra
+              // path history can only move a verdict toward TRUE, so reusing a FALSE
+              // is at worst pessimistic. See PerpetualFailCache in perpetual.h.
+              //
+              // Only the checkCount != 0 branch stores: the no-checks case is already
+              // fenced off for free above, so spending a slot on it would evict a
+              // real failure to cache something a GEN_CHECKS re-derives.
+              perpetualFailCache.recordFail(pos.hashValue);
+            }
+          }
         }
       }
     }
@@ -1113,6 +1137,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
       writer << "Perpetual: probes=" << info.perpetualProbes
              << " suppressed=" << info.perpetualSuppressed
              << " (" << std::fixed << std::setprecision(1) << suppressRate << "%)"
+             << " throttled=" << info.perpetualThrottled
              << " proofs=" << info.perpetualProofs
              << " (" << std::fixed << std::setprecision(1) << proofRate << "%)"
              << " proverNodes=" << info.perpetualNodes
