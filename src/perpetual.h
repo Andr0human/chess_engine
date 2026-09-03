@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 #include "bitboard.h"
 
@@ -153,10 +154,175 @@ constexpr int          PERPETUAL_SEARCH_PLY_CAP = 25;
 constexpr CheckOrder   PERPETUAL_SEARCH_ORDER   = CheckOrder::HEAVY_NEAR;
 constexpr EvasionOrder PERPETUAL_SEARCH_EVASION = EvasionOrder::CAPTURE;
 
-// Cap on distinct cached positions. The table is an unordered_map, so budget
-// roughly 48 bytes per entry -- 4M entries is a bit under 200 MB. Once full it
+// Cap on distinct cached positions held by one run. Once reached the table
 // stops taking new keys but keeps upgrading the ones it has.
 constexpr uint64_t PERPETUAL_MAX_CACHE = 4000000;
+
+
+/**
+ * The proof cache for one provesPerpetual() run.
+ *
+ * This was an std::unordered_map<Key, CacheEntry>, and the map -- not the proof
+ * search -- was most of the prover's cost: with the cache disabled on the
+ * same position it charged ~170 ns per node at the in-search budget and ~580
+ * ns at the larger standalone ones, i.e. 37% and 62% of total time. Three
+ * reasons, all structural rather than fixable by tuning: a malloc per entry,
+ * an integer division per lookup (libstdc++ takes std::hash -- identity, for
+ * uint64_t -- modulo a prime bucket count), and a dependent pointer load into a
+ * table far too large to sit in cache.
+ *
+ * None of that is needed here. The key is a Zobrist hash, so the low bits are
+ * already uniformly random and a power-of-two mask is as good as any prime; the
+ * payload is 6 bytes, so a slot fits in 16 and four sit on a cache line; and
+ * entries are never erased, so open addressing needs no tombstones.
+ *
+ * `epoch` is the part that makes it work for search rather than just for a
+ * one-off run. A run must start from an empty table, and search issues
+ * thousands of short probes -- memset-ing a megabyte for each would cost more
+ * than the map it replaces. So a slot carries the id of the run that wrote it
+ * and any slot not stamped with the current run reads as empty: newRun() is an
+ * increment, and a real clear happens once per 65535 runs when the counter
+ * wraps.
+ *
+ * The table is process-wide and grow-only rather than owned by ProveContext,
+ * which is what drops the per-probe allocation to zero. Safe because the prover
+ * is single-threaded and never re-entrant -- no caller runs inside an OpenMP
+ * region, and a probe never starts another probe.
+ *
+ * Deliberately NOT a direct-mapped replace-on-collision table like
+ * PerpetualFailCache below. That one can evict freely because a lost entry only
+ * costs a skipped probe; here a lost entry changes node counts, and therefore
+ * which proofs land inside the budget. Probing to a true empty slot keeps this
+ * a drop-in whose per-cap node counts match the map exactly. Eviction would
+ * not, and is a separate question.
+ */
+class PerpetualProofCache
+{
+  public:
+
+  /**
+   * One resolved position.
+   *
+   * TRUE entries are unconditional. A forced repetition is proven or it is not,
+   * and how much room was left when it was found does not enter into it.
+   *
+   * FALSE entries carry the room they failed with: `remaining` is plyCap - ply
+   * at the node that established the failure. A query with no more room than
+   * that cannot do better, so the entry is reusable only when the caller's
+   * remaining is <= this. Same idea as a transposition table's depth field,
+   * counted from the other end -- and it is what lets one iterative-deepening
+   * pass reuse the shallower passes instead of only itself.
+   *
+   * `mateDist` rides along on TRUE entries (PERPETUAL_NO_MATE on the rest). A
+   * mate distance is absolute -- plies below this node -- so it is as
+   * cap-independent as the TRUE it belongs to. Note that a TRUE stored WITHOUT
+   * a mate permanently suppresses mate detection at every later transposition
+   * into it: a cache hit returns before the node is expanded, and there is no
+   * upgrade path back. That is the undercount compounding, and it is deliberate
+   * -- every route out of it costs nodes, which this design spends none of.
+   */
+  struct Entry
+  {
+    Key      key       = 0;
+    uint16_t epoch     = 0;      // run that wrote this slot; != current == empty
+    int16_t  remaining = 0;
+    int16_t  mateDist  = 0;
+    bool     result    = false;
+  };
+
+  // Four slots to a 64-byte line, so a linear probe usually stays on the line
+  // the first one landed on. The claim is worth pinning: adding a field or
+  // widening one silently halves that.
+  static_assert(sizeof(Entry) == 16, "PerpetualProofCache::Entry must stay 16 B");
+
+  private:
+
+  static constexpr size_t MIN_SLOTS = size_t(1) << 12;   //   4k x 16 B = 64 KB
+  static constexpr size_t MAX_SLOTS = size_t(1) << 24;   //  16M x 16 B = 256 MB
+
+  std::vector<Entry> table;
+  size_t   mask  = 0;
+  uint16_t epoch = 0;
+  uint64_t live  = 0;   // distinct keys written during the current run
+  uint64_t cap   = 0;   // most this run will hold; see newRun()
+
+  public:
+
+  /**
+   * Begin a run expecting up to `wantEntries` distinct positions.
+   *
+   * Sized to twice that, so linear probing runs at a load factor of 0.5 or
+   * below -- above ~0.7 the probe chains grow fast enough to give back what
+   * open addressing won. Grow-only: search asks for the same 20000 every probe
+   * and allocates once for the life of the process.
+   *
+   * `cap` is clamped to three quarters of the table on top of the caller's own
+   * limit, which both guarantees a stale slot always exists (so a lookup for an
+   * absent key terminates) and bounds the memory a large request can ask for. It cannot bind in practice: entries are bounded by nodes, nodes by
+   * the node budget, and the table is sized from that same budget.
+   */
+  void
+  newRun(uint64_t wantEntries) noexcept;
+
+  // The entry for `key`, or nullptr. The caller applies the reuse rule -- an
+  // entry being present does not mean it answers the question being asked.
+  const Entry*
+  probe(Key key) const noexcept
+  {
+    size_t i = size_t(key) & mask;
+
+    while (table[i].epoch == epoch)
+    {
+      if (table[i].key == key)
+        return &table[i];
+      i = (i + 1) & mask;
+    }
+    return nullptr;
+  }
+
+  /**
+   * Insert, or upgrade in place. Returns whether anything was written.
+   *
+   * A proof beats a failure, and a failure established with more room to work
+   * in beats one established with less; a TRUE is never overwritten, being
+   * unconditional already.
+   */
+  bool
+  store(Key key, bool result, int16_t remaining, int16_t mateDist) noexcept
+  {
+    size_t i = size_t(key) & mask;
+
+    while (table[i].epoch == epoch)
+    {
+      if (table[i].key == key)
+      {
+        Entry& e = table[i];
+
+        if (e.result or (!result and remaining <= e.remaining))
+          return false;
+
+        e.result    = result;
+        e.remaining = remaining;
+        e.mateDist  = mateDist;
+        return true;
+      }
+      i = (i + 1) & mask;
+    }
+
+    if (live >= cap)
+      return false;             // full: stop growing, keep what we have
+
+    table[i] = Entry{key, epoch, remaining, mateDist, result};
+    ++live;
+    return true;
+  }
+
+  uint64_t
+  size() const noexcept
+  { return live; }
+};
+
+extern PerpetualProofCache perpetualProofCache;
 
 /**
  * Probe-suppression table for the in-search gate (alphaBeta).

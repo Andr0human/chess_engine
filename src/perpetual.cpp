@@ -1,7 +1,7 @@
 #include <algorithm>
+#include <bit>
 #include <cassert>
 #include <climits>
-#include <unordered_map>
 
 #include "perpetual.h"
 #include "movegen.h"
@@ -52,35 +52,6 @@ checkerValue(Move move)
 }
 
 
-/**
- * One resolved position.
- *
- * TRUE entries are unconditional. A forced repetition is proven or it is not,
- * and how much room was left when it was found does not enter into it.
- *
- * FALSE entries carry the room they failed with: `remaining` is plyCap - ply at
- * the node that established the failure. A query with no more room than that
- * cannot do better, so the entry is reusable only when the caller's remaining
- * is <= this. Same idea as a transposition table's depth field, counted from
- * the other end -- and it is what lets one iterative-deepening pass reuse the
- * shallower passes instead of only itself.
- *
- * `mateDist` rides along on TRUE entries (PERPETUAL_NO_MATE on the rest). A
- * mate distance is absolute -- plies below this node -- so it is as
- * cap-independent as the TRUE it belongs to. Note that a TRUE stored WITHOUT a
- * mate permanently suppresses mate detection at every later transposition into
- * it: a cache hit returns before the node is expanded, and there is no upgrade
- * path back. That is the undercount compounding, and it is deliberate -- every
- * route out of it costs nodes, which this design spends none of.
- */
-struct CacheEntry
-{
-  bool    result;
-  int16_t remaining;
-  int16_t mateDist;
-};
-
-
 struct ProveContext
 {
   Color    attacker;
@@ -91,7 +62,10 @@ struct ProveContext
   CheckOrder   order;
   EvasionOrder evasion;
 
-  std::unordered_map<Key, CacheEntry> resolved;
+  // Shared, grow-only, cleared by epoch bump in provesPerpetual(). See
+  // PerpetualProofCache -- not owned here, which is what makes a probe
+  // allocation-free.
+  PerpetualProofCache& resolved;
 
   // hashValue at each search ply, used to find WHICH ancestor a repetition
   // closed onto. ChessBoard's undoInfo stack already knows this but does not
@@ -203,14 +177,13 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
 
   if (ctx.useCache)
   {
-    const auto it = ctx.resolved.find(cacheKey(pos));
+    const PerpetualProofCache::Entry* e = ctx.resolved.probe(cacheKey(pos));
 
-    if (it != ctx.resolved.end()
-        and (it->second.result or remaining <= it->second.remaining))
+    if (e != nullptr and (e->result or remaining <= e->remaining))
     {
       ++st.cacheHits;
-      mateDist = it->second.mateDist;
-      return it->second.result;
+      mateDist = e->mateDist;
+      return e->result;
     }
   }
 
@@ -452,27 +425,12 @@ proveRec(ChessBoard& pos, ProveContext& ctx, int ply,
   // ever cost a proof this run would have found. It cannot become a draw claim
   // that is not there. Losing proofs is the direction this prover is allowed to
   // err in; inventing them is not.
-  const Key        key = cacheKey(pos);
-  const CacheEntry fresh{result, int16_t(remaining), int16_t(mateDist)};
-
-  auto it = ctx.resolved.find(key);
-
-  if (it == ctx.resolved.end())
-  {
-    if (ctx.resolved.size() >= ctx.cacheCap)
-      return result;                  // table full: stop growing, keep what we have
-
-    ctx.resolved.emplace(key, fresh);
+  // Insert or upgrade in place -- a proof beats a failure, and a failure
+  // established with more room to work in beats one established with less. The
+  // table refuses new keys once full, keeping what it has. See store().
+  if (ctx.resolved.store(cacheKey(pos), result,
+                         int16_t(remaining), int16_t(mateDist)))
     ++st.cacheStores;
-  }
-  else if (!it->second.result
-           and (fresh.result or fresh.remaining > it->second.remaining))
-  {
-    // Upgrade in place: a proof beats a failure, and a failure established with
-    // more room to work in beats one established with less.
-    it->second = fresh;
-    ++st.cacheStores;
-  }
 
   return result;
 }
@@ -485,9 +443,20 @@ provesPerpetual(ChessBoard& pos, PerpetualStats& stats,
 {
   stats = PerpetualStats{};
 
+  // Sized from the run's own ceiling on distinct entries: one is stored per
+  // node at most, and nodes are capped by the budget. The bump is the clear --
+  // nothing from an earlier run survives it.
+  perpetualProofCache.newRun(std::min(nodeBudget, cacheCap));
+
+  // The trailing {} zeroes pathHash, which proveRec does not need -- it writes
+  // ply before recursing and repetitionOwner reads only plies below the current
+  // one. Left in anyway: 2 KB of memset is noise next to a run's node budget,
+  // and dropping it means giving ProveContext a constructor to stop aggregate
+  // initialisation from zeroing the member regardless.
   ProveContext ctx{pos.color, nodeBudget,
                    std::min(plyCap, PERPETUAL_PLY_LIMIT),
-                   useCache, cacheCap, order, evasion, {}, {}};
+                   useCache, cacheCap, order, evasion,
+                   perpetualProofCache, {}};
 
   int  dep      = NO_PATH_DEP;
   bool tainted  = false;
@@ -500,6 +469,46 @@ provesPerpetual(ChessBoard& pos, PerpetualStats& stats,
   stats.mateDist     = proven ? mateDist : PERPETUAL_NO_MATE;
 
   return proven;
+}
+
+
+// The one instance, shared by every run -- see the class comment. Starts empty
+// and grows on the first newRun(); search settles at 1 MiB and never resizes
+// again.
+PerpetualProofCache perpetualProofCache;
+
+void
+PerpetualProofCache::newRun(uint64_t wantEntries) noexcept
+{
+  // Twice the expected entries, so linear probing stays at or below a load
+  // factor of 0.5. MAX_SLOTS is the backstop for an absurd request; the cap
+  // below then keeps the table from filling past 3/4 whatever happens, which
+  // is what guarantees probe() finds a stale slot and terminates.
+  const size_t want = size_t(std::min<uint64_t>(wantEntries, MAX_SLOTS / 2));
+  const size_t need = std::clamp(std::bit_ceil(want * 2 + 1), MIN_SLOTS, MAX_SLOTS);
+
+  if (need > table.size())
+  {
+    // Resizing invalidates every index, so the old contents cannot be carried
+    // across; assign() drops them and resets the stamp with them.
+    table.assign(need, Entry{});
+    mask  = need - 1;
+    epoch = 0;
+  }
+
+  ++epoch;
+
+  // 0 is what a freshly assigned slot holds, so it can never be a live stamp.
+  // Reaching it means the counter wrapped: pay the one real clear, 1 run in
+  // 65535.
+  if (epoch == 0)
+  {
+    std::fill(table.begin(), table.end(), Entry{});
+    epoch = 1;
+  }
+
+  live = 0;
+  cap  = std::min<uint64_t>(wantEntries, (table.size() / 4) * 3);
 }
 
 
