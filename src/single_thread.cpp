@@ -51,6 +51,40 @@ recordPerpetualMate(const PerpetualStats& st)
                                   info.perpetualMateDist.size() - 1)]++;
 }
 
+/**
+ * The score a proof is worth at `ply` -- the whole point of carrying mateDist.
+ *
+ * A draw proof bounds the score from below at VALUE_DRAW. A mate proof bounds
+ * it from below at "I mate in st.mateDist plies", which is the same claim made
+ * sharper: the prover's distance is an UPPER bound (it measures the line found,
+ * not the shortest), so the score it converts to stays a LOWER bound. Both are
+ * spent the same way -- a fail-high at an interior node, an alpha clamp at the
+ * root -- so this is a pure change of magnitude, not of kind.
+ *
+ * Negating checkmateScore() rather than open-coding VALUE_MATE - 20*ply keeps
+ * the encoding in one place: the 20-points-per-ply step is not obvious, and a
+ * score built with the wrong step lands outside isMateScore()'s band and reads
+ * as an ordinary evaluation of about +150 pawns.
+ *
+ * Past MAX_PLY it does exactly that, and the prover's ply cap is independent of
+ * MAX_PLY, so the case is reachable: fall back to the draw bound. Sound (a
+ * forced mate is at least a draw) and still cuts, since the caller only asks
+ * with beta <= VALUE_DRAW.
+ */
+static Score
+perpetualProofScore(const PerpetualStats& st, Ply ply)
+{
+  if (st.mateDist == PERPETUAL_NO_MATE)
+    return VALUE_DRAW;
+
+  const Ply matePly = ply + st.mateDist;
+
+  if (matePly > MAX_PLY)
+    return VALUE_DRAW;
+
+  return -checkmateScore(matePly);
+}
+
 
 template <bool leafnode = 0>
 static Score
@@ -695,11 +729,14 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
             info.perpetualProofs++;
             recordPerpetualMate(st);
 
-            // Still VALUE_DRAW even when st.mateDist says this was a mate: the
-            // sharper bound is only being COUNTED for now, not claimed. Reading
-            // it here would mean returning a mate score from a node the search
-            // never verified, which is a change of kind, not of degree.
-            return VALUE_DRAW;
+            // VALUE_DRAW for an ordinary perpetual, the mate score when the
+            // proof was a forced mate. Not a display nicety: the gate fires
+            // BEFORE the move loop, so at a node with mate in one this used to
+            // return VALUE_DRAW where searching on would have returned the
+            // mate -- both cut, but only one carries the score, which made the
+            // probe strictly worse than not probing at exactly the nodes it
+            // had the most to say about.
+            return perpetualProofScore(st, ply);
           }
 
           // Store the failure, never the proof. The proof leans on this node's
@@ -829,7 +866,8 @@ template Score alphaBeta<true >(ChessBoard&, Depth, Score, Score, Ply, int, int,
 template Score alphaBeta<false>(ChessBoard&, Depth, Score, Score, Ply, int, int, bool);
 
 Score
-rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth, Move perpMove)
+rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth, Move perpMove,
+              Score perpScore)
 {
   int ply{0}, pvIndex{0};
 
@@ -839,21 +877,25 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth, Move perpMo
 
   NodeState ns{alpha, beta, depth, Ply(ply), pvIndex, 0};
 
-  // A proven perpetual is a hard lower bound of VALUE_DRAW: whatever the search
-  // makes of the position, this side can always take the draw. Interior nodes
-  // spend that bound as a fail-high and return; the root cannot, because it owes
-  // the caller a MOVE. So it is spent the other way -- raise alpha to the bound
-  // and put the proving move in the PV. Any line the search likes better than a
-  // draw still wins the slot; if none does, the pre-seeded move is played and
-  // the score reported is VALUE_DRAW instead of the material count the search
-  // would otherwise believe.
+  // A proven perpetual is a hard lower bound -- VALUE_DRAW for a draw proof,
+  // the mate score for a mate proof (perpetualProofScore). Whatever the search
+  // makes of the position, this side can always take at least that. Interior
+  // nodes spend the bound as a fail-high and return; the root cannot, because
+  // it owes the caller a MOVE. So it is spent the other way -- raise alpha to
+  // the bound and put the proving move in the PV. Any line the search likes
+  // better still wins the slot; if none does, the pre-seeded move is played and
+  // the bound is reported instead of the material count the search would
+  // otherwise believe.
   //
   // Raising alpha is also the point where this earns its keep as a search
   // improvement rather than a display fix: in a position bad enough to want a
-  // perpetual, a root alpha of VALUE_DRAW cuts off nearly everything.
-  if (perpMove != NULL_MOVE and ns.alpha < VALUE_DRAW)
+  // perpetual, a root alpha of VALUE_DRAW cuts off nearly everything -- and a
+  // mate clamp cuts off everything that is not a faster mate. That is the right
+  // answer rather than an aggressive one: `perpMove` is the first move of a
+  // proven forced mate, so only a shorter one deserves to displace it.
+  if (perpMove != NULL_MOVE and ns.alpha < perpScore)
   {
-    ns.alpha = VALUE_DRAW;
+    ns.alpha = perpScore;
     pvArray[pvIndex] = filter(perpMove);
     // Terminate the line. Only the root's own slot is known; the continuation
     // still holds the previous iteration's PV, and printing the proving move
@@ -916,8 +958,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   // cannot change between iterations. Deferred to the first iteration deep
   // enough to be worth it, which keeps the probe off the shortest
   // `difficulty beginner` searches.
-  Move rootPerpMove = NULL_MOVE;
-  bool perpTried    = false;
+  Move  rootPerpMove  = NULL_MOVE;
+  Score rootPerpScore = VALUE_DRAW;
+  bool  perpTried     = false;
 
   if (debug)
     info.showHeader(writer);
@@ -950,13 +993,18 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
           {
             info.perpetualProofs++;
             recordPerpetualMate(st);
-            rootPerpMove = st.proofMove;
+
+            // The root IS the prover's root, so the distance needs no rebasing:
+            // ply 0. st.proofMove is the decisive child that set mateDist, so
+            // the move and the score describe the same line by construction.
+            rootPerpMove  = st.proofMove;
+            rootPerpScore = perpetualProofScore(st, 0);
           }
         }
       }
     }
 
-    Score eval = rootAlphaBeta(board, alpha, beta, depth, rootPerpMove);
+    Score eval = rootAlphaBeta(board, alpha, beta, depth, rootPerpMove, rootPerpScore);
 
     if (info.shouldStop())
       break;
@@ -1050,7 +1098,12 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
       double nodeShare = info.totalSearchedNodes()
         ? 100.0 * double(info.perpetualNodes) / double(info.totalSearchedNodes()) : 0.0;
       writer << "Perpetual: root=" << (rootPerpMove == NULL_MOVE ? std::string("-")
-                                        : printMove(rootPerpMove, board)) << endl;
+                                        : printMove(rootPerpMove, board));
+      if (rootPerpMove != NULL_MOVE)
+        writer << (isMateScore(rootPerpScore)
+                    ? " (mate in " + std::to_string((VALUE_MATE - rootPerpScore) / 20)
+                        + " ply)" : std::string(" (draw)"));
+      writer << endl;
       // suppressed/(suppressed+probes) is the re-probe rate the fail cache
       // collapses -- near zero means the cost was distinct positions all along.
       const uint64_t asked = info.perpetualProbes + info.perpetualSuppressed;

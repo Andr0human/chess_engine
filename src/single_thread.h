@@ -58,13 +58,17 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
 
 /**
- * @param perpMove a move proven (by perpetual.cpp) to force a draw from this
- *   root, or NULL_MOVE. A proof is a hard LOWER bound of VALUE_DRAW, so the
- *   root clamps alpha up to it and pre-seeds the PV with the move -- if no
- *   search line beats a draw, this is what gets played and reported.
+ * @param perpMove a move proven (by perpetual.cpp) to force at least a draw
+ *   from this root, or NULL_MOVE.
+ * @param perpScore what that proof is worth -- VALUE_DRAW for a perpetual, a
+ *   mate score when the prover reached a checkmate terminal. Ignored unless
+ *   perpMove is set. Being a hard LOWER bound, the root clamps alpha up to it
+ *   and pre-seeds the PV with the move -- if no search line beats it, this is
+ *   what gets played and reported.
  */
 Score
-rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth, Move perpMove = NULL_MOVE);
+rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth,
+              Move perpMove = NULL_MOVE, Score perpScore = VALUE_DRAW);
 
 
 #endif
