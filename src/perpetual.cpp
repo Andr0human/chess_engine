@@ -6,6 +6,7 @@
 #include "perpetual.h"
 #include "movegen.h"
 #include "lookup_table.h"
+#include "search.h"
 #include "search_utils.h"
 
 
@@ -520,4 +521,98 @@ void
 PerpetualFailCache::clear() noexcept
 {
   table.fill(0);
+}
+
+
+namespace {
+
+/**
+ * 4*Qd + 2*Rd + Bd + Nd over `men`'s pieces, manhattan distance to kSq.
+ *
+ * `weight` gets 4*nQ + 2*nR + nB + nN, so the caller can compare two of these
+ * as means without dividing here -- and so an absent piece type contributes to
+ * neither the sum nor the weight, instead of reading as distance zero.
+ */
+void
+kingDistanceSum(const ChessBoard& pos, Color men, Square kSq, int& sum, int& weight)
+{
+  constexpr PieceType pieceTypes[4] = {QUEEN, ROOK, BISHOP, KNIGHT};
+  constexpr int       pieceWeight[4] = {4, 2, 1, 1};
+
+  sum = weight = 0;
+
+  for (int i = 0; i < 4; ++i)
+  {
+    Bitboard pieceBb = pos.getPiece(men, pieceTypes[i]);
+
+    while (pieceBb != 0)
+    {
+      const Square sq = lsbIndex(pieceBb);
+      pieceBb &= pieceBb - 1;
+
+      sum    += pieceWeight[i] * int(plt::manhattanDistance(sq, kSq));
+      weight += pieceWeight[i];
+    }
+  }
+}
+
+}  // namespace
+
+
+bool
+perpetualDistanceVeto(const ChessBoard& pos)
+{
+  // pos.color is the side that would be giving the checks; the other defends.
+  const Color  defender = ~pos.color;
+  const Square defKingSq = squareNo(pos.getPiece(defender, KING));
+
+  int distAtk = 0, weightAtk = 0, distDef = 0, weightDef = 0;
+  kingDistanceSum(pos, pos.color, defKingSq, distAtk, weightAtk);
+  kingDistanceSum(pos, defender,  defKingSq, distDef, weightDef);
+
+  // A defender with no Q/R/B/N left has nothing to bring back, so there is no
+  // deficit to measure -- never veto. weightAtk is nonzero at the call site,
+  // whose gate has already established a queen or a rook, but the guard keeps
+  // this callable from anywhere.
+  if (weightDef == 0 or weightAtk == 0)
+    return false;
+
+  //   distDef/weightDef - distAtk/weightAtk < -PERPETUAL_DIST_DEFICIT
+  // cross-multiplied by weightAtk*weightDef, which is positive, so the
+  // direction holds and the whole test stays in integers. Both products are
+  // bounded by 14 * maxWeight^2, nowhere near overflow.
+  return distDef * weightAtk + PERPETUAL_DIST_DEFICIT * weightAtk * weightDef
+       < distAtk * weightDef;
+}
+
+
+bool
+perpetualCaptureVeto(const ChessBoard& pos, const MoveList& myMoves)
+{
+  // Same numbers seeScore() itself uses (search.cpp), indexed by PieceType.
+  constexpr Score pieceValue[ALL] = {0, 100, 320, 300, 530, 910, 3200};
+
+  MoveArray captures;
+  myMoves.getMoves<MType::CAPTURES>(pos, captures);
+
+  for (size_t i = 0; i < captures.size(); ++i)
+  {
+    const Move move = captures[i];
+
+    // SEE cannot exceed the victim's value, so a capture whose victim is too
+    // cheap is skipped without paying for the exchange walk -- which is most of
+    // them, since pawn captures dominate. A promotion is the exception: it also
+    // banks the promoted piece, so its SEE can outrun the victim.
+    //
+    // An en-passant capture lands on an empty square and reads NONE here. Its
+    // victim is a pawn either way, so falling into the skip is correct.
+    if (!is_type<MType::PROMOTION>(move)
+      and pieceValue[type_of(pos.pieceOnSquare(to_sq(move)))] < PERPETUAL_CAPTURE_GAIN)
+      continue;
+
+    if (seeScore(pos, move) >= PERPETUAL_CAPTURE_GAIN)
+      return true;
+  }
+
+  return false;
 }

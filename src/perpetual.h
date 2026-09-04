@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "bitboard.h"
+#include "movelist.h"
 
 // Hard ceiling on prover ply, sized to makeMove's 256-entry undoInfo stack
 // (bitboard.h). provesPerpetual() clamps any plyCap it is handed to this.
@@ -416,6 +417,68 @@ class PerpetualFailCache
 };
 
 extern PerpetualFailCache perpetualFailCache;
+
+
+/**
+ * @brief Is the check chain geometrically hopeless? A gate, not a verdict.
+ *
+ * Compares how far each side's heavy-ish men stand from the DEFENDING king, in
+ * weighted-mean manhattan distance:
+ *
+ *   dist(men) = 4*Qd + 2*Rd + Bd + Nd     summed per piece, manhattan
+ *   w(men)    = 4*nQ + 2*nR + nB + nN
+ *   contrast  = dist(defender)/w(defender) - dist(attacker)/w(attacker)
+ *
+ * Positive means the attacker's pieces are the ones camped near the defending
+ * king while the defender's own pieces are out of position -- they cannot get
+ * back to interpose, which is the geometric precondition for a check chain
+ * that never runs out. Returns true (skip the probe) when the contrast falls
+ * below -PERPETUAL_DIST_DEFICIT, i.e. the defenders are the close ones.
+ *
+ * Neither half predicts alone. A raw distance sum cannot tell "close" from
+ * "few pieces" -- a side with no queen contributes 0 to Qd and reads as
+ * maximally close -- so the division by w is load-bearing; and each normalised
+ * half still carries the same dominant nuisance term, where the defending king
+ * happens to stand, since a cornered king is far from everything for both
+ * sides. Subtracting cancels it, which is why only the difference predicts.
+ *
+ * A veto rather than a score because the effect is a floor, not a ramp: below
+ * the threshold the proof rate collapses, above it the rate is flat. It can be
+ * wrong in exactly one direction: a skipped probe that would have proven. It
+ * never invents a proof.
+ *
+ * In-node probe only -- the root probe fires once per search and seeds the PV.
+ */
+bool
+perpetualDistanceVeto(const ChessBoard& pos);
+
+
+/**
+ * @brief Is the side to move about to win the material back? A gate, not a verdict.
+ *
+ * True when some immediate capture has SEE >= PERPETUAL_CAPTURE_GAIN, i.e. the
+ * attacker can just take something and keep it. The probe is then abandoned.
+ *
+ * The gate above this one asks whether the node is losing badly enough for a
+ * draw to be worth proving, and it asks the STATIC eval, which does not know a
+ * piece is hanging. So a node one move from equality can read -900 and pass.
+ * `2k1r3/p1p2p1p/2p3p1/2bQ1qB1/2P5/PP3P2/4N1PP/R3K2R b KQ - 0 18` is the case
+ * that prompted this: black is nominally a rook and a knight down, static eval
+ * -979, every gate satisfied -- and cxd5 simply takes the queen (SEE +910).
+ *
+ * The test is the raw capture and not the capture-corrected eval
+ * (`staticEval + bestSee > -PERPETUAL_MARGIN`), which is the obvious reading of
+ * "the position is not really lost" but a far weaker predictor: proofs
+ * concentrate at the LESS lost nodes, so correcting the eval upward fences off
+ * the ground perpetuals actually live on. What predicts is the hanging piece
+ * itself -- a position with material in the air is tactically unsettled, and a
+ * perpetual needs a check geometry that holds still.
+ *
+ * Wrong in one direction only, like the distance veto: a skipped probe that
+ * would have proven. It never invents a proof.
+ */
+bool
+perpetualCaptureVeto(const ChessBoard& pos, const MoveList& myMoves);
 
 
 /**

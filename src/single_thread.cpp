@@ -696,6 +696,15 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
       }
       else if (nodeStaticEval(pos, ns) <= VALUE_DRAW - PERPETUAL_MARGIN)
       {
+        // Geometry: the defender's men are home and the attacker's are the
+        // far ones, so there is no check chain to find here (perpetual.h).
+        // Four bitboard walks and a table lookup per piece, no division and no
+        // memory traffic -- cheaper than the fail cache's hash probe below, so
+        // it goes first among the two tests that can be wrong.
+        if (perpetualDistanceVeto(pos))
+        {
+          info.perpetualVetoed++;
+        }
         // Cheaper than every test above it, but it goes last because it is the
         // only one that can be WRONG in a way worth avoiding: a hit skips a probe
         // that might have proven, so there is no point paying that risk at nodes
@@ -704,9 +713,18 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
         // Ahead of GEN_CHECKS, though, so a suppressed node pays no movegen
         // either. That is not redundant with the unconditional GEN_CHECKS further
         // down: nodes that cut off at NMP never reach it.
-        if (perpetualFailCache.failed(pos.hashValue))
+        else if (perpetualFailCache.failed(pos.hashValue))
         {
           info.perpetualSuppressed++;
+        }
+        // Material is about to come back, so the static eval that opened this
+        // gate is describing a position that no longer exists (perpetual.h).
+        // Last of the three skip tests because it is the dearest: an SEE walk
+        // per fat capture, against one hash probe and a handful of bitboard
+        // walks above it. Still ahead of GEN_CHECKS, which is dearer again.
+        else if (perpetualCaptureVeto(pos, myMoves))
+        {
+          info.perpetualCaptureVetoed++;
         }
         else
         {
@@ -1138,6 +1156,8 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
              << " suppressed=" << info.perpetualSuppressed
              << " (" << std::fixed << std::setprecision(1) << suppressRate << "%)"
              << " throttled=" << info.perpetualThrottled
+             << " vetoed=" << info.perpetualVetoed
+             << " capVeto=" << info.perpetualCaptureVetoed
              << " proofs=" << info.perpetualProofs
              << " (" << std::fixed << std::setprecision(1) << proofRate << "%)"
              << " proverNodes=" << info.perpetualNodes

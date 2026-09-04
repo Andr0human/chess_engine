@@ -179,6 +179,18 @@ enum Value: Score
   // already doing fine, proving it can force a draw is not news, and the
   // cutoff it produces would have come from a real move anyway.
   PERPETUAL_MARGIN = 200,
+  // Veto threshold for perpetualDistanceVeto() (perpetual.h), in weighted-mean
+  // manhattan distance per attacking-piece weight. The probe is abandoned when
+  // the defender's own men sit this much CLOSER to their king than the
+  // attacker's men do: the defenders are home, and a check chain has nowhere
+  // to run.
+  PERPETUAL_DIST_DEFICIT = 2,
+  // SEE threshold for perpetualCaptureVeto() (perpetual.h). A capture worth at
+  // least this much says the node is losing on paper only -- material is about
+  // to come back -- and the probe is abandoned. Set above a pawn on purpose:
+  // winning a pawn carries no signal, so gating on one would cost proofs for
+  // nothing.
+  PERPETUAL_CAPTURE_GAIN = 200,
   VALUE_TRANSPOSITION_TABLE_SEED = 1557,
 
 

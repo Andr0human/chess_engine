@@ -167,6 +167,18 @@ class SearchData
   // one relative to perpetualProbes means the share is set too low.
   uint64_t perpetualThrottled = 0;
 
+  // Probes skipped by the distance-contrast veto (perpetualDistanceVeto,
+  // perpetual.h). Unlike `perpetualSuppressed` this one has no second chance:
+  // a vetoed node is never re-asked, so read it against perpetualProbes as the
+  // share of gate survivors the geometry test is fencing off.
+  uint64_t perpetualVetoed = 0;
+
+  // Probes skipped by the capture veto (perpetualCaptureVeto, perpetual.h) --
+  // the node is losing on the static eval only, and a capture is about to hand
+  // the material back. Like perpetualVetoed this is final, not a retry, so read
+  // it against perpetualProbes.
+  uint64_t perpetualCaptureVetoed = 0;
+
   // Of the proofs above, how many came back as a forced MATE rather than a
   // repetition/stalemate draw (PerpetualStats::mateDist), and their distance
   // histogram in plies. This is the frequency measurement that decides whether
