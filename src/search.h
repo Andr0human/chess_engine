@@ -167,17 +167,29 @@ class SearchData
   // one relative to perpetualProbes means the share is set too low.
   uint64_t perpetualThrottled = 0;
 
+  // Probes skipped by the open-king veto (perpetualOpenKingVeto, perpetual.h)
+  // -- the defending king had PERPETUAL_SAFE_ADJ_LIMIT or more free flight
+  // squares. Final like the two vetoes below, not a retry, so read it against
+  // perpetualProbes.
+  uint64_t perpetualOpenVetoed = 0;
+
   // Probes skipped by the distance-contrast veto (perpetualDistanceVeto,
   // perpetual.h). Unlike `perpetualSuppressed` this one has no second chance:
   // a vetoed node is never re-asked, so read it against perpetualProbes as the
   // share of gate survivors the geometry test is fencing off.
   uint64_t perpetualVetoed = 0;
 
-  // Probes skipped by the capture veto (perpetualCaptureVeto, perpetual.h) --
-  // the node is losing on the static eval only, and a capture is about to hand
-  // the material back. Like perpetualVetoed this is final, not a retry, so read
-  // it against perpetualProbes.
-  uint64_t perpetualCaptureVetoed = 0;
+  // Failed probes whose deficit was discounted rather than handed up as-is
+  // (PERPETUAL_RESIST_PLY_1 / _2, perpetual.h) -- the defender was still in
+  // check that deep when the prover gave up. `Deep` is the second tier and a
+  // SUBSET of the first.
+  //
+  // Counted on every score returned, which includes the reuses served out of
+  // PerpetualFailCache, so this is NOT bounded by perpetualProbes and the ratio
+  // to watch is against probes + suppressed. That is deliberate: the question
+  // this answers is how often the discount reached the search, not how often it
+  // was computed.
+  uint64_t perpetualResisted = 0, perpetualResistedDeep = 0;
 
   // Of the proofs above, how many came back as a forced MATE rather than a
   // repetition/stalemate draw (PerpetualStats::mateDist), and their distance

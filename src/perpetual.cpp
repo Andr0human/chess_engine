@@ -4,6 +4,7 @@
 #include <climits>
 
 #include "perpetual.h"
+#include "attacks.h"
 #include "movegen.h"
 #include "lookup_table.h"
 #include "search.h"
@@ -527,6 +528,45 @@ PerpetualFailCache::clear() noexcept
 namespace {
 
 /**
+ * Every square `men` attacks, given `occupied`. Callers that care about king
+ * flight squares pass an occupancy with the enemy king cleared, so sliders
+ * x-ray through it.
+ *
+ * Deliberately not shared with evaluation's sideAttacks(): that one also fills
+ * per-piece-type maps and a king-ring counter this has no use for, and the
+ * whole point of a gate is to be cheaper than what it gates.
+ */
+Bitboard
+perpetualAttackMap(const ChessBoard& pos, Color men, Bitboard occupied)
+{
+  Bitboard attacks = 0;
+
+  Bitboard pieceBb = pos.getPiece(men, PAWN);
+  while (pieceBb != 0)
+    attacks |= plt::pawnCaptureMasks[men][nextSquare(pieceBb)];
+
+  pieceBb = pos.getPiece(men, KNIGHT);
+  while (pieceBb != 0)
+    attacks |= plt::knightMasks[nextSquare(pieceBb)];
+
+  pieceBb = pos.getPiece(men, BISHOP);
+  while (pieceBb != 0)
+    attacks |= attackSquares<BISHOP>(nextSquare(pieceBb), occupied);
+
+  pieceBb = pos.getPiece(men, ROOK);
+  while (pieceBb != 0)
+    attacks |= attackSquares<ROOK>(nextSquare(pieceBb), occupied);
+
+  pieceBb = pos.getPiece(men, QUEEN);
+  while (pieceBb != 0)
+    attacks |= attackSquares<QUEEN>(nextSquare(pieceBb), occupied);
+
+  attacks |= plt::kingMasks[squareNo(pos.getPiece(men, KING))];
+
+  return attacks;
+}
+
+/**
  * 4*Qd + 2*Rd + Bd + Nd over `men`'s pieces, manhattan distance to kSq.
  *
  * `weight` gets 4*nQ + 2*nR + nB + nN, so the caller can compare two of these
@@ -557,6 +597,26 @@ kingDistanceSum(const ChessBoard& pos, Color men, Square kSq, int& sum, int& wei
 }
 
 }  // namespace
+
+
+bool
+perpetualOpenKingVeto(const ChessBoard& pos)
+{
+  // pos.color is the side that would be giving the checks; the other defends.
+  const Color  defender  = ~pos.color;
+  const Bitboard defKing = pos.getPiece(defender, KING);
+  const Square defKingSq = squareNo(defKing);
+
+  // The king itself out of the occupancy: a slider must x-ray through it, or
+  // the square it would be driven onto reads as safe.
+  const Bitboard attackMap =
+    perpetualAttackMap(pos, pos.color, pos.all() ^ defKing);
+
+  const Bitboard safeAdjacent =
+    plt::kingMasks[defKingSq] & ~pos.getPiece(defender, ALL) & ~attackMap;
+
+  return popCount(safeAdjacent) >= PERPETUAL_SAFE_ADJ_LIMIT;
+}
 
 
 bool

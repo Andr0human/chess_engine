@@ -56,7 +56,45 @@ enum SearchFlag: bool
   // claim), so turning this on can only ever ADD cutoffs that are true; it can
   // never invent one. What it can cost is time, which is what the gate below
   // and the arena are for.
+  //
+  // The single call site: a QUIESCENCE leaf. After the losing side has tried
+  // every capture and is about to return a losing alpha, ask whether it can
+  // force a perpetual out of the position it is stuck with -- a proof REPLACES
+  // that settled score on its way up the negamax chain.
+  //
+  // The two other call sites this feature was built with, a ROOT probe and an
+  // INTERIOR probe before alphaBeta's move loop, have been removed. Both fired
+  // where the search was already cutting the subtree off, so they changed the
+  // move played almost never while sharing out the PERPETUAL_NODE_SHARE_DIV
+  // budget the qsearch site needs. Every bit of divergence from the pre-qsearch
+  // baseline came from the leaf.
+  //
+  // Still unproven as a strength gain: it holds its own against a build without
+  // it and no more. What it is is cheap and sound -- the probe cannot invent a
+  // draw claim, and PERPETUAL_SEARCH_NODES keeps its share of the search well
+  // under the limiter's ceiling. Judge any change here on proofs bought per
+  // node spent, which is the quantity the gate stack and the budgets all move.
   USE_PERPETUAL = true,
+
+  // Resistance damping on a FAILED perpetual probe. The prover fails closed,
+  // so "no proof" covers both "there was never a check to give" and "the
+  // defender was still running when the budget ran out" -- PerpetualStats::
+  // maxPly separates them, and this spends the difference as a soft discount on
+  // the deficit rather than as the hard draw bound a proof earns.
+  //
+  // Strictly an addition to the probe: with USE_PERPETUAL off this is inert,
+  // and with it on and this off the probe behaves exactly as it did before, so
+  // flipping this alone leaves the gate stack, the budgets and the proof path
+  // untouched. See PERPETUAL_RESIST_PLY_1 in perpetual.h.
+  //
+  // OFF, on two counts. It is the one score here that is a heuristic rather
+  // than a proven bound, so it costs the soundness argument the rest of the
+  // feature rests on; and it showed no strength to pay for that. It is also
+  // only half built: under PERPETUAL_SEARCH_PLY_CAP the second tier cannot
+  // fire at all, so what a single threshold does is all this has ever been.
+  // Re-arming it means raising the ply cap first, which changes proof yield
+  // and so has to be judged on its own.
+  USE_PERPETUAL_RESIST = false,
 };
 
 enum Color: uint8_t
@@ -185,6 +223,12 @@ enum Value: Score
   // attacker's men do: the defenders are home, and a check chain has nowhere
   // to run.
   PERPETUAL_DIST_DEFICIT = 2,
+  // Veto threshold for perpetualOpenKingVeto() (perpetual.h), counted in
+  // squares of the defending king's ring that are both empty of its own men
+  // and unattacked by the checking side. At or above this many the king simply
+  // walks out of any check chain: proofs occur throughout the range below this
+  // and stop dead at it, so this is the first cut that costs nothing.
+  PERPETUAL_SAFE_ADJ_LIMIT = 5,
   // SEE threshold for perpetualCaptureVeto() (perpetual.h). A capture worth at
   // least this much says the node is losing on paper only -- material is about
   // to come back -- and the probe is abandoned. Set above a pawn on purpose:
@@ -331,4 +375,3 @@ constexpr bool hasFlag(MType value, MType flag)
 { return static_cast<std::underlying_type_t<MType>>(value & flag) != 0; }
 
 #endif
-

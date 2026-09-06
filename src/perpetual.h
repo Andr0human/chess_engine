@@ -149,11 +149,82 @@ enum class EvasionOrder { NONE, CAPTURE, FLEE, BOTH, APPROACH };
  * contradiction: APPROACH was tuned where the checking piece is never
  * capturable, so the CAPTURE key was constant. Here the attacker's checks ARE
  * capturable, which makes "take the checker" live information.
+ *
+ * The node budget is deliberately tiny, and it is a budget for GIVING UP, not
+ * for proving. A probe that proves anything at all proves it almost at once --
+ * the whole distribution of proof cost sits within a few dozen nodes, because
+ * a perpetual is a short forcing chain that closes on a repetition or does not
+ * exist. Probes that run long are not close to a proof; they are enumerating a
+ * check tree that has no cycle in it, and they end in failure however much
+ * budget they are handed.
+ *
+ * So the cap is set just past where proofs stop arriving, and the nodes it
+ * refuses are spent on further probes instead. That trade is strongly
+ * favourable, and the reason is the conversion rate on either side of it: the
+ * long probes surrendered almost never prove, while the extra probes bought
+ * convert at the feature's normal rate. Lowering it further does eventually
+ * cost proofs -- there is a turnover, and it is not far below this value.
+ *
+ * It is not a speed knob. Search node count and time-to-depth barely move;
+ * what changes is how many proofs the same spend buys, and how much of the
+ * search the prover occupies while buying them.
  */
-constexpr uint64_t     PERPETUAL_SEARCH_NODES   = 20000;
+constexpr uint64_t     PERPETUAL_SEARCH_NODES   = 100;
 constexpr int          PERPETUAL_SEARCH_PLY_CAP = 25;
 constexpr CheckOrder   PERPETUAL_SEARCH_ORDER   = CheckOrder::HEAVY_NEAR;
 constexpr EvasionOrder PERPETUAL_SEARCH_EVASION = EvasionOrder::CAPTURE;
+
+/**
+ * Resistance damping -- what a FAILED probe is still worth knowing.
+ *
+ * `false` from the prover is not one fact but a range of them, because it fails
+ * closed: it spans "the attacker never had a check" and "the defender was still
+ * in check at ply 25 when the budget ran out". PerpetualStats::maxPly separates
+ * the two. A large maxPly means the attacker had a check to give at every ply
+ * down to there and the defender never got a free move -- the position was
+ * still forcing when the prover was cut off, and the search is about to hand a
+ * settled losing number up the chain as if it were not.
+ *
+ * That number is not wrong so much as overconfident. Converting still means
+ * walking a long forcing line, and each ply of it is another chance for the
+ * winning side to go wrong or for the position to repeat. So the deficit is
+ * SHRUNK toward VALUE_DRAW, never replaced by it: a proof REPLACES the score
+ * because it is a bound, this only DISCOUNTS it because it is evidence.
+ *
+ * Two tiers, each dividing the remaining deficit:
+ *   maxPly > PERPETUAL_RESIST_PLY_1  ->  deficit / PERPETUAL_RESIST_DIV_1
+ *   maxPly > PERPETUAL_RESIST_PLY_2  ->  deficit / PERPETUAL_RESIST_DIV_2
+ *
+ * ---- This is a heuristic, and it is the first thing here that is ----
+ *
+ * Every other score this feature produces is a proven lower bound; the whole
+ * soundness argument for the probe is that budget exhaustion can never
+ * manufacture a draw claim. This one CAN be wrong: a defender that checks for
+ * 25 plies and then runs out is genuinely lost, and this hides part of that.
+ * Bounded by construction -- the caller only asks with a deficit of at least
+ * PERPETUAL_MARGIN, and the result stays strictly below VALUE_DRAW, so it can
+ * shrink a loss but never invent an advantage -- but it is an eval term, not a
+ * theorem, and belongs on the arena rather than in a correctness argument.
+ *
+ * ---- Reachability of the second tier ----
+ *
+ * st.maxPly is bumped on entry to every prover node INCLUDING the one that
+ * bails on the ply wall, so it is bounded by the plyCap itself, not by
+ * plyCap - 1. At the shipped PERPETUAL_SEARCH_PLY_CAP of 25 the first tier is
+ * live and the second CANNOT fire. Left that way deliberately: raising the cap
+ * changes which proofs fit inside the node budget, so it is a separate
+ * experiment owing its own measurement, not a free rider on this one.
+ */
+constexpr int PERPETUAL_RESIST_PLY_1 = 20;
+constexpr int PERPETUAL_RESIST_PLY_2 = 40;
+constexpr int PERPETUAL_RESIST_DIV_1 = 2;
+constexpr int PERPETUAL_RESIST_DIV_2 = 4;
+
+static_assert(PERPETUAL_RESIST_PLY_1 < PERPETUAL_RESIST_PLY_2,
+              "resistance tiers must be ordered shallow-to-deep");
+static_assert(PERPETUAL_RESIST_DIV_1 > 1 and
+              PERPETUAL_RESIST_DIV_2 > PERPETUAL_RESIST_DIV_1,
+              "the deeper tier must discount harder, and neither may amplify");
 
 // Cap on distinct cached positions held by one run. Once reached the table
 // stops taking new keys but keeps upgrading the ones it has.
@@ -163,10 +234,14 @@ constexpr uint64_t PERPETUAL_MAX_CACHE = 4000000;
  * Rate limiter on the in-search probe: prover nodes may not exceed
  * PERPETUAL_FREE_NODES + searchedNodes / PERPETUAL_NODE_SHARE_DIV.
  *
- * A per-PROBE budget is the wrong knob: lowering PERPETUAL_SEARCH_NODES just
- * trades cost-per-probe for probe count, because the faster search reaches more
- * gate-passing nodes. This is a different quantity -- a ceiling on the feature's
- * share of the WHOLE search.
+ * A different quantity from PERPETUAL_SEARCH_NODES: that caps a single probe,
+ * this caps the feature's share of the WHOLE search, which no per-probe number
+ * can bound -- a search reaching more gate-passing nodes simply runs more
+ * probes.
+ *
+ * Both knobs are live, and they are not substitutes: this one bounds the total
+ * regardless of how the per-probe cap is set, and the per-probe cap decides
+ * how much of that total is spent on probes that were never going to prove.
  *
  * It exists because the prover's cost across positions is a thin tail, not a
  * level charge. The large majority of positions probe near-free; a small
@@ -177,9 +252,18 @@ constexpr uint64_t PERPETUAL_MAX_CACHE = 4000000;
  * prover is ahead of its allowance and back on as the search catches up, so a
  * long search is never permanently locked out by one expensive early probe.
  *
- * The free floor is one full probe budget, so the first probe of a search
- * always runs (searchedNodes is ~0 at the root probe, and a ratio test alone
- * would make the limiter meaningless there).
+ * The allowance is tested BEFORE a probe starts, so the prover may overshoot
+ * it by one full probe budget. With the per-probe cap small that overshoot is
+ * negligible and the "<= 20%" below is honest; raise the cap materially and it
+ * stops being so, which is a second reason to keep that cap tight.
+ *
+ * The free floor exists so the first probe of a search always runs
+ * (searchedNodes is ~0 at the root probe, and a ratio test alone would make
+ * the limiter meaningless there). It is written out rather than derived from
+ * PERPETUAL_SEARCH_NODES: the two answer different questions, and deriving it
+ * silently moves the floor whenever the per-probe cap is retuned. The floor
+ * wants to cover a whole early search's worth of probing, which is orders of
+ * magnitude more than one probe's cap.
  *
  * The divisor is deliberately loose. Throttling is not free: where the prover
  * is proving, its cutoffs prune whole subtrees and pay for themselves, so a
@@ -188,7 +272,7 @@ constexpr uint64_t PERPETUAL_MAX_CACHE = 4000000;
  * and only the tail this was built for is clipped.
  */
 constexpr uint64_t PERPETUAL_NODE_SHARE_DIV = 5;                       // <= 20%
-constexpr uint64_t PERPETUAL_FREE_NODES     = PERPETUAL_SEARCH_NODES;
+constexpr uint64_t PERPETUAL_FREE_NODES     = 20000;
 
 
 /**
@@ -389,6 +473,17 @@ extern PerpetualProofCache perpetualProofCache;
  * between moves would mostly be valid -- a failure stays a failure while the
  * position stands -- but it would make probe counts depend on game history and
  * stop measurements reproducing.
+ *
+ * ---- Why the failed probe's maxPly rides along ----
+ *
+ * A slot also carries how deep the probe that failed here got, because the
+ * resistance discount (PERPETUAL_RESIST_PLY_1, above) is derived from it and a
+ * suppressed probe has no other way to know. Without this the discount would
+ * apply on a node's FIRST visit and silently vanish on every later one -- and
+ * since this table is cleared once per search rather than once per iteration,
+ * the visit that sets the played move is almost always a later one. The signal
+ * would have been near-inert by construction, which is the same failure mode
+ * that made the interior probe worth removing.
  */
 class PerpetualFailCache
 {
@@ -396,9 +491,18 @@ class PerpetualFailCache
   static constexpr size_t SIZE = size_t(1) << BITS;  // ... x 8 B = 256 KB
   static constexpr size_t MASK = SIZE - 1;
 
-  // Zero doubles as "empty", so a position hashing to exactly 0 reads as a
-  // failure it never earned -- one key in 2^64, costing a missed proof, left
-  // unhandled rather than paid for on every lookup.
+  // A slot is the key with its low 8 bits REPLACED by the failed probe's
+  // maxPly. That costs no discrimination: two keys landing in the same slot
+  // already agree on bits 0..14 (that is what the index is), so comparing bits
+  // 8..63 still separates every pair of distinct keys exactly as the full-key
+  // compare did. It is the payload, not the key, that the low byte gives up.
+  static constexpr Key    PAYLOAD_MASK = Key(0xFF);
+  static constexpr Key    KEY_MASK     = ~PAYLOAD_MASK;
+  static constexpr int    MAX_RESIST   = 0xFF;
+
+  // Zero doubles as "empty", so a position whose key has all of bits 8..63
+  // clear reads as a failure it never earned -- 2^8 keys in 2^64, costing a
+  // missed proof, left unhandled rather than paid for on every lookup.
   std::array<Key, SIZE> table{};
 
   public:
@@ -406,17 +510,72 @@ class PerpetualFailCache
   void
   clear() noexcept;
 
-  // Did the prover already fail on this position, earlier in this search?
+  /**
+   * Did the prover already fail on this position, earlier in this search?
+   *
+   * @param resistPly  out: st.maxPly of that failed probe, untouched on a miss.
+   */
   bool
-  failed(Key key) const noexcept
-  { return table[key & MASK] == key; }
+  failed(Key key, int& resistPly) const noexcept
+  {
+    const Key slot = table[key & MASK];
+
+    if (((slot ^ key) & KEY_MASK) != 0)
+      return false;
+
+    resistPly = int(slot & PAYLOAD_MASK);
+    return true;
+  }
 
   void
-  recordFail(Key key) noexcept
-  { table[key & MASK] = key; }
+  recordFail(Key key, int resistPly) noexcept
+  {
+    const int clamped = resistPly < 0 ? 0
+                      : (resistPly > MAX_RESIST ? MAX_RESIST : resistPly);
+
+    table[key & MASK] = (key & KEY_MASK) | Key(clamped);
+  }
 };
 
 extern PerpetualFailCache perpetualFailCache;
+
+
+/**
+ * @brief Has the defending king too many flight squares to ever be trapped?
+ *
+ * Counts the squares of the defending king's ring that are BOTH empty of its
+ * own men and unattacked by the checking side. That count is the number of
+ * places the king can simply step to and be safe, so it is an upper bound of
+ * sorts on how confining any check can be: a perpetual needs every check to
+ * leave the king with nowhere better to go, and a king with five free squares
+ * walks out of the chain on its own.
+ *
+ * Returns true (skip the probe) at PERPETUAL_SAFE_ADJ_LIMIT or more.
+ *
+ * The attacker's map is built with the defending king REMOVED from the
+ * occupancy, so a slider x-rays through it. Without that, the square directly
+ * behind a checked king reads as safe when it is the one square that is not --
+ * exactly the case the count exists to catch.
+ *
+ * Both halves are needed and neither is the obvious one. Ring squares merely
+ * empty ("openAdj") do not predict at all; ring squares merely defended
+ * ("guardAdj") barely do. It is the conjunction -- empty AND unattacked --
+ * that separates, because a proof lives on a king whose escape squares are
+ * covered, not on one whose escape squares are blocked by its own pieces. A
+ * king boxed in by its own men is the classic back-rank perpetual.
+ *
+ * The threshold sits where it does because the relation is a ceiling rather
+ * than a slope: proofs occur across the whole range below the cut and then
+ * stop dead, with none above it. So the veto is not trading proofs for nodes;
+ * it is declining nodes that were never going to prove.
+ *
+ * Wrong in one direction only, like the two vetoes below: a skipped probe that
+ * would have proven. It never invents a proof.
+ *
+ * In-node probe only -- the root probe fires once per search and seeds the PV.
+ */
+bool
+perpetualOpenKingVeto(const ChessBoard& pos);
 
 
 /**
