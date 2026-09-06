@@ -234,25 +234,18 @@ qsearchPerpetualBound(ChessBoard& pos, Score alpha, Ply ply, MoveList& myMoves)
     return perpetualResistanceScore(alpha, resistPly);
   }
 
-  // perpetualCaptureVeto() is deliberately NOT in this stack. It is left in
-  // perpetual.cpp uncalled: it was the fourth test in the interior probe's
-  // gate, and that probe has since been removed, but the test itself is the
-  // one gate never tried at a leaf and is the obvious thing to reach for if
-  // this stack ever needs tightening.
-  //
-  // It existed there to catch a node whose static eval reads lost only because
-  // the eval cannot see a hanging piece -- "material is about to come back, so
-  // the number that opened this gate describes a position that no longer
-  // exists". That premise is already discharged here, and by a stronger
+  // There is deliberately no "material is about to come back" test in this
+  // stack -- the one asking whether some immediate capture wins enough to say
+  // the static eval that opened the gate describes a position that no longer
+  // exists. That premise is already discharged here, and by a stronger
   // instrument: this node has SEARCHED its captures. If a capture were going to
   // hand the material back, alpha would have risen and the value test above
-  // would have returned. Running the veto anyway would fence off precisely the
-  // nodes where the capture was tried and found not to help -- SEE says the
-  // material comes back, the search says it does not, and the search is right.
+  // would have returned. Adding the test would fence off precisely the nodes
+  // where the capture was tried and found not to help -- SEE says the material
+  // comes back, the search says it does not, and the search is right.
   //
   // The moves orderCaptures() pruned below its SEE floor do not reopen this:
-  // those are the LOSING captures, and the veto only ever fires on one worth
-  // PERPETUAL_CAPTURE_GAIN or more.
+  // those are the LOSING captures, which no such test would fire on anyway.
 
   // No check here, no check chain from here. Cheaper than letting the prover's
   // own root re-derive it: that path rebuilds GEN_METADATA + GEN_MOVES from

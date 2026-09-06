@@ -229,12 +229,6 @@ enum Value: Score
   // walks out of any check chain: proofs occur throughout the range below this
   // and stop dead at it, so this is the first cut that costs nothing.
   PERPETUAL_SAFE_ADJ_LIMIT = 5,
-  // SEE threshold for perpetualCaptureVeto() (perpetual.h). A capture worth at
-  // least this much says the node is losing on paper only -- material is about
-  // to come back -- and the probe is abandoned. Set above a pawn on purpose:
-  // winning a pawn carries no signal, so gating on one would cost proofs for
-  // nothing.
-  PERPETUAL_CAPTURE_GAIN = 200,
   VALUE_TRANSPOSITION_TABLE_SEED = 1557,
 
 

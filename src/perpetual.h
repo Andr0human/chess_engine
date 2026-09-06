@@ -613,34 +613,6 @@ perpetualDistanceVeto(const ChessBoard& pos);
 
 
 /**
- * @brief Is the side to move about to win the material back? A gate, not a verdict.
- *
- * True when some immediate capture has SEE >= PERPETUAL_CAPTURE_GAIN, i.e. the
- * attacker can just take something and keep it. The probe is then abandoned.
- *
- * The gate above this one asks whether the node is losing badly enough for a
- * draw to be worth proving, and it asks the STATIC eval, which does not know a
- * piece is hanging. So a node one move from equality can read -900 and pass.
- * `2k1r3/p1p2p1p/2p3p1/2bQ1qB1/2P5/PP3P2/4N1PP/R3K2R b KQ - 0 18` is the case
- * that prompted this: black is nominally a rook and a knight down, static eval
- * -979, every gate satisfied -- and cxd5 simply takes the queen (SEE +910).
- *
- * The test is the raw capture and not the capture-corrected eval
- * (`staticEval + bestSee > -PERPETUAL_MARGIN`), which is the obvious reading of
- * "the position is not really lost" but a far weaker predictor: proofs
- * concentrate at the LESS lost nodes, so correcting the eval upward fences off
- * the ground perpetuals actually live on. What predicts is the hanging piece
- * itself -- a position with material in the air is tactically unsettled, and a
- * perpetual needs a check geometry that holds still.
- *
- * Wrong in one direction only, like the distance veto: a skipped probe that
- * would have proven. It never invents a proof.
- */
-bool
-perpetualCaptureVeto(const ChessBoard& pos, const MoveList& myMoves);
-
-
-/**
  * @brief Can the side to move force an unending check sequence?
  *
  * A boolean AND/OR proof search restricted to checking moves for the side to

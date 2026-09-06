@@ -644,35 +644,3 @@ perpetualDistanceVeto(const ChessBoard& pos)
   return distDef * weightAtk + PERPETUAL_DIST_DEFICIT * weightAtk * weightDef
        < distAtk * weightDef;
 }
-
-
-bool
-perpetualCaptureVeto(const ChessBoard& pos, const MoveList& myMoves)
-{
-  // Same numbers seeScore() itself uses (search.cpp), indexed by PieceType.
-  constexpr Score pieceValue[ALL] = {0, 100, 320, 300, 530, 910, 3200};
-
-  MoveArray captures;
-  myMoves.getMoves<MType::CAPTURES>(pos, captures);
-
-  for (size_t i = 0; i < captures.size(); ++i)
-  {
-    const Move move = captures[i];
-
-    // SEE cannot exceed the victim's value, so a capture whose victim is too
-    // cheap is skipped without paying for the exchange walk -- which is most of
-    // them, since pawn captures dominate. A promotion is the exception: it also
-    // banks the promoted piece, so its SEE can outrun the victim.
-    //
-    // An en-passant capture lands on an empty square and reads NONE here. Its
-    // victim is a pawn either way, so falling into the skip is correct.
-    if (!is_type<MType::PROMOTION>(move)
-      and pieceValue[type_of(pos.pieceOnSquare(to_sq(move)))] < PERPETUAL_CAPTURE_GAIN)
-      continue;
-
-    if (seeScore(pos, move) >= PERPETUAL_CAPTURE_GAIN)
-      return true;
-  }
-
-  return false;
-}
