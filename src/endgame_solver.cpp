@@ -545,7 +545,7 @@ EgSolver::resolvedCacheDir() const
     if (!ed.empty())
       return (ed / base).string();
   }
-  return cacheDir;   // absolute, or exe path unknown -> CWD-relative as before
+  return cacheDir;   // absolute, or exe path unknown -> resolves CWD-relative
 }
 
 std::string

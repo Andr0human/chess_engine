@@ -27,7 +27,6 @@
 */
 
 
-// Checks if move is valid for given position
 bool
 isLegalMoveForPosition(Move move, const ChessBoard& pos);
 
@@ -37,24 +36,11 @@ isLegalMoveForPosition(Move move, const ChessBoard& pos);
 bool
 isLegalMoveForPosition_V2(Move move, const ChessBoard& pos);
 
-/**
- * @brief Runs one stage of move generation on the given MoveList.
- *
- * @param pos ChessBoard
- * @param myMoves staging buffer (in/out)
- */
 template <MoveGenStage stage>
 void
 stagedGenerateMoves(const ChessBoard& pos, MoveList& myMoves);
 
-/**
- * @brief Returns a list of all the legal moves in current position.
- *
- * Thin wrapper that runs GEN_METADATA + GEN_MOVES (+ GEN_CHECKS when asked).
- *
- * @param pos ChessBoard
- * @param generateChecksData bool
- */
+// Thin wrapper that runs GEN_METADATA + GEN_MOVES (+ GEN_CHECKS when asked).
 MoveList
 generateMoves(const ChessBoard& pos, bool generateChecksData=false);
 

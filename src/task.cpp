@@ -397,7 +397,6 @@ task(const vector<string>& args)
     return;
   }
 
-  // Command map that associates commands with their handler functions
   const std::unordered_map<string, std::function<void(const vector<string>&)>> commandMap = {
     {"help",     [](const auto&){ helper(); }},
     {"accuracy", [](const auto&){ accuracyTest(); }},
@@ -413,7 +412,6 @@ task(const vector<string>& args)
     {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }}
   };
 
-  // Search for any command in the args
   string foundCommand;
   for (const auto& arg : args) {
     if (commandMap.find(arg) != commandMap.end()) {

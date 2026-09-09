@@ -103,13 +103,11 @@ struct EvalComponents
   float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
 };
 
-// Extract the white-relative component subtotals for a position.
 EvalComponents
 extractEvalComponents(const ChessBoard& pos);
 
-// Reconstruct the white-relative static eval from cached components + weights.
-// Mirrors evaluate()'s arithmetic exactly, including the int truncation of the mg/eg
-// subscores before the phase blend.
+// Mirrors evaluate()'s arithmetic exactly, including the int truncation of the
+// mg/eg subscores before the phase blend.
 Score
 evalFromComponents(const EvalComponents& ec, const EvalWeights& w);
 

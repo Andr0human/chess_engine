@@ -366,7 +366,6 @@ struct Walker
         if (r < 1 || r > 6) continue;
       }
 
-      // Distinct squares.
       bool overlap = false;
       for (int j = 0; j < slot; ++j)
         if (square[j] == sq) { overlap = true; break; }

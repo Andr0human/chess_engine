@@ -306,7 +306,6 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
   constexpr Bitboard quietMask =
     hasFlag(mt1, MType::QUIET) ? Bitboard(AllSquares) : Bitboard(Rank18);
 
-  // fix pawns
   Bitboard emyPieces = pos.getPiece(~color, ALL);
   Bitboard kingMask  = pos.getPiece(color, KING) & initSquares;
   Bitboard pawnMask  = myPawns & initSquares;

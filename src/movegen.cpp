@@ -261,7 +261,6 @@ enpassantRecheck(Square ip, const ChessBoard& pos)
   Bitboard tmp2 = lsb((plt::upLeftMasks[kpos] & ap)) | msb((plt::downRightMasks[kpos] & ap));
 
   if (res & erq) return false;
-  // Board has to be invalid for this check
   if ((tmp1 | tmp2) & ebq) return false;
 
   return true;
@@ -605,18 +604,12 @@ kingMoves(const ChessBoard& pos, MoveList& myMoves)
 #ifndef GENERATOR
 
 
-/**
- * @brief Calculates the bitboard of initial squares from which a moving piece
- * could potentially give a discovered check to the opponent's king.
-**/
+// Bitboard of initial squares from which a moving piece could potentially
+// give a discovered check to the opponent's king.
 template <Color cMy>
 static Bitboard
 squaresForDiscoveredCheck(const ChessBoard& pos, MoveList& myMoves)
 {
-  // Implementation to calculate and return the bitboard of squares.
-  // These squares are the initial positions from which a piece could move
-  // to potentially give a discovered check to the enemy king.
-
   constexpr Color cEmy = ~cMy;
 
   Square kSq = squareNo( pos.piece<cEmy, KING>() );

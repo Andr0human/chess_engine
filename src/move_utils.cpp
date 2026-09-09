@@ -104,7 +104,6 @@ printMove(Move move, ChessBoard pos)
     return string("K") + captures + indexToSquare(fpRow, fpCol) + givesCheck;
   }
 
-  // If piece is [BISHOP, KNIGHT, ROOK, QUEEN]
   Bitboard pieces =
     (pt == BISHOP ? attackSquares<BISHOP>(fp, apieces) :
     (pt == KNIGHT ? attackSquares<KNIGHT>(fp, apieces) :

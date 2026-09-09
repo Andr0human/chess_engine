@@ -153,7 +153,7 @@ enum Value: Score
   // representable mate (ply == MAX_PLY) scores +/-15000. Any |score| at or
   // above this is a forced mate, anything below is a normal eval. Single
   // source of truth for isMateScore() and the RFP / razoring / futility
-  // mate-window gates, which used to open-code it.
+  // mate-window gates.
   MATE_BOUND = VALUE_MATE - 20 * MAX_PLY,
 
   VALUE_UNKNOWN = 555666777,

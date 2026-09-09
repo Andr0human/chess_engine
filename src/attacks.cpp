@@ -14,7 +14,6 @@ pawnAttackSquares(const ChessBoard& pos)
          shift(pawns & LeftAttkingPawns , 8 - inc);
 }
 
-// Returns all squares attacked by pawn on index sq
 template <>
 Bitboard
 attackSquares<WHITE, PAWN>(Square sq)
@@ -25,7 +24,6 @@ Bitboard
 attackSquares<BLACK, PAWN>(Square sq)
 { return plt::pawnCaptureMasks[BLACK][sq]; }
 
-// Returns all squares attacked by bishop on index sq
 template <>
 Bitboard
 attackSquares<BISHOP>(Square sq, Bitboard occupied)
@@ -39,7 +37,6 @@ attackSquares<BISHOP>(Square sq, Bitboard occupied)
   return plt::bishopMovesLookUp[start + occupancy];
 }
 
-// Returns all squares attacked by knight on index sq
 template <>
 Bitboard
 attackSquares<KNIGHT>(Square sq, Bitboard occupied)
@@ -47,7 +44,6 @@ attackSquares<KNIGHT>(Square sq, Bitboard occupied)
   return plt::knightMasks[sq] + (occupied - occupied);
 }
 
-// Returns all squares attacked by rook on index sq
 template <>
 Bitboard
 attackSquares<ROOK>(Square sq, Bitboard occupied)
@@ -61,7 +57,6 @@ attackSquares<ROOK>(Square sq, Bitboard occupied)
   return plt::rookMovesLookUp[start + occupancy];
 }
 
-// Returns all squares attacked by queen on index sq
 template <>
 Bitboard
 attackSquares<QUEEN>(Square sq, Bitboard occupied)

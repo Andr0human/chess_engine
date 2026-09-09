@@ -17,16 +17,12 @@ using std::array;
 class UndoInfo
 {
   public:
-  // Last Move
   Move move;
 
-  // Last castle and en-passant states.
   int csep;
 
-  // Last Position Hash
   Key hash;
 
-  // Last HalfMove
   int halfmove;
 
   UndoInfo() : move(0), csep(0), hash(0), halfmove(0) {}
@@ -48,19 +44,13 @@ class ChessBoard
 
   int undoInfoStackCounter;
 
-  // Stores the piece at each index
   array<Piece, SQUARE_NB> board;
 
-  // Stores bitboard location of a piece
   array<Bitboard, 16> pieceBb;
 
-  // Stores count of each piece
   array<int, 16> pieceCt;
 
-  // Halfmove and Fullmove
   int halfmove, fullmove;
-
-  // MakeMove-Subparts
 
   bool
   isEnpassant(Square fp, Square ep) const noexcept

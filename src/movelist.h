@@ -15,7 +15,6 @@ public:
   array<Bitboard, SQUARE_NB> destSquares;
   array<Bitboard, SQUARE_NB> discoverCheckMasks;
 
-  // Active side color
   Color color;
 
   int checkers;
@@ -38,26 +37,20 @@ public:
   // loop (i.e. the hash-move fast path).
   uint16_t removedMovesCount;
 
-  // Array to store squares that give check to the enemy king
-  // {Pawn, Bishop, Knight, Rook, Queen}
-  // Index 1: Squares where a bishop can give check to the enemy king
+  // Squares that give check to the enemy king, indexed by piece type:
+  // {Pawn, Bishop, Knight, Rook, Queen}.
   Bitboard squaresThatCheckEnemyKing[5];
 
-  // Bitboard of initial squares from which a moving piece
-  // could potentially give a discovered check to the opponent's king.
+  // Initial squares from which a moving piece could potentially give a
+  // discovered check to the opponent's king.
   Bitboard discoverCheckSquares;
 
-  // Bitboard of squares that have pinned pieces on them
   Bitboard pinnedPiecesSquares;
 
-  // Bitboard representing squares that the pieces of active
-  // side can legally move to when the king is under check
   Bitboard legalSquaresMaskInCheck;
 
-  // Bitboard representing squares current side is attacking
   Bitboard myAttackedSquares;
 
-  // Bitboard representing squares under enemy attack
   Bitboard enemyAttackedSquares;
 
   MoveList()

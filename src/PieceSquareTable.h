@@ -9,8 +9,6 @@
 using std::array;
 using ScoreTable = array<Score, SQUARE_NB>;
 
-/***      Square Tables for Pieces      ***/
-
 extern ScoreTable wpBoard;
 extern ScoreTable bpBoard;
 extern ScoreTable  NBoard;

@@ -558,22 +558,10 @@ template <Color winningSide, bool debug>
 static Score
 loneKingEndGame(const ChessBoard& pos, const MaterialDiffs& md)
 {
-  /**
-    * Evaluates the score for an endgame position where the
-    * losing side has no major, minor pieces, or pawns left.
-    *
-    * Intuition:
-    * In this endgame scenario, the primary objective is to
-    * corner the king of the losing side. Simultaneously,
-    * bringing the winning side's king closer to the opponent's
-    * king for checkmate setup.
-    *
-    * If the winning side has a bishop, the strategy for checkmate
-    * corner differs based on the bishop's color. If white bishop
-    * bring the losing king to white corners. Conversely,
-    * if the bishop is black, focus on bringing the losing side
-    * king to black corner.
-  **/
+  // Pushes the losing king toward a corner (distanceScore pulls the winning
+  // king closer to it for the mate). With a bishop + knight, only the corner
+  // matching the bishop's square colour is a forced win, so centreScore below
+  // is biased toward that pair of corners specifically.
 
   constexpr Color losingSide  = ~winningSide;
 
@@ -658,7 +646,6 @@ pawnStructureScoreEndgame(const ChessBoard& pos, const EvalData& ed)
 
     if (isPassedPawn<cMy>(emyPawns, pawnSq))
     {
-      // Reward for passed pawn
       Score rankProgress = (7 * (cMy ^ 1)) + (pawnSq >> 3) * (2 * cMy - 1);
       score += 3 * rankProgress * rankProgress;
 
@@ -670,8 +657,6 @@ pawnStructureScoreEndgame(const ChessBoard& pos, const EvalData& ed)
     }
 
     // TODO: More points for being close to pawn which is closer to promotion
-    // Add score for king close to passed pawn and
-    // Reduce score if enemy king is close to pawn
     int dist = (14 - distance(pawnSq, kpos)) - (14 - distance(pawnSq, ekpos));
     score += 6 * dist;
   }
@@ -683,11 +668,6 @@ template<bool debug>
 static Score
 endGameScore(const ChessBoard& pos, const EvalData& ed, const SharedTerms& shared)
 {
-  // Distance between kings
-  // King in corners
-  // BN endgames
-  // Rule of Square (2n1k1r1/p7/3B1Rp1/2P2pKp/8/4P1P1/5P1P/8 w - - 17 45)
-
   Score materialScore   = materialDiffereceEndGame(shared.material);
   Score pieceTableScore = pieceTableStrengthEndGame(pos);
   Score pawnStructure   = pawnStructureScoreEndgame<WHITE>(pos, ed)

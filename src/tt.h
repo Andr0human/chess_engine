@@ -89,7 +89,6 @@ class TranspositionTable
   void freeTables();
 
   public:
-  // Initialize Transposition Table
   TranspositionTable() { }
 
   // Seed the Zobrist key table. Needed for hashValue maintenance (repetition

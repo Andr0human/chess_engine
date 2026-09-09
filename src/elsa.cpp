@@ -9,8 +9,8 @@ int main(int argc, char **argv)
   const auto args = utils::extractArgumentList(argc, argv);
   init(args);
 
-  // Default to UCI when no command is given (how UCI GUIs launch us)
-  // or when "uci" is passed explicitly on the command line.
+  // No args is how UCI GUIs launch us; also enter the UCI loop if "uci" was
+  // passed explicitly.
   if (args.empty() || (!args.empty() && args.front() == "uci"))
   {
     uciLoop();

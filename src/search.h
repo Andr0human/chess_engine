@@ -96,10 +96,8 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply pl
 
 class SearchData
 {
-  // Set the starting point for clock
   perf_clock startTime;
 
-  // Store which side to play for search_position
   Color side;
 
   uint64_t nodes, qNodes;
@@ -109,11 +107,9 @@ class SearchData
   // feeds the UCI `nodes`/`nps` fields, which GUIs expect to be cumulative.
   Nodes searchedNodes = 0;
 
-  // Time provided to find move for current position
   nanoseconds allotedTime;
 
-  // Time spend on searching for move in position (in secs.)
-  double timeForSearch = 0;
+  double timeForSearch = 0;  // seconds
 
   public:
 
@@ -155,7 +151,6 @@ class SearchData
   // search at every node.
   size_t pvSearchedLen = 0;
 
-  // Stores the <best_move, eval> for each depth during search.
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
 
   // Stores <move, <nodes, qNodes>> searched for each move in each iteration.
@@ -202,9 +197,8 @@ class SearchData
   // searched to at least the depth still remaining at that point in the line, so
   // the tail stops at the first link the table cannot vouch for. An unverified
   // walk chains — one unproven move and every later probe describes a position
-  // that was never on the PV, which is how this used to print a whole fabricated
-  // queen trade off the end of a nine-ply line. A short honest tail beats a long
-  // invented one.
+  // that was never on the PV, fabricating an arbitrarily long fake tail. A short
+  // honest tail beats a long invented one.
   //
   // The appended moves are for display only — see pvSearchedLen for why they
   // are fenced off from isPartOfPv().
@@ -405,7 +399,6 @@ class SearchData
   pair<Move, Score> lastIterationResult() const noexcept
   { return moveEvals.back(); }
 
-  // Cumulative nodes (main + quiescence) searched so far, across all depths.
   Nodes
   totalSearchedNodes() const noexcept
   { return searchedNodes; }
@@ -441,7 +434,6 @@ class SearchData
     );
   }
 
-  // Prints the results of last searched depth
   void
   showLastDepthResult(ChessBoard pos, std::ostream& writer) const noexcept
   {
@@ -472,18 +464,14 @@ class SearchData
   }
 
   // Reorder root moves for the next iteration: move `bestMove` to the front and
-  // leave every other move where it is.
-  //
-  // The tail used to be re-sorted by descending subtree size (2*nodes + qNodes),
-  // on the theory that the hardest-to-resolve moves deserve the earliest slots.
-  // That fights move ordering rather than helping it: node count measures how
-  // expensive a move was to refute, not how good it is, so a cheap-subtree move
-  // — a move refuted quickly *because* it is bad, but also a strong move whose
-  // subtree collapsed on a cutoff — gets buried at the back. Root LMR is keyed
-  // on list index (rootReduction, up to R=3 at depth >= 6), so burial costs
-  // search depth, not just order; that is the mechanism behind the measured
-  // 4-ply tactic delay. The node counts are still recorded — insertMoveToList /
-  // totalNodes / print all read them — they just no longer drive ordering.
+  // leave every other move where it is. Do not sort the tail by subtree size —
+  // node count measures how expensive a move was to refute, not how good it
+  // is, so a cheap-subtree move — refuted quickly *because* it is bad, but
+  // also a strong move whose subtree collapsed on a cutoff — would get buried
+  // at the back. Root LMR is keyed on list index (rootReduction, up to R=3 at
+  // depth >= 6), so burial costs search depth, not just order. Node counts
+  // are still recorded — insertMoveToList / totalNodes / print all read them —
+  // they just don't drive ordering.
   void
   promoteBestMove(Move bestMove)
   {
@@ -491,10 +479,9 @@ class SearchData
     // pvArray[0], since by definition no move beat alpha. Fall back to the last
     // completed iteration's best move — moveEvals is seeded in the constructor
     // and only appended on completed iterations, so back() is always a legal
-    // move of this position. (With the node sort gone this is belt-and-braces:
-    // pinning nothing now leaves the list untouched, and the previous iteration
-    // already put its best move in slot 0. It matters the moment anything
-    // reorders the tail again.)
+    // move of this position. (Pinning nothing leaves the list untouched, and
+    // the previous iteration already put its best move in slot 0 — this
+    // matters the moment anything reorders the tail again.)
     if (bestMove == NULL_MOVE)
     {
       if (moveEvals.size() == 0)
@@ -553,26 +540,15 @@ class SearchData
   }
 };
 
-/**
- * @brief SEE-orders a pure capture list for quiescence search.
- *
- * @param pos board position
- * @param movesArray capture-only move list, reordered in place (SEE descending)
- * @param floor moves to keep even when their SEE is negative
- * @return count of leading moves worth searching
- */
+// SEE-orders a pure capture list for quiescence search, in place (SEE
+// descending). `floor` sets how many leading moves are kept even when their
+// SEE score is negative. Returns the count of leading moves worth searching.
 size_t
 orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor);
 
 Score
 seeScore(const ChessBoard& pos, Move move);
 
-/**
- * @brief Prints all encoded-moves in list to human-readable strings
- *
- * @param myMoves Movelist for board positions.
- * @param pos board position
- */
 void
 printMovelist(MoveArray myMoves, ChessBoard pos);
 

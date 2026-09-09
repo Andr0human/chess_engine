@@ -120,10 +120,7 @@ handlePosition(stringstream& ss)
 constexpr double MOVE_OVERHEAD = 0.040;  // seconds
 
 // Decide how long to search given the side-to-move's remaining clock and
-// increment (both in milliseconds). Faithful 1:1 port of the heuristic that
-// used to live on the Unity side (ChessEngine.DecideTimeForSearch): the GUI
-// now forwards the raw clock and the engine owns the time-management decision
-// — the correct UCI split. Returns the budget in seconds.
+// increment (both in milliseconds). Returns the budget in seconds.
 double
 decideSearchTime(long long sideTimeMs, long long sideIncMs)
 {
@@ -209,8 +206,8 @@ handleGo(stringstream& ss)
     // but `go depth <n>` (and a bare `go`) name no time at all and must run
     // until the depth limit or an async `stop` — capping those at a default
     // makes the GUI's setting silently inert. En Croissant's analysis pane
-    // sends exactly these forms (`go depth 20` ... `stop`), and under the old
-    // 1s fallback a 20-ply request returned at depth 12.
+    // sends exactly these forms (`go depth 20` ... `stop`), so a default cap
+    // here would return a shallower search than the requested depth.
     long long sideTime = (g_board.color == WHITE) ? wtime : btime;
     long long sideInc  = (g_board.color == WHITE) ? winc  : binc;
 

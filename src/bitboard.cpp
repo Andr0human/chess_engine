@@ -39,12 +39,9 @@ ChessBoard::setPositionWithFen(const string& fen) noexcept
 
   reset();
 
-  // Split the elements from FEN.
   const vector<string> elements = utils::split(fen, ' ');
 
   {
-    // Generating board and Pieces array
-
     Square square = SQ_A8;
     for (const char elem : elements[0])
     {
@@ -68,25 +65,20 @@ ChessBoard::setPositionWithFen(const string& fen) noexcept
     }
   }
 
-  // Extracting which color to play
   color = Color(int(elements[1][0]) & 1);
 
-  // Extracting castle-info
   for (char ch : elements[2])
     castlingRights(ch);
 
-  // Extracting en-passant square
   if (elements[3] == "-") csep |= 64;
   else csep |= 28 + ((2 * color - 1) * 12) + (elements[3][0] - 'a');
 
-  // Extracting half-move and full-move
   if (elements.size() == 6)
   {
     halfmove = stoi(elements[4]);
     fullmove = stoi(elements[5]) * 2 + (color ^ 1);
   }
 
-  // Generate hash-value for current position
   hashValue = generateHashkey();
 }
 
@@ -172,7 +164,6 @@ ChessBoard::fen() const
 void
 ChessBoard::makeMove(Move move, bool inSearch) noexcept
 {
-  // Init and Dest. sq
   Square ip = Square(move & 63);
   Square fp = Square((move >> 6) & 63);
 
@@ -184,7 +175,6 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
   PieceType it = PieceType((move >> 12) & 7);
   PieceType ft = PieceType((move >> 15) & 7);
 
-  // Piece at init and dest. sq.
   Piece ipt = board[ip];
   Piece fpt = board[fp];
 
@@ -199,16 +189,11 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
   if (ep != SQUARE_NB)
     hashValue ^= tt.hashKey(ep + 1);
 
-  // Reset the en-passant state
   csep = (csep & 1920) ^ SQUARE_NB;
 
-  // Check if a rook is on dest. sq.
   makeMoveCastleCheck(ft, fp);
-
-  // Check if a rook is on init. sq.
   makeMoveCastleCheck(it, ip);
 
-  // Check for pawn special moves.
   if (it == PAWN)
   {
     if (isDoublePawnPush(ip, fp))
@@ -221,7 +206,6 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
       return makeMovePawnPromotion(move);
   }
 
-  // Check for king moves.
   if (it == KING)
   {
     int oldCsep = csep;
@@ -249,7 +233,6 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
   pieceBb[ipt] ^= iPos ^ fPos;
   pieceBb[(color << 3) + 7] ^= iPos ^ fPos;
 
-  // Flip the sides.
   color = ~color;
 
   hashValue ^= tt.hashKeyUpdate(ipt, ip)
@@ -285,7 +268,6 @@ ChessBoard::makeMoveDoublePawnPush(Square ip, Square fp) noexcept
   pieceBb[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
   pieceBb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
-  // Add current enpassant-state to hash_value
   hashValue ^= tt.hashKey(1 + enPassantSquare());
   hashValue ^= tt.hashKeyUpdate(own + 1, ip)
              ^ tt.hashKeyUpdate(own + 1, fp)
@@ -301,7 +283,6 @@ ChessBoard::makeMoveEnpassant(Square ip, Square ep) noexcept
   int emy = own ^ 8;
   Square capPawnFp = ep - 8 * (2 * color - 1);
 
-  // Remove opp. pawn from the Pieces-table
   pieceBb[emy + PAWN] ^= 1ULL << capPawnFp;
   pieceBb[emy + ALL ] ^= 1ULL << capPawnFp;
   pieceCt[emy + PAWN]--;
@@ -309,7 +290,6 @@ ChessBoard::makeMoveEnpassant(Square ip, Square ep) noexcept
   board[capPawnFp] = NO_PIECE;
   boardWeight -= pieceValues[PAWN - 1];
 
-  // Shift own pawn in Pieces-table
   pieceBb[own + PAWN] ^= (1ULL << ip) ^ (1ULL << ep);
   pieceBb[own +  ALL] ^= (1ULL << ip) ^ (1ULL << ep);
 
@@ -566,7 +546,6 @@ ChessBoard::makeNullMove()
   // Flip side-to-move in the hash, mirroring every real move (hashKey(0)).
   hashValue ^= tt.hashKey(0);
 
-  // Reset en-passant state (keep castling bits), then flip side to move.
   csep = (csep & 1920) ^ SQUARE_NB;
   color = ~color;
 }

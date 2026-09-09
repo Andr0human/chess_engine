@@ -66,11 +66,8 @@ checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }
 
 // True when `score` encodes a forced mate rather than a normal evaluation.
-// The band must match checkmateScore()'s 20-points-per-ply step: the old
-// threshold (VALUE_MATE - MAX_PLY = 15960) assumed 1 point per ply and so only
-// recognized mates at ply <= 2 — a mate at ply 3 (-15940) fell through and the
-// guards built on this predicate were effectively dead. MATE_BOUND = 15000
-// covers the full 0..MAX_PLY range.
+// The band must match checkmateScore()'s 20-points-per-ply step so every mate
+// in the 0..MAX_PLY range clears MATE_BOUND (15000).
 bool
 isMateScore(Score score)
 { return __abs(score) >= int(MATE_BOUND); }
@@ -140,11 +137,10 @@ searchExtension(
   if (numExtensions >= EXTENSION_LIMIT)
     return 0;
 
-  // If king is in check, add 1
   if (myMoves.checkers > 0)
     return 1;
 
-  // if queen trapped and attacked by minor piece, add 1
+  // Queen trapped and attacked by a minor piece.
   if (
     (depth == 1) and
     (myMoves.checkers == 0) and

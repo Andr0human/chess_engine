@@ -35,7 +35,6 @@ template <bool leafnode = 0>
 static Score
 quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 {
-  // Check if Time Left for Search
   if (info.shouldStop())
     return TIMEOUT;
 
@@ -71,10 +70,8 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   info.addQNode();
 
-  // Get a 'Stand Pat' Score
   Score standPat = evaluate(pos);
 
-  // Checking for beta-cutoff, usually called at the end of move-generation.
   if (standPat >= beta)
     return beta;
 
@@ -134,7 +131,6 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     if (info.shouldStop())
       return TIMEOUT;
 
-    // Check for Beta-cutoff
     if (score >= beta) return beta;
 
     if (score > alpha)
@@ -316,9 +312,8 @@ playSubsetMoves(
 {
   // myMoves.removedMoves() accounts for moves searched *outside* this array
   // (the hash-move fast-path searches 1 move before playAllMoves runs).
-  // Without this, LMR's `moveNo < LMR_LIMIT` gate gives the first staged
-  // move an extra full-depth search the old impl wouldn't have done —
-  // that's where the ~25% tree-bloat was coming from.
+  // Without this, LMR's `moveNo < LMR_LIMIT` gate would give the first staged
+  // move an extra full-depth search it shouldn't get.
   const size_t moveNoBias = myMoves.removedMoves();
 
   for (size_t moveNo = start; moveNo < end; ++moveNo)
@@ -352,7 +347,6 @@ playSubsetMoves(
     }
 
     //! TODO: Why beta is not in root-search??
-    // beta-cut found
     if (eval >= ns.beta)
     {
       ns.hashf = Flag::HASH_BETA;
@@ -386,7 +380,6 @@ playSubsetMoves(
       if (is_type<MType::QUIET>(move))
         ns.triedQuiets.add(move);
 
-    // Better move found, update the result
     if (eval > ns.alpha) {
       ns.hashf = Flag::HASH_EXACT;
       ns.alpha = eval;
@@ -415,11 +408,10 @@ playAllMoves(
   if constexpr (moveGen == 1)
     myMoves.getMoves<MType::QUIET, MType::CHECK>(pos, movesArray);
 
-  // The residual QUIET stage used to short-circuit to movesArray.size() here.
-  // That was only ever an optimization: with mTypes == MType::QUIET every
-  // prioritize/sort/killer branch inside orderMoves is gated off and it returns
-  // movesArray.size() anyway. Routing the stage through orderMoves gives the
-  // history sort somewhere to live.
+  // The residual QUIET stage is routed through orderMoves — rather than
+  // short-circuiting straight to movesArray.size() — so the history sort has
+  // somewhere to live, even though every prioritize/sort/killer branch inside
+  // orderMoves is otherwise gated off for mTypes == MType::QUIET.
   //
   // Don't pay for that sort when playSubsetMoves is about to break on move 0 --
   // literally its own break condition (ns.skipsQuiets), evaluated one call
@@ -462,7 +454,6 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (info.shouldStop())
     return TIMEOUT;
 
-    // Depth 0, starting Quiensense Search
   if (depth <= 0)
     return quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
 
@@ -658,14 +649,13 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
 
   // Drop the already-searched hash move so subsequent getMoves<>() calls in
-  // playAllMoves don't re-emit it. Both branches now feed the same uniform
-  // playAllMoves<0, …> entry.
+  // playAllMoves don't re-emit it.
   if (hashOutcome.searched)
     myMoves.removeMove(hashMove);
 
-  // LMR bias is now derived from myMoves.removedMoves() inside
-  // playSubsetMoves — the hash-move fast-path's removeMove() call already
-  // bumped that counter, so the LMR_LIMIT gate sees the right moveNo.
+  // LMR bias is derived from myMoves.removedMoves() inside playSubsetMoves —
+  // the removeMove() call above already bumped that counter, so the
+  // LMR_LIMIT gate sees the right moveNo.
 
   MoveArray movesArray;
   bestMove = playAllMoves<PvNode, 0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
@@ -695,7 +685,7 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 
   MoveArray myMoves = info.getMoves();
 
-  pvArray[pvIndex] = NULL_MOVE; // no pv yet
+  pvArray[pvIndex] = NULL_MOVE;
 
   NodeState ns{alpha, beta, depth, Ply(ply), pvIndex, 0};
 
@@ -787,11 +777,11 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
                   << " time " << timeMs
                   << " pv";
         // Print the validated PV (built by addResult above), not the raw
-        // pvArray: every move in it is legality-checked, where a raw walk used
-        // to emit illegal moves (fastchess "Illegal PV move" warnings). It also
+        // pvArray: every move in it is legality-checked, which GUIs like
+        // fastchess enforce (they warn on an illegal PV move). It also
         // carries the TT-reconstructed tail, so a line ending at an
-        // early-returning node still shows its full length. Stop at the first
-        // quiescence move, as the prior raw printer did.
+        // early-returning node still shows its full length. Stop at the
+        // first quiescence move, matching the rest of the PV display.
         for (const Move m : info.getPvLine())
         {
           if (m & quiescenceMove()) break;
