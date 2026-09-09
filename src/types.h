@@ -22,7 +22,7 @@ const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk
 // rating lists label the engine — without it, games from two different builds are
 // indistinguishable in an arena log. Bump this in the commit that gets tagged.
 const std::string ENGINE_NAME = "Elsa";
-const std::string ENGINE_VERSION = "3.0.0";
+const std::string ENGINE_VERSION = "3.0.0 aw-24";
 
 enum SearchFlag: bool
 {
@@ -157,7 +157,7 @@ enum Value: Score
   MATE_BOUND = VALUE_MATE - 20 * MAX_PLY,
 
   VALUE_UNKNOWN = 555666777,
-  VALUE_WINDOW = 4,
+  VALUE_WINDOW = 24,
   RFP_MARGIN = 110,
   RAZOR_MARGIN = 240,
   FUTILITY_MARGIN = 120,
