@@ -796,7 +796,7 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     }
 
     // If found a checkmate
-    if (withinValWindow and (__abs(eval) >= VALUE_INF - 500)) break;
+    if (withinValWindow and isMateScore(eval)) break;
 
     // Put this iteration's best move first for the next one. pvArray[0] is
     // NULL_MOVE on an aspiration fail-low; promoteBestMove handles that itself.
