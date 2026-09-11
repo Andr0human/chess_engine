@@ -399,6 +399,12 @@ class SearchData
   pair<Move, Score> lastIterationResult() const noexcept
   { return moveEvals.back(); }
 
+  // The move to play: search() keeps the current best at the front of the root
+  // list via promoteBestMove, including one found by an unfinished iteration.
+  Move
+  bestMoveFound() const noexcept
+  { return moveNodes[0].first; }
+
   Nodes
   totalSearchedNodes() const noexcept
   { return searchedNodes; }
