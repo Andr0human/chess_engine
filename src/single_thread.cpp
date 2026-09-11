@@ -740,7 +740,19 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     Score eval = rootAlphaBeta(board, alpha, beta, depth);
 
     if (info.shouldStop())
+    {
+      // A root move that finished before the stop and beat alpha was searched to
+      // the full new depth, so it beats the move at the front. With none,
+      // leave the front alone: it holds the last completed best, or a move that
+      // failed high at this depth, which the NULL fallback would displace.
+      if (pvArray[0] != NULL_MOVE)
+        info.promoteBestMove(pvArray[0]);
+
+      if (debug and filter(info.bestMoveFound()) != filter(info.lastIterationResult().first))
+        writer << "Unfinished depth " << int(depth) << " changed the best move to "
+               << printMove(info.bestMoveFound(), board) << endl;
       break;
+    }
 
     if ((eval <= alpha) or (eval >= beta))
     {
@@ -795,12 +807,13 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
       depth++;
     }
 
-    // If found a checkmate
-    if (withinValWindow and isMateScore(eval)) break;
-
     // Put this iteration's best move first for the next one. pvArray[0] is
     // NULL_MOVE on an aspiration fail-low; promoteBestMove handles that itself.
+    // Before the mate break, so the front is the move to play.
     info.promoteBestMove(pvArray[0]);
+
+    // If found a checkmate
+    if (withinValWindow and isMateScore(eval)) break;
   }
 
   info.searchCompleted();

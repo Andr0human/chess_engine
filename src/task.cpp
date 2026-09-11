@@ -253,10 +253,10 @@ bestMoveSearch(const vector<string> &args)
 
   ChessBoard pos(fen);
   search(pos, depth, searchTime, std::cout, false);
-  const auto bestMove = info.lastIterationResult();
-  cout << printMove(bestMove.first, pos) << endl;
+  const Move bestMove = info.bestMoveFound();
+  cout << printMove(bestMove, pos) << endl;
 
-  pos.makeMove(bestMove.first);
+  pos.makeMove(bestMove);
   cout << pos.fen() << endl;
 }
 

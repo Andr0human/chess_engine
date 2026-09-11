@@ -233,7 +233,7 @@ handleGo(stringstream& ss)
   g_worker = std::thread([board = g_board, maxDepth, moveTimeSec]() {
     std::ostringstream sink;
     search(board, maxDepth, moveTimeSec, sink, false, true);
-    uciSend("bestmove " + moveToUci(info.lastIterationResult().first));
+    uciSend("bestmove " + moveToUci(info.bestMoveFound()));
   });
 }
 
