@@ -111,6 +111,22 @@ class SearchData
 
   double timeForSearch = 0;  // seconds
 
+  // Clock-poll throttle. shouldStop() is called ~2.3x per searched node, and a
+  // high_resolution_clock read costs ~30ns here (QueryPerformanceCounter), so
+  // reading it every call spends a double-digit percentage of the search on
+  // timekeeping. Instead the clock is read once per POLL_INTERVAL calls and the
+  // verdict is cached; in between, shouldStop() answers from `timedOut`.
+  //
+  // Mutable because shouldStop() is const and called from const contexts all
+  // over the search; the throttle is an implementation detail of the query, not
+  // observable state.
+  //
+  // The cached verdict is naturally sticky: time only moves forward, so once a
+  // real read reports expiry every later read does too.
+  static constexpr int POLL_INTERVAL = 256;
+  mutable int pollCountdown = POLL_INTERVAL;
+  mutable bool timedOut = false;
+
   public:
 
   // Transposition-table instrumentation, accumulated over the whole search:
@@ -336,9 +352,23 @@ class SearchData
   // Abort predicate polled at every search checkpoint: true when the time
   // budget is spent OR the UCI layer asked to stop. Used in place of
   // timeOver() at the abort gates so `stop` (and `go infinite`) work.
+  //
+  // The `searchStop` half is tested on every call — it is a plain relaxed load,
+  // and throttling it would delay the UCI `stop` response by a poll interval
+  // for no gain. Only the clock read is throttled (see POLL_INTERVAL).
   bool
   shouldStop() const noexcept
-  { return timeOver() || searchStop.load(std::memory_order_relaxed); }
+  {
+    if (searchStop.load(std::memory_order_relaxed))
+      return true;
+
+    if (--pollCountdown > 0)
+      return timedOut;
+
+    pollCountdown = POLL_INTERVAL;
+    timedOut = timeOver();
+    return timedOut;
+  }
 
   double
   timeSpent() const noexcept
