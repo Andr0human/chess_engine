@@ -92,6 +92,11 @@ enum Search
   FUTILITY_MAX_DEPTH = 4,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
+  // How many SearchData::shouldStop() calls share one reading of the clock.
+  // Raising it past the point where the reads stop being a measurable cost buys
+  // nothing further, so this is a time-granularity choice, not a speed knob:
+  // it bounds how far past its budget a search can run before it notices.
+  CLOCK_POLL_INTERVAL = 256,
   MAX_THREADS = 12,
   // The triangular PV rows need (MAX_PLY * (MAX_PLY + 1)) / 2 words; the +1 is a
   // spare slot that is never part of any row. quiescenceSearch writes

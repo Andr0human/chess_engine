@@ -111,20 +111,21 @@ class SearchData
 
   double timeForSearch = 0;  // seconds
 
-  // Clock-poll throttle. shouldStop() is called ~2.3x per searched node, and a
-  // high_resolution_clock read costs ~30ns here (QueryPerformanceCounter), so
-  // reading it every call spends a double-digit percentage of the search on
-  // timekeeping. Instead the clock is read once per POLL_INTERVAL calls and the
-  // verdict is cached; in between, shouldStop() answers from `timedOut`.
+  // Clock-poll throttle state. shouldStop() runs at every search checkpoint, so
+  // several times per searched node; reading the clock that often costs real
+  // time, because high_resolution_clock is a syscall-grade counter read rather
+  // than something the compiler can hoist. The clock is instead read once per
+  // CLOCK_POLL_INTERVAL calls and the verdict cached, with the calls in between
+  // answered from `timedOut`.
   //
   // Mutable because shouldStop() is const and called from const contexts all
   // over the search; the throttle is an implementation detail of the query, not
   // observable state.
   //
-  // The cached verdict is naturally sticky: time only moves forward, so once a
-  // real read reports expiry every later read does too.
-  static constexpr int POLL_INTERVAL = 256;
-  mutable int pollCountdown = POLL_INTERVAL;
+  // No staleness window to worry about on the true side: time only moves
+  // forward, so once a real read reports expiry every later read does too. Both
+  // members reset per search, via the `info = SearchData(...)` assignment.
+  mutable int pollCountdown = CLOCK_POLL_INTERVAL;
   mutable bool timedOut = false;
 
   public:
@@ -355,7 +356,7 @@ class SearchData
   //
   // The `searchStop` half is tested on every call — it is a plain relaxed load,
   // and throttling it would delay the UCI `stop` response by a poll interval
-  // for no gain. Only the clock read is throttled (see POLL_INTERVAL).
+  // for no gain. Only the clock read is throttled (see CLOCK_POLL_INTERVAL).
   bool
   shouldStop() const noexcept
   {
@@ -365,7 +366,7 @@ class SearchData
     if (--pollCountdown > 0)
       return timedOut;
 
-    pollCountdown = POLL_INTERVAL;
+    pollCountdown = CLOCK_POLL_INTERVAL;
     timedOut = timeOver();
     return timedOut;
   }
