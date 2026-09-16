@@ -56,6 +56,9 @@ sendId()
 {
   uciSend("id name " + ENGINE_NAME + " " + ENGINE_VERSION);
   uciSend("id author Andr0human");
+  uciSend("option name Hash type spin default " + std::to_string(int(TT_DEFAULT_MB))
+          + " min " + std::to_string(int(TT_MIN_MB))
+          + " max " + std::to_string(int(TT_MAX_MB)));
   uciSend("uciok");
 }
 
@@ -237,6 +240,40 @@ handleGo(stringstream& ss)
   });
 }
 
+// `setoption name <id> [value <x>]`. Hash is the only option we advertise;
+// anything else is accepted and ignored, which is what the loop did with every
+// setoption before this existed.
+void
+handleSetOption(stringstream& ss)
+{
+  string token, name;
+  if (!(ss >> token) or token != "name")
+    return;
+
+  // The UCI grammar lets an option name contain spaces, so the name is
+  // everything between `name` and the `value` keyword.
+  while (ss >> token and token != "value")
+    name += (name.empty() ? "" : " ") + token;
+
+  if (name != "Hash" or token != "value")
+    return;
+
+  // Read as a number rather than stoul'd from a string, so GUI-supplied text
+  // cannot throw on a thread that has no handler for it. A malformed value
+  // leaves the table exactly as it was.
+  unsigned long long mb = 0;
+  if (!(ss >> mb))
+    return;
+
+  // resize() frees and reallocates both tables, so it must not run under a live
+  // search -- same reason ucinewgame stops first. Every stored entry goes with
+  // it, which is what the GUI asked for.
+  stopAndJoin();
+  if constexpr (USE_TT) {
+    tt.resize(size_t(mb));
+  }
+}
+
 void
 handleUciNewGame()
 {
@@ -294,12 +331,16 @@ uciLoop()
       // unwinds, and prints `bestmove`. It is joined on the next go/quit.
       searchStop.store(true, std::memory_order_relaxed);
     }
+    else if (cmd == "setoption")
+    {
+      handleSetOption(ss);
+    }
     else if (cmd == "quit")
     {
       stopAndJoin();
       break;
     }
-    // Silently accept: debug, setoption, register, ponderhit, etc.
+    // Silently accept: debug, register, ponderhit, etc.
   }
 
   // Reached on EOF (stdin closed) without an explicit `quit`: never let a

@@ -1,7 +1,10 @@
 
 
 #include "tt.h"
+#include "base_utils.h"     // msb
 #include "search_utils.h"   // isMateScore
+
+#include <algorithm>
 
 using std::string;
 using std::to_string;
@@ -49,33 +52,40 @@ TranspositionTable::getRandomKeys() noexcept
 void
 TranspositionTable::freeTables()
 {
-  if (TT_SIZE == 0)
-    return;
-
   delete[] ttPrimary;
   delete[] ttSecondary;
+  ttPrimary = ttSecondary = nullptr;
 }
 
 void
 TranspositionTable::allocateTables()
 {
-  ttPrimary   = new ZobristHashKey[TT_SIZE]();
-  ttSecondary = new ZobristHashKey[TT_SIZE]();
+  ttPrimary   = new ZobristHashKey[ttSize]();
+  ttSecondary = new ZobristHashKey[ttSize]();
 }
 
 void
-TranspositionTable::resize(int preset)
+TranspositionTable::resize(size_t mb)
 {
   getRandomKeys();
   freeTables();
-  TT_SIZE = ttSizes[preset];
+
+  mb = std::clamp(mb, size_t(TT_MIN_MB), size_t(TT_MAX_MB));
+
+  // Round the request down to the largest power-of-two entry count that fits:
+  // msb() is exactly that for any non-zero argument, and the clamp keeps it
+  // non-zero (TT_MIN_MB of 1 MB is already 32768 entries per table).
+  const size_t entriesThatFit = (mb << 20) / (2 * sizeof(ZobristHashKey));
+  ttSize = msb(entriesThatFit);
+  ttMask = ttSize - 1;
+
   allocateTables();
 }
 
 string
 TranspositionTable::size() const noexcept
 {
-  uint64_t tableSize = sizeof(ZobristHashKey) * TT_SIZE * 2;
+  uint64_t tableSize = sizeof(ZobristHashKey) * ttSize * 2;
 
   uint64_t KB = 1024, MB = KB * KB, GB = MB * KB;
 
@@ -113,7 +123,7 @@ TranspositionTable::recordPosition
     key.pack(storedEval, depth, flag, bestMove);
   };
 
-  size_t index = hashValue % TT_SIZE;
+  size_t index = hashValue & ttMask;
 
   if (depth >= ttPrimary[index].depth())
     addEntry(ttPrimary[index]);
@@ -155,7 +165,7 @@ TranspositionTable::lookupPosition
   outMove = NULL_MOVE;
   ttHit = false;
 
-  size_t index = hashValue % TT_SIZE;
+  size_t index = hashValue & ttMask;
 
   int res = probe(ttPrimary[index]);
   if (res != VALUE_UNKNOWN) return res;
@@ -181,7 +191,7 @@ TranspositionTable::probePvMove(uint64_t hashValue, Depth minDepth) const noexce
     return key.bestMove();
   };
 
-  size_t index = hashValue % TT_SIZE;
+  size_t index = hashValue & ttMask;
 
   Move move = probe(ttPrimary[index]);
   if (move != NULL_MOVE)
@@ -193,6 +203,6 @@ TranspositionTable::probePvMove(uint64_t hashValue, Depth minDepth) const noexce
 void
 TranspositionTable::clear() noexcept
 {
-  for (size_t i = 0; i < TT_SIZE; i++)
+  for (size_t i = 0; i < ttSize; i++)
     ttPrimary[i].hashValue = ttSecondary[i].hashValue = 0;
 }

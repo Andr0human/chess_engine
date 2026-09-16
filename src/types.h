@@ -76,6 +76,16 @@ enum Search
 {
   HASH_INDEXES_SIZE = 855,
 
+  // Transposition-table size, in MB of *total* allocation (primary +
+  // secondary). Both tables hold the same number of 16-byte entries, so the
+  // allocation is always `entries * 32` bytes -- which makes every legal size a
+  // power-of-two MB, since the entry count is constrained to a power of two.
+  // A request that is not one is rounded *down* (100 -> 64), never up: rounding
+  // up would let a GUI asking for 3000 MB get 4096.
+  TT_DEFAULT_MB = 64,
+  TT_MIN_MB = 1,
+  TT_MAX_MB = 4096,
+
   MAX_MOVES = 256,
   MAX_PLY = 50,
   MAX_DEPTH = 40,

@@ -71,16 +71,20 @@ class ZobristHashKey
 
 class TranspositionTable
 {
-  /**
-   * 0 ->  66 MB tableSize
-   * 1 -> 686 MB tableSize
-  */
-  array<uint64_t, 2> ttSizes = { 2189477ULL, 22508861ULL };
+  // Entries per table -- always a power of two, so a slot is located with
+  // `hashValue & ttMask` instead of `hashValue % ttSize`. The mask only sees the
+  // low bits of the key, which costs nothing here: the Zobrist keys are
+  // mt19937_64 output, so every bit slice is as uniform as any other. What it
+  // buys is the 64-bit division that the modulo put on every probe and every
+  // store, against a table size the compiler cannot constant-fold.
+  size_t ttSize = 0;
 
-  size_t TT_SIZE = 0;
+  // ttSize - 1. Zero while the table is unallocated, and zero is *not* a safe
+  // mask -- it indexes slot 0 of a null pointer. Callers gate on USE_TT instead.
+  size_t ttMask = 0;
 
-  ZobristHashKey *ttPrimary;
-  ZobristHashKey *ttSecondary;
+  ZobristHashKey *ttPrimary   = nullptr;
+  ZobristHashKey *ttSecondary = nullptr;
 
   array<uint64_t, HASH_INDEXES_SIZE> hashIndex;
 
@@ -96,11 +100,14 @@ class TranspositionTable
   // be callable even when USE_TT is false. resize() also calls it.
   void getRandomKeys() noexcept;
 
-  TranspositionTable(int preset)
-  { resize(preset); }
+  explicit TranspositionTable(size_t mb)
+  { resize(mb); }
 
+  // `mb` is clamped to [TT_MIN_MB, TT_MAX_MB] and then rounded down to the
+  // largest power-of-two entry count that fits in it. Reallocates both tables,
+  // so every stored entry is discarded, and re-seeds the Zobrist keys.
   void
-  resize(int preset = 0);
+  resize(size_t mb = TT_DEFAULT_MB);
 
   std::string
   size() const noexcept;

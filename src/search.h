@@ -222,8 +222,8 @@ class SearchData
   void
   extendPvFromTt(ChessBoard pos, Depth rootDepth)
   {
-    // With the TT disabled there is no table to walk — and TT_SIZE is 0, so
-    // probeMove()'s `hash % TT_SIZE` would divide by zero.
+    // With the TT disabled there is no table to walk, and nothing allocated to
+    // walk it in: ttMask is 0, so a probe would read slot 0 of a null pointer.
     if constexpr (!USE_TT)
       return;
 
