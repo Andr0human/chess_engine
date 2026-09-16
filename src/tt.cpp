@@ -131,46 +131,80 @@ TranspositionTable::recordPosition
   addEntry(ttSecondary[index]);
 }
 
+void
+TranspositionTable::recordQuiescence
+    (uint64_t hashValue, Ply ply, Score eval, Flag flag, Move bestMove) noexcept
+{
+  const Score storedEval = valueToTt(eval, ply);
+
+  size_t index = hashValue & ttMask;
+
+  // depth() is unsigned, so this admits exactly the empty and depth-0 slots --
+  // the rationale for the tier choice is in tt.h.
+  if (ttPrimary[index].depth() == 0)
+  {
+    ttPrimary[index].hashValue = hashValue;
+    ttPrimary[index].pack(storedEval, 0, flag, bestMove);
+  }
+}
+
+int
+TranspositionTable::probeEntry
+  (const ZobristHashKey& key, uint64_t hashValue, Depth depth, Ply ply,
+   Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept
+{
+  if (key.hashValue != hashValue)
+    return VALUE_UNKNOWN;
+
+  ttHit = true;
+
+  // Hash match — surface the stored move for ordering, even when the
+  // entry's depth is too shallow to produce a cutoff.
+  if (outMove == NULL_MOVE)
+    outMove = key.bestMove();
+
+  if (key.depth() >= depth)
+  {
+    Flag flag = key.flag();
+    // Back to root-relative *before* the bound tests — alpha and beta are
+    // root-relative, so comparing a node-relative mate against them would
+    // cut off on the wrong distance.
+    Score eval = valueFromTt(key.eval(), ply);
+    if (flag == Flag::HASH_EXACT) return eval;
+    if (flag == Flag::HASH_ALPHA and eval <= alpha) return alpha;
+    if (flag == Flag::HASH_BETA  and eval >= beta ) return beta;
+  }
+
+  return VALUE_UNKNOWN;
+}
+
 int
 TranspositionTable::lookupPosition
   (uint64_t hashValue, Depth depth, Ply ply, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept
 {
-  const auto probe = [&] (const ZobristHashKey &key) -> int
-  {
-    if (key.hashValue != hashValue)
-      return VALUE_UNKNOWN;
-
-    ttHit = true;
-
-    // Hash match — surface the stored move for ordering, even when the
-    // entry's depth is too shallow to produce a cutoff.
-    if (outMove == NULL_MOVE)
-      outMove = key.bestMove();
-
-    if (key.depth() >= depth)
-    {
-      Flag flag = key.flag();
-      // Back to root-relative *before* the bound tests — alpha and beta are
-      // root-relative, so comparing a node-relative mate against them would
-      // cut off on the wrong distance.
-      Score eval = valueFromTt(key.eval(), ply);
-      if (flag == Flag::HASH_EXACT) return eval;
-      if (flag == Flag::HASH_ALPHA and eval <= alpha) return alpha;
-      if (flag == Flag::HASH_BETA  and eval >= beta ) return beta;
-    }
-
-    return VALUE_UNKNOWN;
-  };
-
   outMove = NULL_MOVE;
   ttHit = false;
 
   size_t index = hashValue & ttMask;
 
-  int res = probe(ttPrimary[index]);
+  int res = probeEntry(ttPrimary[index], hashValue, depth, ply, alpha, beta, outMove, ttHit);
   if (res != VALUE_UNKNOWN) return res;
 
-  return probe(ttSecondary[index]);
+  return probeEntry(ttSecondary[index], hashValue, depth, ply, alpha, beta, outMove, ttHit);
+}
+
+Score
+TranspositionTable::lookupQuiescence
+  (uint64_t hashValue, Ply ply, Score alpha, Score beta, bool& ttHit) const noexcept
+{
+  // probeEntry() fills this on a hash match and the caller has no use for it.
+  // The rationale for discarding it, and for the single tier, is in tt.h.
+  Move unused = NULL_MOVE;
+  ttHit = false;
+
+  size_t index = hashValue & ttMask;
+
+  return probeEntry(ttPrimary[index], hashValue, 0, ply, alpha, beta, unused, ttHit);
 }
 
 Move

@@ -37,17 +37,15 @@ bulkCount(ChessBoard& pos, Depth depth)
 // the point of probing here: a main-search score, backed by real depth, is
 // always usable at a q-node, and the q-node had no way to see it before.
 //
-// The hash move is read into a dead local rather than handed to orderCaptures().
-// Ordering on it is a second mechanism with a cost of its own -- folding it in
-// here would leave neither half separately measurable.
+// lookupQuiescence() rather than lookupPosition(): one tier, and no hash move.
+// Both restrictions are argued where it is declared.
 static Score
 qProbe(const ChessBoard& pos, Score alpha, Score beta, Ply ply)
 {
-  Move unused = NULL_MOVE;
   bool ttHit = false;
 
   const Score ttValue =
-    tt.lookupPosition(pos.hashValue, 0, ply, alpha, beta, unused, ttHit);
+    tt.lookupQuiescence(pos.hashValue, ply, alpha, beta, ttHit);
 
   info.qTtProbes++;
   if (ttHit) info.qTtHits++;
@@ -128,10 +126,32 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   info.addQNode();
 
+  // The window this node was handed, kept because `alpha` is about to be raised
+  // by the stand-pat and the bound flag has to be read against the original.
+  const Score origAlpha = alpha;
+
+  // A node in check is not stored. Its stand-pat is evaluate() on a position
+  // where the side to move may be mated next ply, and the move list it searches
+  // is captures only -- neither the score nor the refutation means what a
+  // reader would take it to mean. Confined to one path that is merely
+  // imprecise; published to the table it becomes wrong everywhere.
+  const bool storable = USE_TT and !myMoves.checkers;
+
+  Move bestQMove = NULL_MOVE;
+
+  const auto qStore = [&] (Score eval, Flag flag, Move move)
+  {
+    if (storable)
+      tt.recordQuiescence(pos.hashValue, ply, eval, flag, move);
+  };
+
   Score standPat = evaluate(pos);
 
   if (standPat >= beta)
+  {
+    qStore(beta, Flag::HASH_BETA, NULL_MOVE);
     return beta;
+  }
 
   // int BIG_DELTA = 925;
   // if (standPat < alpha - BIG_DELTA) return alpha;
@@ -153,7 +173,13 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   const bool promoExists = USE_QSEARCH_PROMO and myMoves.exists<MType::PROMOTION>(pos);
 
   if (!myMoves.exists<MType::CAPTURES>(pos) and !promoExists)
+  {
+    // Nothing to search, so the stand-pat *is* this node's value, not a floor
+    // under it -- exact whenever it beat the incoming alpha, a fail-low
+    // otherwise.
+    qStore(alpha, alpha > origAlpha ? Flag::HASH_EXACT : Flag::HASH_ALPHA, NULL_MOVE);
     return alpha;
+  }
 
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
@@ -189,11 +215,16 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
     if (info.shouldStop())
       return TIMEOUT;
 
-    if (score >= beta) return beta;
+    if (score >= beta)
+    {
+      qStore(beta, Flag::HASH_BETA, filter(qMove));
+      return beta;
+    }
 
     if (score > alpha)
     {
       alpha = score;
+      bestQMove = filter(qMove);
 
       if (ply < MAX_PLY)
       {
@@ -203,6 +234,13 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
       }
     }
   }
+
+  // Falling out of the loop: exact if a move beat the incoming alpha, otherwise
+  // everything searched failed low and alpha is only an upper bound. The list
+  // orderCaptures() pruned is not a hole in that -- the moves it dropped are the
+  // SEE-losing ones qsearch declines to search at all, so this is the same value
+  // the node would have returned with no table in play.
+  qStore(alpha, alpha > origAlpha ? Flag::HASH_EXACT : Flag::HASH_ALPHA, bestQMove);
 
   return alpha;
 }

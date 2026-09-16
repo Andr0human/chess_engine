@@ -92,6 +92,13 @@ class TranspositionTable
 
   void freeTables();
 
+  // The per-entry half of a probe. Shared by lookupPosition() and
+  // lookupQuiescence() so the two cannot drift apart on the bound tests -- the
+  // only thing that differs between them is which tiers they walk.
+  int
+  probeEntry(const ZobristHashKey& key, uint64_t hashValue, Depth depth, Ply ply,
+             Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
+
   public:
   TranspositionTable() { }
 
@@ -128,8 +135,39 @@ class TranspositionTable
   void
   recordPosition(uint64_t hashValue, Depth depth, Ply ply, Score eval, Flag flag, Move bestMove) noexcept;
 
+  // Store a quiescence result. Identical to recordPosition() at depth 0 but for
+  // one thing: it writes the primary tier only. recordPosition() writes the
+  // secondary unconditionally (always-replace), and q-nodes outnumber main-search
+  // nodes by an order of magnitude -- routing them there would let a single
+  // iteration's captures evict the entire always-replace tier, costing the main
+  // search more than the q-side could ever win back.
+  //
+  // Depth 0 is not a weakened bar on the way out either: the primary tier is
+  // depth-preferred, so a q-entry lands only in a slot that is empty or already
+  // holds a depth-0 entry. Every real search result outranks it and stays.
+  void
+  recordQuiescence(uint64_t hashValue, Ply ply, Score eval, Flag flag, Move bestMove) noexcept;
+
   int
   lookupPosition(uint64_t hashValue, Depth depth, Ply ply, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
+
+  // Probe for a quiescent node: depth 0, and the primary tier only.
+  //
+  // Skipping the secondary tier is the point of this function, not a corner cut.
+  // A q-probe misses far more often than it hits, and a miss that walks both
+  // tiers spends two random reads -- two likely cache misses -- to learn
+  // nothing. Everything a q-node can actually cut on is in the primary:
+  // recordQuiescence() writes nowhere else, and the deep main-search entries
+  // worth a cutoff are exactly what a depth-preferred tier is for. What the
+  // secondary holds and the primary does not is shallow and recent, and probing
+  // for it was measured on its own (probe-only, both tiers, no stores) at
+  // +0.02 ply with an interval spanning zero.
+  //
+  // No hash move comes back. Ordering a q-node on it is a separate mechanism
+  // with a cost of its own; folding it in here would leave neither half
+  // separately measurable.
+  Score
+  lookupQuiescence(uint64_t hashValue, Ply ply, Score alpha, Score beta, bool& ttHit) const noexcept;
 
   // Fetch a stored best move that is trustworthy enough to *display* as part of
   // a principal variation. Returns NULL_MOVE unless the entry actually proved
