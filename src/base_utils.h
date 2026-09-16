@@ -77,6 +77,11 @@ namespace utils
   double
   getTime(const vector<string>& args, double defaultTime);
 
+  // Requested transposition-table size in MB. Returned as asked -- the clamping
+  // and the round-down to a power-of-two entry count happen in tt.resize().
+  size_t
+  getHash(const vector<string>& args, size_t defaultHash);
+
   string
   getOutputFile(const vector<string>& args, string defaultOutputFile);
 

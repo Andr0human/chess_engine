@@ -21,7 +21,7 @@ init(const vector<string>& args)
   tt.getRandomKeys();
 
   if constexpr (USE_TT) {
-    tt.resize(0);
+    tt.resize(utils::getHash(args, TT_DEFAULT_MB));
   }
   perf_time dur = perf::now() - start;
   const auto it = dur.count();

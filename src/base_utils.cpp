@@ -96,6 +96,19 @@ namespace utils
     return "";
   }
 
+  size_t
+  getHash(const vector<string>& args, size_t defaultHash)
+  {
+    if (hasArg(args, "hash") and !argValue(args, "hash").empty()) {
+      try {
+        return size_t(std::stoull(argValue(args, "hash")));
+      } catch (...) {
+        return defaultHash;
+      }
+    }
+    return defaultHash;
+  }
+
   string
   getFen(const vector<string>& args, string defaultFen)
   {
