@@ -31,6 +31,39 @@ bulkCount(ChessBoard& pos, Depth depth)
   return answer;
 }
 
+// Probe the table at a quiescent node. A q-node has no depth of its own, so it
+// asks for depth 0 -- a bar no stored entry can fail, since alphaBeta hands off
+// to qsearch at depth <= 0 and therefore never records below depth 1. That is
+// the point of probing here: a main-search score, backed by real depth, is
+// always usable at a q-node, and the q-node had no way to see it before.
+//
+// The hash move is read into a dead local rather than handed to orderCaptures().
+// Ordering on it is a second mechanism with a cost of its own -- folding it in
+// here would leave neither half separately measurable.
+static Score
+qProbe(const ChessBoard& pos, Score alpha, Score beta, Ply ply)
+{
+  Move unused = NULL_MOVE;
+  bool ttHit = false;
+
+  const Score ttValue =
+    tt.lookupPosition(pos.hashValue, 0, ply, alpha, beta, unused, ttHit);
+
+  info.qTtProbes++;
+  if (ttHit) info.qTtHits++;
+
+  // Counted here because the caller returns on the spot and never reaches its
+  // own addQNode(). A node the table answered is still a node visited, and
+  // leaving it out would make the nps figure climb for doing less work.
+  if (ttValue != VALUE_UNKNOWN)
+  {
+    info.addQNode();
+    info.qTtCutoffs++;
+  }
+
+  return ttValue;
+}
+
 template <bool leafnode = 0>
 static Score
 quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
@@ -43,6 +76,21 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
   // addResult() copies whenever it is coincidentally legal in the new line —
   // rendering phantom captures in the printed PV (e.g. "Kd4 (Kxe7)").
   pvArray[pvIndex] = NULL_MOVE;
+
+  // Recursive q-nodes probe before move generation, so a hit skips generateMoves,
+  // isTheoreticalDraw, the eval and the whole capture subtree under this node.
+  // Leaf q-nodes cannot probe this early: their repetition / 50-move test below
+  // depends on the path taken to get here and the table does not record one, so
+  // a cutoff jumped past that test would answer a drawn position with a score.
+  // Nothing of the sort can arise under a recursive node -- every move qsearch
+  // plays is a capture or a promotion, and both reset the halfmove clock.
+  if constexpr (USE_TT and !leafnode)
+  {
+    const Score ttValue = qProbe(pos, alpha, beta, ply);
+
+    if (ttValue != VALUE_UNKNOWN)
+      return ttValue;
+  }
 
   const MoveList myMoves = generateMoves(pos);
 
@@ -67,6 +115,16 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 
   if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
+
+  // The leaf half of the probe above, placed where the path-dependent draw tests
+  // have already had their say.
+  if constexpr (USE_TT and leafnode)
+  {
+    const Score ttValue = qProbe(pos, alpha, beta, ply);
+
+    if (ttValue != VALUE_UNKNOWN)
+      return ttValue;
+  }
 
   info.addQNode();
 
@@ -826,6 +884,14 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
     writer << "TT: probes=" << info.ttProbes
            << " hits=" << info.ttHits << " (" << std::fixed << std::setprecision(1) << hitRate << "%)"
            << " cutoffs=" << info.ttCutoffs << " (" << ttCutRate << "% of hits)" << endl;
+
+    double qHitRate = info.qTtProbes
+      ? 100.0 * double(info.qTtHits) / double(info.qTtProbes) : 0.0;
+    double qCutRate = info.qTtHits
+      ? 100.0 * double(info.qTtCutoffs) / double(info.qTtHits) : 0.0;
+    writer << "TT(q): probes=" << info.qTtProbes
+           << " hits=" << info.qTtHits << " (" << qHitRate << "%)"
+           << " cutoffs=" << info.qTtCutoffs << " (" << qCutRate << "% of hits)" << endl;
 
     double cutoffRate = info.hashMoveInList
       ? 100.0 * double(info.hashMoveCutoffs) / double(info.hashMoveInList) : 0.0;

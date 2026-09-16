@@ -136,6 +136,12 @@ class SearchData
   //   ttCutoffs  — of those hits, the entry was deep enough to return a bound
   uint64_t ttProbes = 0, ttHits = 0, ttCutoffs = 0;
 
+  // Quiescence-side TT instrumentation, kept separate from the counters above
+  // because the two measure different things: a q-node probes at depth 0, a bar
+  // no stored entry can fail, so qTtCutoffs/qTtHits is a reading of bound
+  // usability alone, where ttCutoffs/ttHits is dominated by the depth test.
+  uint64_t qTtProbes = 0, qTtHits = 0, qTtCutoffs = 0;
+
   // Hash-move (TT best move) instrumentation, accumulated over the whole search:
   //   ttMoveProvided   — nodes where the TT handed back a usable best move
   //   hashMoveInList   — of those, the move was legal here and tried first
