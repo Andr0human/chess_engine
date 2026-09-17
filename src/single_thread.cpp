@@ -155,16 +155,13 @@ quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
 // resolves the runtime `moveNo == 0` test into one of the two instantiations.
 template <bool ChildPv>
 static Score
-searchChild(
-  ChessBoard& pos, Depth depth, Score alpha, Score beta,
-  Ply ply, int pvNextIndex, int numExtensions, int R
-)
+searchChild(ChessBoard& pos, const SearchContext& ctx, int R)
 {
-  Score eval = -alphaBeta<ChildPv>(pos, depth - 1 - R, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+  Score eval = -alphaBeta<ChildPv>(pos, ctx.child(ctx.depth - 1 - R, ctx.alpha, ctx.beta));
 
   // if timed-out, eval will be highly negative thus following code won't execute
-  if (R > 0 and eval > alpha)
-    eval = -alphaBeta<ChildPv>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+  if (R > 0 and eval > ctx.alpha)
+    eval = -alphaBeta<ChildPv>(pos, ctx.child(ctx.depth - 1, ctx.alpha, ctx.beta));
 
   return eval;
 }
@@ -173,12 +170,9 @@ template <ReductionFunc reductionFunction, bool PvNode>
 static Score
 playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
 {
-  const Depth depth         = ns.depth;
-  const Score alpha         = ns.alpha;
-  const Score beta          = ns.beta;
-  const Ply   ply           = ns.ply;
-  const int   pvNextIndex   = ns.pvNextIndex();
-  const int   numExtensions = ns.numExtensions;
+  const Depth depth = ns.depth;
+  const Score alpha = ns.alpha;
+  const Score beta  = ns.beta;
 
   Score eval = VALUE_ZERO;
   pos.makeMove(move);
@@ -192,7 +186,7 @@ playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
     // only re-searched at full depth + full window if the scout beats alpha.
     if (moveNo == 0)
     {
-      eval = -alphaBeta<PvNode>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+      eval = -alphaBeta<PvNode>(pos, ns.child(depth - 1, alpha, beta));
     }
     else
     {
@@ -201,7 +195,7 @@ playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
       // A scout is a null-window search: its score is a bound, never the real
       // thing, so it is never a PV node however this node is labelled.
       info.pvsScouts++;
-      eval = -alphaBeta<false>(pos, depth - 1 - R, -alpha - 1, -alpha, ply + 1, pvNextIndex, numExtensions);
+      eval = -alphaBeta<false>(pos, ns.child(depth - 1 - R, alpha, alpha + 1));
 
       // Scout beat alpha (and timeout didn't drive it negative): re-search at
       // full depth + full window for the true score. One step undoes both the
@@ -223,7 +217,7 @@ playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
       if (eval > alpha and (eval < beta or R > 0))
       {
         info.pvsResearches++;
-        eval = -alphaBeta<PvNode>(pos, depth - 1, -beta, -alpha, ply + 1, pvNextIndex, numExtensions);
+        eval = -alphaBeta<PvNode>(pos, ns.child(depth - 1, alpha, beta));
       }
     }
   }
@@ -239,12 +233,12 @@ playMove(ChessBoard& pos, Move move, size_t moveNo, const NodeState& ns)
     if constexpr (PvNode)
     {
       eval = moveNo == 0
-        ? searchChild<true >(pos, depth, alpha, beta, ply, pvNextIndex, numExtensions, R)
-        : searchChild<false>(pos, depth, alpha, beta, ply, pvNextIndex, numExtensions, R);
+        ? searchChild<true >(pos, ns, R)
+        : searchChild<false>(pos, ns, R);
     }
     else
     {
-      eval = searchChild<false>(pos, depth, alpha, beta, ply, pvNextIndex, numExtensions, R);
+      eval = searchChild<false>(pos, ns, R);
     }
   }
 
@@ -272,7 +266,7 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
   // The hash move is move 0 at this node, so it carries the node's PV status
   // down (same rule as playMove's `moveNo == 0`).
   pos.makeMove(hashMove);
-  Score eval = -alphaBeta<PvNode>(pos, ns.depth - 1, -ns.beta, -ns.alpha, ns.ply + 1, pvNextIndex, ns.numExtensions);
+  Score eval = -alphaBeta<PvNode>(pos, ns.child(ns.depth - 1, ns.alpha, ns.beta));
   pos.unmakeMove();
 
   if (info.shouldStop())
@@ -449,13 +443,18 @@ nodeStaticEval(ChessBoard& pos, NodeState& ns)
 
 template <bool PvNode>
 Score
-alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull)
+alphaBeta(ChessBoard& pos, SearchContext ctx)
 {
+  // Up to the NodeState construction below, the node's inputs are read from
+  // `ctx`; from there on, only from `ns`. The split keeps the early-return
+  // paths (draws, TT cutoff) from paying for NodeState's triedQuiets buffer,
+  // and reading `ns` afterwards is what keeps depth pre-extension for
+  // RFP / razoring / NMP and post-extension for futility / the TT store.
   if (info.shouldStop())
     return TIMEOUT;
 
-  if (depth <= 0)
-    return quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
+  if (ctx.depth <= 0)
+    return quiescenceSearch<1>(pos, ctx.alpha, ctx.beta, ctx.ply, ctx.pvIndex);
 
   // Terminate this node's PV row before any early return (same reason as in
   // quiescenceSearch). A TT cutoff / draw / RFP / razoring exit that leaves the
@@ -463,7 +462,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // addResult() then copies for as long as it happens to stay legal — printing
   // moves that were never searched here. Truncating honestly is also what lets
   // SearchData::extendPvFromTt() rebuild a *real* tail from the table.
-  pvArray[pvIndex] = NULL_MOVE;
+  pvArray[ctx.pvIndex] = NULL_MOVE;
 
   // Repetition / 50-move draws, before the TT probe and RFP: the hash carries no
   // halfmove clock, so either could otherwise return a stale non-draw score for a
@@ -480,7 +479,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if (pos.fiftyMoveDraw())
   {
     const MoveList drawMoves = generateMoves(pos);
-    return (drawMoves.checkers and !drawMoves.anyMove()) ? checkmateScore(ply) : VALUE_DRAW;
+    return (drawMoves.checkers and !drawMoves.anyMove()) ? checkmateScore(ctx.ply) : VALUE_DRAW;
   }
 
   info.addNode();
@@ -489,7 +488,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   if constexpr (USE_TT) {
     bool ttHit = false;
-    Score ttValue = tt.lookupPosition(pos.hashValue, depth, ply, alpha, beta, hashMove, ttHit);
+    Score ttValue = tt.lookupPosition(pos.hashValue, ctx.depth, ctx.ply, ctx.alpha, ctx.beta, hashMove, ttHit);
 
     info.ttProbes++;
     if (ttHit) info.ttHits++;
@@ -524,9 +523,9 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
   // Per-node search state. Built here, before RFP, so the node's static eval
   // can be cached in it once (via nodeStaticEval) and reused by every
-  // heuristic in the node. depth / numExtensions are pre-extension at this
-  // point — synced into ns after the extension policy runs below.
-  NodeState ns{alpha, beta, depth, ply, pvIndex, numExtensions};
+  // heuristic in the node. ns.depth / ns.numExtensions are pre-extension at
+  // this point — bumped in place once the extension policy runs below.
+  NodeState ns{ctx};
 
   // Reverse futility pruning: at a shallow, not-in-check node, if the static
   // eval already beats beta by a depth-scaled margin, assume some move holds
@@ -539,11 +538,11 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if constexpr (USE_RFP)
   {
     if (myMoves.checkers == 0
-      and depth <= RFP_MAX_DEPTH
-      and !isMateScore(beta))
+      and ns.depth <= RFP_MAX_DEPTH
+      and !isMateScore(ns.beta))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
-      if (staticEval - RFP_MARGIN * depth >= beta)
+      if (staticEval - RFP_MARGIN * ns.depth >= ns.beta)
         return staticEval;
     }
   }
@@ -560,16 +559,16 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if constexpr (USE_RAZOR)
   {
     if (myMoves.checkers == 0
-      and depth <= RAZOR_MAX_DEPTH
-      and !isMateScore(alpha))
+      and ns.depth <= RAZOR_MAX_DEPTH
+      and !isMateScore(ns.alpha))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
-      if (staticEval + RAZOR_MARGIN * depth <= alpha)
+      if (staticEval + RAZOR_MARGIN * ns.depth <= ns.alpha)
       {
-        const Score razorScore = quiescenceSearch<1>(pos, alpha, beta, ply, pvIndex);
+        const Score razorScore = quiescenceSearch<1>(pos, ns.alpha, ns.beta, ns.ply, ns.pvIndex);
         if (info.shouldStop())
           return TIMEOUT;
-        if (razorScore <= alpha)
+        if (razorScore <= ns.alpha)
           return razorScore;
       }
     }
@@ -578,7 +577,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   stagedGenerateMoves<GEN_MOVES   >(pos, myMoves);
 
   if (!myMoves.anyMove())
-    return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
+    return myMoves.checkers ? checkmateScore(ns.ply) : VALUE_ZERO;
 
   if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
@@ -590,44 +589,41 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // pre-extension depth and the already-populated myMoves.checkers.
   if constexpr (USE_NMP)
   {
-    if (doNull
+    if (ns.doNull
         and myMoves.checkers == 0                 // never null out of check
-        and depth >= NMP_MIN_DEPTH                 // too shallow to be worth it
+        and ns.depth >= NMP_MIN_DEPTH              // too shallow to be worth it
         and pos.hasNonPawnMaterial(pos.color)      // zugzwang guard
-        and !isMateScore(beta))                    // don't manufacture false mates
+        and !isMateScore(ns.beta))                 // don't manufacture false mates
     {
-      const int R = nullReduction(depth);
-      const int rawNullDepth = depth - 1 - R;
+      const int R = nullReduction(ns.depth);
+      const int rawNullDepth = ns.depth - 1 - R;
       const Depth nullDepth = static_cast<Depth>(rawNullDepth > 0 ? rawNullDepth : 0);
-      const int pvNextIndex = pvIndex + MAX_PLY - ply;
 
       pos.makeNullMove();
       // Null-window probe around beta — never a PV node, whatever this node is.
-      Score nullScore = -alphaBeta<false>(pos, nullDepth, -beta, -beta + 1,
-                                          ply + 1, pvNextIndex, numExtensions,
-                                          /*doNull=*/false);
+      // No null move on the reply: two in a row just hand the tempo back.
+      Score nullScore = -alphaBeta<false>(
+        pos, ns.child(nullDepth, ns.beta - 1, ns.beta).withoutNull());
       pos.unmakeNullMove();
 
       if (info.shouldStop())
         return TIMEOUT;
 
-      if (nullScore >= beta)
+      if (nullScore >= ns.beta)
       {
         // A mate score off a null move is not trustworthy — the side to move
         // was handed a free tempo. Clamp to beta rather than propagate it.
         if (isMateScore(nullScore))
-          return beta;
+          return ns.beta;
         return nullScore;
       }
     }
   }
 
   if constexpr (USE_EXTENSIONS) {
-    int extensions = searchExtension(pos, myMoves, numExtensions, depth);
-    depth += extensions;
-    numExtensions += extensions;
-    ns.depth = depth;
-    ns.numExtensions = numExtensions;
+    int extensions = searchExtension(pos, myMoves, ns.numExtensions, ns.depth);
+    ns.depth += extensions;
+    ns.numExtensions += extensions;
   }
 
   // Quiet-move futility precondition (consumed in the QUIET stage of
@@ -643,11 +639,11 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   if constexpr (USE_FUTILITY)
   {
     if (myMoves.checkers == 0
-      and depth <= FUTILITY_MAX_DEPTH
-      and !isMateScore(alpha))
+      and ns.depth <= FUTILITY_MAX_DEPTH
+      and !isMateScore(ns.alpha))
     {
       const Score staticEval = nodeStaticEval(pos, ns);
-      ns.quietFutile = (staticEval + FUTILITY_MARGIN * depth <= alpha);
+      ns.quietFutile = (staticEval + FUTILITY_MARGIN * ns.depth <= ns.alpha);
     }
   }
 
@@ -679,7 +675,7 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // (the TT is not cleared between moves).
   if constexpr (USE_TT) {
     if (!ns.aborted)
-      tt.recordPosition(pos.hashValue, depth, ply, ns.alpha, ns.hashf, bestMove);
+      tt.recordPosition(pos.hashValue, ns.depth, ns.ply, ns.alpha, ns.hashf, bestMove);
   }
 
   return ns.alpha;
@@ -687,8 +683,8 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
 
 // alphaBeta is declared in the header but only ever called from this TU, so
 // the two instantiations are named here rather than exposing the definition.
-template Score alphaBeta<true >(ChessBoard&, Depth, Score, Score, Ply, int, int, bool);
-template Score alphaBeta<false>(ChessBoard&, Depth, Score, Score, Ply, int, int, bool);
+template Score alphaBeta<true >(ChessBoard&, SearchContext);
+template Score alphaBeta<false>(ChessBoard&, SearchContext);
 
 Score
 rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
@@ -699,7 +695,7 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 
   pvArray[pvIndex] = NULL_MOVE;
 
-  NodeState ns{alpha, beta, depth, Ply(ply), pvIndex, 0};
+  NodeState ns{SearchContext{alpha, beta, depth, Ply(ply), pvIndex, 0}};
 
   for (size_t moveNo = 0; moveNo < myMoves.size(); ++moveNo)
   {
