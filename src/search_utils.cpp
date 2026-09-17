@@ -3,7 +3,7 @@
 #include "movegen.h"
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
-array<Varray<Move, 2>, MAX_PLY> killerMoves;
+array<Varray<Move, KILLER_ARRAY_SIZE>, MAX_PLY> killerMoves;
 array<array<array<int32_t, SQUARE_NB>, SQUARE_NB>, COLOR_NB> historyTable;
 
 void

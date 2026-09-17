@@ -100,6 +100,7 @@ enum Search
   RFP_MAX_DEPTH = 6,
   RAZOR_MAX_DEPTH = 3,
   FUTILITY_MAX_DEPTH = 4,
+  KILLER_ARRAY_SIZE = 2,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
   // How many SearchData::shouldStop() calls share one reading of the clock.

@@ -5,7 +5,7 @@
 
 
 extern Move pvArray[MAX_PV_ARRAY_SIZE];
-extern array<Varray<Move, 2>, MAX_PLY> killerMoves;
+extern array<Varray<Move, KILLER_ARRAY_SIZE>, MAX_PLY> killerMoves;
 
 // Butterfly history table, [color][from][to] — 2 * 64 * 64 * 4 B = 32 KB.
 // Records how often a *quiet* move produced a beta cutoff, weighted by the
