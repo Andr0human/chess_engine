@@ -720,6 +720,9 @@ search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer,
   clearKillers();
   clearHistory();
 
+  // Everything on the undo stack so far is game history; see threeMoveRepetition.
+  board.markSearchRoot();
+
   if (!generateMoves(board).anyMove())
   {
     writer << "Position has no legal moves! Discarding Search." << endl;

@@ -488,11 +488,20 @@ ChessBoard::threeMoveRepetition() const noexcept
   // two writers and both sit on a colour flip, each storing the hash *before* its
   // ply. So candidates are exactly the even offsets from the top, and stepping by
   // 2 from stackCounter - 2 halves the scan without dropping a possible match.
+  //
+  // A repeat of a position reached inside the search tree is a draw on its
+  // first recurrence: whoever steered into the cycle can steer into it again.
+  // A repeat of a pre-root game position is not — the opponent has not committed
+  // to that cycle and will just play something else — so it needs a genuine
+  // threefold. Counting it once scored lost positions as draws for the defender
+  // and scared the stronger side off lines that merely pass through an earlier
+  // position. The root's own hash sits at searchRootIndex and counts as history.
   for (int i = undoInfoStackCounter - 2; i >= last; i -= 2)
     if (hashValue == undoInfo[i].hash)
-        ++posCount;
+      if (i > searchRootIndex or ++posCount >= 2)
+        return true;
 
-  return posCount >= 1;
+  return false;
 }
 
 bool
@@ -568,6 +577,7 @@ ChessBoard::reset()
   csep = 0;
   hashValue = 0;
   undoInfoStackCounter = 0;
+  searchRootIndex = 0;
   color = Color::WHITE;
   boardWeight = 0;
 
