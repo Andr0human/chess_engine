@@ -465,11 +465,23 @@ alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pv
   // SearchData::extendPvFromTt() rebuild a *real* tail from the table.
   pvArray[pvIndex] = NULL_MOVE;
 
-  // Cheap repetition / 50-move draws — no movegen needed. Leaf nodes (depth <= 0)
-  // are handed off above and run the same test inside quiescenceSearch, where it
-  // sits after move generation so mate takes precedence over the 50-move rule.
-  if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
+  // Repetition / 50-move draws, before the TT probe and RFP: the hash carries no
+  // halfmove clock, so either could otherwise return a stale non-draw score for a
+  // drawn position. Leaf nodes (depth <= 0) are handed off above and run the same
+  // test inside quiescenceSearch.
+  //
+  // A repeated position cannot be terminal — every stored hash is one a move was
+  // played from — so repetition needs no movegen. The 50-move rule does: a mate
+  // delivered on the 100th half-move stands, so rule it out first. Rare enough
+  // that the full movegen here costs nothing.
+  if (pos.threeMoveRepetition())
     return VALUE_DRAW;
+
+  if (pos.fiftyMoveDraw())
+  {
+    const MoveList drawMoves = generateMoves(pos);
+    return (drawMoves.checkers and !drawMoves.anyMove()) ? checkmateScore(ply) : VALUE_DRAW;
+  }
 
   info.addNode();
 
