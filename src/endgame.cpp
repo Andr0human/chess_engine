@@ -26,9 +26,7 @@ kingBetweenQueens(const Square kingSq, const Bitboard queen1, const Bitboard que
          between(plt::upRightMasks[kingSq], plt::downLeftMasks[kingSq]);
 }
 
-// Color-relative ranks: relativeRank[color][r] is the r-th rank (1-8) counting
-// from color's own back rank, so the BLACK row mirrors to absolute rank 9-r.
-// Ranks are 1-based; index 0 is a NoSquares placeholder so call sites read naturally.
+// Ranks indexed relative to each side's home rank. Index 0 is unused.
 constexpr Bitboard relativeRank[COLOR_NB][9] = {
   { NoSquares, Rank8, Rank7, Rank6, Rank5, Rank4, Rank3, Rank2, Rank1 },  // BLACK
   { NoSquares, Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8 },  // WHITE
@@ -255,11 +253,7 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
      (passedPawnMasks[side][pawnSq] & emyKing)
   ) return true;
 
-  // Rook-pawn corner draw (oracle-mined with bucket-probing).
-  // With a rook pawn, if the defending king is closer to the queening corner than
-  // the attacking king by a safe margin, the attacker cannot evict it from the
-  // corner -- drawn. The margin is one square tighter when the pawn side is to
-  // move, since it gains a tempo (sideAdvantage == 1 => needs mdq - edq >= 2).
+  // Rook-pawn corner draw when the defending king can reach the queening corner.
   if (pawn & FileAH)
   {
     const Square queenSq = static_cast<Square>((side == WHITE ? 56 : 0) + pawnF);
@@ -276,7 +270,7 @@ template <>
 inline bool
 Endgame<Endgames::KPBK>(const ChessBoard& pos)
 {
-  // Look from side who has bishop
+  // Evaluate from the bishop side.
   const Color side2move = pos.color;
   const Color side = pos.count<WHITE, BISHOP>() ? WHITE : BLACK;
   const Color emySide = ~side;
@@ -303,16 +297,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
     Bitboard extEmyKingCapMask = 0;
 
-    // Hanging bishop. The rest of this block reasons about a bishop that is still
-    // on the board, so a bishop the pawn side can simply take is out of scope --
-    // defer to eval rather than claim the draw.
-    //
-    // Both qualifiers are load-bearing. Only the pawn side to move can execute
-    // the capture, and a bishop its own king defends cannot be taken by the bare
-    // king at all; without either test the guard fires on positions where nothing
-    // is actually hanging and costs 196,638 correctly-recognized draws inside the
-    // call gate. With them it is exactly inert there (the gate already drops every
-    // position it fires on) and still clears the whole 208,415 gate-off residue.
+    // If the bishop can be taken immediately, defer to search.
     if ((side2move == emySide) and
        ((bishop & plt::pawnCaptureMasks[emySide][pawnSq]) or
         (bishop & emyKingCapMask & ~kingCapMask)))
@@ -401,9 +386,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
   Bitboard cornerMask = pawnMask & Rank18;
   const int increment = int(side2move == side);
 
-  // Wrong-bishop rook-pawn draw: checked before the non-draw block below so a
-  // corner-held draw isn't pre-empted by the pawn being bishop/king-defended or
-  // ahead of the enemy king. With the wrong bishop the king can't be evicted.
+  // Wrong-bishop rook-pawn draw.
   if ((pawn & FileAH) and
       (emyKing & passedPawnMasks[side][pawnSq]) and
       ((side == WHITE ? emyKingR > kingR + increment : emyKingR < kingR - increment)
@@ -421,7 +404,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
       (!(plt::pawnMasks[side][pawnSq] & occupied) and (attackSquares<KING>(pawnSq + 8 * (2 * side - 1), 0) & myKing))
   ) return false;
 
-  // If pawn is attacked by enemy king and our king cannot support the pawn
+  // Pawn attacked by the enemy king without sufficient king support.
   if ((pawn & emyKingCapMask) and !(kingCapMask & attackSquares<KING>(pawnSq, 0) & ~emyKingCapMask)) {
     // If bishop is just above it
     if ((plt::pawnMasks[side][pawnSq] & bishop))
@@ -484,30 +467,11 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
     const int    daPromoDist  = chebyshevDistance(emyKingSq, promoSq);
     const int    pawnEdgeFile = std::min(pawnF, 7 - pawnF);
 
-    // Hanging queen -- the KPQK member of the guard family. Everything below
-    // reasons about a queen that stays on the board, so defer to eval when the
-    // defending king or pawn can just take it.
-    //
-    // Unlike the KPBK/KRKB/KPKN/KPRK guards this one carries neither qualifier:
-    // no side-to-move test and no defended-piece test. Measured, it does not
-    // need them -- adding both leaves the gated tallies bit-identical
-    // (242,454 / 136,604 / FALSE-DRAW 0) and recovers all of 32 draws gate-off,
-    // so the extra tests would be noise. The reason the qualifiers carry no
-    // weight here is that the queen side is a bare king: a queen its own king
-    // defends is still a queen for nothing, and the defender's king and pawn
-    // between them cover so little of the board that the unqualified form
-    // barely over-fires.
+    // If the queen can be taken immediately, defer to search.
     if (queen & (plt::kingMasks[kingSq] | plt::pawnCaptureMasks[side][pawnSq]))
       return false;
 
-    // Rook-/bishop-pawn fortress. With the pawn on the 7th and its own king
-    // holding the promotion square, the queen alone cannot make progress: an
-    // a/h or c/f pawn hands the defender the stalemate resource that a b/g or
-    // centre pawn lacks, so the win needs the attacking king -- and it is still
-    // six ranks away. The defender-to-move bishop-pawn case tolerates one more
-    // tempo of approach. The king may not sit *on* the promotion square of a
-    // rook pawn while the attacker is to move: there it blocks its own pawn
-    // with no flight square, and the queen mates instead of stalemating.
+    // Rook- and bishop-pawn fortress positions.
     if (pawnOnRank7 and (kingMask & pawn) and
        ((pawnEdgeFile == 0) or (pawnEdgeFile == 2)) and
         (dkPromoDist <= 1) and
@@ -543,7 +507,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
     // if pawn can promote,
     // opp (queen | king) cannot capture,
     // own king is not on promo square
-    // Condition-1 pre-check needed
+    // Condition 1 pre-check.
     if (sideAdvantage and
        pawnOnRank7 and
        kingNotOnPromoSq and
@@ -563,24 +527,13 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
           (chebyshevDistance(emyKingSq, queenSq) > 3)
       ) return false;
 
-      // The four filters below reject a position because the queen bears on the
-      // defending king along a file/diagonal/rank -- the skewer that wins the
-      // new queen after the pawn promotes. That test is purely geometric, so it
-      // also rejects positions where the skewer cannot be converted: with the
-      // defending king already on the promotion square's doorstep and the
-      // attacking king still out of range, there is no follow-up and the
-      // ending is drawn regardless of the alignment.
+      // Check for queen lines that can win the promoted queen.
       const bool queenLineDraw =
            (dkPromoDist == 1 and distanceBtwKings > daPromoDist)
         or (dkPromoDist == 1 and daPromoDist >= 4 and distanceBtwKings >= 4)
         or (dkPromoDist == 2 and daPromoDist >= 5 and distanceBtwKings >= 6);
 
-      // A skewer along a file or rank is far weaker than one along a diagonal:
-      // the promoted queen and the king sit on the same colour complex there,
-      // so the diagonal pin has no parry while the orthogonal one is met by
-      // interposing. With the king a knight's-move from the promotion square
-      // and the attacking king still four away, the orthogonal alignment is
-      // therefore not enough to win.
+      // Orthogonal queen lines require a stronger position than diagonal lines.
       const bool queenLineDrawOrthogonal =
            queenLineDraw
         or (dkPromoDist == 2 and daPromoDist >= 4);
@@ -593,10 +546,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
           return queenLineDrawOrthogonal;
       }
 
-      // King and promo square share the a1-h8 diagonal (file - rank constant).
-      // A bare `% 9` index test wrongly fires on file-wrapped differences that
-      // happen to be multiples of 9, which breaks colour symmetry (the index
-      // delta is not preserved under a vertical mirror).
+      // a1-h8 diagonal.
       if ((myKingF - myKingR) == (pawnF - (promoSq >> 3)))
       {
         Bitboard mask = side == WHITE ? plt::downLeftMasks[kingSq] : plt::upRightMasks[kingSq];
@@ -605,8 +555,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
           return queenLineDraw;
       }
 
-      // Same for the a8-h1 anti-diagonal (file + rank constant); `% 7` had the
-      // identical file-wrap false-positive bug.
+      // a8-h1 diagonal.
       if ((myKingF + myKingR) == (pawnF + (promoSq >> 3)))
       {
         Bitboard mask = side == WHITE ? plt::downRightMasks[kingSq] : plt::upLeftMasks[kingSq];
@@ -630,7 +579,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
       ) return true;
     }
 
-    // Condition-1 pre-check needed
+    // Condition 1 pre-check.
     if (sideAdvantage and
         (myKing & (relativeRank[side][8] & FileAH)) and
         pawnOnRank7 and
@@ -659,16 +608,8 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
        !(queenMask & (1ULL << toReachSq))
     ) return true;
 
-    // Pawn on the 7th, its own king beside the promotion square, the queen not
-    // yet bearing on that king, and the attacking king far away: the defence
-    // simply shuffles between the pawn and the promotion square, and the lone
-    // queen has no way to gain a tempo before its king arrives. The distance is
-    // manhattan, not chebyshev: what makes the position holdable is the total
-    // walk the attacking king still owes, so a diagonal approach must count as
-    // nearer than a straight one of the same chebyshev length.
-    //
-    // Oracle-mined with bucket-probing over the residual: ten PURE-DRAW buckets
-    // (4,655 draws, zero decided) forming one contiguous band in mdKK >= 5.
+    // Pawn on the 7th with the defending king near promotion and the attacking
+    // king too far away.
     if (sideAdvantage and pawnOnRank7 and
         (dkPromoDist == 1) and
        !(queenMask & myKing) and
@@ -730,8 +671,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   const int rookR    = rookSq >> 3;
   const int rookF    = rookSq   & 7;
 
-  // Every rule below is keyed on one of these five distances plus the two
-  // structural coordinates (kingMob, badCornerD) defined further down.
+  // Distances used by the KRKB draw rules.
   const int distBtwKings       = chebyshevDistance(kingSq   , emyKingSq);
   const int distBtwKingAndBish = chebyshevDistance(kingSq   , bishopSq );
   const int atkKingBishD       = chebyshevDistance(emyKingSq, bishopSq );
@@ -744,30 +684,14 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   const Bitboard emyKingMask = attackSquares< KING >(emyKingSq, 0);
   const Bitboard rookDiag    = attackSquares<BISHOP>(rookSq   , 0);
 
-  // Two different rook-to-bishop relations, and the rules below distinguish
-  // them: rookHitsBishop is the empty-board ray ("the bishop stands on a line
-  // the rook could work with"), rookOnBish the real attack through blockers.
+  // rookHitsBishop ignores blockers; rookOnBish uses the current position.
   const Bitboard rookNow    = attackSquares<ROOK>(rookSq, occupied);
   const bool rookHitsBishop = attackSquares<ROOK>(rookSq, 0) & bishop;
   const bool rookOnBish     = rookNow & bishop;
 
-  // ------------------------------------------------------------------
-  // Decided regions: bail out rather than claim a draw.
-  // ------------------------------------------------------------------
+  // Positions known to be decided.
 
-  // Pinned bishop the defence cannot save. The rook truly attacks the bishop
-  // and, with the bishop lifted, the same ray reaches the defending king --
-  // squares revealed by removing a piece lie strictly beyond it on the one ray
-  // it stood on, so this is exactly "rook -> bishop -> king, nothing between".
-  // A bishop pinned on a rank/file has no legal move whatsoever.
-  //
-  // With its king more than a move away from guarding it (> 2 => the king cannot
-  // even reach an adjacent square in one), the frozen bishop drops and the rook
-  // side is left with KRK -- decided. The side-to-move clause is the stalemate
-  // escape: with the DEFENDER to move and the enemy king two squares off, the
-  // defender can walk into the corner net and answer RxB with stalemate
-  // (8/8/8/8/8/8/k3bR2/2K5 b: Ka1! and Rxe2 is stalemate). Data-mined against
-  // the perfect KRKB oracle -- 29,716 decided positions, zero drawn.
+  // Pinned bishop that cannot be saved.
   const Bitboard rookXray = attackSquares<ROOK>(rookSq, occupied ^ bishop);
 
   if (rookOnBish and ((rookXray & ~rookNow) & king) and
@@ -775,13 +699,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
      (!defToMove or (distBtwKings > 2))
   ) return false;
 
-  // Hanging bishop -- the KRKB analogue of the KPBK guard. Everything below
-  // reasons about a bishop that stays on the board, so a bishop the rook side
-  // can simply take is out of scope: defer to eval instead of claiming the draw.
-  // Both qualifiers matter: only the rook side to move can execute the capture,
-  // and a bishop its own king defends is not worth taking. Measured over the
-  // full oracle: inert inside the call gate while clearing the whole
-  // 102,228-position gate-off residue, and it costs no gate-off draw.
+  // If the bishop can be taken immediately, defer to search.
   if (!defToMove and (rookMask & bishop) and !(kingMask & bishop))
     return false;
 
@@ -800,11 +718,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
       return false;
   }
 
-  // Bishop on its king's rank or file with the attacker to move: the alignment
-  // the rook wins against. Rank and file are the same rule read along the shared
-  // line, so they share one body -- perp is the coordinate ACROSS that line (the
-  // file when king and bishop share a rank, the rank when they share a file).
-  // The two cases are exclusive: matching both would put them on one square.
+  // Bishop aligned with its king on a rank or file.
   if (!defToMove and (distBtwKingAndBish > 2) and
      ((kingR == bishopR) or (kingF == bishopF)))
   {
@@ -823,10 +737,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
     ) return false;
   }
 
-  // ------------------------------------------------------------------
-  // Draw regions. Every rule below was data-mined against the perfect KRKB
-  // oracle and is FALSE-DRAW-free over the full 11.3M-position sweep.
-  // ------------------------------------------------------------------
+  // Known KRKB draw positions.
 
   const int kingEdgeD   = std::min(std::min(kingR, 7 - kingR),
                                    std::min(kingF, 7 - kingF));
@@ -834,17 +745,11 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
                                    std::min(bishopF, 7 - bishopF));
   const bool offRim = (kingEdgeD >= 1) and (bishopEdgeD >= 1);
 
-  // The classic KRKB defence rests on a colour match: a defending king standing
-  // on its own bishop's colour can be shielded by it, so the rook never gets the
-  // skewer that wins the piece.
+  // Whether the defending king is on the bishop's colour.
   const bool kingOnBishColour =
     bool(king & WhiteSquares) == bool(bishop & WhiteSquares);
 
-  // Philidor's colour rule as a coordinate: the corner that loses KRKB is the one
-  // whose colour matches the BISHOP's, so measure the defending king against those
-  // two squares. badCornerD == 7 is exactly "the king stands in the safe corner"
-  // -- from a good corner both bad ones are a full board away, and no other square
-  // reaches 7.
+  // Distance from the defending king to the bishop-coloured corners.
   const Bitboard badCorners =
     CornerSquares & ((bishop & WhiteSquares) ? WhiteSquares : BlackSquares);
 
@@ -852,56 +757,44 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
   for (Bitboard c = badCorners; c != 0; c &= c - 1)
     badCornerD = std::min(badCornerD, chebyshevDistance(kingSq, squareNo(c & -c)));
 
-  // Bishop with its own king: the rook cannot win a piece the king guards, so
-  // what decides these is how close the ATTACKING king has got and how far the
-  // kings stand apart. Ten mined boxes, ~1.0M draws.
+  // Draws where the bishop is protected by its king.
   if (distBtwKingAndBish <= 2)
   {
     const bool bishopBeside = distBtwKingAndBish == 1;
 
-    // Kings far apart -- the rook can never break in before the defence re-forms.
+    // Kings are too far apart for the rook to break through.
     if (distBtwKings > 4)
       return true;
 
-    // Neither piece on the rim and the attacking king not on top of them: the
-    // textbook held draw, and the single largest pure box the cube contains.
+    // Both pieces are away from the rim and the attacking king is not close.
     if (offRim and (atkKingBishD >= 3))
       return true;
 
     if (offRim and bishopBeside and (atkKingBishD == 2))
       return true;
 
-    // Attacking king still a long way off. Sole exception from range 5 out:
-    // attacker to move with the rook already on the bishop's line and the
-    // defending king pressed to the edge -- the trap-against-the-edge setup,
-    // and it wins (8 positions).
+    // Attacking king is far away, except for the edge-trap case.
     if ((atkKingBishD >= 5) and
        !(!defToMove and rookHitsBishop and (kingEdgeD == 0)))
       return true;
 
-    // One square nearer still holds on the defender's move with the rook off the
-    // bishop's line, or -- with the bishop two off -- when the king sits on the
-    // wrong colour for the attacker's net.
+    // Additional draw conditions at distance 4.
     if ((atkKingBishD == 4) and
        ((defToMove and !rookHitsBishop) or (!bishopBeside and !kingOnBishColour)))
       return true;
 
-    // Bishop guarded by its own king, away from the bad corners, attacking king
-    // at middle range: it cannot both approach and keep the rook useful.
+    // Bishop beside its king and away from the bad corners.
     if (bishopBeside and (badCornerD >= 2) and
        ((atkKingBishD == 4) or (atkKingBishD == 5) or
         (defToMove and (atkKingBishD == 3))))
       return true;
 
-    // Kings exactly four apart with the bishop two off -- off the rim, or with
-    // the colour mismatch working for the defence.
+    // Draw when the kings are four squares apart in the listed configurations.
     if (!bishopBeside and (distBtwKings == 4) and
        ((kingEdgeD >= 1) or (defToMove and !kingOnBishColour)))
       return true;
 
-    // Bishop right beside its king, off the rim, rook not yet on its line. The
-    // king-separation bound is asymmetric: with the attacker to move it wins a
-    // tempo at exactly 3, so it needs 4.
+    // Bishop beside its king and the rook is not attacking it.
     if (bishopBeside and (kingEdgeD >= 1) and !rookHitsBishop and
        (distBtwKings > 2 + !defToMove))
       return true;
@@ -910,10 +803,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
       return true;
   }
 
-  // A bishop three squares off is still close enough to shield -- provided the
-  // colour matches, or (defender to move, kings far apart) the rook is out of
-  // reach. At distKingBish 3 with the attacking king 5-7 away the wrong-colour
-  // half carries 6,844 decided positions while the right-colour half carries none.
+  // Draws with the bishop three squares from the defending king.
   if (distBtwKingAndBish == 3)
   {
     if (kingOnBishColour and !rookHitsBishop and (atkKingBishD > 3))
@@ -924,25 +814,17 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
       return true;
   }
 
-  // King off the rim, bishop loose but two clear of it in BOTH coordinates, and
-  // the attacking king far from the bishop.
+  // Loose bishop with both coordinates separated from the king.
   if ((kingEdgeD >= 1) and !rookHitsBishop and (atkKingBishD > 3) and
      (abs(kingR - bishopR) > 1) and (abs(kingF - bishopF) > 1))
     return true;
 
-  // The loose-bishop region indexed by the defending king's distance from the
-  // edge: well off the rim the mating net has nothing to press the king against.
-  // Ranges 4-5 are the exception and not noise -- close enough to help the rook
-  // trap the bishop, far enough that the defence cannot chase the king off.
+  // Draws based on the defending king's distance from the edge.
   if (defToMove and !rookOnBish and (kingEdgeD >= 2) and
      ((atkKingBishD == 2) or (atkKingBishD == 3) or (atkKingBishD >= 6)))
     return true;
 
-  // King at the rook's throat with the rook's own king out of reach: the rook
-  // must keep stepping away, so the attack never gets organised. Asymmetric in
-  // both coordinates -- a rook the king actually touches holds from 3 apart with
-  // the defender to move but needs 5 with the attacker to move (a free tempo to
-  // untangle), and at distance 2 the king is merely harassing. ~845k draws.
+  // Defending king is close to the rook while the attacking king is too far away.
   if (kingRookD == 1)
   {
     if (defToMove ? ((distBtwKings > 2) or (atkKingRookD > 1))
@@ -953,30 +835,19 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
           ((distBtwKings > 4) or (!rookHitsBishop and (atkKingRookD > 2))))
     return true;
 
-  // How many squares the defending king actually has. This is the coordinate the
-  // distance features could not express: the rook wins KRKB by confining the king
-  // and then squeezing, so a king whose field is still intact is a king the attack
-  // has not begun to work on. Squares are counted the way the king may really use
-  // them -- the rook's ray is taken THROUGH the king (a king does not shield
-  // itself), its own bishop is not a destination, and the rook is only edible when
-  // its own king does not defend it.
+  // Legal escape squares for the defending king.
   const Bitboard rookThruKing = attackSquares<ROOK>(rookSq, occupied ^ king);
   Bitboard kingEsc = kingMask & ~emyKingMask & ~bishop & ~rookThruKing;
   if (emyKingMask & rook) kingEsc &= ~rook;
 
   const int kingMob = popCount(kingEsc);
 
-  // ~850k draws, every one of them with the defender to move. The switch is not
-  // cosmetic: kingMob behaves as an exact LABEL rather than a threshold, because
-  // the intermediate values are the fields a rook has already started to cut
-  // down. 5 is an untouched rim king and 8 an untouched king off the rim, both
-  // clean -- while 4 and 6 carry thousands of decided positions.
+  // kingMob is used as a discrete draw classifier.
   if (defToMove)
   {
     switch (kingMob)
     {
-      // Boxed in, but still off the bad corners with the attacking king not yet
-      // arrived.
+      // Limited escape squares away from the bad corners.
       case 0: case 1: case 2:
         if ((distBtwKings >= 3) and (badCornerD >= 2) and (badCornerD <= 6))
           return true;
@@ -984,9 +855,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
           return true;
         break;
 
-      // Three squares: either tucked into the SAFE corner (badCornerD == 7, the
-      // textbook draw) or sitting in the bad one with the enemy king still too
-      // far to build the net.
+      // Three escape squares: safe-corner or distant-bad-corner cases.
       case 3:
         if ((badCornerD == 7) and (distBtwKings >= 3))
           return true;
@@ -999,7 +868,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
           return true;
         break;
 
-      // A rim king with its whole field still free.
+      // Defending king on the rim with all escape squares available.
       case 5:
         if ((distBtwKings >= 5) or
            ((distBtwKings == 4) and (badCornerD != 4)))
@@ -1008,13 +877,13 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
           return true;
         break;
 
-      // The awkward value -- a king one step off the rim with two squares gone.
+      // King one step from the rim with two escape squares removed.
       case 6:
         if (!rookOnBish and ((atkKingBishD >= 5) or (atkKingBishD == 2)))
           return true;
         break;
 
-      // Off the rim with essentially nothing taken from it.
+      // King away from the rim with most escape squares available.
       case 7:
         if (!rookOnBish)
           return true;
@@ -1037,11 +906,7 @@ template <>
 inline bool
 Endgame<Endgames::KPNK>(const ChessBoard& pos)
 {
-  // Look from the KNIGHT side -- the defender fighting to hold the draw against
-  // the passed pawn. Like KPQK this covers both material configs: the
-  // opposite-side KN-vs-KP case (each side one non-king man) carries the draw
-  // logic; same-side KPN-vs-K falls through to the terminal return false (trivial
-  // win -- a safe missed-draw gap for now).
+  // Evaluate from the knight side.
   const Color side2move = pos.color;
   const Color side    = pos.count<WHITE, KNIGHT>() ? WHITE : BLACK;   // knight (defender)
   const Color emySide = ~side;                                        // pawn (attacker)
@@ -1063,28 +928,13 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
 
     const int    pawnR = pawnSq >> 3;
     const int    pawnF = pawnSq  & 7;
-    // Pawn advancement counted from the ATTACKER's back rank: 2..7, higher = closer to promotion.
+    // Pawn rank relative to the attacking side.
     const int  pawnRel = (emySide == WHITE) ? pawnR + 1 : 8 - pawnR;
 
     Bitboard kingCapMask    = attackSquares<KING>(myKingSq , 0);
     Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
 
-    // Hanging knight -- the KPKN analogue of the KPBK guard, same two qualifiers:
-    // only the pawn side to move can execute the capture, and a knight its own
-    // king defends cannot be taken by the bare king at all.
-    //
-    // Unlike the KPBK and KRKB versions this one is NOT free gate-off. Bucketed
-    // against the oracle by (claiming rule, hanging), every non-hanging bucket is
-    // pure draw and the hanging ones hold all 20,533 gate-off FALSE-DRAWs -- but
-    // also 92,786 genuine draws, because rules 1/2/7/8 below are king-based and
-    // mostly survive losing the knight (they are 73-97% draw when it hangs; only
-    // rule 5, the knight-forks-the-promotion-square rule, is 94% decided and
-    // genuinely needs the knight). Splitting them apart needs a "drawn as bare
-    // KPK" test, which is a coverage project, not a correctness one.
-    //
-    // Shipped as-is because it is exactly inert inside the call gate (gated
-    // tallies bit-identical to no guard) and takes the gate-off FALSE-DRAW count
-    // to 0, trading a bug for a safe missed-draw gap.
+    // If the knight can be taken immediately, defer to search.
     if (!(defToMove) and
       ((knight & plt::pawnCaptureMasks[emySide][pawnSq]) or
       (knight & emyKingCapMask & ~kingCapMask))
@@ -1101,36 +951,23 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
     const auto legalKnightSquares = (plt::knightMasks[knightSq] &
       ~(attackSquares<KING>(emyKingSq, 0) | plt::pawnCaptureMasks[emySide][pawnSq])) != 0;
 
-    // --- Draw rules first: claim the known draws before any carve-out filter, so
-    // a filter can never steal a genuine draw from a rule below it. The
-    // hanging-knight guard above is the one deliberate exception -- see its note
-    // for what it costs the rules below. ---
+    // Known draw conditions.
 
-    // Defender king blockades the promotion square (any pawn rank): the pawn can
-    // never queen, so a held draw. Oracle-mined FALSE-DRAW-free.
+    // Defender king occupies the promotion square.
     if (defKingPromoDist == 0)
       return true;
 
-    // Unadvanced pawn with the defence in range: the pawn is still on the
-    // attacker's 2nd/3rd rank, the defender king is near the promotion square,
-    // and the king or knight is close enough to the pawn to blockade or win it.
-    // Oracle-mined FALSE-DRAW-free over the full KPKN sweep.
+    // Unadvanced pawn with the defending pieces close enough to hold.
     if (pawnRel <= 3 and defKingPromoDist <= 3 and
         std::min(defKingPawnDist, knightPawnDist) <= 3)
       return true;
 
-    // Defender to move, unadvanced non-rook pawn, and the knight has a safe
-    // (non-losing) move: the defender always has a holding move, so it holds the
-    // draw. Rook pawns are excluded -- there the knight can be trapped in the
-    // corner (the sibling bucket carries decided positions). Oracle-mined
-    // FALSE-DRAW-free.
+    // Defender to move with a safe knight move and a non-rook pawn.
     if (pawnRel <= 3 and defToMove and legalKnightSquares and not pawnOnFileAH)
       return true;
 
-    // Same holding pattern one rank further advanced (pawnRel 4), made safe by the
-    // rule-of-the-square: the defender king is inside the pawn's promotion square,
-    // so it catches the pawn. Without the king-in-square gate rank 4 leaks decided
-    // positions; with it the bucket is pure. Oracle-mined FALSE-DRAW-free.
+    // Same holding pattern one rank further advanced, with the king inside the
+    // rule of the square.
     if (pawnRel <= 4 and defToMove and legalKnightSquares and not pawnOnFileAH and kingInROS)
       return true;
 
@@ -1157,8 +994,7 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
      or (chebyshevDistance(emyKingSq, promoSq) == 4))
     ) return true;
 
-    // Everything else falls through: the pawn is advanced and the defence is not
-    // in a recognized holding pattern -- treat as decided and defer to search.
+    // Unrecognized positions are handled by search.
     return false;
   }
 
