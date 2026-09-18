@@ -76,20 +76,11 @@ class TestPosition
   { return fen; }
 };
 
-// Control-plane abort signal raised by the UCI `stop`/`quit` handlers (main
-// thread) and polled by the search worker via SearchData::shouldStop(). Lives
-// outside SearchData because std::atomic is non-copyable and `info` is
-// rebuilt by copy-assignment (`info = SearchData(...)`) on every search.
+// Set by the UCI thread and checked by the search thread.
 extern std::atomic<bool> searchStop;
 
-// Declared ahead of SearchData because its constructor calls this to seed the
-// root move order. A member body defined inline inside the class can't see a
-// namespace-scope name declared later in the file, so this block must stay
-// above the class.
-//
-// `useHistory` gates only the residual-QUIET history sort: pass false when the
-// caller already knows the stage will break on its first move (quiet futility),
-// so the sort isn't paid for a band nothing will read.
+// Orders moves for a search stage. History ordering can be disabled when the
+// caller knows the stage will be skipped.
 size_t
 orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply,
            size_t start = 0, bool useHistory = true);
@@ -335,7 +326,7 @@ class SearchData
   {
     const Move filteredMove = filter(m);
 
-    // Searched prefix only — the TT-reconstructed tail must not reach ordering.
+    // Only moves from the searched part of the PV affect move ordering.
     for (size_t i = 0; i < pvSearchedLen; i++) {
       if (filter(pvLine[i]) == filteredMove)
         return true;
