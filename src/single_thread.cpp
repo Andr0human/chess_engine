@@ -285,7 +285,8 @@ playSubsetMoves(
 
       if (is_type<MType::QUIET>(move))
       {
-        killerMoves[ns.ply].addKillerMove(move);
+        if constexpr (USE_KILLERS)
+          killerMoves[ns.ply].addKillerMove(move);
         if constexpr (USE_HISTORY)
         {
           updateHistory(pos.color, move, ns.depth);

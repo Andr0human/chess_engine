@@ -36,6 +36,7 @@ enum SearchFlag : bool
   USE_RAZOR = true,
   USE_FUTILITY = true,
   USE_HISTORY = true,
+  USE_KILLERS = false,
 
   // Penalize quiet moves that fail to cause a cutoff when a later quiet move
   // does. This helps distinguish consistently good moves from moves that only

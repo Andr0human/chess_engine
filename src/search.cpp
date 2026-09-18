@@ -95,11 +95,14 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
       --start;
   }
 
-  if (hasFlag(mTypes, MType::KILLER))
+  if constexpr (USE_KILLERS)
   {
-    for (size_t i = start; i < movesArray.size(); i++) {
-      if (killerMoves[ply].search(movesArray[i]))
-        std::swap(movesArray[i], movesArray[start++]);
+    if (hasFlag(mTypes, MType::KILLER))
+    {
+      for (size_t i = start; i < movesArray.size(); i++) {
+        if (killerMoves[ply].search(movesArray[i]))
+          std::swap(movesArray[i], movesArray[start++]);
+      }
     }
   }
 
