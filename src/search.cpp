@@ -100,7 +100,7 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
     if (hasFlag(mTypes, MType::KILLER))
     {
       for (size_t i = start; i < movesArray.size(); i++) {
-        if (killerMoves[ply].search(movesArray[i]))
+        if (killerMoves[ply].contains(filter(movesArray[i])))
           std::swap(movesArray[i], movesArray[start++]);
       }
     }

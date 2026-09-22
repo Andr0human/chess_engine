@@ -286,7 +286,15 @@ playSubsetMoves(
       if (is_type<MType::QUIET>(move))
       {
         if constexpr (USE_KILLERS)
-          killerMoves[ns.ply].addKillerMove(move);
+        {
+          // Killers are stored filtered, so lookups must filter too. Newest
+          // killer first; the oldest is evicted when the slots are full.
+          auto& killers = killerMoves[ns.ply];
+          if constexpr (KILLER_SWAP_TO_FRONT)
+            killers.addKiller(filter(move));
+          else if (!killers.contains(filter(move)))
+            killers.pushFront(filter(move));
+        }
         if constexpr (USE_HISTORY)
         {
           updateHistory(pos.color, move, ns.depth);
@@ -305,7 +313,7 @@ playSubsetMoves(
     // penalized.
     if constexpr (USE_HISTORY and USE_HISTORY_MALUS)
       if (is_type<MType::QUIET>(move))
-        ns.triedQuiets.add(move);
+        ns.triedQuiets.push(move);
 
     if (eval > ns.alpha) {
       ns.hashf = Flag::HASH_EXACT;

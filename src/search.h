@@ -267,7 +267,7 @@ class SearchData
       if (move == NULL_MOVE or !isLegalMoveForPosition(move, pos))
         break;
 
-      pvLine.add(move);
+      pvLine.push(move);
       pos.makeMove(move);
     }
   }
@@ -308,10 +308,10 @@ class SearchData
             orderMoves(pos, movesArray, MType::CHECK,     0, start, false);
 
     Move zeroMove = movesArray[0];
-    moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
+    moveEvals.push(make_pair(zeroMove, VALUE_ZERO));
 
     for (const Move move : movesArray)
-      moveNodes.add(make_pair(move, make_pair(0, 0)));
+      moveNodes.push(make_pair(move, make_pair(0, 0)));
   }
 
   // Read access to the validated principal variation (built by addResult;
@@ -377,12 +377,12 @@ class SearchData
     // Bounded by pvLine's capacity, not MAX_PV_ARRAY_SIZE: the root's row in
     // the triangular pvArray is only the first MAX_PLY entries, so a full-length
     // legal line would otherwise run off it into the ply-1 row (and the extra
-    // moves would be silently dropped by Varray::add anyway).
+    // moves would be silently dropped by Varray::push anyway).
     for (size_t i = 0; i < pvLine.capacity(); i++)
     {
       if (!isLegalMoveForPosition(pv[i], pos))
         break;
-      pvLine.add(pv[i]);
+      pvLine.push(pv[i]);
       pos.makeMove(pv[i]);
     }
 
@@ -396,7 +396,7 @@ class SearchData
     // know how much search each recovered move still has to be backed by.
     extendPvFromTt(pos, depth);
 
-    moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
+    moveEvals.push(make_pair(pv[0], eval * (2 * side - 1)));
   }
 
   void
@@ -562,7 +562,7 @@ class SearchData
     MoveArray movesArray;
 
     for (const auto& moveTime : moveNodes)
-      movesArray.add(moveTime.first);
+      movesArray.push(moveTime.first);
 
     return movesArray;
   }

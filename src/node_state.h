@@ -81,7 +81,7 @@ struct NodeState : SearchContext
   // a per-stage span would be free but a QUIET-stage cutoff would then never
   // penalize the killers that failed ahead of it, which are the node's
   // highest-information failures. Drained exactly once, by the move that cuts
-  // off. Fixed capacity: Varray::add() bounds-checks itself, so overflow
+  // off. Fixed capacity: Varray::push() bounds-checks itself, so overflow
   // silently stops recording -- it costs a penalty, never correctness.
   Varray<Move, 64> triedQuiets{};
 
