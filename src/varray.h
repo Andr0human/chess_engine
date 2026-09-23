@@ -11,10 +11,12 @@ using std::array;
 template <typename T, size_t Nm>
 class Varray {
   size_t Nc;
-  array<T, Nm> _array{};
+  array<T, Nm> _array;
 
   public:
 
+  // Deliberately user-provided: a defaulted ctor would make `Varray<...> x{}`
+  // zero-fill all Nm slots. Slots >= Nc are never read.
   Varray() : Nc(0) {}
 
   void
