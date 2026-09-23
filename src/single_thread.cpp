@@ -33,7 +33,11 @@ bulkCount(ChessBoard& pos, Depth depth)
 
 template <bool leafnode = 0>
 static Score
-quiescenceSearch(ChessBoard& pos, Score alpha, Score beta, Ply ply, int pvIndex)
+quiescenceSearch(ChessBoard& pos,
+                 Score alpha,
+                 Score beta,
+                 Ply ply,
+                 int pvIndex)
 {
   if (info.shouldStop())
     return TIMEOUT;
@@ -245,11 +249,14 @@ playHashMove(ChessBoard& pos, Move hashMove, NodeState& ns, Move& bestMove)
 
 template <bool PvNode>
 static Move
-playSubsetMoves(
-  ChessBoard& pos, const MoveList& myMoves, MoveArray& movesArray,
-  size_t start, size_t end,
-  NodeState& ns, Move bestMove, bool futilityStage = false
-)
+playSubsetMoves(ChessBoard& pos,
+                const MoveList& myMoves,
+                MoveArray& movesArray,
+                size_t start,
+                size_t end,
+                NodeState& ns,
+                Move bestMove,
+                bool futilityStage = false)
 {
   // Account for moves searched before this stage when calculating the move number
   // used by LMR.
@@ -329,11 +336,12 @@ playSubsetMoves(
 // PvNode comes first because the parameter pack must be last.
 template <bool PvNode, int moveGen, MType orderType, MType... rest>
 static Move
-playAllMoves(
-  ChessBoard& pos, MoveList& myMoves,
-  MoveArray movesArray, size_t start,
-  NodeState& ns, Move bestMove
-)
+playAllMoves(ChessBoard& pos,
+             MoveList& myMoves,
+             MoveArray movesArray,
+             size_t start,
+             NodeState& ns,
+             Move bestMove)
 {
   if constexpr (moveGen == 0)
     myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
@@ -347,7 +355,13 @@ playAllMoves(
   size_t end = orderMoves(pos, movesArray, orderType, ns.ply, start, useHistory);
 
   // Futility pruning is only applied to the final quiet-move stage.
-  bestMove = playSubsetMoves<PvNode>(pos, myMoves, movesArray, start, end, ns, bestMove,
+  bestMove = playSubsetMoves<PvNode>(pos,
+                                     myMoves,
+                                     movesArray,
+                                     start,
+                                     end,
+                                     ns,
+                                     bestMove,
                                      orderType == MType::QUIET);
 
   // Stop processing the remaining move stages after a timeout or cutoff.
@@ -355,7 +369,9 @@ playAllMoves(
     return bestMove;
 
   if constexpr (sizeof...(rest) > 0)
-    return playAllMoves<PvNode, moveGen + 1, rest...>(pos, myMoves, movesArray, end, ns, bestMove);
+    return playAllMoves<PvNode,
+                        moveGen + 1,
+                        rest...>(pos, myMoves, movesArray, end, ns, bestMove);
 
   return bestMove;
 }
@@ -401,7 +417,14 @@ alphaBeta(ChessBoard& pos, SearchContext ctx)
 
   if constexpr (USE_TT) {
     bool ttHit = false;
-    Score ttValue = tt.lookupPosition(pos.hashValue, ctx.depth, ctx.ply, ctx.alpha, ctx.beta, hashMove, ttHit);
+    Score ttValue = tt.lookupPosition(
+      pos.hashValue,
+      ctx.depth,
+      ctx.ply,
+      ctx.alpha,
+      ctx.beta,
+      hashMove,
+      ttHit);
 
     info.ttProbes++;
     if (ttHit) info.ttHits++;
@@ -538,8 +561,14 @@ alphaBeta(ChessBoard& pos, SearchContext ctx)
   // move number.
 
   MoveArray movesArray;
-  bestMove = playAllMoves<PvNode, 0, MType::CAPTURES, MType::PROMOTION, MType::CHECK, MType::PV, MType::KILLER, MType::QUIET>
-    (pos, myMoves, movesArray, 0, ns, bestMove);
+  bestMove = playAllMoves<PvNode,
+                          0,
+                          MType::CAPTURES,
+                          MType::PROMOTION,
+                          MType::CHECK,
+                          MType::PV,
+                          MType::KILLER,
+                          MType::QUIET>(pos, myMoves, movesArray, 0, ns, bestMove);
 
   // Do not store a partial result from an aborted search.
   if constexpr (USE_TT) {
@@ -589,7 +618,12 @@ rootAlphaBeta(ChessBoard& pos, Score alpha, Score beta, Depth depth)
 }
 
 void
-search(ChessBoard board, Depth mDepth, double search_time, std::ostream& writer, bool debug, bool emitUciInfo)
+search(ChessBoard board,
+       Depth mDepth,
+       double search_time,
+       std::ostream& writer,
+       bool debug,
+       bool emitUciInfo)
 {
   resetPvLine();
   clearKillers();
