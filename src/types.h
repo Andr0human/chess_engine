@@ -38,10 +38,6 @@ enum SearchFlag : bool
   USE_HISTORY = true,
   USE_KILLERS = true,
 
-  // Killer store policy. false: a killer already in the slots is left where it
-  // is (pushFront only new moves). true: a repeat killer is swapped to slot 0.
-  KILLER_SWAP_TO_FRONT = true,
-
   // Penalize quiet moves that fail to cause a cutoff when a later quiet move
   // does. This helps distinguish consistently good moves from moves that only
   // cause occasional cutoffs.

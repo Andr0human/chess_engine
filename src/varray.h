@@ -32,22 +32,6 @@ class Varray {
     _array[0] = val;
   }
 
-  // If val is already present, swap it with the first element (no insertion).
-  // Otherwise behave like pushFront.
-  void
-  addKiller(T val) noexcept
-  {
-    for (size_t i = 0; i < Nc; ++i)
-    {
-      if (_array[i] == val)
-      {
-        std::swap(_array[0], _array[i]);
-        return;
-      }
-    }
-    pushFront(val);
-  }
-
   size_t
   size() const noexcept
   { return Nc; }

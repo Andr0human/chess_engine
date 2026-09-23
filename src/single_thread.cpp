@@ -290,9 +290,7 @@ playSubsetMoves(
           // Killers are stored filtered, so lookups must filter too. Newest
           // killer first; the oldest is evicted when the slots are full.
           auto& killers = killerMoves[ns.ply];
-          if constexpr (KILLER_SWAP_TO_FRONT)
-            killers.addKiller(filter(move));
-          else if (!killers.contains(filter(move)))
+          if (!killers.contains(filter(move)))
             killers.pushFront(filter(move));
         }
         if constexpr (USE_HISTORY)
