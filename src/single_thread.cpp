@@ -338,7 +338,7 @@ template <bool PvNode, int moveGen, MType orderType, MType... rest>
 static Move
 playAllMoves(ChessBoard& pos,
              MoveList& myMoves,
-             MoveArray movesArray,
+             MoveArray& movesArray,
              size_t start,
              NodeState& ns,
              Move bestMove)
