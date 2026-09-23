@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <utility>
 
 using std::array;
 
@@ -16,8 +17,20 @@ class Varray {
 
   Varray() : Nc(0) {}
 
-  void add(T val) noexcept
+  void
+  push(T val) noexcept
   { if (Nc < Nm) _array[Nc++] = val; }
+
+  // Insert at the front, shifting the rest right. When full, the last element
+  // is dropped.
+  void
+  pushFront(T val) noexcept
+  {
+    static_assert(Nm >= 1, "pushFront needs at least one slot");
+    if (Nc < Nm) ++Nc;
+    for (size_t i = Nc - 1; i > 0; --i) _array[i] = _array[i - 1];
+    _array[0] = val;
+  }
 
   size_t
   size() const noexcept
@@ -63,21 +76,13 @@ class Varray {
   end() const noexcept
   { return _array.begin() + Nc; }
 
-  void
-  addKillerMove(T val) noexcept
-  {
-    if (_array[0] == val) return;
-    _array[1] = _array[0];
-    _array[0] = val;
-  }
-
-  void
-  clearKillerMoves() noexcept
-  { _array[0] = T{}; _array[1] = T{}; }
-
   bool
-  search(T val) const noexcept
-  { return _array[0] == val || _array[1] == val; }
+  contains(const T& val) const noexcept
+  {
+    for (const T& elem : *this)
+      if (elem == val) return true;
+    return false;
+  }
 };
 
 #endif

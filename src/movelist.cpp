@@ -36,7 +36,7 @@ MoveList::fillMoves(
     if (hasFlag(mt2, MType::CHECK) and ((1ULL << fp) & squaresThatCheckEnemyKing[ipt - 1]))
       move |= generateTypeBit<MType::CHECK>();
 
-    movesArray.add(move);
+    movesArray.push(move);
   }
 }
 
@@ -74,7 +74,7 @@ MoveList::fillKingMoves(
         move |= generateTypeBit<MType::CHECK>();
     }
 
-    movesArray.add(move);
+    movesArray.push(move);
   }
 }
 
@@ -110,7 +110,7 @@ MoveList::fillEnpassantPawns(const ChessBoard& pos, MoveArray& movesArray) const
         move |= generateTypeBit<MType::CHECK>();
     }
 
-    movesArray.add(move);
+    movesArray.push(move);
   }
 }
 
@@ -141,7 +141,7 @@ MoveList::fillShiftPawns(
     if (hasFlag(mt1, MType::CAPTURES))
       move |= Move(type_of(pos.pieceOnSquare(fp))) << 15;
 
-    movesArray.add(move);
+    movesArray.push(move);
   }
 }
 
@@ -206,17 +206,17 @@ MoveList::fillPawns(
       // a real promoSuppress always carries non-zero from|to bits.
       if ((moveB & 0xFFF) != (promoSuppress & 0xFFF))
       {
-        movesArray.add(moveQ);
-        movesArray.add(moveR);
-        movesArray.add(moveN);
-        movesArray.add(moveB);
+        movesArray.push(moveQ);
+        movesArray.push(moveR);
+        movesArray.push(moveN);
+        movesArray.push(moveB);
       }
       else
       {
-        if ((moveQ & 0xC0FFF) != promoSuppress) movesArray.add(moveQ);
-        if ((moveR & 0xC0FFF) != promoSuppress) movesArray.add(moveR);
-        if ((moveN & 0xC0FFF) != promoSuppress) movesArray.add(moveN);
-        if ((moveB & 0xC0FFF) != promoSuppress) movesArray.add(moveB);
+        if ((moveQ & 0xC0FFF) != promoSuppress) movesArray.push(moveQ);
+        if ((moveR & 0xC0FFF) != promoSuppress) movesArray.push(moveR);
+        if ((moveN & 0xC0FFF) != promoSuppress) movesArray.push(moveN);
+        if ((moveB & 0xC0FFF) != promoSuppress) movesArray.push(moveB);
       }
     }
     else
@@ -226,7 +226,7 @@ MoveList::fillPawns(
          or (fPos & squaresThatCheckEnemyKing[0]))
       ) move |= generateTypeBit<MType::CHECK>();
 
-      movesArray.add(move);
+      movesArray.push(move);
     }
   }
 }

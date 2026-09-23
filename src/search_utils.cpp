@@ -21,7 +21,7 @@ void
 clearKillers()
 {
   for (auto& slot : killerMoves)
-    slot.clearKillerMoves();
+    slot.clear();
 }
 
 void
