@@ -77,14 +77,26 @@ quiescenceSearch(ChessBoard& pos,
   // the parent's PV.
   pvArray[pvIndex] = NULL_MOVE;
 
-  // Recursive q-nodes probe before move generation, so a hit skips generateMoves,
+  // Check repetition and the 50-move rule at the qsearch entry, before the TT
+  // probe, since the table does not record the path. Deeper qsearch moves are
+  // captures or promotions, so neither draw condition can arise there. As in
+  // alphaBeta, a repeated position cannot be terminal, but a 50-move position
+  // can be mate, which outranks the draw.
+  if constexpr (leafnode)
+  {
+    if (pos.threeMoveRepetition())
+      return VALUE_DRAW;
+
+    if (pos.fiftyMoveDraw())
+    {
+      const MoveList drawMoves = generateMoves(pos);
+      return (drawMoves.checkers and !drawMoves.anyMove()) ? checkmateScore(ply) : VALUE_DRAW;
+    }
+  }
+
+  // Probe before move generation, so a hit skips generateMoves,
   // isTheoreticalDraw, the eval and the whole capture subtree under this node.
-  // Leaf q-nodes cannot probe this early: their repetition / 50-move test below
-  // depends on the path taken to get here and the table does not record one, so
-  // a cutoff jumped past that test would answer a drawn position with a score.
-  // Nothing of the sort can arise under a recursive node -- every move qsearch
-  // plays is a capture or a promotion, and both reset the halfmove clock.
-  if constexpr (USE_TT and !leafnode)
+  if constexpr (USE_TT)
   {
     const Score ttValue = qProbe(pos, alpha, beta, ply);
 
@@ -97,26 +109,8 @@ quiescenceSearch(ChessBoard& pos,
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
 
-  // Check repetition and the 50-move rule at the qsearch entry. Deeper qsearch
-  // moves are captures or promotions, so neither draw condition can arise there.
-  if constexpr (leafnode)
-  {
-    if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
-      return VALUE_DRAW;
-  }
-
   if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
-
-  // The leaf half of the probe above, placed where the path-dependent draw tests
-  // have already had their say.
-  if constexpr (USE_TT and leafnode)
-  {
-    const Score ttValue = qProbe(pos, alpha, beta, ply);
-
-    if (ttValue != VALUE_UNKNOWN)
-      return ttValue;
-  }
 
   info.addQNode();
 
