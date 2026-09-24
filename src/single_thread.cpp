@@ -305,20 +305,20 @@ playSubsetMoves(ChessBoard& pos,
           updateHistory(pos.color, move, ns.depth);
 
           // Penalize quiet moves that were searched but failed to cause a cutoff.
-          // History remains a quiet-move statistic.
+          // History remains a quiet-move statistic. movesArray[0, moveNo) is
+          // exactly this node's searched moves in search order, across all
+          // stages: every stage appends to the same array, orderMoves never
+          // touches the band before `start`, and no move in that band is ever
+          // skipped. A prune that `continue`s past a move would break this.
+          // The hash move is never in movesArray, so it escapes the malus.
           if constexpr (USE_HISTORY_MALUS)
-            for (Move tried : ns.triedQuiets)
-              penalizeHistory(pos.color, tried, ns.depth);
+            for (size_t i = 0; i < moveNo; ++i)
+              if (is_type<MType::QUIET>(movesArray[i]))
+                penalizeHistory(pos.color, movesArray[i], ns.depth);
         }
       }
       break;
     }
-
-    // Record the quiet move after the cutoff check so the winning move is not
-    // penalized.
-    if constexpr (USE_HISTORY and USE_HISTORY_MALUS)
-      if (is_type<MType::QUIET>(move))
-        ns.triedQuiets.push(move);
 
     if (eval > ns.alpha) {
       ns.hashf = Flag::HASH_EXACT;
@@ -378,7 +378,7 @@ playAllMoves(ChessBoard& pos,
 
 // Cache the static evaluation so multiple pruning heuristics can reuse it.
 static inline Score
-nodeStaticEval(ChessBoard& pos, NodeState& ns)
+nodeStaticEval(const ChessBoard& pos, NodeState& ns)
 {
   if (!ns.staticEval.has_value())
     ns.staticEval = evaluate(pos);

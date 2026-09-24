@@ -3,7 +3,6 @@
 #define NODE_STATE_H
 
 #include "types.h"
-#include "varray.h"
 #include <optional>
 
 
@@ -74,16 +73,6 @@ struct NodeState : SearchContext
   // Carried as state rather than re-testing shouldStop() at the store site so
   // the abort costs no extra clock read on the hot path.
   bool aborted = false;
-
-  // Quiet moves searched at this node that did NOT cause a cutoff -- the malus
-  // list. Filled across *all* stages (quiet checks, killers, residual quiets)
-  // because playAllMoves threads one NodeState& through the stage recursion;
-  // a per-stage span would be free but a QUIET-stage cutoff would then never
-  // penalize the killers that failed ahead of it, which are the node's
-  // highest-information failures. Drained exactly once, by the move that cuts
-  // off. Fixed capacity: Varray::push() bounds-checks itself, so overflow
-  // silently stops recording -- it costs a penalty, never correctness.
-  Varray<Move, 64> triedQuiets{};
 
   // The quiet-futility skip test, in one place because two sites must agree on
   // it: playSubsetMoves breaks out of the QUIET stage on it, and playAllMoves
