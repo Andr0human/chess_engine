@@ -483,16 +483,14 @@ ChessBoard::threeMoveRepetition() const noexcept
   int posCount = 0;
   int last = std::max(0, undoInfoStackCounter - halfmove);
 
-  // Only a ply with the same side to move can repeat this position, and every
-  // stack entry flips that side — undoInfoPush() and makeNullMove() are the only
-  // two writers and both sit on a colour flip, each storing the hash *before* its
-  // ply. So candidates are exactly the even offsets from the top, and stepping by
-  // 2 from stackCounter - 2 halves the scan without dropping a possible match.
+  // Only positions with the same side to move can repeat, so check every
+  // other stack entry.
   for (int i = undoInfoStackCounter - 2; i >= last; i -= 2)
     if (hashValue == undoInfo[i].hash)
-        ++posCount;
+      if (i > searchRootIndex or ++posCount >= 2)
+        return true;
 
-  return posCount >= 1;
+  return false;
 }
 
 bool
@@ -568,6 +566,7 @@ ChessBoard::reset()
   csep = 0;
   hashValue = 0;
   undoInfoStackCounter = 0;
+  searchRootIndex = 0;
   color = Color::WHITE;
   boardWeight = 0;
 

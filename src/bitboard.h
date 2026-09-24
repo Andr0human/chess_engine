@@ -44,6 +44,11 @@ class ChessBoard
 
   int undoInfoStackCounter;
 
+  // undoInfo index holding the search root's own hash (set by markSearchRoot).
+  // Entries above it were reached inside the search tree; entries below it are
+  // game history. threeMoveRepetition() treats the two differently.
+  int searchRootIndex;
+
   array<Piece, SQUARE_NB> board;
 
   array<Bitboard, 16> pieceBb;
@@ -122,6 +127,10 @@ class ChessBoard
 
   bool
   threeMoveRepetition() const noexcept;
+
+  void
+  markSearchRoot() noexcept
+  { searchRootIndex = undoInfoStackCounter; }
 
   bool
   fiftyMoveDraw() const noexcept;

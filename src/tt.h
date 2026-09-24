@@ -71,20 +71,16 @@ class ZobristHashKey
 
 class TranspositionTable
 {
-  // Entries per table -- always a power of two, so a slot is located with
-  // `hashValue & ttMask` instead of `hashValue % ttSize`. The mask only sees the
-  // low bits of the key, which costs nothing here: the Zobrist keys are
-  // mt19937_64 output, so every bit slice is as uniform as any other. What it
-  // buys is the 64-bit division that the modulo put on every probe and every
-  // store, against a table size the compiler cannot constant-fold.
+  // Number of entries in each table. Always a power of two, so ttMask can be
+  // used instead of modulo when calculating the table index.
   size_t ttSize = 0;
 
   // ttSize - 1. Zero while the table is unallocated, and zero is *not* a safe
   // mask -- it indexes slot 0 of a null pointer. Callers gate on USE_TT instead.
   size_t ttMask = 0;
 
-  ZobristHashKey *ttPrimary   = nullptr;
-  ZobristHashKey *ttSecondary = nullptr;
+  ZobristHashKey* ttPrimary   = nullptr;
+  ZobristHashKey* ttSecondary = nullptr;
 
   array<uint64_t, HASH_INDEXES_SIZE> hashIndex;
 
@@ -102,17 +98,15 @@ class TranspositionTable
   public:
   TranspositionTable() { }
 
-  // Seed the Zobrist key table. Needed for hashValue maintenance (repetition
-  // detection) independently of whether the TT itself is enabled, so it must
-  // be callable even when USE_TT is false. resize() also calls it.
+  // Initialize the Zobrist keys. This is needed even when the transposition
+  // table is disabled because the keys are also used for position hashing.
   void getRandomKeys() noexcept;
 
   explicit TranspositionTable(size_t mb)
   { resize(mb); }
 
-  // `mb` is clamped to [TT_MIN_MB, TT_MAX_MB] and then rounded down to the
-  // largest power-of-two entry count that fits in it. Reallocates both tables,
-  // so every stored entry is discarded, and re-seeds the Zobrist keys.
+  // Resize the tables using the configured minimum and maximum sizes.
+  // Existing entries are discarded and the Zobrist keys are regenerated.
   void
   resize(size_t mb = TT_DEFAULT_MB);
 
@@ -129,9 +123,8 @@ class TranspositionTable
   uint64_t
   hashKeyUpdate(int piece, int pos) const noexcept;
 
-  // `ply` is the storing/probing node's distance from the root. It is used only
-  // to rebase mate scores (which are root-relative on the search stack but must
-  // be node-relative in a table shared across paths) — non-mate evals ignore it.
+  // Store a position in the transposition table. ply is used to convert
+  // root-relative mate scores to node-relative scores.
   void
   recordPosition(uint64_t hashValue, Depth depth, Ply ply, Score eval, Flag flag, Move bestMove) noexcept;
 
@@ -169,16 +162,12 @@ class TranspositionTable
   Score
   lookupQuiescence(uint64_t hashValue, Ply ply, Score alpha, Score beta, bool& ttHit) const noexcept;
 
-  // Fetch a stored best move that is trustworthy enough to *display* as part of
-  // a principal variation. Returns NULL_MOVE unless the entry actually proved
-  // the move: HASH_EXACT (a fail-low entry's move was never proven best — it is
-  // just whatever was left standing) and searched to at least `minDepth`.
-  // Both those conditions are checked per table, so a primary entry that fails
-  // them still falls through to the secondary.
+  // Return a stored move suitable for extending the displayed PV.
+  // Returns NULL_MOVE unless the entry is an exact result and was searched
+  // to at least minDepth.
   Move
   probePvMove(uint64_t hashValue, Depth minDepth) const noexcept;
 };
-
 
 extern TranspositionTable tt;
 

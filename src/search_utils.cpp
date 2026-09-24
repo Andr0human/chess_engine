@@ -3,7 +3,7 @@
 #include "movegen.h"
 
 Move pvArray[MAX_PV_ARRAY_SIZE];
-array<Varray<Move, 2>, MAX_PLY> killerMoves;
+array<Varray<Move, KILLER_ARRAY_SIZE>, MAX_PLY> killerMoves;
 array<array<array<int32_t, SQUARE_NB>, SQUARE_NB>, COLOR_NB> historyTable;
 
 void
@@ -21,7 +21,7 @@ void
 clearKillers()
 {
   for (auto& slot : killerMoves)
-    slot.clearKillerMoves();
+    slot.clear();
 }
 
 void
@@ -51,13 +51,9 @@ penalizeHistory(Color c, Move move, Depth depth)
   const int malus = int(depth) * int(depth);
   int32_t& h = historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))];
 
-  // The mirror of the bonus is `-= malus + h*malus/MAX`, NOT `-= malus - ...`.
-  // Work the sign through: with h negative, `h*malus/MAX` is negative, so the
-  // `+` shrinks the decrement as h approaches -MAX_HISTORY (the asymptote the
-  // bonus form has at +MAX_HISTORY). Writing `-` instead makes the decrement
-  // *grow* the more negative h gets -- an unbounded runaway that eventually
-  // overflows int32 and, long before that, stops the ordering key from being
-  // comparable between moves. There is no compile error for getting it wrong.
+  // Use the same gravity update as the bonus, mirrored around zero.
+  // The '+' is intentional: as h becomes more negative, the malus decreases
+  // and approaches -MAX_HISTORY instead of growing without bound.
   h -= int32_t(malus + int(h) * malus / int(MAX_HISTORY));
 }
 
@@ -65,9 +61,8 @@ Score
 checkmateScore(Ply ply)
 { return -VALUE_MATE + (20 * ply); }
 
-// True when `score` encodes a forced mate rather than a normal evaluation.
-// The band must match checkmateScore()'s 20-points-per-ply step so every mate
-// in the 0..MAX_PLY range clears MATE_BOUND (15000).
+// Returns true if score represents a forced mate.
+// MATE_BOUND matches the mate-score range used by checkmateScore().
 bool
 isMateScore(Score score)
 { return __abs(score) >= int(MATE_BOUND); }

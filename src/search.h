@@ -76,20 +76,11 @@ class TestPosition
   { return fen; }
 };
 
-// Control-plane abort signal raised by the UCI `stop`/`quit` handlers (main
-// thread) and polled by the search worker via SearchData::shouldStop(). Lives
-// outside SearchData because std::atomic is non-copyable and `info` is
-// rebuilt by copy-assignment (`info = SearchData(...)`) on every search.
+// Set by the UCI thread and checked by the search thread.
 extern std::atomic<bool> searchStop;
 
-// Declared ahead of SearchData because its constructor calls this to seed the
-// root move order. A member body defined inline inside the class can't see a
-// namespace-scope name declared later in the file, so this block must stay
-// above the class.
-//
-// `useHistory` gates only the residual-QUIET history sort: pass false when the
-// caller already knows the stage will break on its first move (quiet futility),
-// so the sort isn't paid for a band nothing will read.
+// Orders moves for a search stage. History ordering can be disabled when the
+// caller knows the stage will be skipped.
 size_t
 orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType moveTypes, Ply ply,
            size_t start = 0, bool useHistory = true);
@@ -282,7 +273,7 @@ class SearchData
       if (move == NULL_MOVE or !isLegalMoveForPosition(move, pos))
         break;
 
-      pvLine.add(move);
+      pvLine.push(move);
       pos.makeMove(move);
     }
   }
@@ -323,10 +314,10 @@ class SearchData
             orderMoves(pos, movesArray, MType::CHECK,     0, start, false);
 
     Move zeroMove = movesArray[0];
-    moveEvals.add(make_pair(zeroMove, VALUE_ZERO));
+    moveEvals.push(make_pair(zeroMove, VALUE_ZERO));
 
     for (const Move move : movesArray)
-      moveNodes.add(make_pair(move, make_pair(0, 0)));
+      moveNodes.push(make_pair(move, make_pair(0, 0)));
   }
 
   // Read access to the validated principal variation (built by addResult;
@@ -341,7 +332,7 @@ class SearchData
   {
     const Move filteredMove = filter(m);
 
-    // Searched prefix only — the TT-reconstructed tail must not reach ordering.
+    // Only moves from the searched part of the PV affect move ordering.
     for (size_t i = 0; i < pvSearchedLen; i++) {
       if (filter(pvLine[i]) == filteredMove)
         return true;
@@ -392,12 +383,12 @@ class SearchData
     // Bounded by pvLine's capacity, not MAX_PV_ARRAY_SIZE: the root's row in
     // the triangular pvArray is only the first MAX_PLY entries, so a full-length
     // legal line would otherwise run off it into the ply-1 row (and the extra
-    // moves would be silently dropped by Varray::add anyway).
+    // moves would be silently dropped by Varray::push anyway).
     for (size_t i = 0; i < pvLine.capacity(); i++)
     {
       if (!isLegalMoveForPosition(pv[i], pos))
         break;
-      pvLine.add(pv[i]);
+      pvLine.push(pv[i]);
       pos.makeMove(pv[i]);
     }
 
@@ -411,7 +402,7 @@ class SearchData
     // know how much search each recovered move still has to be backed by.
     extendPvFromTt(pos, depth);
 
-    moveEvals.add(make_pair(pv[0], eval * (2 * side - 1)));
+    moveEvals.push(make_pair(pv[0], eval * (2 * side - 1)));
   }
 
   void
@@ -577,7 +568,7 @@ class SearchData
     MoveArray movesArray;
 
     for (const auto& moveTime : moveNodes)
-      movesArray.add(moveTime.first);
+      movesArray.push(moveTime.first);
 
     return movesArray;
   }

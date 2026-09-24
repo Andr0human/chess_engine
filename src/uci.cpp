@@ -149,7 +149,7 @@ decideSearchTime(long long sideTimeMs, long long sideIncMs)
   const double movesToGo =
       maxMoves - (((maxWeight - currentWeight) / 400.0) * 1.3);
 
-  double searchTime = ((timeLeft + increment) / movesToGo) + (0.6 * increment);
+  double searchTime = ((timeLeft + increment) / movesToGo) + (0.9 * increment);
 
   // Never spend more than 62% of the remaining clock on one move.
   searchTime = std::min(searchTime, 0.62 * timeLeft);

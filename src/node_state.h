@@ -3,17 +3,16 @@
 #define NODE_STATE_H
 
 #include "types.h"
-#include "varray.h"
 #include <optional>
 
 
 /**
- * Per-node search state shared across playAllMoves / playSubsetMoves /
- * playMove inside the alpha-beta recursion. `alpha` and `hashf` mutate as
- * moves improve the bound / trigger cutoffs; the rest are constant within
- * a node.
+ * The inputs a parent hands to alphaBeta: window, remaining depth, ply, PV row
+ * and extension budget. Small and trivially copyable -- passed by value down
+ * the recursion. Children are built with child(), which is the one place the
+ * negamax window flip (-beta, -alpha) and the ply / PV-row step are written.
  */
-struct NodeState
+struct SearchContext
 {
   Score alpha;
   Score beta;
@@ -21,11 +20,41 @@ struct NodeState
   Ply ply;
   int pvIndex;
   int numExtensions;
+  bool doNull = true;
 
   // NOTE: PV-ness is deliberately *not* stored here. It is a compile-time
   // property (`template <bool PvNode>` on alphaBeta and the play* helpers),
   // since a node is only ever handed its parent's PvNode or a literal false.
 
+  constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
+
+  // Context for a child searched at `childDepth` with this node's window
+  // [a, b] -- pass the window as seen from *this* side; the flip happens here.
+  // numExtensions is inherited as-is (post-extension when called after the
+  // extension policy has run), and doNull resets to true.
+  constexpr SearchContext
+  child(Depth childDepth, Score a, Score b) const noexcept
+  { return SearchContext{-b, -a, childDepth, ply + 1, pvNextIndex(), numExtensions, true}; }
+
+  constexpr SearchContext
+  withoutNull() const noexcept
+  {
+    SearchContext ctx = *this;
+    ctx.doNull = false;
+    return ctx;
+  }
+};
+
+
+/**
+ * Per-node search state shared across playAllMoves / playSubsetMoves /
+ * playMove inside the alpha-beta recursion. Extends the node's SearchContext:
+ * `alpha` and `hashf` mutate as moves improve the bound / trigger cutoffs,
+ * `depth` / `numExtensions` are bumped once by the extension policy; the rest
+ * are constant within a node.
+ */
+struct NodeState : SearchContext
+{
   Flag hashf = Flag::HASH_ALPHA;
 
   // Node static eval, computed at most once per node (lazy) and reused across
@@ -44,18 +73,6 @@ struct NodeState
   // Carried as state rather than re-testing shouldStop() at the store site so
   // the abort costs no extra clock read on the hot path.
   bool aborted = false;
-
-  // Quiet moves searched at this node that did NOT cause a cutoff -- the malus
-  // list. Filled across *all* stages (quiet checks, killers, residual quiets)
-  // because playAllMoves threads one NodeState& through the stage recursion;
-  // a per-stage span would be free but a QUIET-stage cutoff would then never
-  // penalize the killers that failed ahead of it, which are the node's
-  // highest-information failures. Drained exactly once, by the move that cuts
-  // off. Fixed capacity: Varray::add() bounds-checks itself, so overflow
-  // silently stops recording -- it costs a penalty, never correctness.
-  Varray<Move, 64> triedQuiets{};
-
-  constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
 
   // The quiet-futility skip test, in one place because two sites must agree on
   // it: playSubsetMoves breaks out of the QUIET stage on it, and playAllMoves

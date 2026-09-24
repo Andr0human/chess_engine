@@ -24,7 +24,7 @@ const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk
 const std::string ENGINE_NAME = "Elsa";
 const std::string ENGINE_VERSION = "3.0.0";
 
-enum SearchFlag: bool
+enum SearchFlag : bool
 {
   USE_TT = true,
   USE_LMR = true,
@@ -36,13 +36,11 @@ enum SearchFlag: bool
   USE_RAZOR = true,
   USE_FUTILITY = true,
   USE_HISTORY = true,
+  USE_KILLERS = true,
 
-  // History malus: penalize every quiet searched at a node that did NOT cut
-  // off, while a later quiet did. Without it the table only ever learns which
-  // moves are good, and two moves that have each cut off a few times are not
-  // comparable -- a quiet that cuts off once in ten visits reads the same as
-  // one that cuts off every time. Depends on USE_HISTORY; inert, not wrong,
-  // with it off.
+  // Penalize quiet moves that fail to cause a cutoff when a later quiet move
+  // does. This helps distinguish consistently good moves from moves that only
+  // cause occasional cutoffs.
   USE_HISTORY_MALUS = true,
 
   USE_QSEARCH_PROMO = true,
@@ -76,12 +74,12 @@ enum Search
 {
   HASH_INDEXES_SIZE = 855,
 
-  // Transposition-table size, in MB of *total* allocation (primary +
-  // secondary). Both tables hold the same number of 16-byte entries, so the
-  // allocation is always `entries * 32` bytes -- which makes every legal size a
-  // power-of-two MB, since the entry count is constrained to a power of two.
-  // A request that is not one is rounded *down* (100 -> 64), never up: rounding
-  // up would let a GUI asking for 3000 MB get 4096.
+  // Transposition-table size in MB, including both primary and secondary
+  // tables. Each entry is 16 bytes and both tables have the same number of
+  // entries, so the total allocation is entries * 32 bytes.
+  //
+  // Sizes that are not powers of two are rounded down (e.g. 100 -> 64).
+  // This prevents a request such as 3000 MB from allocating 4096 MB.
   TT_DEFAULT_MB = 64,
   TT_MIN_MB = 1,
   TT_MAX_MB = 4096,
@@ -90,47 +88,50 @@ enum Search
   MAX_PLY = 50,
   MAX_DEPTH = 40,
   LMR_LIMIT = 4,
-  // Saturation point of the butterfly history table. The gravity update
-  // (h += bonus - h*bonus/MAX_HISTORY) keeps every entry inside
-  // (-MAX_HISTORY, MAX_HISTORY) by construction, so there is no overflow sweep
-  // to schedule. Keep it inside int16 range if the table is ever narrowed.
+
+  // Maximum value used by the butterfly history gravity update.
+  // The update keeps history values within (-MAX_HISTORY, MAX_HISTORY).
   MAX_HISTORY = 16384,
+
   EXTENSION_LIMIT = 8,
   NMP_MIN_DEPTH = 3,
   RFP_MAX_DEPTH = 6,
   RAZOR_MAX_DEPTH = 3,
   FUTILITY_MAX_DEPTH = 4,
+  KILLER_ARRAY_SIZE = 2,
   TIMEOUT = 1112223334,
   DEFAULT_SEARCH_TIME = 1,
-  // How many SearchData::shouldStop() calls share one reading of the clock.
-  // Raising it past the point where the reads stop being a measurable cost buys
-  // nothing further, so this is a time-granularity choice, not a speed knob:
-  // it bounds how far past its budget a search can run before it notices.
+
+  // Number of shouldStop() calls between clock checks. This controls how often
+  // the search checks for timeouts.
   CLOCK_POLL_INTERVAL = 256,
+
   MAX_THREADS = 12,
-  // The triangular PV rows need (MAX_PLY * (MAX_PLY + 1)) / 2 words; the +1 is a
-  // spare slot that is never part of any row. quiescenceSearch writes
-  // pvArray[pvIndex] = NULL_MOVE unguarded, and the pvIndex it hands its children
-  // at the last row is exactly the triangular size -- one past the end. Unlike the
-  // alphaBeta overflow above, that is not fixable by sizing MAX_PLY: qsearch ply is
-  // bounded by capture-chain length, not by depth, so the last row is reachable for
-  // any MAX_PLY. The spare word absorbs that write instead of clobbering whatever
-  // follows pvArray in BSS (killerMoves).
+
+  // PV storage uses a triangular layout with one extra slot at the end.
+  // quiescenceSearch can write NULL_MOVE at the first position after the last
+  // row, so the extra slot prevents that write from overwriting the next array.
   MAX_PV_ARRAY_SIZE = (MAX_PLY * (MAX_PLY + 1)) / 2 + 1,
 
   NULL_MOVE = 0,
 };
 
-// alphaBeta has no ply bound of its own: depth falls by 1 per ply, but
-// searchExtension adds it back up to EXTENSION_LIMIT, so the deepest node a
-// root search can reach sits at ply MAX_DEPTH + EXTENSION_LIMIT. Both per-ply
-// tables are sized by MAX_PLY -- killerMoves has MAX_PLY entries, and the
-// triangular pvArray's row for ply k starts at MAX_PLY*k - k*(k-1)/2, which at
-// k == MAX_PLY is past the last row. Let ply reach MAX_PLY and the
-// PV-update movcpy runs with source = target - 1 and n = MAX_PLY - ply - 1 =
-// -1: an overlapping copy that never meets a NULL_MOVE terminator, smearing one
-// move through memory until it walks off the end and faults (0xC0000005 at root
-// depth 33, when MAX_PLY was 40). Keep the strict inequality.
+// alphaBeta does not have its own ply limit. Normally, depth decreases by 1
+// per ply, but searchExtension can add up to EXTENSION_LIMIT back to the
+// search. This means a root search can reach MAX_DEPTH + EXTENSION_LIMIT.
+//
+// The per-ply tables are sized using MAX_PLY. killerMoves has MAX_PLY entries,
+// while pvArray uses a triangular layout where the row for ply k starts at
+// MAX_PLY * k - k * (k - 1) / 2. At k == MAX_PLY, this points past the end of
+// the array.
+//
+// If ply reaches MAX_PLY, the PV update can also calculate a copy length of -1.
+// The overlapping copy then runs past the expected NULL_MOVE terminator and can
+// corrupt memory. This caused a 0xC0000005 access violation during a root search
+// at depth 33 when MAX_PLY was 40.
+//
+// Keep the strict inequality to ensure there is always room for the deepest
+// possible search ply.
 static_assert(MAX_PLY > MAX_DEPTH + EXTENSION_LIMIT,
               "MAX_PLY must exceed MAX_DEPTH + EXTENSION_LIMIT, or an "
               "extension-saturated search indexes pvArray out of bounds");
@@ -163,12 +164,8 @@ enum Value: Score
   VALUE_MATE = 16000,
   VALUE_INF  = 16001,
 
-  // Lower edge of the mate band. Mates are encoded ply-relative at 20 points
-  // per ply (checkmateScore = -VALUE_MATE + 20 * ply), so the deepest
-  // representable mate (ply == MAX_PLY) scores +/-15000. Any |score| at or
-  // above this is a forced mate, anything below is a normal eval. Single
-  // source of truth for isMateScore() and the RFP / razoring / futility
-  // mate-window gates.
+  // Scores at or above this value are treated as mate scores.
+  // Mate scores are adjusted by 20 points per ply.
   MATE_BOUND = VALUE_MATE - 20 * MAX_PLY,
 
   VALUE_UNKNOWN = 555666777,
@@ -235,19 +232,17 @@ enum class MType: uint8_t
   KILLER = 1 << 5,
 };
 
-/**
- * @brief Stages of the move-generation pipeline.
- *
- * GEN_METADATA - attacked-square bitboards, checkers count, in-check mask
- *                (and stamps the active color onto the MoveList).
- * GEN_MOVES    - the actual moves (pins, pawns, sliders/knights, king + castling).
- * GEN_CHECKS   - discovered-check / check-giving-square data (search-only).
- *
- * GEN_METADATA must run first; GEN_MOVES depends on it. GEN_CHECKS is independent
- * of GEN_MOVES and only reads the board.
- */
-enum MoveGenStage { GEN_METADATA, GEN_MOVES, GEN_CHECKS };
+enum MoveGenStage
+{
+  // Generates attack data and check information required by GEN_MOVES.
+  GEN_METADATA,
 
+  // Generates the actual moves. Requires GEN_METADATA.
+  GEN_MOVES,
+
+  // Generates check-related data used by search. Independent of GEN_MOVES.
+  GEN_CHECKS
+};
 
 // Toggle color
 constexpr Color

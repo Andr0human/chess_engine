@@ -8,6 +8,7 @@
 #include "search.h"
 #include "evaluation.h"
 #include "endgame.h"
+#include "node_state.h"
 
 
 typedef int (*ReductionFunc)(Depth depth, size_t move_no);
@@ -34,7 +35,7 @@ search(
 // declines TT cutoffs so it always writes its pvArray row.
 template <bool PvNode>
 Score
-alphaBeta(ChessBoard& pos, Depth depth, Score alpha, Score beta, Ply ply, int pvIndex, int numExtensions, bool doNull = true);
+alphaBeta(ChessBoard& pos, SearchContext ctx);
 
 
 Score
