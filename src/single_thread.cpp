@@ -31,6 +31,37 @@ bulkCount(ChessBoard& pos, Depth depth)
   return answer;
 }
 
+// Probe the table at a quiescent node. A q-node has no depth of its own, so it
+// asks for depth 0 -- a bar no stored entry can fail, since alphaBeta hands off
+// to qsearch at depth <= 0 and therefore never records below depth 1. That is
+// the point of probing here: a main-search score, backed by real depth, is
+// always usable at a q-node, and the q-node had no way to see it before.
+//
+// lookupQuiescence() rather than lookupPosition(): one tier, and no hash move.
+// Both restrictions are argued where it is declared.
+static Score
+qProbe(const ChessBoard& pos, Score alpha, Score beta, Ply ply)
+{
+  bool ttHit = false;
+
+  const Score ttValue =
+    tt.lookupQuiescence(pos.hashValue, ply, alpha, beta, ttHit);
+
+  info.qTtProbes++;
+  if (ttHit) info.qTtHits++;
+
+  // Counted here because the caller returns on the spot and never reaches its
+  // own addQNode(). A node the table answered is still a node visited, and
+  // leaving it out would make the nps figure climb for doing less work.
+  if (ttValue != VALUE_UNKNOWN)
+  {
+    info.addQNode();
+    info.qTtCutoffs++;
+  }
+
+  return ttValue;
+}
+
 template <bool leafnode = 0>
 static Score
 quiescenceSearch(ChessBoard& pos,
@@ -46,28 +77,69 @@ quiescenceSearch(ChessBoard& pos,
   // the parent's PV.
   pvArray[pvIndex] = NULL_MOVE;
 
+  // Check repetition and the 50-move rule at the qsearch entry, before the TT
+  // probe, since the table does not record the path. Deeper qsearch moves are
+  // captures or promotions, so neither draw condition can arise there. As in
+  // alphaBeta, a repeated position cannot be terminal, but a 50-move position
+  // can be mate, which outranks the draw.
+  if constexpr (leafnode)
+  {
+    if (pos.threeMoveRepetition())
+      return VALUE_DRAW;
+
+    if (pos.fiftyMoveDraw())
+    {
+      const MoveList drawMoves = generateMoves(pos);
+      return (drawMoves.checkers and !drawMoves.anyMove()) ? checkmateScore(ply) : VALUE_DRAW;
+    }
+  }
+
+  // Probe before move generation, so a hit skips generateMoves,
+  // isTheoreticalDraw, the eval and the whole capture subtree under this node.
+  if constexpr (USE_TT)
+  {
+    const Score ttValue = qProbe(pos, alpha, beta, ply);
+
+    if (ttValue != VALUE_UNKNOWN)
+      return ttValue;
+  }
+
   const MoveList myMoves = generateMoves(pos);
 
   if (!myMoves.anyMove())
     return myMoves.checkers ? checkmateScore(ply) : VALUE_ZERO;
-
-  // Check repetition and the 50-move rule at the qsearch entry. Deeper qsearch
-  // moves are captures or promotions, so neither draw condition can arise there.
-  if constexpr (leafnode)
-  {
-    if (pos.threeMoveRepetition() or pos.fiftyMoveDraw())
-      return VALUE_DRAW;
-  }
 
   if (isTheoreticalDraw(pos))
     return VALUE_DRAW;
 
   info.addQNode();
 
+  // The window this node was handed, kept because `alpha` is about to be raised
+  // by the stand-pat and the bound flag has to be read against the original.
+  const Score origAlpha = alpha;
+
+  // A node in check is not stored. Its stand-pat is evaluate() on a position
+  // where the side to move may be mated next ply, and the move list it searches
+  // is captures only -- neither the score nor the refutation means what a
+  // reader would take it to mean. Confined to one path that is merely
+  // imprecise; published to the table it becomes wrong everywhere.
+  const bool storable = USE_TT and !myMoves.checkers;
+
+  Move bestQMove = NULL_MOVE;
+
+  const auto qStore = [&] (Score eval, Flag flag, Move move)
+  {
+    if (storable)
+      tt.recordQuiescence(pos.hashValue, ply, eval, flag, move);
+  };
+
   Score standPat = evaluate(pos);
 
   if (standPat >= beta)
+  {
+    qStore(beta, Flag::HASH_BETA, NULL_MOVE);
     return beta;
+  }
 
   // int BIG_DELTA = 925;
   // if (standPat < alpha - BIG_DELTA) return alpha;
@@ -79,7 +151,13 @@ quiescenceSearch(ChessBoard& pos,
   const bool promoExists = USE_QSEARCH_PROMO and myMoves.exists<MType::PROMOTION>(pos);
 
   if (!myMoves.exists<MType::CAPTURES>(pos) and !promoExists)
+  {
+    // Nothing to search, so the stand-pat *is* this node's value, not a floor
+    // under it -- exact whenever it beat the incoming alpha, a fail-low
+    // otherwise.
+    qStore(alpha, alpha > origAlpha ? Flag::HASH_EXACT : Flag::HASH_ALPHA, NULL_MOVE);
     return alpha;
+  }
 
   MoveArray movesArray;
   myMoves.getMoves<MType::CAPTURES>(pos, movesArray);
@@ -109,11 +187,16 @@ quiescenceSearch(ChessBoard& pos,
     if (info.shouldStop())
       return TIMEOUT;
 
-    if (score >= beta) return beta;
+    if (score >= beta)
+    {
+      qStore(beta, Flag::HASH_BETA, filter(qMove));
+      return beta;
+    }
 
     if (score > alpha)
     {
       alpha = score;
+      bestQMove = filter(qMove);
 
       if (ply < MAX_PLY)
       {
@@ -123,6 +206,13 @@ quiescenceSearch(ChessBoard& pos,
       }
     }
   }
+
+  // Falling out of the loop: exact if a move beat the incoming alpha, otherwise
+  // everything searched failed low and alpha is only an upper bound. The list
+  // orderCaptures() pruned is not a hole in that -- the moves it dropped are the
+  // SEE-losing ones qsearch declines to search at all, so this is the same value
+  // the node would have returned with no table in play.
+  qStore(alpha, alpha > origAlpha ? Flag::HASH_EXACT : Flag::HASH_ALPHA, bestQMove);
 
   return alpha;
 }
@@ -727,6 +817,14 @@ search(ChessBoard board,
     writer << "TT: probes=" << info.ttProbes
            << " hits=" << info.ttHits << " (" << std::fixed << std::setprecision(1) << hitRate << "%)"
            << " cutoffs=" << info.ttCutoffs << " (" << ttCutRate << "% of hits)" << endl;
+
+    double qHitRate = info.qTtProbes
+      ? 100.0 * double(info.qTtHits) / double(info.qTtProbes) : 0.0;
+    double qCutRate = info.qTtHits
+      ? 100.0 * double(info.qTtCutoffs) / double(info.qTtHits) : 0.0;
+    writer << "TT(q): probes=" << info.qTtProbes
+           << " hits=" << info.qTtHits << " (" << qHitRate << "%)"
+           << " cutoffs=" << info.qTtCutoffs << " (" << qCutRate << "% of hits)" << endl;
 
     double cutoffRate = info.hashMoveInList
       ? 100.0 * double(info.hashMoveCutoffs) / double(info.hashMoveInList) : 0.0;
