@@ -16,10 +16,12 @@
 // before/after and the tuned weights. It does NOT overwrite the engine's defaults —
 // the tuned values are printed for the user to paste in deliberately.
 //
-//   elsa tune pst [data <path> | --all [dir <folder>]] [iters <n>] [free]
+//   elsa tune pst [data <path> | --all [dir <folder>]] [tables <list>] [iters <n>] [free]
 //
-// Tunes the endgame piece-square tables by gradient descent, holding the weights fixed,
-// and prints them as C++ tables. `free` lets each table's mean drift (material).
+// Tunes piece-square tables by gradient descent, holding the weights and every other
+// table fixed, and prints them as C++ tables. `tables` is a comma-separated list such as
+// queenMg,queenEg, where mg and eg mean all six of that phase; the default is eg.
+// `free` lets each table's mean drift (material).
 void
 tuneEval(const std::vector<std::string>& args);
 

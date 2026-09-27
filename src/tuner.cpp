@@ -375,51 +375,76 @@ listDatasets(const string& dirArg)
 }
 
 // ---------------------------------------------------------------------------------------
-// Endgame piece-square tables: elsa tune pst [data <path> | --all [dir <folder>]]
-//                                            [iters <n>] [free]
+// Piece-square tables: elsa tune pst [data <path> | --all [dir <folder>]] [tables <list>]
+//                                    [iters <n>] [free]
 //
 // Coordinate descent can't move hundreds of table entries one probe at a time, so the
 // tables get full-batch gradient descent (Adam) instead, with every weight and every
 // other term held fixed. A position's eval is linear in the entries,
 //
-//   eval = fixed + (1 - phase) * pieceTableWeightEg * sum(count * entry),
+//   eval = fixed + phase       * pieceTableWeightMg * sum(count * mgEntry)
+//                + (1 - phase) * pieceTableWeightEg * sum(count * egEntry),
 //
-// so each position is cached as `fixed` plus a sparse list of (entry, count) features.
-// The model skips evaluate()'s truncation of the endgame sum, which is under 1 cp.
+// where the sums run over the tables being tuned and `fixed` is the rest of the eval,
+// tables left out included. Each position is cached as `fixed` plus a sparse list of
+// (entry, count) features. evaluate() truncates each phase's sum to a Score; the model
+// skips that for a phase with a tuned table, which is under 1 cp.
 // ---------------------------------------------------------------------------------------
 
-// Each piece's table is tuned with its files folded (a = h, b = g, c = f, d = e): 32
-// entries, rank * 4 + folded file, at (pt - PAWN) * 32 in the parameter vector.
-constexpr int PST_TYPES  = KING - PAWN + 1;
-constexpr int PST_HALF   = 32;
-constexpr int PST_PARAMS = PST_TYPES * PST_HALF;
+// Each table is tuned with its files folded (a = h, b = g, c = f, d = e): 32 entries,
+// rank * 4 + folded file. The parameter vector holds the six midgame tables and then the
+// six endgame tables, in PieceType order.
+constexpr int PST_MG      = 0;
+constexpr int PST_EG      = 1;
+constexpr int PST_TYPES   = KING - PAWN + 1;
+constexpr int PST_TABLES  = 2 * PST_TYPES;
+constexpr int PST_ENTRIES = 32;
+constexpr int PST_PHASE   = PST_TYPES  * PST_ENTRIES;  // one phase's tables
+constexpr int PST_PARAMS  = PST_TABLES * PST_ENTRIES;
 
 using PstParams = array<double, PST_PARAMS>;
+using PstTables = array<bool, PST_TABLES>;  // which tables are tuned
 
+static constexpr array<const char*, PST_TABLES> PST_NAMES = {
+  "pawnMg", "bishopMg", "knightMg", "rookMg", "queenMg", "kingMg",
+  "pawnEg", "bishopEg", "knightEg", "rookEg", "queenEg", "kingEg"
+};
+
+constexpr int
+pstTable(int phase, PieceType pt)
+{ return phase * PST_TYPES + (pt - PAWN); }
+
+constexpr PieceType
+pstTableType(int table)
+{ return PieceType(table % PST_TYPES + PAWN); }
+
+// The entry's index within one phase's tables; the endgame entry is PST_PHASE further on.
 constexpr int
 pstParam(PieceType pt, int whiteSq)
 {
   const int file = whiteSq & 7;
-  return (pt - PAWN) * PST_HALF + (whiteSq >> 3) * 4 + std::min(file, 7 - file);
+  return (pt - PAWN) * PST_ENTRIES + (whiteSq >> 3) * 4 + std::min(file, 7 - file);
 }
 
 struct PstFeature
 {
-  uint8_t param;
+  uint8_t param;  // pstParam(): the same entry in both phases
   int8_t  count;  // White's pieces on the entry minus Black's (on the mirrored square)
 };
 
 struct PstEntry
 {
-  float    fixed;    // the eval without the endgame tables
+  float    fixed;    // the eval without the tuned tables
+  float    mgScale;  // phase * pieceTableWeightMg
   float    egScale;  // (1 - phase) * pieceTableWeightEg
   float    result;
   uint32_t first;    // this position's features are features[first, first + size)
   uint8_t  size;
 };
 
-// One dataset's slice of PstData. `occurrences` sums (1 - phase) over every piece that
-// stands on each entry; it weights the table means that centreTables() holds at zero.
+// One dataset's slice of PstData. `occurrences` sums the phase weight (phase for a
+// midgame entry, 1 - phase for an endgame one) over every piece that stands on each
+// entry; it weights the table means that centreTables() holds in place.
 struct PstRange
 {
   string    name;
@@ -434,33 +459,81 @@ struct PstData
   vector<PstRange>   ranges;
 };
 
+// `list` is comma-separated table names (queenMg, pawnEg, ...), where `mg` and `eg` stand
+// for all six of that phase. Empty means `eg`. Returns false on an unknown name.
 bool
-appendPstDataset(PstData& data, const string& path, const string& name)
+parsePstTables(const string& list, PstTables& tuned)
+{
+  tuned = {};
+
+  for (const string& token : utils::split(list.empty() ? "eg" : list, ','))
+  {
+    if (token.empty()) continue;
+
+    bool known = false;
+    for (int t = 0; t < PST_TABLES; t++)
+    {
+      const int phase = t / PST_TYPES;
+      if (token == PST_NAMES[t] || (token == "mg" && phase == PST_MG) || (token == "eg" && phase == PST_EG))
+        tuned[t] = known = true;
+    }
+
+    if (!known)
+    {
+      cout << "Unknown table: " << token << " (use pawnMg ... kingEg, mg or eg).\n";
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool
+tunesPhase(const PstTables& tuned, int phase)
+{
+  for (int pt = PAWN; pt <= KING; pt++)
+    if (tuned[pstTable(phase, PieceType(pt))]) return true;
+  return false;
+}
+
+bool
+appendPstDataset(PstData& data, const string& path, const string& name, const PstTables& tuned)
 {
   PstRange range;
   range.name  = name;
   range.begin = data.entries.size();
 
+  const bool tuneMg = tunesPhase(tuned, PST_MG);
+  const bool tuneEg = tunesPhase(tuned, PST_EG);
+
   const bool ok = readDataset(path, [&](const ChessBoard& pos, const EvalComponents& ec, double result)
   {
-    // evaluate() truncates the midgame sum to a Score; the endgame tables don't touch it.
-    const PhaseSums sums     = phaseSumsFromComponents(ec, evalWeights);
-    const float     mgScore  = float(Score(sums.mg));
-    const float     egRest   = sums.eg - evalWeights.pieceTableWeightEg * ec.ptEg;
-    const float     egWeight = 1 - ec.phase;
+    const float  mgWeight = ec.phase;
+    const float  egWeight = 1 - ec.phase;
+    const size_t first    = data.features.size();
 
-    const size_t first = data.features.size();
+    // The tuned tables' current share of the piece-square sums, White-relative.
+    Score tunedMg = 0, tunedEg = 0;
 
     for (int sq = 0; sq < SQUARE_NB; sq++)
     {
       const Piece p = pos.pieceOnSquare(Square(sq));
       if (p == NO_PIECE) continue;
 
+      const PieceType pt = type_of(p);
+      const bool      mg = tuned[pstTable(PST_MG, pt)];
+      const bool      eg = tuned[pstTable(PST_EG, pt)];
+      if (!mg && !eg) continue;
+
+      if (mg) tunedMg += pieceSquareTable[p][sq].mg;
+      if (eg) tunedEg += pieceSquareTable[p][sq].eg;
+
       const bool   white = color_of(p) == WHITE;
-      const int    param = pstParam(type_of(p), white ? sq : sq ^ 56);
+      const int    param = pstParam(pt, white ? sq : sq ^ 56);
       const int8_t sign  = white ? 1 : -1;
 
-      range.occurrences[param] += egWeight;
+      range.occurrences[param]             += mgWeight;
+      range.occurrences[PST_PHASE + param] += egWeight;
 
       // A second piece on the same folded entry merges into the first; a white and a
       // black piece on mirrored squares cancel out.
@@ -474,8 +547,16 @@ appendPstDataset(PstData& data, const string& path, const string& name)
                                        [](const PstFeature& f) { return f.count == 0; }),
                         data.features.end());
 
+    // A phase with no tuned table keeps evaluate()'s truncation, so it stays exact.
+    const PhaseSums sums   = phaseSumsFromComponents(ec, evalWeights);
+    const float     mgRest = tuneMg ? sums.mg - evalWeights.pieceTableWeightMg * float(tunedMg)
+                                    : float(Score(sums.mg));
+    const float     egRest = tuneEg ? sums.eg - evalWeights.pieceTableWeightEg * float(tunedEg)
+                                    : float(Score(sums.eg));
+
     data.entries.push_back({
-      ec.phase * mgScore + egWeight * egRest,
+      mgWeight * mgRest + egWeight * egRest,
+      mgWeight * evalWeights.pieceTableWeightMg,
       egWeight * evalWeights.pieceTableWeightEg,
       float(result),
       uint32_t(first),
@@ -488,23 +569,38 @@ appendPstDataset(PstData& data, const string& path, const string& name)
   return ok;
 }
 
-// The engine's current endgame tables, folded. Only the king has one today, and it is
-// symmetric, so folding loses nothing.
+// The engine's current tables, folded, with every table left out at zero (its value is
+// in `fixed`). Folding changes a table that isn't left-right symmetric, so those are named.
 PstParams
-currentPstParams()
+startingPstParams(const PstTables& tuned)
 {
   PstParams theta = {}, squares = {};
 
-  for (int pt = PAWN; pt <= KING; pt++)
+  for (int t = 0; t < PST_TABLES; t++)
+  {
+    if (!tuned[t]) continue;
+
+    const PieceType pt    = pstTableType(t);
+    const int       base  = t / PST_TYPES * PST_PHASE;
+    const auto&     row   = pieceSquareTable[make_piece(WHITE, pt)];
+    bool            folds = true;
+
     for (int sq = 0; sq < SQUARE_NB; sq++)
     {
-      const int param = pstParam(PieceType(pt), sq);
-      theta[param]   += pieceSquareTable[make_piece(WHITE, PieceType(pt))][sq].eg;
-      squares[param] += 1;
+      const Score value = t / PST_TYPES == PST_MG ? row[sq].mg : row[sq].eg;
+      const Score other = t / PST_TYPES == PST_MG ? row[sq ^ 7].mg : row[sq ^ 7].eg;
+
+      theta  [base + pstParam(pt, sq)] += value;
+      squares[base + pstParam(pt, sq)] += 1;
+      folds = folds && value == other;
     }
 
+    if (!folds)
+      cout << "Note: " << PST_NAMES[t] << " isn't left-right symmetric; it starts from its folded average.\n";
+  }
+
   for (int j = 0; j < PST_PARAMS; j++)
-    theta[j] /= squares[j];
+    if (squares[j] > 0) theta[j] /= squares[j];
 
   return theta;
 }
@@ -512,11 +608,15 @@ currentPstParams()
 double
 pstEval(const PstData& data, const PstEntry& e, const PstParams& theta)
 {
-  double sum = 0.0;
+  double mg = 0.0, eg = 0.0;
   for (uint32_t k = e.first; k < e.first + e.size; k++)
-    sum += data.features[k].count * theta[data.features[k].param];
+  {
+    const PstFeature& f = data.features[k];
+    mg += f.count * theta[f.param];
+    eg += f.count * theta[PST_PHASE + f.param];
+  }
 
-  return e.fixed + e.egScale * sum;
+  return e.fixed + e.mgScale * mg + e.egScale * eg;
 }
 
 double
@@ -536,63 +636,84 @@ pstMse(const PstData& data, const PstRange& r, double K, const PstParams& theta)
   return total / double(end - begin);
 }
 
-// The king is left out of both helpers below: every position has one king a side, so a
-// shift of the king's table cancels and its mean has no gradient to begin with.
+// Each table's occurrence-weighted mean: how much it adds to the piece's value on average
+// over the data, in table units (before pieceTableWeight).
+array<double, PST_TABLES>
+tableMeans(const PstParams& theta, const PstParams& occurrences)
+{
+  array<double, PST_TABLES> means = {};
+
+  for (int t = 0; t < PST_TABLES; t++)
+  {
+    double sum = 0.0, weight = 0.0;
+    for (int j = t * PST_ENTRIES; j < (t + 1) * PST_ENTRIES; j++)
+    {
+      sum    += theta[j] * occurrences[j];
+      weight += occurrences[j];
+    }
+    means[t] = weight > 0.0 ? sum / weight : 0.0;
+  }
+
+  return means;
+}
+
+// Both helpers below touch only the tuned tables, and never the king's: every position
+// has one king a side, so a shift of a king table cancels and its mean has no gradient.
 
 // Removes the part of each table's gradient along its occurrence vector, the direction
 // that would change what the piece is worth on average rather than where it stands.
 void
-removeMeanDirection(PstParams& grad, const PstParams& occurrences)
+removeMeanDirection(PstParams& grad, const PstParams& occurrences, const PstTables& tuned)
 {
-  for (int pt = PAWN; pt < KING; pt++)
+  for (int t = 0; t < PST_TABLES; t++)
   {
-    const int base = (pt - PAWN) * PST_HALF;
+    if (!tuned[t] || pstTableType(t) == KING) continue;
+
+    const int base = t * PST_ENTRIES;
     double dot = 0.0, norm = 0.0;
 
-    for (int j = base; j < base + PST_HALF; j++)
+    for (int j = base; j < base + PST_ENTRIES; j++)
     {
       dot  += grad[j] * occurrences[j];
       norm += occurrences[j] * occurrences[j];
     }
 
     if (norm > 0.0)
-      for (int j = base; j < base + PST_HALF; j++)
+      for (int j = base; j < base + PST_ENTRIES; j++)
         grad[j] -= dot / norm * occurrences[j];
   }
 }
 
-// Shifts each table so its occurrence-weighted mean is zero. Entries no piece stands on
-// (the pawn's first and last ranks) stay at zero.
+// Shifts each table back to its target mean. Entries no piece stands on (the pawn's
+// first and last ranks) stay where they are.
 void
-centreTables(PstParams& theta, const PstParams& occurrences)
+centreTables(PstParams& theta, const PstParams& occurrences, const PstTables& tuned,
+             const array<double, PST_TABLES>& targets)
 {
-  for (int pt = PAWN; pt < KING; pt++)
+  const array<double, PST_TABLES> means = tableMeans(theta, occurrences);
+
+  for (int t = 0; t < PST_TABLES; t++)
   {
-    const int base = (pt - PAWN) * PST_HALF;
-    double sum = 0.0, weight = 0.0;
+    if (!tuned[t] || pstTableType(t) == KING) continue;
 
-    for (int j = base; j < base + PST_HALF; j++)
-    {
-      sum    += theta[j] * occurrences[j];
-      weight += occurrences[j];
-    }
-
-    if (weight > 0.0)
-      for (int j = base; j < base + PST_HALF; j++)
-        if (occurrences[j] > 0.0) theta[j] -= sum / weight;
+    for (int j = t * PST_ENTRIES; j < (t + 1) * PST_ENTRIES; j++)
+      if (occurrences[j] > 0.0) theta[j] -= means[t] - targets[t];
   }
 }
 
-// Full-batch Adam over one range of the data. With `centre`, every table but the
-// king's keeps a zero occurrence-weighted mean: the tables move pieces around without
-// changing what they are worth on average, so material stays the anchor.
+// Full-batch Adam over one range of the data, moving only the tuned tables. With
+// `centre`, every tuned table but the king's keeps the mean it started with (zero for a
+// table that starts empty): the tables move pieces around without changing what they
+// are worth on average, so material stays the anchor.
 PstParams
-adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int epochs, bool centre)
+adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int epochs,
+        bool centre, const PstTables& tuned)
 {
   constexpr double BETA1 = 0.9, BETA2 = 0.999, EPSILON = 1e-8;
   constexpr double LR_START = 1.0, LR_END = 0.1;  // table units per epoch
 
-  const ptrdiff_t begin = ptrdiff_t(r.begin), end = ptrdiff_t(r.end);
+  const ptrdiff_t begin   = ptrdiff_t(r.begin), end = ptrdiff_t(r.end);
+  const auto      targets = tableMeans(theta, r.occurrences);
   PstParams m = {}, v = {};
 
   for (int t = 1; t <= epochs; t++)
@@ -614,9 +735,13 @@ adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int e
         l += diff * diff;
 
         // d(diff^2) / d(entry), up to a constant factor that Adam normalises away.
-        const double scale = diff * p * (1.0 - p) * e.egScale;
+        const double scale = diff * p * (1.0 - p);
         for (uint32_t k = e.first; k < e.first + e.size; k++)
-          g[data.features[k].param] += scale * data.features[k].count;
+        {
+          const PstFeature& f = data.features[k];
+          g[f.param]             += scale * e.mgScale * f.count;
+          g[PST_PHASE + f.param] += scale * e.egScale * f.count;
+        }
       }
 
       #pragma omp critical
@@ -626,7 +751,10 @@ adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int e
       }
     }
 
-    if (centre) removeMeanDirection(grad, r.occurrences);
+    for (int j = 0; j < PST_PARAMS; j++)
+      if (!tuned[j / PST_ENTRIES]) grad[j] = 0.0;
+
+    if (centre) removeMeanDirection(grad, r.occurrences, tuned);
 
     const double lr = LR_START + (LR_END - LR_START) * double(t - 1) / double(epochs);
     for (int j = 0; j < PST_PARAMS; j++)
@@ -639,7 +767,7 @@ adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int e
       theta[j] -= lr * mHat / (std::sqrt(vHat) + EPSILON);
     }
 
-    if (centre) centreTables(theta, r.occurrences);
+    if (centre) centreTables(theta, r.occurrences, tuned, targets);
 
     if (t == 1 || t % 100 == 0 || t == epochs)
       cout << "  epoch " << std::setw(5) << t << "  mse " << std::fixed << std::setprecision(8)
@@ -649,44 +777,56 @@ adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int e
   return theta;
 }
 
-// The tables as C++, ready to paste into PieceSquareTable.cpp (rank 1 first), each
-// followed by its occurrence-weighted mean: how much it adds to the piece's endgame
-// value on average, before pieceTableWeightEg. The mean is 0 when centred.
+// The tuned tables as C++, ready to paste into PieceSquareTable.cpp (rank 1 first) and in
+// that file's order. Each is followed by its occurrence-weighted mean (see tableMeans())
+// and by how far it moved from where it started, as the RMS change over the entries
+// pieces stand on.
 void
-printPstTables(std::ostream& os, const PstParams& theta, const PstParams& occurrences)
+printPstTables(std::ostream& os, const PstParams& theta, const PstParams& start,
+               const PstParams& occurrences, const PstTables& tuned)
 {
-  static constexpr array<std::pair<PieceType, const char*>, PST_TYPES> TABLES = {{
-    {PAWN, "pawnEg"}, {KNIGHT, "knightEg"}, {BISHOP, "bishopEg"},
-    {ROOK, "rookEg"}, {QUEEN , "queenEg" }, {KING  , "kingEg"  }
-  }};
+  static constexpr array<PieceType, PST_TYPES> FILE_ORDER = {PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING};
 
-  for (const auto& [pt, name] : TABLES)
-  {
-    double sum = 0.0, weight = 0.0;
-    for (int j = (pt - PAWN) * PST_HALF; j < (pt - PAWN + 1) * PST_HALF; j++)
-    {
-      sum    += theta[j] * occurrences[j];
-      weight += occurrences[j];
-    }
+  const array<double, PST_TABLES> means = tableMeans(theta, occurrences);
 
-    os << "static constexpr ScoreTable " << name << " = {\n";
-    for (int rank = 0; rank < 8; rank++)
+  for (int phase : {PST_MG, PST_EG})
+    for (PieceType pt : FILE_ORDER)
     {
-      os << ' ';
-      for (int file = 0; file < 8; file++)
-        os << std::setw(5) << std::lround(theta[pstParam(pt, rank * 8 + file)]) << ',';
-      os << '\n';
+      const int t = pstTable(phase, pt);
+      if (!tuned[t]) continue;
+
+      double moved = 0.0;
+      int    used  = 0;
+      for (int j = t * PST_ENTRIES; j < (t + 1) * PST_ENTRIES; j++)
+        if (occurrences[j] > 0.0)
+        {
+          moved += (theta[j] - start[j]) * (theta[j] - start[j]);
+          used  += 1;
+        }
+
+      os << "static constexpr ScoreTable " << PST_NAMES[t] << " = {\n";
+      for (int rank = 0; rank < 8; rank++)
+      {
+        os << ' ';
+        for (int file = 0; file < 8; file++)
+          os << std::setw(5) << std::lround(theta[phase * PST_PHASE + pstParam(pt, rank * 8 + file)]) << ',';
+        os << '\n';
+      }
+      os << "};  // weighted mean " << std::fixed << std::setprecision(2) << means[t]
+         << ", moved " << (used > 0 ? std::sqrt(moved / used) : 0.0) << " (rms)\n\n";
     }
-    os << "};  // weighted mean " << std::fixed << std::setprecision(2)
-       << (weight > 0.0 ? sum / weight : 0.0) << "\n\n";
-  }
 }
 
-// Loads the dataset(s), then tunes the tables on each one and, when there are several,
-// on all of them together. Each result also goes to tune_pst_<name>.txt.
+// Loads the dataset(s), then tunes the chosen tables on each one and, when there are
+// several, on all of them together. Each result also goes to tune_pst_<name>.txt, or
+// tune_pst_<tables>_<name>.txt when `tables` is given.
 void
 tunePieceSquare(const vector<string>& args, int epochs)
 {
+  const string tablesArg = utils::argValue(args, "tables");
+  PstTables tuned;
+  if (!parsePstTables(tablesArg, tuned)) return;
+
   vector<std::pair<string, string>> files;  // name, path
 
   if (utils::hasArg(args, "--all") || utils::hasArg(args, "all"))
@@ -706,12 +846,17 @@ tunePieceSquare(const vector<string>& args, int epochs)
     return;
   }
 
+  string tableList;
+  for (int t = 0; t < PST_TABLES; t++)
+    if (tuned[t]) tableList += (tableList.empty() ? "" : " ") + string(PST_NAMES[t]);
+  cout << "Tuning " << tableList << '\n';
+
   const perf_clock loadStart = perf::now();
   PstData data;
   for (const auto& [name, path] : files)
   {
     cout << "Loading " << path << '\n';
-    appendPstDataset(data, path, name);
+    appendPstDataset(data, path, name, tuned);
   }
   if (data.ranges.empty()) { cout << "No tunable positions loaded.\n"; return; }
 
@@ -730,7 +875,15 @@ tunePieceSquare(const vector<string>& args, int epochs)
        << " features in " << std::fixed << std::setprecision(1) << loadTime.count() << " s.\n";
 
   const bool      centre = !utils::hasArg(args, "free");
-  const PstParams start  = currentPstParams();
+  const PstParams start  = startingPstParams(tuned);
+
+  string prefix = "tune_pst_";
+  if (!tablesArg.empty())
+  {
+    string tag = tablesArg;
+    std::replace(tag.begin(), tag.end(), ',', '+');
+    prefix += tag + '_';
+  }
 
   for (const PstRange& r : data.ranges)
   {
@@ -744,24 +897,25 @@ tunePieceSquare(const vector<string>& args, int epochs)
     cout << "Fitted K = " << std::setprecision(4) << K << "   MSE (current tables) = "
          << std::setprecision(8) << mseBefore << "\n\n";
 
-    const PstParams tuned    = adamPst(data, r, K, start, epochs, centre);
-    const double    mseAfter = pstMse(data, r, K, tuned);
+    const PstParams fitted   = adamPst(data, r, K, start, epochs, centre, tuned);
+    const double    mseAfter = pstMse(data, r, K, fitted);
     const perf_time tuneTime = perf::now() - tuneStart;
 
     std::ostringstream report;
     report << "Dataset: " << r.name << " (" << (r.end - r.begin) << " positions), "
            << epochs << " epochs, " << (centre ? "centred" : "free") << '\n'
+           << "Tables: " << tableList << '\n'
            << "Fitted K = " << std::fixed << std::setprecision(4) << K << '\n'
            << "MSE before = " << std::setprecision(8) << mseBefore
            << "   MSE after = " << mseAfter
            << "   (" << std::setprecision(4)
            << 100.0 * (mseBefore - mseAfter) / mseBefore << "% lower)\n\n";
-    printPstTables(report, tuned, r.occurrences);
+    printPstTables(report, fitted, start, r.occurrences, tuned);
 
     cout << '\n' << report.str() << "Tuned in " << std::setprecision(1)
          << tuneTime.count() << " s.\n";
 
-    const string reportPath = "tune_pst_" + r.name + ".txt";
+    const string reportPath = prefix + r.name + ".txt";
     std::ofstream f(reportPath);
     if (f) { f << report.str(); cout << "  -> wrote " << reportPath << '\n'; }
     else   { cout << "  ! could not write " << reportPath << '\n'; }
@@ -782,7 +936,7 @@ tuneEval(const vector<string>& args)
     return;
   }
 
-  // pst: gradient-tune the endgame piece-square tables instead of the weights.
+  // pst: gradient-tune piece-square tables instead of the weights.
   if (utils::hasArg(args, "pst"))
   {
     tunePieceSquare(args, utils::hasArg(args, "iters")
