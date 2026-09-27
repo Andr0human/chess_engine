@@ -56,6 +56,7 @@ ChessBoard::setPositionWithFen(const string& fen) noexcept
         pieceBb[piece] |= 1ULL << square;
         pieceBb[(piece & 8) + 7] |= 1ULL << square;
         pieceCt[piece]++;
+        pieceSquare += pieceSquareTable[piece][square];
         ++square;
 
         if ((piece & 7) == KING) continue;
@@ -186,6 +187,13 @@ ChessBoard::makeMove(Move move, bool inSearch) noexcept
   board[ip] = NO_PIECE;
   board[fp] = ipt;
 
+  // The moving piece, and whatever it captured on fp. The table's NO_PIECE row is
+  // zero, so a quiet move subtracts nothing. En passant, promotion and castling add
+  // their own terms below.
+  pieceSquare += pieceSquareTable[ipt][fp]
+               - pieceSquareTable[ipt][ip]
+               - pieceSquareTable[fpt][fp];
+
   if (ep != SQUARE_NB)
     hashValue ^= tt.hashKey(ep + 1);
 
@@ -289,6 +297,7 @@ ChessBoard::makeMoveEnpassant(Square ip, Square ep) noexcept
   pieceCt[emy + ALL ]--;
   board[capPawnFp] = NO_PIECE;
   boardWeight -= pieceValues[PAWN - 1];
+  pieceSquare -= pieceSquareTable[emy + PAWN][capPawnFp];
 
   pieceBb[own + PAWN] ^= (1ULL << ip) ^ (1ULL << ep);
   pieceBb[own +  ALL] ^= (1ULL << ip) ^ (1ULL << ep);
@@ -321,6 +330,9 @@ ChessBoard::makeMovePawnPromotion(Move move) noexcept
   boardWeight += pieceValues[newPt - 1];
 
   board[fp] = make_piece(color, newPt);
+
+  // makeMove counted a pawn arriving on fp; replace it with the promoted piece.
+  pieceSquare += pieceSquareTable[own + newPt][fp] - pieceSquareTable[own + PAWN][fp];
 
   if (cpt > 0)
   {
@@ -369,6 +381,11 @@ void ChessBoard::makeMoveCastling(Square ip, Square fp) noexcept
     pieceBb[own + 6] ^= (1ULL << ip) ^ (1ULL << fp);
     pieceBb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
     color = ~color;
+
+    // makeMove already moved the king; this is the rook.
+    const Square rookFrom = fp > ip ? ip + 3 : ip - 4;
+    const Square rookTo   = fp > ip ? ip + 1 : ip - 1;
+    pieceSquare += pieceSquareTable[own + ROOK][rookTo] - pieceSquareTable[own + ROOK][rookFrom];
 
     int p1 = lsbIndex(rooksIndexes);
     int p2 = msbIndex(rooksIndexes);
@@ -455,7 +472,7 @@ ChessBoard::undoInfoPush(PieceType it, PieceType ft, Move move, bool inSearch)
   if (!inSearch and ((ft != NONE) or (it == PAWN)))
     undoInfoStackCounter = 0;
 
-  undoInfo[undoInfoStackCounter++] = UndoInfo(move, csep, hashValue, halfmove);
+  undoInfo[undoInfoStackCounter++] = UndoInfo(move, csep, hashValue, halfmove, pieceSquare);
 }
 
 
@@ -466,6 +483,7 @@ ChessBoard::undoInfoPop()
   csep = undoInfo[undoInfoStackCounter].csep;
   hashValue = undoInfo[undoInfoStackCounter].hash;
   halfmove = undoInfo[undoInfoStackCounter].halfmove;
+  pieceSquare = undoInfo[undoInfoStackCounter].pieceSquare;
   return undoInfo[undoInfoStackCounter].move;
 }
 
@@ -474,7 +492,7 @@ void
 ChessBoard::addPreviousBoardPositions(const vector<Key>& prevKeys) noexcept
 {
   for (Key key : prevKeys)
-    undoInfo[undoInfoStackCounter++] = UndoInfo(0, 0, key, 0);
+    undoInfo[undoInfoStackCounter++] = UndoInfo(0, 0, key, 0, {});
 }
 
 bool
@@ -534,7 +552,7 @@ ChessBoard::makeNullMove()
 {
   // Save full state so unmakeNullMove can restore it verbatim. A null move is
   // never irreversible, so (unlike undoInfoPush) we never reset the stack.
-  undoInfo[undoInfoStackCounter++] = UndoInfo(NULL_MOVE, csep, hashValue, halfmove);
+  undoInfo[undoInfoStackCounter++] = UndoInfo(NULL_MOVE, csep, hashValue, halfmove, pieceSquare);
 
   // An en-passant target cannot survive a null move — drop it from the hash
   // before csep is cleared (read while csep still holds the old value).
@@ -569,6 +587,7 @@ ChessBoard::reset()
   searchRootIndex = 0;
   color = Color::WHITE;
   boardWeight = 0;
+  pieceSquare = {};
 
   halfmove = 0;
   fullmove = 2;
@@ -657,15 +676,21 @@ ChessBoard::integrityCheck() const noexcept
   if ((pieceBb[0] | pieceBb[8]) != 0)
     return false;
 
+  TaperedScore pieceSquareSum;
+
   for (Square sq = SQ_A1; sq < SQUARE_NB; ++sq)
   {
     if (board[sq] == NO_PIECE) continue;
 
     Piece pt = board[sq];
+    pieceSquareSum += pieceSquareTable[pt][sq];
 
     if ((pieceBb[pt] & (1ULL << sq)) == 0)
       return false;
   }
+
+  if (pieceSquareSum != pieceSquare)
+    return false;
 
   for (int side = BLACK; side <= WHITE; side++)
   {

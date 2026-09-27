@@ -427,23 +427,6 @@ taperedMaterial(const MaterialDiffs& md)
        + materialValue[QUEEN ] * md.queen;
 }
 
-// One pass over every piece on the board. Black's entries in pieceSquareTable are
-// negated, so the sum is already White-relative.
-static TaperedScore
-taperedPieceSquare(const ChessBoard& pos)
-{
-  Bitboard pieces = pos.all();
-  TaperedScore score;
-
-  while (pieces != 0)
-  {
-    Square sq = nextSquare(pieces);
-    score += pieceSquareTable[pos.pieceOnSquare(sq)][sq];
-  }
-
-  return score;
-}
-
 // Reads the per-type attack unions built by sideAttacks().
 static MobilityDiffs
 mobilityDiffs(const EvalAttacks& atk)
@@ -726,7 +709,7 @@ evaluate(const ChessBoard& pos)
   const SharedTerms shared = {
     material,
     taperedMaterial(material),
-    taperedPieceSquare(pos),
+    pos.pieceSquare,
     bishopPairDiff(pos),
     isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos)
   };
@@ -783,7 +766,7 @@ extractEvalComponents(const ChessBoard& pos)
 
   const MaterialDiffs material    = materialDiffs(pos);
   const TaperedScore  mat         = taperedMaterial(material);
-  const TaperedScore  pieceSquare = taperedPieceSquare(pos);
+  const TaperedScore  pieceSquare = pos.pieceSquare;
   const EvalAttacks   atk         = computeAttacks(pos);
 
   MobilityDiffs mob = mobilityDiffs(atk);

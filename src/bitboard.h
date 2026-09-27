@@ -6,6 +6,7 @@
 #include "types.h"
 #include "base_utils.h"
 #include "tt.h"
+#include "PieceSquareTable.h"
 
 
 extern uint64_t tmpTotalCounter;
@@ -25,10 +26,12 @@ class UndoInfo
 
   int halfmove;
 
-  UndoInfo() : move(0), csep(0), hash(0), halfmove(0) {}
+  TaperedScore pieceSquare;
 
-  UndoInfo(Move m, int c, Key h, int hm)
-  : move(m), csep(c), hash(h), halfmove(hm) {}
+  UndoInfo() : move(0), csep(0), hash(0), halfmove(0), pieceSquare() {}
+
+  UndoInfo(Move m, int c, Key h, int hm, TaperedScore ps)
+  : move(m), csep(c), hash(h), halfmove(hm), pieceSquare(ps) {}
 };
 
 
@@ -99,6 +102,10 @@ class ChessBoard
   Key hashValue;
 
   Weight boardWeight;
+
+  // Sum of pieceSquareTable over every piece on the board, White-relative. Kept up
+  // to date by makeMove and restored from undoInfo by unmakeMove, like hashValue.
+  TaperedScore pieceSquare;
 
   ChessBoard();
 
@@ -225,6 +232,7 @@ class ChessBoard
     pieceBb[p] |= 1ULL << sq;
     pieceBb[(p & 8) + 7] |= 1ULL << sq;
     pieceCt[p]++;
+    pieceSquare += pieceSquareTable[p][sq];
 
     if ((p & 7) != KING)
       pieceCt[(p & 8) + 7]++;
@@ -238,6 +246,7 @@ class ChessBoard
     pieceBb[p] &= AllSquares ^ (1ULL << sq);
     pieceBb[(p & 8) + 7] &= AllSquares ^ (1ULL << sq);
     pieceCt[p]--;
+    pieceSquare -= pieceSquareTable[p][sq];
 
     if ((p & 7) != KING)
       pieceCt[(p & 8) + 7]--;

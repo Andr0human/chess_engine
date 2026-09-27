@@ -215,6 +215,9 @@ struct TaperedScore
   constexpr TaperedScore&
   operator-=(TaperedScore o) noexcept
   { mg -= o.mg; eg -= o.eg; return *this; }
+
+  constexpr bool
+  operator==(const TaperedScore&) const noexcept = default;
 };
 
 enum Board: Bitboard
