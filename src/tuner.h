@@ -15,6 +15,11 @@
 // runtime EvalWeights to minimise mean-squared prediction error, printing the MSE
 // before/after and the tuned weights. It does NOT overwrite the engine's defaults —
 // the tuned values are printed for the user to paste in deliberately.
+//
+//   elsa tune pst [data <path> | --all [dir <folder>]] [iters <n>] [free]
+//
+// Tunes the endgame piece-square tables by gradient descent, holding the weights fixed,
+// and prints them as C++ tables. `free` lets each table's mean drift (material).
 void
 tuneEval(const std::vector<std::string>& args);
 

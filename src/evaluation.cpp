@@ -794,8 +794,8 @@ extractEvalComponents(const ChessBoard& pos)
   return ec;
 }
 
-Score
-evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
+PhaseSums
+phaseSumsFromComponents(const EvalComponents& ec, const EvalWeights& w)
 {
   const MobilityDiffs mob{ec.mobBishop, ec.mobKnight, ec.mobRook, ec.mobQueen};
 
@@ -816,8 +816,16 @@ evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
     + w.bishopPairWeightEg    * ec.bishopPair
     + w.isolatedPawnWeightEg  * ec.isolated;
 
+  return {mg, eg};
+}
+
+Score
+evalFromComponents(const EvalComponents& ec, const EvalWeights& w)
+{
+  const PhaseSums sums = phaseSumsFromComponents(ec, w);
+
   // Match evaluate(): mg/eg are truncated to Score (int32) before the phase blend.
-  Score mgScore = Score(mg);
-  Score egScore = Score(eg);
+  Score mgScore = Score(sums.mg);
+  Score egScore = Score(sums.eg);
   return Score( ec.phase * float(mgScore) + (1 - ec.phase) * float(egScore) );
 }
