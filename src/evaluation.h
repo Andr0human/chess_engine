@@ -106,6 +106,17 @@ struct EvalComponents
 EvalComponents
 extractEvalComponents(const ChessBoard& pos);
 
+// The weighted midgame and endgame sums, before evaluate() truncates each to a Score
+// and blends them by phase.
+struct PhaseSums
+{
+  float mg = 0.0f;
+  float eg = 0.0f;
+};
+
+PhaseSums
+phaseSumsFromComponents(const EvalComponents& ec, const EvalWeights& w);
+
 // Mirrors evaluate()'s arithmetic exactly, including the int truncation of the
 // mg/eg subscores before the phase blend.
 Score

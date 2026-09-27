@@ -185,6 +185,41 @@ enum Value: Score
   GamePhaseLimit = 16 * PawnValueMg + 4 * (BishopValueMg + KnightValueMg + RookValueMg) + 2 * QueenValueMg
 };
 
+// A (midgame, endgame) pair. Eval terms with a value in both phases are summed as
+// pairs in one pass; evaluate() splits them into the midgame and endgame scores.
+struct TaperedScore
+{
+  Score mg = 0;
+  Score eg = 0;
+
+  constexpr TaperedScore
+  operator+(TaperedScore o) const noexcept
+  { return {mg + o.mg, eg + o.eg}; }
+
+  constexpr TaperedScore
+  operator-(TaperedScore o) const noexcept
+  { return {mg - o.mg, eg - o.eg}; }
+
+  constexpr TaperedScore
+  operator-() const noexcept
+  { return {-mg, -eg}; }
+
+  constexpr TaperedScore
+  operator*(int k) const noexcept
+  { return {mg * k, eg * k}; }
+
+  constexpr TaperedScore&
+  operator+=(TaperedScore o) noexcept
+  { mg += o.mg; eg += o.eg; return *this; }
+
+  constexpr TaperedScore&
+  operator-=(TaperedScore o) noexcept
+  { mg -= o.mg; eg -= o.eg; return *this; }
+
+  constexpr bool
+  operator==(const TaperedScore&) const noexcept = default;
+};
+
 enum Board: Bitboard
 {
   Rank1 = 255ULL, Rank2 = Rank1 << 8, Rank3 = Rank1 << 16, Rank4 = Rank1 << 24,
