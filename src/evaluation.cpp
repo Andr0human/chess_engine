@@ -68,6 +68,8 @@ struct MaterialDiffs
 struct SharedTerms
 {
   MaterialDiffs material;
+  TaperedScore  materialScore;
+  TaperedScore  pieceSquare;
   int bishopPair;
   int isolated;
 };
@@ -404,43 +406,42 @@ materialDiffs(const ChessBoard& pos)
   };
 }
 
-static Score
-materialDiffereceMidGame(const MaterialDiffs& md)
+// Indexed by PieceType. The king carries no material.
+static constexpr TaperedScore materialValue[] = {
+  {},
+  {  PawnValueMg,   PawnValueEg},
+  {BishopValueMg, BishopValueEg},
+  {KnightValueMg, KnightValueEg},
+  {  RookValueMg,   RookValueEg},
+  { QueenValueMg,  QueenValueEg},
+  {},
+};
+
+static TaperedScore
+taperedMaterial(const MaterialDiffs& md)
 {
-  return PawnValueMg * md.pawn
-     + BishopValueMg * md.bishop
-     + KnightValueMg * md.knight
-     +   RookValueMg * md.rook
-     +  QueenValueMg * md.queen;
+  return materialValue[PAWN  ] * md.pawn
+       + materialValue[BISHOP] * md.bishop
+       + materialValue[KNIGHT] * md.knight
+       + materialValue[ROOK  ] * md.rook
+       + materialValue[QUEEN ] * md.queen;
 }
 
-template<Color cMy, PieceType pt, const ScoreTable& strTable>
-static Score
-addStrScore(const ChessBoard& pos)
+// One pass over every piece on the board. Black's entries in pieceSquareTable are
+// negated, so the sum is already White-relative.
+static TaperedScore
+taperedPieceSquare(const ChessBoard& pos)
 {
-  Bitboard pieceBb = pos.piece<cMy, pt>();
-  Score score = 0;
+  Bitboard pieces = pos.all();
+  TaperedScore score;
 
-  while (pieceBb > 0)
-    score += strTable[nextSquare(pieceBb)];
+  while (pieces != 0)
+  {
+    Square sq = nextSquare(pieces);
+    score += pieceSquareTable[pos.pieceOnSquare(sq)][sq];
+  }
+
   return score;
-}
-
-static Score
-pieceTableStrengthMidGame(const ChessBoard& pos)
-{
-  Score pawns   = addStrScore<WHITE, PAWN , wpBoard>(pos)
-                - addStrScore<BLACK, PAWN , bpBoard>(pos);
-  Score bishops = addStrScore<WHITE, BISHOP, wBoard>(pos)
-                - addStrScore<BLACK, BISHOP, bBoard>(pos);
-  Score knights = addStrScore<WHITE, KNIGHT, NBoard>(pos)
-                - addStrScore<BLACK, KNIGHT, NBoard>(pos);
-  Score rooks   = addStrScore<WHITE, ROOK , wRBoard>(pos)
-                - addStrScore<BLACK, ROOK , bRBoard>(pos);
-  Score king    = addStrScore<WHITE, KING, whiteKingMidGameTable>(pos)
-                - addStrScore<BLACK, KING, blackKingMidGameTable>(pos);
-
-  return pawns + bishops + knights + rooks + king;
 }
 
 // Reads the per-type attack unions built by sideAttacks().
@@ -483,8 +484,8 @@ template<bool debug>
 static Score
 midGameScore(const ChessBoard& pos, const EvalAttacks& atk, const SharedTerms& shared)
 {
-  Score materialScore   = materialDiffereceMidGame(shared.material);
-  Score pieceTableScore = pieceTableStrengthMidGame(pos);
+  Score materialScore   = shared.materialScore.mg;
+  Score pieceTableScore = shared.pieceSquare.mg;
   MobilityDiffs mob     = mobilityDiffs(atk);
   Score threatsScore    = threatsImpl<debug>(pos, atk);
 
@@ -528,16 +529,6 @@ midGameScore(const ChessBoard& pos, const EvalAttacks& atk, const SharedTerms& s
 #ifndef ENDGAME
 
 static Score
-materialDiffereceEndGame(const MaterialDiffs& md)
-{
-  return PawnValueEg * md.pawn
-     + BishopValueEg * md.bishop
-     + KnightValueEg * md.knight
-     +   RookValueEg * md.rook
-     +  QueenValueEg * md.queen;
-}
-
-static Score
 distanceBetweenKingsScore(const ChessBoard& pos, const MaterialDiffs& md)
 {
   Square wkSq = squareNo(pos.piece<WHITE, KING>());
@@ -572,7 +563,7 @@ loneKingEndGame(const ChessBoard& pos, const MaterialDiffs& md)
 
   Score distanceScore = distanceBetweenKingsScore(pos, md);
   Score centreScore   = loneKingLosingEndGameTable[lostKingSq] * losingSideCorrectionFactor;
-  Score materialScore = materialDiffereceEndGame(md);
+  Score materialScore = taperedMaterial(md).eg;
 
   if (pos.count<BISHOP>() == 1 and pos.count<KNIGHT>() == 1)
   {
@@ -599,22 +590,6 @@ loneKingEndGame(const ChessBoard& pos, const MaterialDiffs& md)
   }
 
   return score;
-}
-
-static Score
-pieceTableStrengthEndGame(const ChessBoard& pos)
-{
-  const auto StrScore = [] (Bitboard piece, const ScoreTable& strTable)
-  {
-    Score score = 0;
-    while (piece > 0)
-      score += strTable[nextSquare(piece)];
-    return score;
-  };
-
-  Score king = StrScore(pos.piece<WHITE, KING>(), kingEndGameTable)
-             - StrScore(pos.piece<BLACK, KING>(), kingEndGameTable);
-  return king;
 }
 
 template <Color cMy>
@@ -668,8 +643,8 @@ template<bool debug>
 static Score
 endGameScore(const ChessBoard& pos, const EvalData& ed, const SharedTerms& shared)
 {
-  Score materialScore   = materialDiffereceEndGame(shared.material);
-  Score pieceTableScore = pieceTableStrengthEndGame(pos);
+  Score materialScore   = shared.materialScore.eg;
+  Score pieceTableScore = shared.pieceSquare.eg;
   Score pawnStructure   = pawnStructureScoreEndgame<WHITE>(pos, ed)
                         - pawnStructureScoreEndgame<BLACK>(pos, ed);
   Score distanceScore   = distanceBetweenKingsScore(pos, shared.material);
@@ -745,11 +720,13 @@ evaluate(const ChessBoard& pos)
     return score * side2move;
   }
 
-  // Built once and shared: the attack maps feed king safety AND mobility; bishopPair
-  // and isolated feed both the midgame and the endgame subscore.
+  // Built once and shared: the attack maps feed king safety AND mobility; material,
+  // piece-square, bishopPair and isolated feed both the midgame and the endgame subscore.
   const EvalAttacks atk = computeAttacks(pos);
   const SharedTerms shared = {
     material,
+    taperedMaterial(material),
+    taperedPieceSquare(pos),
     bishopPairDiff(pos),
     isolatedPawnCount<WHITE>(pos) - isolatedPawnCount<BLACK>(pos)
   };
@@ -804,21 +781,23 @@ extractEvalComponents(const ChessBoard& pos)
   ec.tunable = true;
   ec.phase   = phase;
 
-  const MaterialDiffs material = materialDiffs(pos);
-  const EvalAttacks   atk      = computeAttacks(pos);
+  const MaterialDiffs material    = materialDiffs(pos);
+  const TaperedScore  mat         = taperedMaterial(material);
+  const TaperedScore  pieceSquare = taperedPieceSquare(pos);
+  const EvalAttacks   atk         = computeAttacks(pos);
 
   MobilityDiffs mob = mobilityDiffs(atk);
 
-  ec.matMg     = float(materialDiffereceMidGame(material));
-  ec.ptMg      = float(pieceTableStrengthMidGame(pos));
+  ec.matMg     = float(mat.mg);
+  ec.ptMg      = float(pieceSquare.mg);
   ec.mobBishop = mob.bishop;
   ec.mobKnight = mob.knight;
   ec.mobRook   = mob.rook;
   ec.mobQueen  = mob.queen;
   ec.threats   = float(threatsImpl<false>(pos, atk));
 
-  ec.matEg    = float(materialDiffereceEndGame(material));
-  ec.ptEg     = float(pieceTableStrengthEndGame(pos));
+  ec.matEg    = float(mat.eg);
+  ec.ptEg     = float(pieceSquare.eg);
   ec.pawnEg   = float(pawnStructureScoreEndgame<WHITE>(pos, ed)
               - pawnStructureScoreEndgame<BLACK>(pos, ed));
   ec.distance = float(distanceBetweenKingsScore(pos, material));

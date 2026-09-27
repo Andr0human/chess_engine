@@ -1,5 +1,3 @@
-
-
 #ifndef SQUARE_TABLE_H
 #define SQUARE_TABLE_H
 
@@ -9,18 +7,12 @@
 using std::array;
 using ScoreTable = array<Score, SQUARE_NB>;
 
-extern ScoreTable wpBoard;
-extern ScoreTable bpBoard;
-extern ScoreTable  NBoard;
-extern ScoreTable  wBoard;
-extern ScoreTable  bBoard;
+// (midgame, endgame) piece-square values, indexed by make_piece(c, pt) and square.
+// White-relative: Black's entries are White's mirrored vertically and negated, so a
+// position's piece-square score is one sum over every piece on the board.
+using PieceSquareTables = array<array<TaperedScore, SQUARE_NB>, 16>;
 
-extern ScoreTable wRBoard;
-extern ScoreTable bRBoard;
-
-extern ScoreTable whiteKingMidGameTable;
-extern ScoreTable blackKingMidGameTable;
-extern ScoreTable      kingEndGameTable;
+extern const PieceSquareTables pieceSquareTable;
 
 extern ScoreTable  loneKingLosingEndGameTable;
 

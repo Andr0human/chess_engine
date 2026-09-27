@@ -2,7 +2,10 @@
 
 #include "PieceSquareTable.h"
 
-ScoreTable wpBoard = {
+// White's tables, indexed by square with a1 = 0, so each one reads upside down: the
+// first row is rank 1. Black's entries are derived from them in buildPieceSquareTable().
+
+static constexpr ScoreTable pawnMg = {
    0,  0,   0,   0,   0,  0,  0,  0,
    0,  0, -10, -20, -20,  0,  5,  0,
    3, 10,   8,   8,   8, -3, 10,  3,
@@ -13,18 +16,7 @@ ScoreTable wpBoard = {
    0,  0,   0,   0,   0,  0,  0,  0,
 };
 
-ScoreTable bpBoard = {
-   0,  0,   0,   0,   0,  0,  0,  0,
-  56, 57,  61,  61,  61, 59, 57, 56,
-  26, 27,  31,  31,  31, 29, 27, 26,
-   6,  7,  15,  17,  17,  9,  7,  6,
-   5,  2,  13,  15,  15,  8, -3,  5,
-   3, 10,   8,   8,   8, -3, 10,  3,
-   0,  0, -10, -20, -20,  0,  5,  0,
-   0,  0,   0,   0,   0,  0,  0,  0,
-};
-
-ScoreTable NBoard  = {
+static constexpr ScoreTable knightMg = {
   -40, -15, -10, -10, -10, -15, -10, -40,
   -10,   2,   5,   5,   5,   5,   2, -10,
   -10,   7,   8,   8,   8,   8,   7, -10,
@@ -35,7 +27,7 @@ ScoreTable NBoard  = {
   -40, -15, -10, -10, -10, -15, -10, -40,
 };
 
-ScoreTable wBoard  = {
+static constexpr ScoreTable bishopMg = {
   -40, -5, -5, -5, -5, -5, -5, -40,
     4, 10,  4,  6,  6,  4, 10,   4,
     4,  4,  4,  5,  5,  4,  4,   4,
@@ -46,19 +38,7 @@ ScoreTable wBoard  = {
   -40, -5, -5, -5, -5, -5, -5, -40,
 };
 
-ScoreTable bBoard = {
-  -40, -5, -5, -5, -5, -5, -5, -40,
-    4,  4,  4,  4,  4,  4,  4,   4,
-    4,  4,  4,  4,  4,  4,  4,   4,
-    5, 20,  4,  6,  6,  4, 20,   5,
-    6,  7, 20,  6,  6, 20,  7,   6,
-    4,  4,  4,  5,  5,  4,  4,   4,
-    4, 10,  4,  6,  6,  4, 10,   4,
-  -40, -5, -5, -5, -5, -5, -5, -40,
-};
-
-
-ScoreTable wRBoard {
+static constexpr ScoreTable rookMg = {
    5, 10, 10, 10, 10, 10, 10,  5,
    5, 10, 10, 10, 10, 10, 10,  5,
    5, 10, 10, 10, 10, 10, 10,  5,
@@ -69,19 +49,7 @@ ScoreTable wRBoard {
   20, 30, 30, 30, 30, 30, 30, 20,
 };
 
-ScoreTable bRBoard {
-  20, 30, 30, 30, 30, 30, 30, 20,
-  40, 50, 50, 50, 50, 50, 50, 40,
-  15, 20, 20, 20, 20, 20, 20, 15,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-};
-
-
-ScoreTable whiteKingMidGameTable = {
+static constexpr ScoreTable kingMg = {
     35,   40,   35,    0,    0,    0,   35,   35,
     35,   35,   -2,   -2,   -2,   -2,   -2,   35,
    -10,  -10,  -10,  -10,  -10,  -10,  -10,  -10,
@@ -92,20 +60,7 @@ ScoreTable whiteKingMidGameTable = {
   -200, -200, -200, -200, -200, -200, -200, -200,
 };
 
-
-ScoreTable blackKingMidGameTable = {
-  -200, -200, -200, -200, -200, -200, -200, -200,
-  -150, -165, -165, -165, -165, -165, -165, -150,
-   -90,  -90, -115, -115, -115, -115,  -90,  -90,
-   -70,  -70,  -85,  -85,  -85,  -85,  -70,  -70,
-   -40,  -40,  -50,  -50,  -50,  -50,  -40,  -40,
-   -10,  -10,  -10,  -10,  -10,  -10,  -10,  -10,
-    35,   35,   -2,   -2,   -2,   -2,   -2,   35,
-    35,   40,   35,    0,    0,    0,   35,   35,
-};
-
-
-ScoreTable kingEndGameTable = {
+static constexpr ScoreTable kingEg = {
   -10,  -8,  -4,   1,   1,  -4,  -8, -10,
    -8,   4,   8,  14,  14,   8,   4,  -8,
    -4,   8,  18,  24,  24,  18,   8,  -4,
@@ -115,6 +70,37 @@ ScoreTable kingEndGameTable = {
    -8,   4,   8,  14,  14,   8,   4,  -8,
   -10,  -8,  -4,   1,   1,  -4,  -8, -10,
 };
+
+static constexpr ScoreTable noTable = {};
+
+static constexpr void
+addPiece(PieceSquareTables& table, PieceType pt, const ScoreTable& mg, const ScoreTable& eg)
+{
+  for (int sq = 0; sq < SQUARE_NB; sq++)
+  {
+    const TaperedScore value = {mg[sq], eg[sq]};
+
+    table[make_piece(WHITE, pt)][sq]      =  value;
+    table[make_piece(BLACK, pt)][sq ^ 56] = -value;
+  }
+}
+
+// The queen has no table yet, and only the king has an endgame table.
+static constexpr PieceSquareTables
+buildPieceSquareTable()
+{
+  PieceSquareTables table = {};
+
+  addPiece(table, PAWN  , pawnMg  , noTable);
+  addPiece(table, BISHOP, bishopMg, noTable);
+  addPiece(table, KNIGHT, knightMg, noTable);
+  addPiece(table, ROOK  , rookMg  , noTable);
+  addPiece(table, KING  , kingMg  , kingEg );
+
+  return table;
+}
+
+constexpr PieceSquareTables pieceSquareTable = buildPieceSquareTable();
 
 ScoreTable loneKingLosingEndGameTable = {
   -296, -216, -144, -96, -96, -144, -216, -296,
