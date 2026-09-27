@@ -376,7 +376,7 @@ listDatasets(const string& dirArg)
 
 // ---------------------------------------------------------------------------------------
 // Piece-square tables: elsa tune pst [data <path> | --all [dir <folder>]] [tables <list>]
-//                                    [iters <n>] [free]
+//                                    [unfold <list>] [iters <n>] [free]
 //
 // Coordinate descent can't move hundreds of table entries one probe at a time, so the
 // tables get full-batch gradient descent (Adam) instead, with every weight and every
@@ -391,19 +391,21 @@ listDatasets(const string& dirArg)
 // skips that for a phase with a tuned table, which is under 1 cp.
 // ---------------------------------------------------------------------------------------
 
-// Each table is tuned with its files folded (a = h, b = g, c = f, d = e): 32 entries,
-// rank * 4 + folded file. The parameter vector holds the six midgame tables and then the
-// six endgame tables, in PieceType order.
+// The parameter vector holds the six midgame tables and then the six endgame tables, in
+// PieceType order, with an entry per square of White's table. A table is folded by
+// default: each entry is tied to its mirror on the other wing (a = h, b = g, c = f,
+// d = e), so the table stays left-right symmetric and the noise on rare squares halves.
+// `unfold <list>` tunes the listed tables square by square instead.
 constexpr int PST_MG      = 0;
 constexpr int PST_EG      = 1;
 constexpr int PST_TYPES   = KING - PAWN + 1;
 constexpr int PST_TABLES  = 2 * PST_TYPES;
-constexpr int PST_ENTRIES = 32;
+constexpr int PST_ENTRIES = SQUARE_NB;
 constexpr int PST_PHASE   = PST_TYPES  * PST_ENTRIES;  // one phase's tables
 constexpr int PST_PARAMS  = PST_TABLES * PST_ENTRIES;
 
 using PstParams = array<double, PST_PARAMS>;
-using PstTables = array<bool, PST_TABLES>;  // which tables are tuned
+using PstTables = array<bool, PST_TABLES>;  // a flag per table: tuned, or folded
 
 static constexpr array<const char*, PST_TABLES> PST_NAMES = {
   "pawnMg", "bishopMg", "knightMg", "rookMg", "queenMg", "kingMg",
@@ -421,15 +423,12 @@ pstTableType(int table)
 // The entry's index within one phase's tables; the endgame entry is PST_PHASE further on.
 constexpr int
 pstParam(PieceType pt, int whiteSq)
-{
-  const int file = whiteSq & 7;
-  return (pt - PAWN) * PST_ENTRIES + (whiteSq >> 3) * 4 + std::min(file, 7 - file);
-}
+{ return (pt - PAWN) * PST_ENTRIES + whiteSq; }
 
 struct PstFeature
 {
-  uint8_t param;  // pstParam(): the same entry in both phases
-  int8_t  count;  // White's pieces on the entry minus Black's (on the mirrored square)
+  uint16_t param;  // pstParam(): the same entry in both phases
+  int8_t   count;  // +1 for a White piece, -1 for a Black one (on the mirrored square)
 };
 
 struct PstEntry
@@ -444,7 +443,8 @@ struct PstEntry
 
 // One dataset's slice of PstData. `occurrences` sums the phase weight (phase for a
 // midgame entry, 1 - phase for an endgame one) over every piece that stands on each
-// entry; it weights the table means that centreTables() holds in place.
+// entry, and for a folded table on its mirror too; it weights the table means that
+// centreTables() holds in place.
 struct PstRange
 {
   string    name;
@@ -496,8 +496,28 @@ tunesPhase(const PstTables& tuned, int phase)
   return false;
 }
 
+// Sets each entry of a folded table and its mirror on the other wing to `scale` times
+// their sum: 1 ties two gradients or occurrence counts together, 0.5 averages two entries.
+void
+tieFiles(PstParams& p, const PstTables& folded, double scale)
+{
+  for (int t = 0; t < PST_TABLES; t++)
+  {
+    if (!folded[t]) continue;
+
+    for (int sq = 0; sq < SQUARE_NB; sq++)
+    {
+      if ((sq & 7) >= 4) continue;  // each pair once, from its queenside half
+
+      const int a = t * PST_ENTRIES + sq, b = a ^ 7;
+      p[a] = p[b] = scale * (p[a] + p[b]);
+    }
+  }
+}
+
 bool
-appendPstDataset(PstData& data, const string& path, const string& name, const PstTables& tuned)
+appendPstDataset(PstData& data, const string& path, const string& name,
+                 const PstTables& tuned, const PstTables& folded)
 {
   PstRange range;
   range.name  = name;
@@ -528,24 +548,16 @@ appendPstDataset(PstData& data, const string& path, const string& name, const Ps
       if (mg) tunedMg += pieceSquareTable[p][sq].mg;
       if (eg) tunedEg += pieceSquareTable[p][sq].eg;
 
-      const bool   white = color_of(p) == WHITE;
-      const int    param = pstParam(pt, white ? sq : sq ^ 56);
-      const int8_t sign  = white ? 1 : -1;
+      const bool white = color_of(p) == WHITE;
+      const int  param = pstParam(pt, white ? sq : sq ^ 56);
 
       range.occurrences[param]             += mgWeight;
       range.occurrences[PST_PHASE + param] += egWeight;
 
-      // A second piece on the same folded entry merges into the first; a white and a
-      // black piece on mirrored squares cancel out.
-      auto it = std::find_if(data.features.begin() + ptrdiff_t(first), data.features.end(),
-                             [&](const PstFeature& f) { return f.param == param; });
-      if (it != data.features.end()) it->count = int8_t(it->count + sign);
-      else data.features.push_back({uint8_t(param), sign});
+      // A White and a Black piece on mirrored squares share an entry and cancel out.
+      if (pos.pieceOnSquare(Square(sq ^ 56)) == make_piece(~color_of(p), pt)) continue;
+      data.features.push_back({uint16_t(param), int8_t(white ? 1 : -1)});
     }
-
-    data.features.erase(std::remove_if(data.features.begin() + ptrdiff_t(first), data.features.end(),
-                                       [](const PstFeature& f) { return f.count == 0; }),
-                        data.features.end());
 
     // A phase with no tuned table keeps evaluate()'s truncation, so it stays exact.
     const PhaseSums sums   = phaseSumsFromComponents(ec, evalWeights);
@@ -564,44 +576,43 @@ appendPstDataset(PstData& data, const string& path, const string& name, const Ps
     });
   });
 
+  tieFiles(range.occurrences, folded, 1.0);
+
   range.end = data.entries.size();
   if (range.end > range.begin) data.ranges.push_back(range);
   return ok;
 }
 
-// The engine's current tables, folded, with every table left out at zero (its value is
-// in `fixed`). Folding changes a table that isn't left-right symmetric, so those are named.
+// The engine's current tables, with every table left out at zero (its value is in
+// `fixed`). Folding changes a table that isn't left-right symmetric, so those are named.
 PstParams
-startingPstParams(const PstTables& tuned)
+startingPstParams(const PstTables& tuned, const PstTables& folded)
 {
-  PstParams theta = {}, squares = {};
+  PstParams theta = {};
 
   for (int t = 0; t < PST_TABLES; t++)
   {
     if (!tuned[t]) continue;
 
-    const PieceType pt    = pstTableType(t);
-    const int       base  = t / PST_TYPES * PST_PHASE;
-    const auto&     row   = pieceSquareTable[make_piece(WHITE, pt)];
-    bool            folds = true;
+    const bool  mg    = t / PST_TYPES == PST_MG;
+    const auto& row   = pieceSquareTable[make_piece(WHITE, pstTableType(t))];
+    bool        folds = true;
 
     for (int sq = 0; sq < SQUARE_NB; sq++)
     {
-      const Score value = t / PST_TYPES == PST_MG ? row[sq].mg : row[sq].eg;
-      const Score other = t / PST_TYPES == PST_MG ? row[sq ^ 7].mg : row[sq ^ 7].eg;
+      const Score value = mg ? row[sq].mg : row[sq].eg;
+      const Score other = mg ? row[sq ^ 7].mg : row[sq ^ 7].eg;
 
-      theta  [base + pstParam(pt, sq)] += value;
-      squares[base + pstParam(pt, sq)] += 1;
+      theta[t * PST_ENTRIES + sq] = value;
       folds = folds && value == other;
     }
 
-    if (!folds)
-      cout << "Note: " << PST_NAMES[t] << " isn't left-right symmetric; it starts from its folded average.\n";
+    if (folded[t] && !folds)
+      cout << "Note: " << PST_NAMES[t] << " isn't left-right symmetric; it starts from its folded"
+              " average (unfold it to keep its shape).\n";
   }
 
-  for (int j = 0; j < PST_PARAMS; j++)
-    if (squares[j] > 0) theta[j] /= squares[j];
-
+  tieFiles(theta, folded, 0.5);
   return theta;
 }
 
@@ -701,13 +712,14 @@ centreTables(PstParams& theta, const PstParams& occurrences, const PstTables& tu
   }
 }
 
-// Full-batch Adam over one range of the data, moving only the tuned tables. With
-// `centre`, every tuned table but the king's keeps the mean it started with (zero for a
-// table that starts empty): the tables move pieces around without changing what they
-// are worth on average, so material stays the anchor.
+// Full-batch Adam over one range of the data, moving only the tuned tables. A folded
+// table's two mirrored entries get the same gradient, so they stay equal. With `centre`,
+// every tuned table but the king's keeps the mean it started with (zero for a table that
+// starts empty): the tables move pieces around without changing what they are worth on
+// average, so material stays the anchor.
 PstParams
 adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int epochs,
-        bool centre, const PstTables& tuned)
+        bool centre, const PstTables& tuned, const PstTables& folded)
 {
   constexpr double BETA1 = 0.9, BETA2 = 0.999, EPSILON = 1e-8;
   constexpr double LR_START = 1.0, LR_END = 0.1;  // table units per epoch
@@ -754,6 +766,7 @@ adamPst(const PstData& data, const PstRange& r, double K, PstParams theta, int e
     for (int j = 0; j < PST_PARAMS; j++)
       if (!tuned[j / PST_ENTRIES]) grad[j] = 0.0;
 
+    tieFiles(grad, folded, 1.0);
     if (centre) removeMeanDirection(grad, r.occurrences, tuned);
 
     const double lr = LR_START + (LR_END - LR_START) * double(t - 1) / double(epochs);
@@ -818,14 +831,25 @@ printPstTables(std::ostream& os, const PstParams& theta, const PstParams& start,
 }
 
 // Loads the dataset(s), then tunes the chosen tables on each one and, when there are
-// several, on all of them together. Each result also goes to tune_pst_<name>.txt, or
-// tune_pst_<tables>_<name>.txt when `tables` is given.
+// several, on all of them together. Each result also goes to tune_pst_<name>.txt, with
+// `<tables>_` and `unfold-<list>_` before the name when those are given.
 void
 tunePieceSquare(const vector<string>& args, int epochs)
 {
   const string tablesArg = utils::argValue(args, "tables");
   PstTables tuned;
   if (!parsePstTables(tablesArg, tuned)) return;
+
+  // Every table is folded unless `unfold` lists it.
+  const string unfoldArg = utils::argValue(args, "unfold");
+  PstTables folded;
+  folded.fill(true);
+  if (!unfoldArg.empty())
+  {
+    PstTables unfolded;
+    if (!parsePstTables(unfoldArg, unfolded)) return;
+    for (int t = 0; t < PST_TABLES; t++) folded[t] = !unfolded[t];
+  }
 
   vector<std::pair<string, string>> files;  // name, path
 
@@ -846,17 +870,22 @@ tunePieceSquare(const vector<string>& args, int epochs)
     return;
   }
 
-  string tableList;
+  string tableList, unfoldList;
   for (int t = 0; t < PST_TABLES; t++)
-    if (tuned[t]) tableList += (tableList.empty() ? "" : " ") + string(PST_NAMES[t]);
-  cout << "Tuning " << tableList << '\n';
+  {
+    if (!tuned[t]) continue;
+    tableList += (tableList.empty() ? "" : " ") + string(PST_NAMES[t]);
+    if (!folded[t]) unfoldList += (unfoldList.empty() ? "" : " ") + string(PST_NAMES[t]);
+  }
+  if (unfoldList.empty()) unfoldList = "none";
+  cout << "Tuning " << tableList << "\nUnfolded: " << unfoldList << '\n';
 
   const perf_clock loadStart = perf::now();
   PstData data;
   for (const auto& [name, path] : files)
   {
     cout << "Loading " << path << '\n';
-    appendPstDataset(data, path, name, tuned);
+    appendPstDataset(data, path, name, tuned, folded);
   }
   if (data.ranges.empty()) { cout << "No tunable positions loaded.\n"; return; }
 
@@ -875,15 +904,17 @@ tunePieceSquare(const vector<string>& args, int epochs)
        << " features in " << std::fixed << std::setprecision(1) << loadTime.count() << " s.\n";
 
   const bool      centre = !utils::hasArg(args, "free");
-  const PstParams start  = startingPstParams(tuned);
+  const PstParams start  = startingPstParams(tuned, folded);
+
+  const auto tag = [](string list)
+  {
+    std::replace(list.begin(), list.end(), ',', '+');
+    return list + '_';
+  };
 
   string prefix = "tune_pst_";
-  if (!tablesArg.empty())
-  {
-    string tag = tablesArg;
-    std::replace(tag.begin(), tag.end(), ',', '+');
-    prefix += tag + '_';
-  }
+  if (!tablesArg.empty()) prefix += tag(tablesArg);
+  if (!unfoldArg.empty()) prefix += "unfold-" + tag(unfoldArg);
 
   for (const PstRange& r : data.ranges)
   {
@@ -897,7 +928,7 @@ tunePieceSquare(const vector<string>& args, int epochs)
     cout << "Fitted K = " << std::setprecision(4) << K << "   MSE (current tables) = "
          << std::setprecision(8) << mseBefore << "\n\n";
 
-    const PstParams fitted   = adamPst(data, r, K, start, epochs, centre, tuned);
+    const PstParams fitted   = adamPst(data, r, K, start, epochs, centre, tuned, folded);
     const double    mseAfter = pstMse(data, r, K, fitted);
     const perf_time tuneTime = perf::now() - tuneStart;
 
@@ -905,6 +936,7 @@ tunePieceSquare(const vector<string>& args, int epochs)
     report << "Dataset: " << r.name << " (" << (r.end - r.begin) << " positions), "
            << epochs << " epochs, " << (centre ? "centred" : "free") << '\n'
            << "Tables: " << tableList << '\n'
+           << "Unfolded: " << unfoldList << '\n'
            << "Fitted K = " << std::fixed << std::setprecision(4) << K << '\n'
            << "MSE before = " << std::setprecision(8) << mseBefore
            << "   MSE after = " << mseAfter
