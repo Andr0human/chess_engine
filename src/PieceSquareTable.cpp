@@ -4,66 +4,82 @@
 
 // White's tables, indexed by square with a1 = 0, so each one reads upside down: the
 // first row is rank 1. Black's entries are derived from them in buildPieceSquareTable().
+//
+// All twelve tables are Texel-tuned on the three datasets combined, with the weights held
+// fixed. The tuner holds each table's phase-weighted mean over the data where it started
+// (the king's excepted), so it moves pieces around without changing their material value.
+
+// The midgame tables were fitted square by square (`elsa tune pst --all tables mg unfold mg`)
+// with the endgame tables held fixed, so they are not left-right symmetric.
 
 static constexpr ScoreTable pawnMg = {
-   0,  0,   0,   0,   0,  0,  0,  0,
-   0,  0, -10, -20, -20,  0,  5,  0,
-   3, 10,   8,   8,   8, -3, 10,  3,
-   5,  2,  13,  15,  15,  8, -3,  5,
-   6,  7,  15,  17,  17,  9,  7,  6,
-  26, 27,  31,  31,  31, 29, 27, 26,
-  56, 57,  61,  61,  61, 59, 57, 56,
-   0,  0,   0,   0,   0,  0,  0,  0,
+    0,   0,   0,   0,   0,   0,   0,   0,
+   -5, -11, -16, -19,  -6,  16,  24,  -7,
+   -7,  -8,  -4,   1,  12,   8,  20,   1,
+   -6,  -7,   1,  16,  17,  13,   1,  -9,
+    4,   3,   9,  14,  30,  23,  15,   3,
+   17,  19,  39,  36,  42,  65,  34,  14,
+   83,  70,  74,  73,  68,  26,  -5, -68,
+    0,   0,   0,   0,   0,   0,   0,   0,
 };
 
 static constexpr ScoreTable knightMg = {
-  -40, -15, -10, -10, -10, -15, -10, -40,
-  -10,   2,   5,   5,   5,   5,   2, -10,
-  -10,   7,   8,   8,   8,   8,   7, -10,
-  -10,   8,  10,  10,  10,  10,   8, -10,
-  -10,   8,  10,  10,  10,  10,   8, -10,
-  -10,   7,   8,   8,   8,   8,   7, -10,
-  -10,   2,   5,   5,   5,   5,   2, -10,
-  -40, -15, -10, -10, -10, -15, -10, -40,
+   -47,  -10,  -26,  -12,  -10,    7,   -8,  -36,
+   -26,  -12,   -7,    7,    4,   10,    6,    7,
+   -20,   -5,   -5,    4,   15,    3,   15,   -4,
+    -7,    0,   10,    8,   19,   10,   19,    1,
+     4,    8,   14,   36,   14,   41,   16,   31,
+    -6,   26,   21,   34,   46,   54,   29,    7,
+   -30,   -3,   17,   29,   11,   37,   -5,  -11,
+  -129,  -50,  -18,  -41,   -5, -110,  -54, -104,
 };
 
 static constexpr ScoreTable bishopMg = {
-  -40, -5, -5, -5, -5, -5, -5, -40,
-    4, 10,  4,  6,  6,  4, 10,   4,
-    4,  4,  4,  5,  5,  4,  4,   4,
-    6,  7, 20,  6,  6, 20,  7,   6,
-    5, 20,  4,  6,  6,  4, 20,   5,
-    4,  4,  4,  4,  4,  4,  4,   4,
-    4,  4,  4,  4,  4,  4,  4,   4,
-  -40, -5, -5, -5, -5, -5, -5, -40,
+  -14,  14,  -2,  -3,  -6,  -7,  -5,  -6,
+   16,   6,  15,  -2,   7,  15,  27,  10,
+    4,   8,   4,   3,   3,   6,   3,  16,
+   -1,   0,   4,  14,  11,  -2,   0,   2,
+   -3,   6,   7,  20,  11,   7,   4,  -6,
+   -6,  13,   8,  16,   3,  29,   8,  17,
+  -20,  -2,  -8,  -2,  -2, -16, -29, -38,
+  -59, -38, -20, -49, -66, -76, -51, -98,
 };
 
 static constexpr ScoreTable rookMg = {
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-   5, 10, 10, 10, 10, 10, 10,  5,
-  15, 20, 20, 20, 20, 20, 20, 15,
-  40, 50, 50, 50, 50, 50, 50, 40,
-  20, 30, 30, 30, 30, 30, 30, 20,
+   10,   8,   7,  11,  13,  13,  15,   0,
+   -6,  -3,   5,   4,   2,   8,  20,  -4,
+   -7,  -5,  -2,   0,   0,   0,  17,   3,
+   -3,  -5,  -3,   1,  -5, -12,   2,  -9,
+    5,   9,   9,   9,  -4,   3,   3,   1,
+   11,  26,  18,  16,  20,  24,  22,  15,
+   27,  29,  47,  53,  31,  24,  17,  29,
+   11,  22,  24,  19,   1,   0,   8,  20,
+};
+
+static constexpr ScoreTable queenMg = {
+    8,  -2,   2,   7,  -1,   2,  10,   6,
+    0,   0,   3,   6,   5,  14,  16,  28,
+  -12,  -7,  -8,  -7,   0,  -1,  12,   9,
+  -13, -17, -16, -12,  -9,  -5,   1,   9,
+  -26, -20, -23, -23, -11,  -2,   0,  11,
+  -26, -21, -23, -16,  -9,  25,  13,  31,
+  -31, -33, -31, -23, -17,  -3,   5,  53,
+  -40, -20,  -9,  -6,  -5,  11,  23,   3,
 };
 
 static constexpr ScoreTable kingMg = {
-    35,   40,   35,    0,    0,    0,   35,   35,
-    35,   35,   -2,   -2,   -2,   -2,   -2,   35,
-   -10,  -10,  -10,  -10,  -10,  -10,  -10,  -10,
-   -40,  -40,  -50,  -50,  -50,  -50,  -40,  -40,
-   -70,  -70,  -85,  -85,  -85,  -85,  -70,  -70,
-   -90,  -90, -115, -115, -115, -115,  -90,  -90,
-  -150, -165, -165, -165, -165, -165, -165, -150,
-  -200, -200, -200, -200, -200, -200, -200, -200,
+    50,   64,   45,  -26,    1,  -12,   37,   41,
+    66,   17,    2,  -23,  -24,   -9,   10,   27,
+     8,    8,  -18,  -30,  -30,  -35,  -20,  -18,
+   -23,  -11,  -21,  -41,  -57,  -58,  -53,  -63,
+   -51,  -47,  -58,  -71,  -68,  -71,  -64,  -79,
+   -77,  -44,  -98,  -71,  -67,  -43,  -51,  -65,
+  -122,  -98, -110,  -98,  -81,  -76,  -93,  -95,
+   -76, -130, -115, -130, -118,  -90,  -66,  -63,
 };
 
-// The endgame tables are Texel-tuned (`elsa tune pst --all`, all three datasets
-// combined) with the weights held fixed, files folded so each table is left-right
-// symmetric. Each table but the king's has a zero phase-weighted mean over the data,
-// so it moves pieces around without changing their material value.
+// The endgame tables were fitted first (`elsa tune pst --all`) with files folded, so each
+// is left-right symmetric and has a zero mean.
 
 static constexpr ScoreTable pawnEg = {
     0,   0,   0,   0,   0,   0,   0,   0,
@@ -131,8 +147,6 @@ static constexpr ScoreTable kingEg = {
     4,  35,  38,  40,  40,  38,  35,   4,
 };
 
-static constexpr ScoreTable noTable = {};
-
 static constexpr void
 addPiece(PieceSquareTables& table, PieceType pt, const ScoreTable& mg, const ScoreTable& eg)
 {
@@ -145,7 +159,6 @@ addPiece(PieceSquareTables& table, PieceType pt, const ScoreTable& mg, const Sco
   }
 }
 
-// The queen has no midgame table yet.
 static constexpr PieceSquareTables
 buildPieceSquareTable()
 {
@@ -155,7 +168,7 @@ buildPieceSquareTable()
   addPiece(table, BISHOP, bishopMg, bishopEg);
   addPiece(table, KNIGHT, knightMg, knightEg);
   addPiece(table, ROOK  , rookMg  , rookEg  );
-  addPiece(table, QUEEN , noTable , queenEg );
+  addPiece(table, QUEEN , queenMg , queenEg );
   addPiece(table, KING  , kingMg  , kingEg  );
 
   return table;
