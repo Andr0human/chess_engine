@@ -68,6 +68,7 @@ For benchmarking, debugging, and scripted use, Elsa also exposes a CLI. Argument
 - `elsa static [fen <fen>]` — print ordered moves and static evaluation
 - `elsa tune [data <path.epd>] [iters <n>]` — Texel-tune the evaluation blend weights against a labeled EPD set
 - `elsa tune --all [dir <folder>] [iters <n>]` — run the tuner across every `.epd` file in a folder
+- `elsa tune pst [data <path.epd> | --all [dir <folder>]] [tables <list>] [unfold <list>] [iters <n>] [free]` — fit the piece-square tables by gradient descent, holding the rest of the evaluation fixed. `tables` picks which ones (e.g. `queenMg,queenEg`; `mg` or `eg` for all six of a phase; default `eg`). Tables stay left-right symmetric unless listed in `unfold`, and keep their average value unless `free` is given. Output is C++ tables ready to paste into `PieceSquareTable.cpp`
 - `elsa readyOk` — quick smoke test (perft 3 from startpos = 8902)
 
 ### Example
