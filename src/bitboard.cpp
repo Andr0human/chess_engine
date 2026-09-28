@@ -1,6 +1,7 @@
 
 
 #include "bitboard.h"
+#include "lookup_table.h"
 
 uint64_t tmpTotalCounter = 0;
 uint64_t tmpThisCounter = 0;
@@ -71,8 +72,16 @@ ChessBoard::setPositionWithFen(const string& fen) noexcept
   for (char ch : elements[2])
     castlingRights(ch);
 
-  if (elements[3] == "-") csep |= 64;
-  else csep |= 28 + ((2 * color - 1) * 12) + (elements[3][0] - 'a');
+  // Drop an en passant square no pawn can capture on, as makeMoveDoublePawnPush()
+  // does, so a FEN position hashes the same as the position reached by moves.
+  int epSq = SQUARE_NB;
+  if (elements[3] != "-")
+  {
+    epSq = 28 + ((2 * color - 1) * 12) + (elements[3][0] - 'a');
+    if (!(plt::pawnCaptureMasks[~color][epSq] & pieceBb[make_piece(color, PAWN)]))
+      epSq = SQUARE_NB;
+  }
+  csep |= epSq;
 
   if (elements.size() == 6)
   {
@@ -271,12 +280,23 @@ void
 ChessBoard::makeMoveDoublePawnPush(Square ip, Square fp) noexcept
 {
   int own = color << 3;
-  csep = (csep & 1920) | ((ip + fp) >> 1);
+  const Square epSq = Square((ip + fp) >> 1);
 
   pieceBb[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
   pieceBb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
-  hashValue ^= tt.hashKey(1 + enPassantSquare());
+  // Set the en passant square only when an enemy pawn attacks it. A square nobody
+  // can capture on doesn't change the position, and hashing it anyway made the
+  // position after a double push look different from the same position a few
+  // moves later, so threeMoveRepetition() missed repetitions that started there
+  // (fastchess: "PV continues after threefold repetition"). makeMove() has already
+  // cleared the old square.
+  if (plt::pawnCaptureMasks[color][epSq] & pieceBb[make_piece(~color, PAWN)])
+  {
+    csep = (csep & 1920) | epSq;
+    hashValue ^= tt.hashKey(1 + epSq);
+  }
+
   hashValue ^= tt.hashKeyUpdate(own + 1, ip)
              ^ tt.hashKeyUpdate(own + 1, fp)
              ^ tt.hashKey(0);
