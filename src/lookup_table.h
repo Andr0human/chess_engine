@@ -10,7 +10,10 @@
 // blockers gathered into a dense, collision-free integer -- instead of the
 // magic multiply-shift. -march=native enables BMI2 wherever the build machine
 // has it; build with -DNO_PEXT to force magics (A/B runs, portable binaries).
-#if defined(__BMI2__) && !defined(NO_PEXT)
+// AMD Excavator, Zen 1 and Zen 2 have BMI2 but run PEXT in microcode, far
+// slower than the multiply, so -march=native on those keeps the magics.
+#if defined(__BMI2__) && !defined(NO_PEXT) \
+    && !defined(__bdver4__) && !defined(__znver1__) && !defined(__znver2__)
   #include <immintrin.h>
   #define USE_PEXT 1
 #else
@@ -76,6 +79,10 @@ namespace plt
     return (magic * (occupied & mask)) >> shift;
 #endif
   }
+
+  // Which indexing this binary was built with. Reported in the UCI `id name`
+  // line so arena logs show which variant played.
+  inline constexpr const char* SLIDER_INDEXING = USE_PEXT ? "pext" : "magic";
 
 
   // Square-to-square distance tables. 4 KB each, and constexpr rather than

@@ -1,6 +1,7 @@
 
 #include "uci.h"
 #include "bitboard.h"
+#include "lookup_table.h"
 #include "movegen.h"
 #include "move_utils.h"
 #include "search.h"
@@ -54,7 +55,7 @@ stopAndJoin()
 void
 sendId()
 {
-  uciSend("id name " + ENGINE_NAME + " " + ENGINE_VERSION);
+  uciSend("id name " + ENGINE_NAME + " " + ENGINE_VERSION + " " + plt::SLIDER_INDEXING);
   uciSend("id author Andr0human");
   uciSend("option name Hash type spin default " + std::to_string(int(TT_DEFAULT_MB))
           + " min " + std::to_string(int(TT_MIN_MB))
