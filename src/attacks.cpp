@@ -33,8 +33,7 @@ attackSquares<BISHOP>(Square sq, Bitboard occupied)
   Bitboard mask  = plt::bishopMasks[sq];
   uint64_t start = plt::bishopStartIndex[sq];
 
-  uint64_t occupancy = (magic * (occupied & mask)) >> bits;
-  return plt::bishopMovesLookUp[start + occupancy];
+  return plt::bishopMovesLookUp[start + plt::sliderIndex(occupied, mask, magic, bits)];
 }
 
 template <>
@@ -53,8 +52,7 @@ attackSquares<ROOK>(Square sq, Bitboard occupied)
   Bitboard mask  = plt::rookMasks[sq];
   uint64_t start = plt::rookStartIndex[sq];
 
-  uint64_t occupancy = (magic * (occupied & mask)) >> bits;
-  return plt::rookMovesLookUp[start + occupancy];
+  return plt::rookMovesLookUp[start + plt::sliderIndex(occupied, mask, magic, bits)];
 }
 
 template <>

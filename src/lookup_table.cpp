@@ -211,7 +211,7 @@ buildLookUpTable(MaskTable& masks, MaskTable& magicTable, ShiftTable& shiftTable
 
 		for (int i = 0; i < n; i++)
 		{
-			Bitboard occupancy = startIndex[sq] + ((blockers[i] * magic) >> bits);
+			Bitboard occupancy = startIndex[sq] + sliderIndex(blockers[i], masks[sq], magic, bits);
 
       if (occupancy > mIndex)
         mIndex = occupancy;

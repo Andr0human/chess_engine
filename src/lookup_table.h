@@ -6,6 +6,17 @@
 #include "types.h"
 #include <array>
 
+// Slider occupancy indexing. With BMI2 the index is one PEXT -- the relevant
+// blockers gathered into a dense, collision-free integer -- instead of the
+// magic multiply-shift. -march=native enables BMI2 wherever the build machine
+// has it; build with -DNO_PEXT to force magics (A/B runs, portable binaries).
+#if defined(__BMI2__) && !defined(NO_PEXT)
+  #include <immintrin.h>
+  #define USE_PEXT 1
+#else
+  #define USE_PEXT 0
+#endif
+
 using std::array;
 using MaskTable  = array<Bitboard, SQUARE_NB>;
 using ShiftTable = array<int     , SQUARE_NB>;
@@ -51,6 +62,20 @@ namespace plt
 
   void
   init();
+
+  // Offset of `occupied`'s relevant blockers within a square's slice of the
+  // sliding lookup table. The table builder and attackSquares<> both go
+  // through here, so the two can never index differently.
+  inline uint64_t
+  sliderIndex(Bitboard occupied, Bitboard mask,
+              [[maybe_unused]] uint64_t magic, [[maybe_unused]] int shift) noexcept
+  {
+#if USE_PEXT
+    return _pext_u64(occupied, mask);
+#else
+    return (magic * (occupied & mask)) >> shift;
+#endif
+  }
 
 
   // Square-to-square distance tables. 4 KB each, and constexpr rather than
