@@ -7,14 +7,15 @@
 
 // Texel-style evaluation weight tuner.
 //
-//   elsa tune [data <path>] [iters <n>]
+//   elsa tune [data <path> | --all [dir <folder>]] [iters <n>] [weights <list>]
 //
 // With no `data` path it only runs the correctness self-check (the reconstruction
 // from cached components must reproduce the real white-relative static eval). With a
 // labeled dataset it fits the sigmoid scaling constant K, then coordinate-descends the
 // runtime EvalWeights to minimise mean-squared prediction error, printing the MSE
 // before/after and the tuned weights. It does NOT overwrite the engine's defaults —
-// the tuned values are printed for the user to paste in deliberately.
+// the tuned values are printed for the user to paste in deliberately. `weights` is a
+// comma-separated list of weight names to descend; the rest stay frozen.
 //
 //   elsa tune pst [data <path> | --all [dir <folder>]] [tables <list>] [unfold <list>]
 //                 [iters <n>] [free]

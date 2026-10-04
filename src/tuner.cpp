@@ -241,10 +241,40 @@ static const std::array<WeightRef, 16> WEIGHTS = {{
   {"isolatedPawnWeightEg",  &EvalWeights::isolatedPawnWeightEg}
 }};
 
-// Coordinate descent: probe each weight +-step, keep any move that lowers MSE; when a full
-// sweep yields no improvement, halve the step. Stops at a tiny step or the iteration cap.
+// Which WEIGHTS entries the descent may move; the rest stay at their engine values.
+using TunedWeights = std::array<bool, WEIGHTS.size()>;
+
+// `list` is comma-separated weight names from WEIGHTS. Empty means all of them.
+// Returns false on an unknown name.
+bool
+parseTunedWeights(const string& list, TunedWeights& tuned)
+{
+  tuned.fill(list.empty());
+
+  for (const string& token : utils::split(list, ','))
+  {
+    if (token.empty()) continue;
+
+    bool known = false;
+    for (size_t i = 0; i < WEIGHTS.size(); i++)
+      if (token == WEIGHTS[i].name) tuned[i] = known = true;
+
+    if (!known)
+    {
+      cout << "Unknown weight: " << token << " (names as printed in the tuner report).\n";
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// Coordinate descent: probe each tuned weight +-step, keep any move that lowers MSE; when
+// a full sweep yields no improvement, halve the step. Stops at a tiny step or the
+// iteration cap.
 EvalWeights
-coordinateDescent(const vector<TuneEntry>& data, double K, EvalWeights best, int maxIters)
+coordinateDescent(const vector<TuneEntry>& data, double K, EvalWeights best, int maxIters,
+                  const TunedWeights& tuned)
 {
   // A sweep whose total MSE gain falls below this is treated as stalled at the current
   // resolution, so the step shrinks (or the search ends once the step is tiny).
@@ -258,8 +288,11 @@ coordinateDescent(const vector<TuneEntry>& data, double K, EvalWeights best, int
   {
     const double sweepStart = bestMse;
 
-    for (const auto& wr : WEIGHTS)
+    for (size_t i = 0; i < WEIGHTS.size(); i++)
     {
+      if (!tuned[i]) continue;
+
+      const WeightRef& wr = WEIGHTS[i];
       const float orig = best.*wr.member;
 
       best.*wr.member = orig + float(step);
@@ -298,11 +331,13 @@ printWeights(std::ostream& os, const EvalWeights& w)
        << std::right << (w.*wr.member) << '\n';
 }
 
-// Loads one dataset, fits K, runs coordinate descent, and streams the report to stdout.
-// When reportPath is non-empty the same default/tuned-weight block is also written there.
-// Returns false if the dataset could not be loaded (so --all can skip to the next file).
+// Loads one dataset, fits K, runs coordinate descent over the weights `which` selects,
+// and streams the report to stdout. When reportPath is non-empty the same
+// default/tuned-weight block is also written there. Returns false if the dataset could
+// not be loaded (so --all can skip to the next file).
 bool
-tuneDataset(const string& path, int maxIters, const string& reportPath)
+tuneDataset(const string& path, int maxIters, const string& reportPath,
+            const TunedWeights& which)
 {
   const perf_clock start = perf::now();
   const vector<TuneEntry> data = loadDataset(path);
@@ -318,13 +353,22 @@ tuneDataset(const string& path, int maxIters, const string& reportPath)
        << "   MSE (defaults) = " << std::setprecision(8) << mseBefore << "\n\n";
 
   cout << "Coordinate descent:\n";
-  const EvalWeights tuned = coordinateDescent(data, K, start_w, maxIters);
+  const EvalWeights tuned = coordinateDescent(data, K, start_w, maxIters, which);
   const double mseAfter = meanSquaredError(data, K, tuned);
 
   // Build the result block once, then send it to stdout and (optionally) the report file.
   std::ostringstream report;
-  report << "Dataset: " << path << '\n'
-         << "Fitted K = " << std::fixed << std::setprecision(4) << K << '\n'
+  report << "Dataset: " << path << '\n';
+
+  if (std::count(which.begin(), which.end(), true) < std::ptrdiff_t(WEIGHTS.size()))
+  {
+    report << "Tuned (the rest frozen):";
+    for (size_t i = 0; i < WEIGHTS.size(); i++)
+      if (which[i]) report << ' ' << WEIGHTS[i].name;
+    report << '\n';
+  }
+
+  report << "Fitted K = " << std::fixed << std::setprecision(4) << K << '\n'
          << "MSE before = " << std::setprecision(8) << mseBefore
          << "   MSE after = " << mseAfter
          << "   (" << std::setprecision(4)
@@ -979,12 +1023,19 @@ tuneEval(const vector<string>& args)
   const int maxIters = utils::hasArg(args, "iters")
                      ? std::stoi(utils::argValue(args, "iters")) : 10000;
 
+  // weights <list>: descend only these; every other weight stays at its engine value.
+  const string weightsArg = utils::argValue(args, "weights");
+  TunedWeights which;
+  if (!parseTunedWeights(weightsArg, which)) return;
+
   // --all: tune every *.epd in the dataset directory in turn, writing each result to
-  // its own tune_<stem>.txt alongside the stdout report. Directory defaults to the
+  // its own tune_<stem>.txt (tune_partial_<stem>.txt with `weights`, so a subset run
+  // never overwrites a full one) alongside the stdout report. Directory defaults to the
   // texel_dataset folder (relative to the usual output/ working dir); override with
   // `dir <path>`.
   if (utils::hasArg(args, "--all") || utils::hasArg(args, "all"))
   {
+    const string prefix = weightsArg.empty() ? "tune_" : "tune_partial_";
     const vector<std::filesystem::path> datasets = listDatasets(utils::argValue(args, "dir"));
     if (datasets.empty()) return;
 
@@ -997,8 +1048,8 @@ tuneEval(const vector<string>& args)
       ++idx;
       cout << "\n================ [" << idx << '/' << datasets.size() << "] "
            << p.filename().string() << " ================\n";
-      const string reportPath = "tune_" + p.stem().string() + ".txt";
-      tuneDataset(p.string(), maxIters, reportPath);
+      const string reportPath = prefix + p.stem().string() + ".txt";
+      tuneDataset(p.string(), maxIters, reportPath, which);
     }
     cout << "\nAll datasets done.\n";
     return;
@@ -1012,5 +1063,5 @@ tuneEval(const vector<string>& args)
     return;
   }
 
-  tuneDataset(dataPath, maxIters, "");
+  tuneDataset(dataPath, maxIters, "", which);
 }

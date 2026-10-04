@@ -167,8 +167,9 @@ helper()
   puts("**        frozen=inequalities as coordinates; maxk/top bound them, freeze <n> sets frozen slots\n");
 
   puts("** For tuning evaluation weights (Texel), type:\n");
-  puts("** elsa tune [data <path.epd>] [iters <n>]\n");
-  puts("** elsa tune --all [dir <folder>] [iters <n>]   (tune every .epd in folder)\n");
+  puts("** elsa tune [data <path.epd>] [iters <n>] [weights <list>]\n");
+  puts("** elsa tune --all [dir <folder>] [iters <n>] [weights <list>]   (tune every .epd in folder)\n");
+  puts("**   (weights: comma-separated names to tune, the rest frozen; default all)\n");
   puts("** elsa tune pst [data <path.epd> | --all [dir <folder>]] [tables <list>] [unfold <list>]\n");
   puts("**               [iters <n>] [free]\n");
   puts("**   (piece-square tables, e.g. tables queenMg,queenEg; mg or eg = all six; default eg;\n");
