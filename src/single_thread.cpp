@@ -803,8 +803,11 @@ search(ChessBoard board,
     // Put this iteration's best move first for the next iteration.
     info.promoteBestMove(pvArray[0]);
 
-    // Stop after finding a checkmate.
-    if (withinValWindow and isMateScore(eval)) break;
+    // Stop after finding a checkmate, but only once the completed depth (depth - 1 here)
+    // reaches it. A longer mate can come from TT entries stored on earlier moves, which
+    // need not be the shortest mate and ignore repetitions the opponent can now claim.
+    const Score mateDistance = VALUE_MATE - (eval > 0 ? eval : -eval);
+    if (withinValWindow and isMateScore(eval) and mateDistance <= 20 * (depth - 1)) break;
   }
 
   info.searchCompleted();
