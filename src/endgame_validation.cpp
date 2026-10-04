@@ -557,6 +557,46 @@ reportScorecard(const Generator& g, const string& pieceStr)
   cout << '\n';
 }
 
+// Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
+// (the only parallel stage) so the harness need not saturate every core. 0 =
+// not given = default to HALF the hardware threads, leaving the machine usable.
+// Clamped to [1, hardware max]. Returns the team size.
+int
+setSolverThreads(const vector<string>& args)
+{
+  int reqThreads = 0;
+  if (utils::hasArg(args, "threads"))
+  {
+    try { reqThreads = std::stoi(utils::argValue(args, "threads")); }
+    catch (...) { reqThreads = 0; }
+    if (reqThreads < 1) reqThreads = 1;
+  }
+
+#ifdef _OPENMP
+  const int maxThreads = omp_get_max_threads();
+  if (reqThreads > maxThreads) reqThreads = maxThreads;
+  // Default (no explicit request): half the cores, at least 1.
+  const int usingThreads = reqThreads > 0 ? reqThreads : std::max(1, maxThreads / 2);
+  omp_set_num_threads(usingThreads);
+  return usingThreads;
+#else
+  (void)reqThreads;
+  return 1;
+#endif
+}
+
+// Human-readable name of a solver signature, e.g. "KRPKR": White first, each
+// side strongest man first.
+string
+sigName(const EgSolver::Sig& sig)
+{
+  string side[COLOR_NB];
+  for (PieceType pt : { KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN })
+    for (Piece p : sig)
+      if (type_of(p) == pt) side[color_of(p)] += "?PBNRQK"[pt];
+  return side[WHITE] + side[BLACK];
+}
+
 } // namespace
 
 void
@@ -696,27 +736,7 @@ validateEndgame(const vector<string>& args)
     if (freezeN < 1) freezeN = 1;
   }
 
-  // Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
-  // (the only parallel stage) so the harness need not saturate every core. 0 =
-  // not given = default to HALF the hardware threads, leaving the machine usable.
-  // Clamped to [1, hardware max]; an unparseable value falls back to the default.
-  int reqThreads = 0;
-  if (utils::hasArg(args, "threads"))
-  {
-    try { reqThreads = std::stoi(utils::argValue(args, "threads")); }
-    catch (...) { reqThreads = 0; }
-    if (reqThreads < 1) reqThreads = 1;
-  }
-
-#ifdef _OPENMP
-  const int maxThreads = omp_get_max_threads();
-  if (reqThreads > maxThreads) reqThreads = maxThreads;
-  // Default (no explicit request): half the cores, at least 1.
-  const int usingThreads = reqThreads > 0 ? reqThreads : std::max(1, maxThreads / 2);
-  omp_set_num_threads(usingThreads);
-#else
-  const int usingThreads = 1;
-#endif
+  const int usingThreads = setSolverThreads(args);
 
   // ---- colourings to enumerate --------------------------------------------
   vector<string> colourings{ pieceArg };
@@ -924,4 +944,122 @@ validateEndgame(const vector<string>& args)
       dumped += g.t.missedDraw + g.t.falseDraw;
     cout << "Dumped " << dumped << " mismatched positions to " << dumpFile << '\n';
   }
+}
+
+void
+solveEndgameTables(const vector<string>& args)
+{
+  // elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [target]
+  //
+  // A tool for working on the oracle itself. Solves every table the signature
+  // needs from scratch -- the disk cache is neither read nor written -- prints
+  // each table's time, sweeps and forward checks, and compares each result with
+  // its cached copy byte for byte. `pieces` works as in egvalidate.
+  //
+  //   sweep  -> use the original solve, which re-checks every undecided position
+  //             on every sweep (the reference for timing)
+  //   check  -> also test the backward move generator on each table against the
+  //             engine's own moves
+  //   target -> solve only the named table, reading its sub-tables from the
+  //             cache (any that are missing are solved too)
+
+  const string pieceArg = utils::hasArg(args, "pieces")
+                        ? utils::argValue(args, "pieces")
+                        : string("Pb");
+
+  vector<Slot> slots;
+  char badChar = 0;
+  if (!parseExtras(pieceArg, slots, badChar))
+  {
+    cout << "Invalid piece in 'pieces " << pieceArg << "': '" << badChar << "'\n"
+            "  Use P/N/B/R/Q (white) or p/n/b/r/q (black). Kings are implicit.\n";
+    return;
+  }
+  vector<Piece> men;
+  for (char c : pieceArg)
+    men.push_back(charToPiece(c));
+
+  const int usingThreads = setSolverThreads(args);
+  const bool wantCheck = utils::hasArg(args, "check");
+
+  EgSolver solver;
+  solver.cacheEnabled = false;
+  solver.fullSweeps = utils::hasArg(args, "sweep");
+  solver.solveTargetOnly = utils::hasArg(args, "target");
+
+  cout << "Solving " << signatureOf(pieceArg)
+       << (solver.solveTargetOnly ? " only, " : " and its sub-tables, ")
+       << (solver.fullSweeps ? "full sweeps" : "re-checking predecessors only")
+       << " (" << usingThreads << " thread" << (usingThreads == 1 ? "" : "s")
+       << ")\n\n";
+
+  string err;
+  if (!solver.build(men, err))
+  {
+    cout << "Cannot solve: " << err << '\n';
+    return;
+  }
+
+  cout << std::left << std::setw(8) << "table" << std::right
+       << std::setw(10) << "seconds" << std::setw(8) << "sweeps"
+       << std::setw(14) << "checks" << "  cache";
+  if (wantCheck)
+    cout << "          backward moves";
+  cout << '\n';
+
+  double totalSeconds = 0;
+  uint64_t totalChecks = 0;
+  int solved = 0, differ = 0, uncompared = 0, missedTables = 0;
+  for (const EgSolver::TableStats& st : solver.lastBuild)
+  {
+    if (st.loaded) continue;
+    ++solved;
+    totalSeconds += st.seconds;
+    totalChecks += st.evaluations;
+    cout << std::left << std::setw(8) << sigName(st.sig) << std::right
+         << std::fixed << std::setprecision(2) << std::setw(10) << st.seconds
+         << std::setw(8) << st.sweeps << std::setw(14) << st.evaluations << "  ";
+
+    uint64_t differing = 0;
+    string cacheCol;
+    if (!solver.compareWithCache(st.sig, differing))
+    {
+      cacheCol = "no file";
+      ++uncompared;
+    }
+    else if (differing == 0)
+      cacheCol = "identical";
+    else
+    {
+      cacheCol = std::to_string(differing) + " differ";
+      ++differ;
+    }
+    cout << std::left << std::setw(15) << cacheCol << std::right;
+
+    if (wantCheck)
+    {
+      uint64_t edges = 0, missing = 0;
+      string example;
+      solver.checkPredecessors(st.sig, edges, missing, example);
+      cout << "  " << edges << " checked, " << missing << " missed";
+      if (missing)
+      {
+        cout << "  (first: " << example << ")";
+        ++missedTables;
+      }
+    }
+    cout << '\n';
+  }
+
+  cout << "\nTotal: " << std::fixed << std::setprecision(2) << totalSeconds
+       << " s solving, " << totalChecks << " forward checks over "
+       << solved << " tables";
+  if (solver.tablesLoaded)
+    cout << " (" << solver.tablesLoaded << " sub-tables read from the cache)";
+  cout << ".\n";
+  cout << "Cache: " << (solved - differ - uncompared)
+       << " identical, " << differ << " differ, " << uncompared << " without a file.\n";
+  if (wantCheck)
+    cout << "Backward moves: " << (missedTables == 0 ? "no misses" :
+             std::to_string(missedTables) + " tables with misses") << ".\n";
 }

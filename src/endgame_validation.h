@@ -19,4 +19,12 @@
 void
 validateEndgame(const std::vector<std::string>& args);
 
+/**
+ * @brief Solve every oracle table a signature needs from scratch, timing each,
+ * and compare the results with the disk cache. A tool for working on the solver
+ * itself. CLI entry point: `elsa egsolve`.
+ */
+void
+solveEndgameTables(const std::vector<std::string>& args);
+
 #endif

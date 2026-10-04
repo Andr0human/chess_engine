@@ -166,6 +166,11 @@ helper()
   puts("**        bucket-probe searches (need 'oracle'): combos=feature subsets, sums=signed inequalities,\n");
   puts("**        frozen=inequalities as coordinates; maxk/top bound them, freeze <n> sets frozen slots\n");
 
+  puts("** To re-solve the oracle tables of a signature and compare them with the cache, type:\n");
+  puts("** elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [target]\n");
+  puts("**   'sweep' uses the original full-sweep solve; 'check' tests the backward move generator;\n");
+  puts("**   'target' solves only the named table, reading its sub-tables from the cache\n");
+
   puts("** For tuning evaluation weights (Texel), type:\n");
   puts("** elsa tune [data <path.epd>] [iters <n>] [weights <list>]\n");
   puts("** elsa tune --all [dir <folder>] [iters <n>] [weights <list>]   (tune every .epd in folder)\n");
@@ -415,7 +420,8 @@ task(const vector<string>& args)
     {"readyOk",   [](const auto&){ readyOk(); }},
     {"isDraw",    [](const auto& arguments){ isDrawCheck(arguments); }},
     {"tune",      [](const auto& arguments){ tuneEval(arguments); }},
-    {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }}
+    {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }},
+    {"egsolve",    [](const auto& arguments){ solveEndgameTables(arguments); }}
   };
 
   string foundCommand;

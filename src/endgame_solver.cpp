@@ -28,8 +28,10 @@
 #endif
 
 #include "endgame_solver.h"
+#include "attacks.h"
 #include "movegen.h"
 #include "move_utils.h"
+#include "perf.h"
 
 using Sig = EgSolver::Sig;
 
@@ -295,6 +297,99 @@ sameSig(const std::array<Piece, 4>& men, int n, const Sig& sig)
   return true;
 }
 
+// Is this the entry indexMen reads, i.e. are identical men in ascending-square
+// order? Any other ordering (a "twin") is the same position under another index.
+bool
+isCanonicalSlot(const Sig& sig, const std::array<int, 4>& sqs, int n)
+{
+  for (int i = 1; i < n; ++i)
+    if (sig[i] == sig[i - 1] && sqs[i] < sqs[i - 1]) return false;
+  return true;
+}
+
+// Table index of `sig` with slot i on sqs[i], put in canonical order first: a
+// backward move can carry one knight past its twin, and the index must then be
+// the one indexMen would compute for that position.
+uint64_t
+slotIndex(const Sig& sig, std::array<int, 4> sqs, int n, Color stm)
+{
+  for (int i = 1; i < n; ++i)
+    for (int j = i; j > 0 && sig[j] == sig[j - 1] && sqs[j] < sqs[j - 1]; --j)
+      std::swap(sqs[j], sqs[j - 1]);
+
+  uint64_t idx = 0;
+  for (int i = 0; i < n; ++i)
+    idx = idx * 64 + static_cast<uint64_t>(sqs[i]);
+  return idx * 2 + stm;
+}
+
+// ---- backward move generation --------------------------------------------
+
+// Squares a pawn of colour `c` now on `to` could have been pushed from: one rank
+// back, or two from its start rank when both squares behind it are empty. Never
+// from the back rank, where no pawn stands.
+Bitboard
+pawnOrigins(Color c, int to, Bitboard occ)
+{
+  const int back = (c == WHITE) ? -8 : 8;
+  const int one  = to + back;
+  if ((one >> 3) == 0 || (one >> 3) == 7 || ((occ >> one) & 1))
+    return 0;
+
+  Bitboard from = Bitboard(1) << one;
+  const int two = one + back;
+  const int startRank = (c == WHITE) ? 1 : 6;
+  if ((two >> 3) == startRank && !((occ >> two) & 1))
+    from |= Bitboard(1) << two;
+  return from;
+}
+
+// Calls `emit(index)` for every entry of `sig` that reaches (sqs, stm) by one
+// move that is neither a capture nor a promotion: the side that just moved takes
+// back one move. Captures and promotions change the material, so those moves come
+// from another table and need no undoing; castling and en passant do not occur.
+//
+// The list may hold entries that are illegal or already decided (the caller skips
+// those by their value), but it must never miss a real predecessor;
+// checkPredecessors tests that against the engine's own moves.
+template <typename Emit>
+void
+forEachPredecessor(const Sig& sig, const std::array<int, 4>& sqs, int n,
+                   Color stm, Emit&& emit)
+{
+  const Color mover = ~stm;
+  Bitboard occ = 0;
+  for (int i = 0; i < n; ++i)
+    occ |= Bitboard(1) << sqs[i];
+
+  for (int i = 0; i < n; ++i)
+  {
+    if (color_of(sig[i]) != mover) continue;
+
+    // Piece moves are reversible: the man came from a square it attacks now.
+    const Square to = Square(sqs[i]);
+    Bitboard from = 0;
+    switch (type_of(sig[i]))
+    {
+      case PAWN:   from = pawnOrigins(mover, to, occ);          break;
+      case BISHOP: from = attackSquares<BISHOP>(to, occ) & ~occ; break;
+      case KNIGHT: from = attackSquares<KNIGHT>(to, occ) & ~occ; break;
+      case ROOK:   from = attackSquares<ROOK  >(to, occ) & ~occ; break;
+      case QUEEN:  from = attackSquares<QUEEN >(to, occ) & ~occ; break;
+      case KING:   from = attackSquares<KING  >(to, occ) & ~occ; break;
+      default:     break;
+    }
+
+    std::array<int, 4> prev = sqs;
+    while (from)
+    {
+      prev[i] = __builtin_ctzll(from);
+      from &= from - 1;
+      emit(slotIndex(sig, prev, n, mover));
+    }
+  }
+}
+
 } // namespace
 
 // --------------------------------------------------------------------------
@@ -320,8 +415,31 @@ EgSolver::valueOf(const ChessBoard& pos) const
   return registry.at(sig)[idx];
 }
 
+// One forward check of an undecided position: WIN if some move reaches a loss
+// for the opponent, LOSS if every move reaches a win for the opponent, otherwise
+// still UNKNOWN. Both solve methods decide positions only through this check.
+Wdl
+EgSolver::forwardValue(ChessBoard& pos) const
+{
+  const MoveList ml = generateMoves(pos);
+  MoveArray moves;
+  ml.getMoves(pos, moves);
+
+  bool allWin = true;
+  for (const Move mv : moves)
+  {
+    pos.makeMove(mv);
+    const Wdl v = valueOf(pos);
+    pos.unmakeMove();
+
+    if (v == Wdl::LOSS) return Wdl::WIN;
+    if (v != Wdl::WIN)  allWin = false;
+  }
+  return allWin ? Wdl::LOSS : Wdl::UNKNOWN;
+}
+
 void
-EgSolver::solve(const Sig& sig)
+EgSolver::solve(const Sig& sig, TableStats& stats)
 {
   const int n = static_cast<int>(sig.size());
   const uint64_t total = numStates(n);
@@ -333,8 +451,7 @@ EgSolver::solve(const Sig& sig)
   // Pass 1: classify illegal / terminal / interior(UNKNOWN). Every index is
   // independent, so this fans out across cores. Each thread keeps its own board
   // (its undo stack is a member, so distinct boards never alias) and writes only
-  // its own slots; the worklist of UNKNOWN indices is gathered in a cheap serial
-  // scan afterwards. n <= 4 => total < 2^26, so uint32 indices suffice.
+  // its own slots.
   #pragma omp parallel
   {
     std::array<int, 4> sqs{};
@@ -359,30 +476,76 @@ EgSolver::solve(const Sig& sig)
     }
   }
 
+  // Relaxation to a fixpoint: a node is WIN if any successor is a LOSS for the
+  // opponent, LOSS if every successor is a WIN for the opponent; otherwise it
+  // settles to DRAW. Values only ever flip UNKNOWN -> WIN/LOSS (monotone), and
+  // the fixpoint does not depend on the order positions are checked in, so both
+  // methods reach the same table.
+  if (fullSweeps)
+    relaxFullSweeps(sig, table, stats);
+  else
+    relaxFrontier(sig, table, stats);
+
+  // Whatever is still undecided is a draw. The frontier method never checks
+  // twins (identical men out of square order), so each one takes the value of
+  // the entry it duplicates; with full sweeps the two already agree. A canonical
+  // entry may turn from UNKNOWN to DRAW while its twin reads it, so an UNKNOWN
+  // read also means DRAW.
+  #pragma omp parallel
+  {
+    std::array<int, 4> sqs{};
+    Color stm = WHITE;
+
+    #pragma omp for schedule(static)
+    for (int64_t s = 0; s < static_cast<int64_t>(total); ++s)
+    {
+      const size_t si = static_cast<size_t>(s);
+      if (table[si] != Wdl::UNKNOWN) continue;
+
+      decode(static_cast<uint64_t>(s), n, sqs, stm);
+      Wdl v = Wdl::UNKNOWN;
+      if (!isCanonicalSlot(sig, sqs, n))
+        v = table[slotIndex(sig, sqs, n, stm)];
+      table[si] = (v == Wdl::UNKNOWN) ? Wdl::DRAW : v;
+    }
+  }
+
+  currentTable = nullptr;
+  registry.emplace(sig, std::move(table));
+}
+
+// The original method: every sweep re-checks every undecided position, until a
+// sweep decides nothing. The number of sweeps is about the longest win in the
+// table, and the draws are re-checked on every one of them.
+//
+// Each sweep runs in parallel. The race on `table` is benign: a uint8 store is
+// atomic on x86, and the only transitions are UNKNOWN -> WIN/LOSS, both final.
+// A thread that reads a sibling's just-written WIN/LOSS merely converges
+// faster; one that still reads UNKNOWN (treated as "not WIN, not LOSS") simply
+// defers that node to a later sweep. A node is finalized LOSS only when *all*
+// its successors are already WIN (final), so no node is ever decided wrongly --
+// the fixpoint reached is bit-identical to the serial version. Each thread
+// collects the indices it could not yet decide into a local list; those are
+// merged to form the next sweep's worklist. n <= 4 => total < 2^26, so uint32
+// indices suffice.
+void
+EgSolver::relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& stats)
+{
+  const int n = static_cast<int>(sig.size());
+  const uint64_t total = table.size();
+
   std::vector<uint32_t> unknown;
   for (uint64_t s = 0; s < total; ++s)
     if (table[s] == Wdl::UNKNOWN) unknown.push_back(static_cast<uint32_t>(s));
 
-  // Relaxation to a fixpoint: a node is WIN if any successor is a LOSS for the
-  // opponent, LOSS if every successor is a WIN for the opponent; otherwise it
-  // settles to DRAW. Values only ever flip UNKNOWN -> WIN/LOSS (monotone), so
-  // this converges in at most (max distance-to-mate) sweeps.
-  //
-  // Each sweep runs in parallel. The race on `table` is benign: a uint8 store is
-  // atomic on x86, and the only transitions are UNKNOWN -> WIN/LOSS, both final.
-  // A thread that reads a sibling's just-written WIN/LOSS merely converges
-  // faster; one that still reads UNKNOWN (treated as "not WIN, not LOSS") simply
-  // defers that node to a later sweep. A node is finalized LOSS only when *all*
-  // its successors are already WIN (final), so no node is ever decided wrongly --
-  // the fixpoint reached is bit-identical to the serial version. Each thread
-  // collects the indices it could not yet decide into a local list; those are
-  // merged to form the next sweep's worklist.
   bool changed = true;
   std::vector<uint32_t> nextUnknown;
   while (changed)
   {
     int changedFlag = 0;
     nextUnknown.clear();
+    ++stats.sweeps;
+    stats.evaluations += unknown.size();
 
     #pragma omp parallel
     {
@@ -399,24 +562,9 @@ EgSolver::solve(const Sig& sig)
         decode(s, n, sqs, stm);
         setupBoard(pos, sig, sqs, n, stm);
 
-        const MoveList ml = generateMoves(pos);
-        MoveArray moves;
-        ml.getMoves(pos, moves);
-
-        bool anyLoss = false, allWin = true;
-        for (const Move mv : moves)
-        {
-          pos.makeMove(mv);
-          const Wdl v = valueOf(pos);
-          pos.unmakeMove();
-
-          if (v == Wdl::LOSS) { anyLoss = true; break; }
-          if (v != Wdl::WIN)  allWin = false;
-        }
-
-        if (anyLoss)      { table[s] = Wdl::WIN;  localChanged = 1; }
-        else if (allWin)  { table[s] = Wdl::LOSS; localChanged = 1; }
-        else              localKeep.push_back(s);   // still undecided -> keep
+        const Wdl v = forwardValue(pos);
+        if (v != Wdl::UNKNOWN) { table[s] = v; localChanged = 1; }
+        else                   localKeep.push_back(s);   // still undecided -> keep
       }
 
       #pragma omp critical
@@ -429,12 +577,103 @@ EgSolver::solve(const Sig& sig)
     changed = changedFlag != 0;
     unknown.swap(nextUnknown);
   }
+}
 
-  for (uint32_t s : unknown)
-    table[s] = Wdl::DRAW;
+// The default method: the first sweep checks every undecided position, and each
+// later sweep checks only the predecessors of positions decided in the sweep
+// before, since nothing else can have changed. (The first sweep must be full: a
+// win through a capture or promotion has no predecessor in this table to
+// trigger it.) The backward generator only chooses what to check; every decision
+// still comes from forwardValue, so an extra predecessor costs one check and
+// changes nothing.
+//
+// The positions to check are kept as bitsets over the table, one bit per entry,
+// so duplicates collapse for free and each sweep walks the table in index order.
+// Each word of `cur` is read and cleared by one thread; `next` is set by many,
+// hence the atomic OR. The race on `table` is the benign one described above:
+// a position decided during a sweep is a predecessor's trigger for the next
+// sweep, whether or not the predecessor already saw it in this one.
+void
+EgSolver::relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& stats)
+{
+  const int n = static_cast<int>(sig.size());
+  const uint64_t total = table.size();
+  const int64_t words = static_cast<int64_t>(total / 64);   // total = 2^(6n+1)
 
-  currentTable = nullptr;
-  registry.emplace(sig, std::move(table));
+  std::vector<uint64_t> cur(static_cast<size_t>(words), 0);
+  std::vector<uint64_t> next(static_cast<size_t>(words), 0);
+
+  // Sweep 1: every undecided canonical entry. Twins are filled in after the solve.
+  #pragma omp parallel
+  {
+    std::array<int, 4> sqs{};
+    Color stm = WHITE;
+
+    #pragma omp for schedule(static)
+    for (int64_t w = 0; w < words; ++w)
+    {
+      uint64_t bits = 0;
+      for (int b = 0; b < 64; ++b)
+      {
+        const uint64_t s = static_cast<uint64_t>(w) * 64 + static_cast<uint64_t>(b);
+        if (table[s] != Wdl::UNKNOWN) continue;
+        decode(s, n, sqs, stm);
+        if (isCanonicalSlot(sig, sqs, n)) bits |= uint64_t(1) << b;
+      }
+      cur[static_cast<size_t>(w)] = bits;
+    }
+  }
+
+  for (;;)
+  {
+    uint64_t checked = 0, decided = 0;
+
+    #pragma omp parallel
+    {
+      std::array<int, 4> sqs{};
+      Color stm = WHITE;
+      ChessBoard pos;
+
+      #pragma omp for schedule(dynamic, 64) reduction(+ : checked, decided)
+      for (int64_t w = 0; w < words; ++w)
+      {
+        uint64_t bits = cur[static_cast<size_t>(w)];
+        if (!bits) continue;
+        cur[static_cast<size_t>(w)] = 0;
+
+        while (bits)
+        {
+          const uint64_t s = static_cast<uint64_t>(w) * 64
+                           + static_cast<uint64_t>(__builtin_ctzll(bits));
+          bits &= bits - 1;
+          if (table[s] != Wdl::UNKNOWN) continue;
+
+          decode(s, n, sqs, stm);
+          setupBoard(pos, sig, sqs, n, stm);
+          ++checked;
+
+          const Wdl v = forwardValue(pos);
+          if (v == Wdl::UNKNOWN) continue;
+          table[s] = v;
+          ++decided;
+
+          forEachPredecessor(sig, sqs, n, stm, [&] (uint64_t p)
+          {
+            if (table[p] != Wdl::UNKNOWN) return;
+            uint64_t* word = &next[p >> 6];
+            const uint64_t mask = uint64_t(1) << (p & 63);
+            if (!(__atomic_load_n(word, __ATOMIC_RELAXED) & mask))
+              __atomic_fetch_or(word, mask, __ATOMIC_RELAXED);
+          });
+        }
+      }
+    }
+
+    ++stats.sweeps;
+    stats.evaluations += checked;
+    if (decided == 0) break;
+    cur.swap(next);   // `cur` was cleared word by word, so `next` starts empty
+  }
 }
 
 bool
@@ -484,15 +723,87 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
   // a miss solves and then persists for next time. Children are cached by their
   // own signature, so they are shared across any target that reaches them.
   tablesSolved = tablesLoaded = 0;
+  lastBuild.clear();
   for (const Sig& s : needed)
   {
-    if (cacheEnabled && cacheLoad(s)) { ++tablesLoaded; continue; }
-    solve(s);
-    if (cacheEnabled) cacheSave(s);
-    ++tablesSolved;
+    TableStats stats;
+    stats.sig = s;
+    const bool tryLoad = solveTargetOnly ? s != target : cacheEnabled;
+    if (tryLoad && cacheLoad(s))
+    {
+      stats.loaded = true;
+      ++tablesLoaded;
+    }
+    else
+    {
+      const perf_clock start = perf::now();
+      solve(s, stats);
+      stats.seconds = perf_time(perf::now() - start).count();
+      if (cacheEnabled && !solveTargetOnly) cacheSave(s);
+      ++tablesSolved;
+    }
+    lastBuild.push_back(std::move(stats));
   }
 
   return true;
+}
+
+void
+EgSolver::checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
+                            std::string& example) const
+{
+  const int n = static_cast<int>(sig.size());
+  const uint64_t total = numStates(n);
+  uint64_t e = 0, m = 0;
+  example.clear();
+
+  #pragma omp parallel
+  {
+    std::array<int, 4> sqs{}, nextSqs{};
+    Color stm = WHITE, nextStm = WHITE;
+    std::array<Piece, 4> men{};
+    int menCount = 0;
+    ChessBoard pos;
+
+    #pragma omp for schedule(dynamic, 4096) reduction(+ : e, m)
+    for (int64_t s = 0; s < static_cast<int64_t>(total); ++s)
+    {
+      decode(static_cast<uint64_t>(s), n, sqs, stm);
+      if (!isCanonicalSlot(sig, sqs, n) || !geometryLegal(sig, sqs, n)) continue;
+      setupBoard(pos, sig, sqs, n, stm);
+      if (sideNotToMoveInCheck(pos, stm)) continue;
+
+      const MoveList ml = generateMoves(pos);
+      MoveArray moves;
+      ml.getMoves(pos, moves);
+
+      for (const Move mv : moves)
+      {
+        pos.makeMove(mv);
+        const uint64_t q = indexMen(pos, men, menCount);
+        const bool stays = sameSig(men, menCount, sig);
+        pos.unmakeMove();
+        if (!stays) continue;   // a capture or promotion: another table
+
+        ++e;
+        decode(q, n, nextSqs, nextStm);
+        bool found = false;
+        forEachPredecessor(sig, nextSqs, n, nextStm,
+                           [&] (uint64_t p) { if (p == static_cast<uint64_t>(s)) found = true; });
+        if (found) continue;
+
+        ++m;
+        #pragma omp critical
+        {
+          if (example.empty())
+            example = pos.fen() + "  move " + printMove(mv, pos);
+        }
+      }
+    }
+  }
+
+  edges = e;
+  missing = m;
 }
 
 Wdl
@@ -551,7 +862,7 @@ EgSolver::resolvedCacheDir() const
 std::string
 EgSolver::cachePath(const Sig& sig) const
 {
-  if (!cacheEnabled || cacheDir.empty() || sig.size() > 4)
+  if (cacheDir.empty() || sig.size() > 4)
     return {};
 
   // Key = the canonical signature's raw Piece bytes in hex. Bytes (not FEN
@@ -568,6 +879,30 @@ EgSolver::cachePath(const Sig& sig) const
 
 bool
 EgSolver::cacheLoad(const Sig& sig)
+{
+  std::vector<Wdl> table;
+  if (!readCacheFile(sig, table))
+    return false;
+  registry.emplace(sig, std::move(table));
+  return true;
+}
+
+bool
+EgSolver::compareWithCache(const Sig& sig, uint64_t& differing) const
+{
+  const auto it = registry.find(sig);
+  std::vector<Wdl> cached;
+  if (it == registry.end() || !readCacheFile(sig, cached))
+    return false;
+
+  differing = 0;
+  for (size_t i = 0; i < cached.size(); ++i)
+    if (cached[i] != it->second[i]) ++differing;
+  return true;
+}
+
+bool
+EgSolver::readCacheFile(const Sig& sig, std::vector<Wdl>& table) const
 {
   const std::string path = cachePath(sig);
   if (path.empty())
@@ -590,16 +925,12 @@ EgSolver::cacheLoad(const Sig& sig)
     if (h.pieces[i] != static_cast<uint32_t>(sig[i]))         return false;
   if (h.total != numStates(static_cast<int>(sig.size())))     return false;
 
-  std::vector<Wdl> table(h.total);
+  table.assign(h.total, Wdl::ILLEGAL);
   if (!in.read(reinterpret_cast<char*>(table.data()),
                static_cast<std::streamsize>(h.total)))
     return false;
   // Reject a file with trailing junk (size must be exactly header + table).
-  if (in.peek() != std::ifstream::traits_type::eof())
-    return false;
-
-  registry.emplace(sig, std::move(table));
-  return true;
+  return in.peek() == std::ifstream::traits_type::eof();
 }
 
 void

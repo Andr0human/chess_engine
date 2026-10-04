@@ -13,9 +13,11 @@
  * @brief Self-contained perfect WDL oracle for small material signatures.
  *
  * This is the "oracle" stage of the endgame-verdict validation harness. Given a
- * material signature it solves, by backward induction (implemented as forward
- * Bellman-Ford relaxation to a fixpoint), the perfect win/draw/loss value of
- * EVERY legal position, then answers O(1) probes.
+ * material signature it solves, by backward induction, the perfect win/draw/loss
+ * value of EVERY legal position, then answers O(1) probes. Positions are decided
+ * only by a forward check of their moves; after one full sweep, a backward move
+ * generator picks which positions to re-check (the predecessors of those just
+ * decided), so draws are not re-checked on every sweep.
  *
  * Verdicts are **side-to-move relative** and computed under **infinite play**:
  * there is no 50-move / DTZ notion, only "with unlimited time, can the side to
@@ -88,6 +90,43 @@ public:
   int tablesSolved = 0;
   int tablesLoaded = 0;
 
+  // Solve with the original method, which re-checks every undecided position on
+  // every sweep. The default re-checks only the predecessors of positions decided
+  // in the previous sweep; both reach the same tables. Kept as the reference for
+  // timing and for checking the default.
+  bool fullSweeps = false;
+
+  // Always solve the target table, but read its sub-tables from the disk cache
+  // (solving any that are missing), and write nothing. For timing and checking
+  // one table at a time.
+  bool solveTargetOnly = false;
+
+  // One table of the last build(), in solve order.
+  struct TableStats
+  {
+    Sig      sig;
+    bool     loaded      = false;   // read from the disk cache, not solved
+    double   seconds     = 0;       // solve time (0 when loaded)
+    int      sweeps      = 0;
+    uint64_t evaluations = 0;       // forward checks after the classification pass
+  };
+  std::vector<TableStats> lastBuild;
+
+  // Compare a solved table with its cache file, byte for byte. Returns false if
+  // the table is not solved or the file is missing or unreadable; otherwise sets
+  // `differing` to the number of entries that differ.
+  bool
+  compareWithCache(const Sig& sig, uint64_t& differing) const;
+
+  // Test the backward move generator against the engine's own moves: for every
+  // legal position P of `sig` and every move of P that stays in `sig` (neither a
+  // capture nor a promotion), P must be among the predecessors of the position
+  // the move reaches. Needs no solved tables. `edges` counts the moves checked,
+  // `missing` the ones the generator missed; `example` describes the first miss.
+  void
+  checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
+                    std::string& example) const;
+
 private:
   std::map<Sig, std::vector<Wdl>> registry;  // solved tables by signature
 
@@ -95,8 +134,12 @@ private:
   // (absolute paths pass through unchanged). Falls back to `cacheDir` verbatim
   // if the executable path can't be determined.
   std::string resolvedCacheDir() const;
-  // Cache file path for a signature, or "" if caching is disabled / no dir.
+  // Cache file path for a signature, or "" if there is no cache dir. (Callers
+  // check `cacheEnabled` themselves; compareWithCache reads it regardless.)
   std::string cachePath(const Sig& sig) const;
+  // Read and validate the cache file of `sig` into `table`; false on any
+  // miss/mismatch/IO error.
+  bool readCacheFile(const Sig& sig, std::vector<Wdl>& table) const;
   // Try to load `sig` from disk straight into the registry; false on any
   // miss/mismatch/IO error (caller then solves and saves).
   bool cacheLoad(const Sig& sig);
@@ -109,8 +152,11 @@ private:
   Sig                currentSig;
   std::vector<Wdl>*  currentTable = nullptr;
 
-  void solve(const Sig& sig);
+  void solve(const Sig& sig, TableStats& stats);
+  void relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& stats);
+  void relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& stats);
   Wdl  valueOf(const ChessBoard& pos) const;
+  Wdl  forwardValue(ChessBoard& pos) const;
 };
 
 #endif
