@@ -30,6 +30,10 @@
  * insufficient-material leaves). build() discovers that DAG, orders it by
  * (piece count, pawn count), and solves bottom-up; everything is cached.
  *
+ * A table holds positions without an en passant square. A position with one
+ * (after a double push next to an enemy pawn) also has the en passant capture,
+ * which leads into a smaller table; enPassantValue combines the two.
+ *
  * Each table stores one entry per position up to board symmetry (see Layout),
  * about 1/8 of 64^n * 2 without pawns and under 1/2 with them, at 2 bits per
  * entry once solved (a byte while solving, which also needs UNKNOWN).
@@ -81,8 +85,9 @@ public:
   build(const std::vector<Piece>& extras, std::string& err);
 
   // Perfect WDL for an arbitrary legal position whose signature (or a position
-  // reachable from the built target) has been solved. Never returns
-  // ILLEGAL/UNKNOWN for a legal input.
+  // reachable from the built target) has been solved, en passant square
+  // included; castling rights are ignored. Never returns ILLEGAL/UNKNOWN for a
+  // legal input.
   Wdl
   probe(const ChessBoard& pos) const;
 
@@ -165,7 +170,9 @@ public:
   // positions only through such steps from positions already decided, so its
   // wins and losses are right by construction; this catches a draw that should
   // have been decided, which is what a missed predecessor would leave. A solved
-  // table that passes is therefore the true one.
+  // table that passes is therefore the true one. A move that reaches a position
+  // with an en passant square is valued by that position's own moves, not by
+  // enPassantValue.
   // Returns false if the table is not solved; otherwise `positions` counts the
   // legal positions, `wrong` the entries that fail, and `example` describes the
   // first failure.
@@ -224,6 +231,7 @@ private:
   template <typename Own>
   Wdl  valueIn(const ChessBoard& pos, const Sig& sig, const Layout& layout,
                const Own& own) const;
+  Wdl  enPassantValue(const ChessBoard& pos, Wdl v) const;
   Wdl  forwardValue(ChessBoard& pos) const;
 };
 

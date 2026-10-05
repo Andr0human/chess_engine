@@ -1104,7 +1104,7 @@ probeEndgame(const vector<string>& args)
   // The oracle's verdict on one position and on each of its moves, for checking
   // a position by hand. Builds the tables for the position's material, reading
   // them from the disk cache when they are there. Like every oracle verdict it
-  // assumes unlimited play: no 50-move rule, and no castling or en passant.
+  // assumes unlimited play: no 50-move rule, and no castling.
 
   if (!utils::hasArg(args, "fen") || utils::argValue(args, "fen").empty())
   {
@@ -1142,8 +1142,8 @@ probeEndgame(const vector<string>& args)
     cout << "Illegal position: the side not to move is in check.\n";
     return;
   }
-  if ((pos.csep & 1920) || !(pos.csep & 64))
-    cout << "Note: the oracle ignores the castling rights and en passant square.\n";
+  if (pos.csep & 1920)
+    cout << "Note: the oracle ignores the castling rights.\n";
 
   const int usingThreads = setSolverThreads(args);
   EgSolver solver;

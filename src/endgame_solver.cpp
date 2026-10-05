@@ -49,7 +49,7 @@ using Squares = std::array<int, MAX_MEN>;
 // rather than silently trusted. Either mismatch => the file is ignored and the
 // table is re-solved. (Escape hatch for an un-versioned change: `nocache`.)
 constexpr char     CACHE_MAGIC[4]   = { 'E', 'G', 'W', '2' };
-constexpr uint32_t SOLVER_VERSION   = 3;
+constexpr uint32_t SOLVER_VERSION   = 4;
 
 // Fixed-size header prefixed to the packed table (EgSolver::Table). Every field
 // is re-validated on load (incl. the signature itself and the trailing byte
@@ -506,7 +506,8 @@ pawnOrigins(Color c, int to, Bitboard occ)
 // Calls `emit(entry)` for every entry of `sig` that reaches (sqs, stm) by one
 // move that is neither a capture nor a promotion: the side that just moved takes
 // back one move. Captures and promotions change the material, so those moves come
-// from another table and need no undoing; castling and en passant do not occur.
+// from another table and need no undoing; en passant is a capture, and castling
+// does not occur.
 // A position that reaches a mirror image of (sqs, stm) is the mirror image of
 // one that reaches (sqs, stm) itself, and both have the same entry.
 //
@@ -579,13 +580,82 @@ EgSolver::valueIn(const ChessBoard& pos, const Sig& sig, const Layout& layout,
 
   // Overwhelmingly common case: a quiet move stays in the given table. Resolve
   // it without ever building a Sig (no alloc).
+  Wdl v;
   if (sameSig(men, n, sig))
-    return own(indexOf(layout, sqs, pos.color));
+    v = own(indexOf(layout, sqs, pos.color));
+  else
+  {
+    // Rare: a capture/promotion successor, resolved in an already-solved child
+    // table. Only here do we pay for a Sig to key the registry.
+    const Table& t = registry.at(Sig(men.begin(), men.begin() + n));
+    v = t.at(indexOf(t.layout, sqs, pos.color));
+  }
+  return pos.enPassantSquare() == SQUARE_NB ? v : enPassantValue(pos, v);
+}
 
-  // Rare: a capture/promotion successor, resolved in an already-solved child
-  // table. Only here do we pay for a Sig to key the registry.
-  const Table& t = registry.at(Sig(men.begin(), men.begin() + n));
-  return t.at(indexOf(t.layout, sqs, pos.color));
+// Value of a position with an en passant square, given its entry `v`, which is
+// its value without one. The capture leads into a smaller, solved table, whose
+// entry is ILLEGAL when the capture leaves the capturer's king in check. The
+// position takes the better of `v` and its legal captures, except that one whose
+// only moves are those captures (stalemate without them) takes theirs alone.
+Wdl
+EgSolver::enPassantValue(const ChessBoard& pos, Wdl v) const
+{
+  const Color stm = pos.color;
+  const int ep = pos.enPassantSquare();
+  const int victim = ep + (stm == WHITE ? -8 : 8);
+  if (v == Wdl::ILLEGAL || pos.pieceOnSquare(Square(victim)) != make_piece(~stm, PAWN))
+    return v;
+
+  std::array<Piece, MAX_MEN> men{};
+  Squares sqs{};
+  const int n = readMen(pos, men, sqs);
+
+  bool any = false;
+  Wdl best = Wdl::LOSS;
+  for (Bitboard from = plt::pawnCaptureMasks[~stm][ep] & pos.getPiece(stm, PAWN);
+       from; from &= from - 1)
+  {
+    // The men after the capture, still in slot order: the captured pawn leaves
+    // and the capturer keeps its place.
+    const int capturer = __builtin_ctzll(from);
+    std::array<Piece, MAX_MEN> kid{};
+    Squares kidSqs{};
+    int k = 0;
+    for (int i = 0; i < n; ++i)
+    {
+      if (sqs[i] == victim) continue;
+      kid[k] = men[i];
+      kidSqs[k++] = (sqs[i] == capturer) ? ep : sqs[i];
+    }
+
+    Wdl after = Wdl::DRAW;   // the capturer is still a pawn, so never insufficient
+    if (!insufficient(kid.data(), k))
+    {
+      const Table& t = registry.at(Sig(kid.begin(), kid.begin() + k));
+      after = t.at(indexOf(t.layout, kidSqs, ~stm));
+    }
+    if (after == Wdl::ILLEGAL) continue;
+
+    any = true;
+    best = std::max(best, after == Wdl::WIN ? Wdl::LOSS : after == Wdl::LOSS ? Wdl::WIN : Wdl::DRAW);
+  }
+
+  if (!any)                return v;
+  if (best == Wdl::WIN)    return Wdl::WIN;
+  if (v == Wdl::UNKNOWN)   return Wdl::UNKNOWN;   // still being solved
+  if (v == Wdl::DRAW && best == Wdl::LOSS)
+  {
+    const MoveList ml = generateMoves(pos);
+    MoveArray moves;
+    ml.getMoves(pos, moves);
+    bool otherMove = false;
+    for (const Move mv : moves)
+      if (to_sq(mv) != ep || type_of(pos.pieceOnSquare(from_sq(mv))) != PAWN)
+        otherMove = true;
+    if (!otherMove) return Wdl::LOSS;
+  }
+  return std::max(v, best);
 }
 
 Wdl
@@ -983,6 +1053,31 @@ EgSolver::verify(const Sig& sig, uint64_t& positions, uint64_t& wrong,
   uint64_t p = 0, w = 0;
   example.clear();
 
+  // Value of the position a move reaches. One with an en passant square has no
+  // entry of its own; it is valued by its moves, as the engine generates them,
+  // rather than through enPassantValue, so that function is checked too.
+  const auto reached = [&] (const auto& self, ChessBoard& pos) -> Wdl
+  {
+    if (pos.enPassantSquare() == SQUARE_NB)
+      return valueIn(pos, sig, layout, own);
+
+    const MoveList ml = generateMoves(pos);
+    if (!ml.anyMove())
+      return stmInCheck(pos, pos.color) ? Wdl::LOSS : Wdl::DRAW;
+    MoveArray moves;
+    ml.getMoves(pos, moves);
+    bool allWin = true;
+    for (const Move mv : moves)
+    {
+      pos.makeMove(mv);
+      const Wdl v = self(self, pos);
+      pos.unmakeMove();
+      if (v == Wdl::LOSS) return Wdl::WIN;
+      if (v != Wdl::WIN)  allWin = false;
+    }
+    return allWin ? Wdl::LOSS : Wdl::DRAW;
+  };
+
   #pragma omp parallel
   {
     Squares sqs{};
@@ -1010,7 +1105,7 @@ EgSolver::verify(const Sig& sig, uint64_t& positions, uint64_t& wrong,
           for (const Move mv : moves)
           {
             pos.makeMove(mv);
-            const Wdl v = valueIn(pos, sig, layout, own);
+            const Wdl v = reached(reached, pos);
             pos.unmakeMove();
             if (v == Wdl::LOSS) { win = true; break; }
             if (v != Wdl::WIN)  allWin = false;
@@ -1069,7 +1164,8 @@ EgSolver::probe(const ChessBoard& pos) const
   const auto it = registry.find(sig);
   if (it == registry.end())
     return Wdl::ILLEGAL;   // signature not solved (shouldn't happen for built target)
-  return it->second.at(indexOf(it->second.layout, sqs, pos.color));
+  const Wdl v = it->second.at(indexOf(it->second.layout, sqs, pos.color));
+  return pos.enPassantSquare() == SQUARE_NB ? v : enPassantValue(pos, v);
 }
 
 bool
