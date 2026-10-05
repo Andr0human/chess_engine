@@ -33,17 +33,23 @@
 #include "move_utils.h"
 #include "perf.h"
 
-using Sig = EgSolver::Sig;
+using Sig    = EgSolver::Sig;
+using Layout = EgSolver::Layout;
 
 namespace {
+
+constexpr int MAX_MEN = EgSolver::MAX_MEN;
+
+// Square of each slot's man, in slot order.
+using Squares = std::array<int, MAX_MEN>;
 
 // On-disk cache format. MAGIC tags the layout; SOLVER_VERSION tags the *meaning*
 // of the bytes and MUST be bumped whenever the solver, move generation, or
 // legality test changes, so stale tables from an older engine are rejected
 // rather than silently trusted. Either mismatch => the file is ignored and the
 // table is re-solved. (Escape hatch for an un-versioned change: `nocache`.)
-constexpr char     CACHE_MAGIC[4]   = { 'E', 'G', 'W', '1' };
-constexpr uint32_t SOLVER_VERSION   = 1;
+constexpr char     CACHE_MAGIC[4]   = { 'E', 'G', 'W', '2' };
+constexpr uint32_t SOLVER_VERSION   = 2;
 
 // Fixed-size header prefixed to the raw Wdl bytes. Every field is re-validated
 // on load (incl. the signature itself and the trailing byte count), so a
@@ -52,9 +58,23 @@ struct CacheHeader
 {
   char     magic[4];
   uint32_t solverVer;
-  uint32_t n;          // men count
-  uint32_t pieces[4];  // the canonical signature (NO_PIECE-padded)
-  uint64_t total;      // == 64^n * 2 == number of Wdl bytes that follow
+  uint32_t n;                // men count
+  uint32_t pieces[MAX_MEN];  // the canonical signature (NO_PIECE-padded)
+  uint64_t total;            // == the layout's total == number of Wdl bytes that follow
+};
+
+// The format before 2026-10-05, read only by compareWithOldCache: no symmetry,
+// slot i's square in 6 bits each, then the side to move (64^n * 2 entries).
+constexpr char     OLD_CACHE_MAGIC[4] = { 'E', 'G', 'W', '1' };
+constexpr uint32_t OLD_SOLVER_VERSION = 1;
+
+struct OldCacheHeader
+{
+  char     magic[4];
+  uint32_t solverVer;
+  uint32_t n;
+  uint32_t pieces[4];
+  uint64_t total;
 };
 
 // Absolute directory of the running executable, or an empty path if it can't
@@ -85,12 +105,13 @@ exeDir()
 
 // ---- small geometry / signature helpers ---------------------------------
 
+int fileOf(int sq) { return sq & 7; }
+int rankOf(int sq) { return sq >> 3; }
+
 int
 kingDistance(int a, int b)
 {
-  int r1 = a >> 3, f1 = a & 7;
-  int r2 = b >> 3, f2 = b & 7;
-  return std::max(std::abs(r1 - r2), std::abs(f1 - f2));
+  return std::max(std::abs(rankOf(a) - rankOf(b)), std::abs(fileOf(a) - fileOf(b)));
 }
 
 // Sort a multiset of men into the canonical slot order (by raw Piece value).
@@ -173,30 +194,201 @@ childSignatures(const Sig& sig, std::set<Sig>& out)
   }
 }
 
+// ---- symmetry ------------------------------------------------------------
+//
+// A frame is one of the 8 symmetries of the board: bit 0 flips the files
+// (a <-> h), bit 1 the ranks (1 <-> 8), and bit 2 then reflects in the a1-h8
+// diagonal. Without pawns or castling all 8 keep the rules of chess, so a
+// position and its images have the same value; with pawns only the left-right
+// mirror (frames 0 and 1) does.
+constexpr int FLIP_FILES = 1, FLIP_RANKS = 2, TRANSPOSE = 4;
+
+// King pairs in the region (Layout): 462 without pawns, 1806 with them.
+constexpr int MAX_KING_PAIRS = 1806;
+
+struct IndexTables
+{
+  uint8_t  sym[8][64];                    // square in frame t
+  uint8_t  frame[2][64];                  // [pawns][white king square]: frame that puts the king in the region
+  int16_t  kingPair[2][64][64];           // [pawns][wk][bk]: number of the pair, -1 if not in the region
+  uint8_t  pairSquares[2][MAX_KING_PAIRS][2];
+  int      pairCount[2];
+  uint64_t binom[65][MAX_MEN + 1];        // binom[s][k] = C(s, k)
+
+  IndexTables()
+  {
+    for (int t = 0; t < 8; ++t)
+      for (int sq = 0; sq < 64; ++sq)
+      {
+        int s = sq;
+        if (t & FLIP_FILES) s ^= 7;
+        if (t & FLIP_RANKS) s ^= 56;
+        if (t & TRANSPOSE)  s = (fileOf(s) << 3) | rankOf(s);
+        sym[t][sq] = static_cast<uint8_t>(s);
+      }
+
+    for (int sq = 0; sq < 64; ++sq)
+    {
+      int f = fileOf(sq), r = rankOf(sq), t = 0;
+      if (f > 3) { t |= FLIP_FILES; f = 7 - f; }
+      frame[1][sq] = static_cast<uint8_t>(t);     // files a-d
+      if (r > 3) { t |= FLIP_RANKS; r = 7 - r; }
+      if (r > f) t |= TRANSPOSE;
+      frame[0][sq] = static_cast<uint8_t>(t);     // the triangle a1-d1-d4
+    }
+
+    // A white king in the region and a black king not next to it. Without pawns
+    // a white king on the diagonal leaves the transpose free, so the black king
+    // is put on or below the diagonal.
+    for (int p = 0; p < 2; ++p)
+    {
+      int count = 0;
+      for (int wk = 0; wk < 64; ++wk)
+        for (int bk = 0; bk < 64; ++bk)
+        {
+          kingPair[p][wk][bk] = -1;
+          if (frame[p][wk] != 0 || kingDistance(wk, bk) <= 1) continue;
+          if (p == 0 && fileOf(wk) == rankOf(wk) && rankOf(bk) > fileOf(bk)) continue;
+          kingPair[p][wk][bk] = static_cast<int16_t>(count);
+          pairSquares[p][count][0] = static_cast<uint8_t>(wk);
+          pairSquares[p][count][1] = static_cast<uint8_t>(bk);
+          ++count;
+        }
+      pairCount[p] = count;
+    }
+
+    for (int s = 0; s <= 64; ++s)
+      for (int k = 0; k <= MAX_MEN; ++k)
+        binom[s][k] = (k == 0) ? 1 : (s == 0) ? 0 : binom[s - 1][k - 1] + binom[s - 1][k];
+  }
+};
+
+const IndexTables tables;
+
 // ---- index <-> position --------------------------------------------------
 
-uint64_t
-numStates(int n)
-{ return (uint64_t(1) << (6 * n)) * 2; }
+Layout
+makeLayout(const Sig& sig)
+{
+  Layout layout;
+  layout.n = static_cast<int>(sig.size());
+  layout.pawns = pawnCount(sig) > 0;
 
-// Decode a table index into per-slot squares (canonical order) + side to move.
+  for (int i = 0; i < layout.n; ++i)
+  {
+    if (sig[i] == make_piece(WHITE, KING)) { layout.wk = i; continue; }
+    if (sig[i] == make_piece(BLACK, KING)) { layout.bk = i; continue; }
+    if (i > 0 && sig[i] == sig[i - 1])     { ++layout.count[layout.groups - 1]; continue; }
+
+    layout.first [layout.groups] = i;
+    layout.count [layout.groups] = 1;
+    layout.offset[layout.groups] = (type_of(sig[i]) == PAWN) ? 8 : 0;
+    ++layout.groups;
+  }
+
+  layout.total = static_cast<uint64_t>(tables.pairCount[layout.pawns]);
+  for (int g = 0; g < layout.groups; ++g)
+  {
+    layout.size[g] = tables.binom[layout.offset[g] ? 48 : 64][layout.count[g]];
+    layout.total *= layout.size[g];
+  }
+  layout.total *= 2;
+  return layout;
+}
+
+// Entry of the position (slot i's man on sqs[i]) seen in frame t, which must
+// put the kings on a pair in the region. A run of identical men is numbered by
+// its squares in ascending order, s0 < s1 < ...: C(s0,1) + C(s1,2) + ...
+uint64_t
+indexIn(const Layout& layout, const Squares& sqs, int t, Color stm)
+{
+  const uint8_t* sym = tables.sym[t];
+  uint64_t idx = static_cast<uint64_t>(tables.kingPair[layout.pawns][sym[sqs[layout.wk]]][sym[sqs[layout.bk]]]);
+
+  for (int g = 0; g < layout.groups; ++g)
+  {
+    const int f = layout.first[g], c = layout.count[g];
+    uint64_t v = 0;
+    if (c == 1)
+      v = static_cast<uint64_t>(sym[sqs[f]] - layout.offset[g]);
+    else
+    {
+      Squares s{};
+      for (int j = 0; j < c; ++j)
+      {
+        const int x = sym[sqs[f + j]] - layout.offset[g];
+        int k = j;
+        for (; k > 0 && s[k - 1] > x; --k) s[k] = s[k - 1];
+        s[k] = x;
+      }
+      for (int j = 0; j < c; ++j)
+        v += tables.binom[s[j]][j + 1];
+    }
+    idx = idx * layout.size[g] + v;
+  }
+  return idx * 2 + static_cast<uint64_t>(stm);
+}
+
+// Table entry of a legal position (slot i's man on sqs[i]): the frame is the
+// one that puts the white king in the region. Without pawns, a white king on
+// the diagonal leaves the transpose free: it puts the black king below the
+// diagonal, and when both kings are on it, the position and its reflection both
+// fit and the smaller entry is used. The larger one is never read and stays
+// ILLEGAL.
+uint64_t
+indexOf(const Layout& layout, const Squares& sqs, Color stm)
+{
+  int t = tables.frame[layout.pawns][sqs[layout.wk]];
+  if (!layout.pawns)
+  {
+    const int wk = tables.sym[t][sqs[layout.wk]];
+    const int bk = tables.sym[t][sqs[layout.bk]];
+    if (fileOf(wk) == rankOf(wk))
+    {
+      if (rankOf(bk) > fileOf(bk))
+        t ^= TRANSPOSE;
+      else if (rankOf(bk) == fileOf(bk))
+        return std::min(indexIn(layout, sqs, t, stm), indexIn(layout, sqs, t ^ TRANSPOSE, stm));
+    }
+  }
+  return indexIn(layout, sqs, t, stm);
+}
+
+// Decode a table entry into per-slot squares (in the region's frame, identical
+// men in ascending order) + side to move. The men may overlap; the caller
+// checks geometryLegal.
 void
-decode(uint64_t idx, int n, std::array<int, 4>& sqs, Color& stm)
+decodeIndex(const Layout& layout, uint64_t idx, Squares& sqs, Color& stm)
 {
   stm = Color(idx & 1);
   idx >>= 1;
-  for (int i = n - 1; i >= 0; --i)
+  for (int g = layout.groups - 1; g >= 0; --g)
   {
-    sqs[i] = static_cast<int>(idx & 63);
-    idx >>= 6;
+    uint64_t v = idx % layout.size[g];
+    idx /= layout.size[g];
+    const int f = layout.first[g], c = layout.count[g], off = layout.offset[g];
+    if (c == 1)
+    {
+      sqs[f] = static_cast<int>(v) + off;
+      continue;
+    }
+    int x = (off ? 48 : 64) - 1;
+    for (int j = c; j >= 1; --j)
+    {
+      while (tables.binom[x][j] > v) --x;
+      v -= tables.binom[x][j];
+      sqs[f + j - 1] = x + off;
+      --x;
+    }
   }
+  sqs[layout.wk] = tables.pairSquares[layout.pawns][idx][0];
+  sqs[layout.bk] = tables.pairSquares[layout.pawns][idx][1];
 }
 
 // Materialise the position for `sig` with slot i on sqs[i], side to move `stm`.
 // Mirrors what FEN "... <stm> - - 0 1" would build (csep = 64 -> no castle/ep).
 void
-setupBoard(ChessBoard& pos, const Sig& sig, const std::array<int, 4>& sqs,
-           int n, Color stm)
+setupBoard(ChessBoard& pos, const Sig& sig, const Squares& sqs, int n, Color stm)
 {
   pos.reset();
   for (int i = 0; i < n; ++i)
@@ -208,7 +400,7 @@ setupBoard(ChessBoard& pos, const Sig& sig, const std::array<int, 4>& sqs,
 // Geometry-only legality (no movegen): distinct squares, pawns on ranks 2-7,
 // kings not adjacent. Catches the bulk of illegal index slots cheaply.
 bool
-geometryLegal(const Sig& sig, const std::array<int, 4>& sqs, int n)
+geometryLegal(const Sig& sig, const Squares& sqs, int n)
 {
   for (int i = 0; i < n; ++i)
     for (int j = i + 1; j < n; ++j)
@@ -219,7 +411,7 @@ geometryLegal(const Sig& sig, const std::array<int, 4>& sqs, int n)
   {
     if (type_of(sig[i]) == PAWN)
     {
-      int r = sqs[i] >> 3;
+      int r = rankOf(sqs[i]);
       if (r == 0 || r == 7) return false;
     }
     if (type_of(sig[i]) == KING)
@@ -229,98 +421,41 @@ geometryLegal(const Sig& sig, const std::array<int, 4>& sqs, int n)
   return true;
 }
 
-// Read the men off a board into canonical slot order, filling `men[0..n)` with
-// the Pieces and returning the table index. Men are sorted by (Piece, square):
-// for distinct men the Piece key alone fixes the order; identical men are
-// tie-broken by square so the lookup lands on the ascending-square
-// representative the table stores. Allocation-free -- this is the hot path
-// (called once per successor probe, billions of times during a solve).
-uint64_t
-indexMen(const ChessBoard& pos, std::array<Piece, 4>& men, int& n)
+// Read the men off a board into slot order, sorted by Piece; squares come out
+// of the bitboard in ascending order and the sort is stable, so identical men
+// end up by square. Returns the number of men, which the caller guarantees is
+// at most MAX_MEN. Allocation-free -- this is the hot path (called once per
+// successor probe, billions of times during a solve).
+int
+readMen(const ChessBoard& pos, std::array<Piece, MAX_MEN>& men, Squares& sqs)
 {
-  std::array<std::pair<Piece, int>, 4> tmp{};
-  n = 0;
-
+  int n = 0;
   Bitboard bb = pos.all();
   while (bb)
   {
-    int sq = __builtin_ctzll(bb);
+    const int sq = __builtin_ctzll(bb);
     bb &= bb - 1;
-    tmp[n++] = { pos.pieceOnSquare(Square(sq)), sq };
-  }
-
-  // Insertion sort by (Piece, square). Hand-rolled rather than std::sort: the
-  // range is <= 4 elements, so introsort's machinery is pure overhead, and its
-  // fixed 16-element final-insertion-sort step also makes GCC emit a bogus
-  // -Warray-bounds on this `tmp[4]` (the >16 path is dead but not provably so).
-  for (int i = 1; i < n; ++i)
-  {
-    std::pair<Piece, int> key = tmp[i];
-    int j = i - 1;
-    while (j >= 0 &&
-           (tmp[j].first != key.first ? key.first < tmp[j].first
-                                      : key.second < tmp[j].second))
+    const Piece p = pos.pieceOnSquare(Square(sq));
+    int j = n++;
+    for (; j > 0 && men[j - 1] > p; --j)
     {
-      tmp[j + 1] = tmp[j];
-      --j;
+      men[j] = men[j - 1];
+      sqs[j] = sqs[j - 1];
     }
-    tmp[j + 1] = key;
+    men[j] = p;
+    sqs[j] = sq;
   }
-
-  uint64_t idx = 0;
-  for (int i = 0; i < n; ++i)
-  {
-    men[i] = tmp[i].first;
-    idx = idx * 64 + static_cast<uint64_t>(tmp[i].second);
-  }
-  return idx * 2 + pos.color;
-}
-
-// Vector-returning convenience wrapper (used off the hot path, e.g. probe()).
-uint64_t
-indexOfBoard(const ChessBoard& pos, Sig& outSig)
-{
-  std::array<Piece, 4> men{};
-  int n = 0;
-  const uint64_t idx = indexMen(pos, men, n);
-  outSig.assign(men.begin(), men.begin() + n);
-  return idx;
+  return n;
 }
 
 // Does the canonical men span equal an already-canonical signature? (No alloc.)
 bool
-sameSig(const std::array<Piece, 4>& men, int n, const Sig& sig)
+sameSig(const std::array<Piece, MAX_MEN>& men, int n, const Sig& sig)
 {
   if (static_cast<int>(sig.size()) != n) return false;
   for (int i = 0; i < n; ++i)
     if (men[i] != sig[i]) return false;
   return true;
-}
-
-// Is this the entry indexMen reads, i.e. are identical men in ascending-square
-// order? Any other ordering (a "twin") is the same position under another index.
-bool
-isCanonicalSlot(const Sig& sig, const std::array<int, 4>& sqs, int n)
-{
-  for (int i = 1; i < n; ++i)
-    if (sig[i] == sig[i - 1] && sqs[i] < sqs[i - 1]) return false;
-  return true;
-}
-
-// Table index of `sig` with slot i on sqs[i], put in canonical order first: a
-// backward move can carry one knight past its twin, and the index must then be
-// the one indexMen would compute for that position.
-uint64_t
-slotIndex(const Sig& sig, std::array<int, 4> sqs, int n, Color stm)
-{
-  for (int i = 1; i < n; ++i)
-    for (int j = i; j > 0 && sig[j] == sig[j - 1] && sqs[j] < sqs[j - 1]; --j)
-      std::swap(sqs[j], sqs[j - 1]);
-
-  uint64_t idx = 0;
-  for (int i = 0; i < n; ++i)
-    idx = idx * 64 + static_cast<uint64_t>(sqs[i]);
-  return idx * 2 + stm;
 }
 
 // ---- backward move generation --------------------------------------------
@@ -333,31 +468,36 @@ pawnOrigins(Color c, int to, Bitboard occ)
 {
   const int back = (c == WHITE) ? -8 : 8;
   const int one  = to + back;
-  if ((one >> 3) == 0 || (one >> 3) == 7 || ((occ >> one) & 1))
+  if (rankOf(one) == 0 || rankOf(one) == 7 || ((occ >> one) & 1))
     return 0;
 
   Bitboard from = Bitboard(1) << one;
   const int two = one + back;
   const int startRank = (c == WHITE) ? 1 : 6;
-  if ((two >> 3) == startRank && !((occ >> two) & 1))
+  if (rankOf(two) == startRank && !((occ >> two) & 1))
     from |= Bitboard(1) << two;
   return from;
 }
 
-// Calls `emit(index)` for every entry of `sig` that reaches (sqs, stm) by one
+// Calls `emit(entry)` for every entry of `sig` that reaches (sqs, stm) by one
 // move that is neither a capture nor a promotion: the side that just moved takes
 // back one move. Captures and promotions change the material, so those moves come
 // from another table and need no undoing; castling and en passant do not occur.
+// A position that reaches a mirror image of (sqs, stm) is the mirror image of
+// one that reaches (sqs, stm) itself, and both have the same entry.
 //
 // The list may hold entries that are illegal or already decided (the caller skips
 // those by their value), but it must never miss a real predecessor;
-// checkPredecessors tests that against the engine's own moves.
+// checkPredecessors tests that against the engine's own moves. Every position it
+// builds is geometry-legal, which indexOf needs: men move only to empty squares,
+// pawns never to the back rank, and a king never next to the other king.
 template <typename Emit>
 void
-forEachPredecessor(const Sig& sig, const std::array<int, 4>& sqs, int n,
+forEachPredecessor(const Sig& sig, const Layout& layout, const Squares& sqs,
                    Color stm, Emit&& emit)
 {
   const Color mover = ~stm;
+  const int n = layout.n;
   Bitboard occ = 0;
   for (int i = 0; i < n; ++i)
     occ |= Bitboard(1) << sqs[i];
@@ -376,16 +516,21 @@ forEachPredecessor(const Sig& sig, const std::array<int, 4>& sqs, int n,
       case KNIGHT: from = attackSquares<KNIGHT>(to, occ) & ~occ; break;
       case ROOK:   from = attackSquares<ROOK  >(to, occ) & ~occ; break;
       case QUEEN:  from = attackSquares<QUEEN >(to, occ) & ~occ; break;
-      case KING:   from = attackSquares<KING  >(to, occ) & ~occ; break;
+      case KING:
+      {
+        const Square other = Square(sqs[mover == WHITE ? layout.bk : layout.wk]);
+        from = attackSquares<KING>(to, occ) & ~occ & ~attackSquares<KING>(other, occ);
+        break;
+      }
       default:     break;
     }
 
-    std::array<int, 4> prev = sqs;
+    Squares prev = sqs;
     while (from)
     {
       prev[i] = __builtin_ctzll(from);
       from &= from - 1;
-      emit(slotIndex(sig, prev, n, mover));
+      emit(indexOf(layout, prev, mover));
     }
   }
 }
@@ -397,9 +542,9 @@ forEachPredecessor(const Sig& sig, const std::array<int, 4>& sqs, int n,
 Wdl
 EgSolver::valueOf(const ChessBoard& pos) const
 {
-  std::array<Piece, 4> men{};
-  int n = 0;
-  const uint64_t idx = indexMen(pos, men, n);
+  std::array<Piece, MAX_MEN> men{};
+  Squares sqs{};
+  const int n = readMen(pos, men, sqs);
 
   if (insufficient(men.data(), n))
     return Wdl::DRAW;
@@ -407,12 +552,12 @@ EgSolver::valueOf(const ChessBoard& pos) const
   // Overwhelmingly common case: a quiet king/pawn move stays in the table we
   // are currently solving. Resolve it without ever building a Sig (no alloc).
   if (sameSig(men, n, currentSig))
-    return (*currentTable)[idx];
+    return (*currentTable)[indexOf(currentLayout, sqs, pos.color)];
 
   // Rare: a capture/promotion successor, resolved in an already-solved child
   // table. Only here do we pay for a Sig to key the registry.
-  Sig sig(men.begin(), men.begin() + n);
-  return registry.at(sig)[idx];
+  const Table& t = registry.at(Sig(men.begin(), men.begin() + n));
+  return t.wdl[indexOf(t.layout, sqs, pos.color)];
 }
 
 // One forward check of an undecided position: WIN if some move reaches a loss
@@ -441,29 +586,33 @@ EgSolver::forwardValue(ChessBoard& pos) const
 void
 EgSolver::solve(const Sig& sig, TableStats& stats)
 {
-  const int n = static_cast<int>(sig.size());
-  const uint64_t total = numStates(n);
+  const Layout layout = makeLayout(sig);
+  const int n = layout.n;
+  const uint64_t total = layout.total;
 
   std::vector<Wdl> table(total, Wdl::ILLEGAL);
   currentSig = sig;
+  currentLayout = layout;
   currentTable = &table;
 
   // Pass 1: classify illegal / terminal / interior(UNKNOWN). Every index is
   // independent, so this fans out across cores. Each thread keeps its own board
   // (its undo stack is a member, so distinct boards never alias) and writes only
-  // its own slots.
+  // its own slots. The unused reflection of a position with both kings on the
+  // diagonal (see indexOf) stays ILLEGAL, so each position is checked once.
   #pragma omp parallel
   {
-    std::array<int, 4> sqs{};
+    Squares sqs{};
     Color stm = WHITE;
     ChessBoard pos;
 
     #pragma omp for schedule(static)
     for (int64_t s = 0; s < static_cast<int64_t>(total); ++s)
     {
-      const size_t si = static_cast<size_t>(s);
-      decode(static_cast<uint64_t>(s), n, sqs, stm);
+      const uint64_t si = static_cast<uint64_t>(s);
+      decodeIndex(layout, si, sqs, stm);
       if (!geometryLegal(sig, sqs, n)) continue;     // stays ILLEGAL
+      if (indexOf(layout, sqs, stm) != si) continue;      // stays ILLEGAL
 
       setupBoard(pos, sig, sqs, n, stm);
       if (sideNotToMoveInCheck(pos, stm)) continue;  // stays ILLEGAL
@@ -482,36 +631,18 @@ EgSolver::solve(const Sig& sig, TableStats& stats)
   // the fixpoint does not depend on the order positions are checked in, so both
   // methods reach the same table.
   if (fullSweeps)
-    relaxFullSweeps(sig, table, stats);
+    relaxFullSweeps(sig, layout, table, stats);
   else
-    relaxFrontier(sig, table, stats);
+    relaxFrontier(sig, layout, table, stats);
 
-  // Whatever is still undecided is a draw. The frontier method never checks
-  // twins (identical men out of square order), so each one takes the value of
-  // the entry it duplicates; with full sweeps the two already agree. A canonical
-  // entry may turn from UNKNOWN to DRAW while its twin reads it, so an UNKNOWN
-  // read also means DRAW.
-  #pragma omp parallel
-  {
-    std::array<int, 4> sqs{};
-    Color stm = WHITE;
-
-    #pragma omp for schedule(static)
-    for (int64_t s = 0; s < static_cast<int64_t>(total); ++s)
-    {
-      const size_t si = static_cast<size_t>(s);
-      if (table[si] != Wdl::UNKNOWN) continue;
-
-      decode(static_cast<uint64_t>(s), n, sqs, stm);
-      Wdl v = Wdl::UNKNOWN;
-      if (!isCanonicalSlot(sig, sqs, n))
-        v = table[slotIndex(sig, sqs, n, stm)];
-      table[si] = (v == Wdl::UNKNOWN) ? Wdl::DRAW : v;
-    }
-  }
+  // Whatever is still undecided is a draw.
+  #pragma omp parallel for schedule(static)
+  for (int64_t s = 0; s < static_cast<int64_t>(total); ++s)
+    if (table[static_cast<size_t>(s)] == Wdl::UNKNOWN)
+      table[static_cast<size_t>(s)] = Wdl::DRAW;
 
   currentTable = nullptr;
-  registry.emplace(sig, std::move(table));
+  registry.emplace(sig, Table{ layout, std::move(table) });
 }
 
 // The original method: every sweep re-checks every undecided position, until a
@@ -526,12 +657,13 @@ EgSolver::solve(const Sig& sig, TableStats& stats)
 // its successors are already WIN (final), so no node is ever decided wrongly --
 // the fixpoint reached is bit-identical to the serial version. Each thread
 // collects the indices it could not yet decide into a local list; those are
-// merged to form the next sweep's worklist. n <= 4 => total < 2^26, so uint32
-// indices suffice.
+// merged to form the next sweep's worklist. Every table up to 5 men has fewer
+// than 2^32 entries, so uint32 indices suffice.
 void
-EgSolver::relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& stats)
+EgSolver::relaxFullSweeps(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
+                          TableStats& stats)
 {
-  const int n = static_cast<int>(sig.size());
+  const int n = layout.n;
   const uint64_t total = table.size();
 
   std::vector<uint32_t> unknown;
@@ -549,7 +681,7 @@ EgSolver::relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& s
 
     #pragma omp parallel
     {
-      std::array<int, 4> sqs{};
+      Squares sqs{};
       Color stm = WHITE;
       ChessBoard pos;
       std::vector<uint32_t> localKeep;
@@ -559,7 +691,7 @@ EgSolver::relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& s
       for (int64_t r = 0; r < static_cast<int64_t>(unknown.size()); ++r)
       {
         const uint32_t s = unknown[static_cast<size_t>(r)];
-        decode(s, n, sqs, stm);
+        decodeIndex(layout, s, sqs, stm);
         setupBoard(pos, sig, sqs, n, stm);
 
         const Wdl v = forwardValue(pos);
@@ -594,34 +726,27 @@ EgSolver::relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& s
 // a position decided during a sweep is a predecessor's trigger for the next
 // sweep, whether or not the predecessor already saw it in this one.
 void
-EgSolver::relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& stats)
+EgSolver::relaxFrontier(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
+                        TableStats& stats)
 {
-  const int n = static_cast<int>(sig.size());
+  const int n = layout.n;
   const uint64_t total = table.size();
-  const int64_t words = static_cast<int64_t>(total / 64);   // total = 2^(6n+1)
+  const int64_t words = static_cast<int64_t>((total + 63) / 64);
 
   std::vector<uint64_t> cur(static_cast<size_t>(words), 0);
   std::vector<uint64_t> next(static_cast<size_t>(words), 0);
 
-  // Sweep 1: every undecided canonical entry. Twins are filled in after the solve.
-  #pragma omp parallel
+  // Sweep 1: every undecided entry.
+  #pragma omp parallel for schedule(static)
+  for (int64_t w = 0; w < words; ++w)
   {
-    std::array<int, 4> sqs{};
-    Color stm = WHITE;
-
-    #pragma omp for schedule(static)
-    for (int64_t w = 0; w < words; ++w)
+    uint64_t bits = 0;
+    for (uint64_t b = 0; b < 64; ++b)
     {
-      uint64_t bits = 0;
-      for (int b = 0; b < 64; ++b)
-      {
-        const uint64_t s = static_cast<uint64_t>(w) * 64 + static_cast<uint64_t>(b);
-        if (table[s] != Wdl::UNKNOWN) continue;
-        decode(s, n, sqs, stm);
-        if (isCanonicalSlot(sig, sqs, n)) bits |= uint64_t(1) << b;
-      }
-      cur[static_cast<size_t>(w)] = bits;
+      const uint64_t s = static_cast<uint64_t>(w) * 64 + b;
+      if (s < total && table[s] == Wdl::UNKNOWN) bits |= uint64_t(1) << b;
     }
+    cur[static_cast<size_t>(w)] = bits;
   }
 
   for (;;)
@@ -630,7 +755,7 @@ EgSolver::relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& sta
 
     #pragma omp parallel
     {
-      std::array<int, 4> sqs{};
+      Squares sqs{};
       Color stm = WHITE;
       ChessBoard pos;
 
@@ -648,7 +773,7 @@ EgSolver::relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& sta
           bits &= bits - 1;
           if (table[s] != Wdl::UNKNOWN) continue;
 
-          decode(s, n, sqs, stm);
+          decodeIndex(layout, s, sqs, stm);
           setupBoard(pos, sig, sqs, n, stm);
           ++checked;
 
@@ -657,7 +782,7 @@ EgSolver::relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& sta
           table[s] = v;
           ++decided;
 
-          forEachPredecessor(sig, sqs, n, stm, [&] (uint64_t p)
+          forEachPredecessor(sig, layout, sqs, stm, [&] (uint64_t p)
           {
             if (table[p] != Wdl::UNKNOWN) return;
             uint64_t* word = &next[p >> 6];
@@ -685,7 +810,7 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
 
   if (target.size() > 4)
   {
-    err = "oracle supports at most 4 men (5-man needs symmetry reduction)";
+    err = "oracle supports at most 4 men";
     return false;
   }
 
@@ -728,6 +853,7 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
   {
     TableStats stats;
     stats.sig = s;
+    stats.entries = makeLayout(s).total;
     const bool tryLoad = solveTargetOnly ? s != target : cacheEnabled;
     if (tryLoad && cacheLoad(s))
     {
@@ -752,24 +878,24 @@ void
 EgSolver::checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
                             std::string& example) const
 {
-  const int n = static_cast<int>(sig.size());
-  const uint64_t total = numStates(n);
+  const Layout layout = makeLayout(sig);
+  const int n = layout.n;
   uint64_t e = 0, m = 0;
   example.clear();
 
   #pragma omp parallel
   {
-    std::array<int, 4> sqs{}, nextSqs{};
+    Squares sqs{}, nextSqs{};
     Color stm = WHITE, nextStm = WHITE;
-    std::array<Piece, 4> men{};
-    int menCount = 0;
+    std::array<Piece, MAX_MEN> men{};
     ChessBoard pos;
 
     #pragma omp for schedule(dynamic, 4096) reduction(+ : e, m)
-    for (int64_t s = 0; s < static_cast<int64_t>(total); ++s)
+    for (int64_t s = 0; s < static_cast<int64_t>(layout.total); ++s)
     {
-      decode(static_cast<uint64_t>(s), n, sqs, stm);
-      if (!isCanonicalSlot(sig, sqs, n) || !geometryLegal(sig, sqs, n)) continue;
+      const uint64_t si = static_cast<uint64_t>(s);
+      decodeIndex(layout, si, sqs, stm);
+      if (!geometryLegal(sig, sqs, n) || indexOf(layout, sqs, stm) != si) continue;
       setupBoard(pos, sig, sqs, n, stm);
       if (sideNotToMoveInCheck(pos, stm)) continue;
 
@@ -780,16 +906,17 @@ EgSolver::checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
       for (const Move mv : moves)
       {
         pos.makeMove(mv);
-        const uint64_t q = indexMen(pos, men, menCount);
+        const int menCount = readMen(pos, men, nextSqs);
         const bool stays = sameSig(men, menCount, sig);
+        const uint64_t q = stays ? indexOf(layout, nextSqs, pos.color) : 0;
         pos.unmakeMove();
         if (!stays) continue;   // a capture or promotion: another table
 
         ++e;
-        decode(q, n, nextSqs, nextStm);
+        decodeIndex(layout, q, nextSqs, nextStm);
         bool found = false;
-        forEachPredecessor(sig, nextSqs, n, nextStm,
-                           [&] (uint64_t p) { if (p == static_cast<uint64_t>(s)) found = true; });
+        forEachPredecessor(sig, layout, nextSqs, nextStm,
+                           [&] (uint64_t p) { if (p == si) found = true; });
         if (found) continue;
 
         ++m;
@@ -809,16 +936,23 @@ EgSolver::checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
 Wdl
 EgSolver::probe(const ChessBoard& pos) const
 {
-  Sig sig;
-  const uint64_t idx = indexOfBoard(pos, sig);
+  if (__builtin_popcountll(pos.all()) > MAX_MEN)
+    return Wdl::ILLEGAL;   // no such table
+
+  std::array<Piece, MAX_MEN> men{};
+  Squares sqs{};
+  const int n = readMen(pos, men, sqs);
+  const Sig sig(men.begin(), men.begin() + n);
 
   if (insufficient(sig))
     return Wdl::DRAW;
+  if (!geometryLegal(sig, sqs, n))
+    return Wdl::ILLEGAL;   // no entry for adjacent kings
 
   const auto it = registry.find(sig);
   if (it == registry.end())
     return Wdl::ILLEGAL;   // signature not solved (shouldn't happen for built target)
-  return it->second[idx];
+  return it->second.wdl[indexOf(it->second.layout, sqs, pos.color)];
 }
 
 bool
@@ -833,7 +967,7 @@ EgSolver::distribution(const std::vector<Piece>& extras,
   if (it == registry.end()) return false;
 
   win = draw = loss = 0;
-  for (Wdl v : it->second)
+  for (Wdl v : it->second.wdl)
   {
     if (v == Wdl::WIN)       ++win;
     else if (v == Wdl::LOSS) ++loss;
@@ -859,14 +993,13 @@ EgSolver::resolvedCacheDir() const
   return cacheDir;   // absolute, or exe path unknown -> resolves CWD-relative
 }
 
-std::string
-EgSolver::cachePath(const Sig& sig) const
-{
-  if (cacheDir.empty() || sig.size() > 4)
-    return {};
+namespace {
 
-  // Key = the canonical signature's raw Piece bytes in hex. Bytes (not FEN
-  // letters) because NTFS is case-insensitive: 'P' and 'p' would collide.
+// Key = the canonical signature's raw Piece bytes in hex. Bytes (not FEN
+// letters) because NTFS is case-insensitive: 'P' and 'p' would collide.
+std::string
+sigKey(const Sig& sig)
+{
   static const char hex[] = "0123456789abcdef";
   std::string key;
   for (Piece p : sig)
@@ -874,7 +1007,25 @@ EgSolver::cachePath(const Sig& sig) const
     key += hex[(static_cast<uint8_t>(p) >> 4) & 0xF];
     key += hex[ static_cast<uint8_t>(p)       & 0xF];
   }
-  return resolvedCacheDir() + "/sig_" + key + ".wdl";
+  return key;
+}
+
+} // namespace
+
+std::string
+EgSolver::cachePath(const Sig& sig) const
+{
+  if (cacheDir.empty() || sig.size() > MAX_MEN)
+    return {};
+  return resolvedCacheDir() + "/sig_" + sigKey(sig) + ".wdl2";
+}
+
+std::string
+EgSolver::oldCachePath(const Sig& sig) const
+{
+  if (cacheDir.empty() || sig.size() > 4)
+    return {};
+  return resolvedCacheDir() + "/sig_" + sigKey(sig) + ".wdl";
 }
 
 bool
@@ -883,7 +1034,7 @@ EgSolver::cacheLoad(const Sig& sig)
   std::vector<Wdl> table;
   if (!readCacheFile(sig, table))
     return false;
-  registry.emplace(sig, std::move(table));
+  registry.emplace(sig, Table{ makeLayout(sig), std::move(table) });
   return true;
 }
 
@@ -897,7 +1048,71 @@ EgSolver::compareWithCache(const Sig& sig, uint64_t& differing) const
 
   differing = 0;
   for (size_t i = 0; i < cached.size(); ++i)
-    if (cached[i] != it->second[i]) ++differing;
+    if (cached[i] != it->second.wdl[i]) ++differing;
+  return true;
+}
+
+bool
+EgSolver::compareWithOldCache(const Sig& sig, uint64_t& differing) const
+{
+  const auto it = registry.find(sig);
+  const std::string path = oldCachePath(sig);
+  if (it == registry.end() || path.empty())
+    return false;
+
+  std::ifstream in(path, std::ios::binary);
+  OldCacheHeader h{};
+  if (!in || !in.read(reinterpret_cast<char*>(&h), sizeof h))
+    return false;
+
+  const int n = static_cast<int>(sig.size());
+  if (std::memcmp(h.magic, OLD_CACHE_MAGIC, sizeof h.magic) != 0) return false;
+  if (h.solverVer != OLD_SOLVER_VERSION)                          return false;
+  if (h.n != sig.size())                                          return false;
+  for (int i = 0; i < n; ++i)
+    if (h.pieces[i] != static_cast<uint32_t>(sig[i]))             return false;
+  if (h.total != (uint64_t(1) << (6 * n)) * 2)                    return false;
+
+  std::vector<Wdl> old(h.total);
+  if (!in.read(reinterpret_cast<char*>(old.data()), static_cast<std::streamsize>(h.total)))
+    return false;
+
+  const Layout& layout = it->second.layout;
+  const std::vector<Wdl>& wdl = it->second.wdl;
+  uint64_t d = 0;
+
+  // Every legal position there has the same value here.
+  #pragma omp parallel for schedule(static) reduction(+ : d)
+  for (int64_t s = 0; s < static_cast<int64_t>(h.total); ++s)
+  {
+    const Wdl v = old[static_cast<size_t>(s)];
+    if (v == Wdl::ILLEGAL) continue;
+
+    Squares sqs{};
+    uint64_t idx = static_cast<uint64_t>(s);
+    const Color stm = Color(idx & 1);
+    idx >>= 1;
+    for (int i = n - 1; i >= 0; --i, idx >>= 6)
+      sqs[i] = static_cast<int>(idx & 63);
+    if (wdl[indexOf(layout, sqs, stm)] != v) ++d;
+  }
+
+  // Every entry here is a legal position there.
+  #pragma omp parallel for schedule(static) reduction(+ : d)
+  for (int64_t s = 0; s < static_cast<int64_t>(layout.total); ++s)
+  {
+    if (wdl[static_cast<size_t>(s)] == Wdl::ILLEGAL) continue;
+
+    Squares sqs{};
+    Color stm = WHITE;
+    decodeIndex(layout, static_cast<uint64_t>(s), sqs, stm);
+    uint64_t idx = 0;
+    for (int i = 0; i < n; ++i)
+      idx = idx * 64 + static_cast<uint64_t>(sqs[i]);
+    if (old[idx * 2 + static_cast<uint64_t>(stm)] == Wdl::ILLEGAL) ++d;
+  }
+
+  differing = d;
   return true;
 }
 
@@ -923,7 +1138,7 @@ EgSolver::readCacheFile(const Sig& sig, std::vector<Wdl>& table) const
   if (h.n != sig.size())                                      return false;
   for (size_t i = 0; i < sig.size(); ++i)
     if (h.pieces[i] != static_cast<uint32_t>(sig[i]))         return false;
-  if (h.total != numStates(static_cast<int>(sig.size())))     return false;
+  if (h.total != makeLayout(sig).total)                       return false;
 
   table.assign(h.total, Wdl::ILLEGAL);
   if (!in.read(reinterpret_cast<char*>(table.data()),
@@ -943,7 +1158,7 @@ EgSolver::cacheSave(const Sig& sig)
   const auto it = registry.find(sig);
   if (it == registry.end())
     return;
-  const std::vector<Wdl>& table = it->second;
+  const std::vector<Wdl>& table = it->second.wdl;
 
   std::error_code ec;
   std::filesystem::create_directories(resolvedCacheDir(), ec);   // best effort
@@ -952,7 +1167,7 @@ EgSolver::cacheSave(const Sig& sig)
   std::memcpy(h.magic, CACHE_MAGIC, sizeof h.magic);
   h.solverVer = SOLVER_VERSION;
   h.n         = static_cast<uint32_t>(sig.size());
-  for (size_t i = 0; i < sig.size() && i < 4; ++i)
+  for (size_t i = 0; i < sig.size() && i < MAX_MEN; ++i)
     h.pieces[i] = static_cast<uint32_t>(sig[i]);
   h.total = table.size();
 

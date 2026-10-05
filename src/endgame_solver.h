@@ -3,6 +3,7 @@
 #ifndef ENDGAME_SOLVER_H
 #define ENDGAME_SOLVER_H
 
+#include <array>
 #include <vector>
 #include <map>
 #include <string>
@@ -29,8 +30,9 @@
  * insufficient-material leaves). build() discovers that DAG, orders it by
  * (piece count, pawn count), and solves bottom-up; everything is cached.
  *
- * Scope: up to 4 men (the unfolded state space is 64^n * 2). 5-man needs
- * symmetry reduction and is intentionally out of scope for v1.
+ * Each table stores one entry per position up to board symmetry (see Layout),
+ * about 1/8 of 64^n * 2 without pawns and under 1/2 with them. build() still
+ * accepts at most 4 men.
  */
 
 // Perfect verdict for one position, side-to-move relative.
@@ -46,8 +48,29 @@ enum class Wdl : uint8_t
 class EgSolver
 {
 public:
+  static constexpr int MAX_MEN = 5;
+
   // Canonical material signature: the men (incl. both kings) as sorted Pieces.
+  // Slot i of a table is the man sig[i]; identical men are adjacent.
   using Sig = std::vector<Piece>;
+
+  // Where each position of one table is stored. The board is first turned by
+  // one of its symmetries so the white king lands in a fixed region: the
+  // triangle a1-d1-d4 without pawns (any of the 8 symmetries), files a-d with
+  // pawns (only the left-right mirror keeps pawn moves legal). The entry is then
+  // the king pair's number, then each run of identical men as one number (a
+  // pawn has 48 squares, ranks 2-7), then the side to move. See indexOf.
+  struct Layout
+  {
+    int      n      = 0;       // men, kings included
+    bool     pawns  = false;
+    int      wk = 0, bk = 0;   // slots of the white and black king
+    int      groups = 0;       // runs of identical men other than the kings
+    std::array<int, MAX_MEN>      first{}, count{};  // slots of each run
+    std::array<int, MAX_MEN>      offset{};          // 8 for pawns (squares a2..h7 -> 0..47), else 0
+    std::array<uint64_t, MAX_MEN> size{};            // numbers each run can take
+    uint64_t total  = 0;       // entries in the table
+  };
 
   // Solve the whole capture/promotion DAG of the target signature (the two
   // kings plus `extras`) and cache every table. Returns false + sets `err` if
@@ -62,21 +85,19 @@ public:
   Wdl
   probe(const ChessBoard& pos) const;
 
-  // WDL distribution over all decided (legal, non-terminal-or-terminal) entries
-  // of one solved signature -- a sanity cross-check (e.g. KPK win/draw counts).
-  // Returns false if the signature was not solved.
+  // WDL counts over the entries of one solved signature, so one per position up
+  // to symmetry. Returns false if the signature was not solved.
   bool
   distribution(const std::vector<Piece>& extras,
                uint64_t& win, uint64_t& draw, uint64_t& loss) const;
 
   // ---- disk persistence ---------------------------------------------------
   // Each solved signature table is a pure function of the engine's move
-  // generation, so it is cached to disk and reloaded verbatim on a later run --
-  // turning a 60-90 s rebuild into a sub-second load. Tables are keyed by their
-  // raw Piece bytes (case-proof on NTFS, unlike FEN chars) under `cacheDir`.
-  // A loaded table is bit-identical to a freshly solved one, so probe() is
-  // unaffected; the cache is an optimization that can never feed wrong data
-  // (every header field + file size is re-validated on load).
+  // generation, so it is cached to disk and reloaded verbatim on a later run.
+  // Tables are keyed by their raw Piece bytes (case-proof on NTFS, unlike FEN
+  // chars) under `cacheDir`. A loaded table is bit-identical to a freshly solved
+  // one, so probe() is unaffected; the cache is an optimization that can never
+  // feed wrong data (every header field + file size is re-validated on load).
   //
   // A relative `cacheDir` is anchored to the *executable's* directory, not the
   // process CWD, so the cache always lands beside the binary (the default
@@ -106,6 +127,7 @@ public:
   {
     Sig      sig;
     bool     loaded      = false;   // read from the disk cache, not solved
+    uint64_t entries     = 0;       // size of the table
     double   seconds     = 0;       // solve time (0 when loaded)
     int      sweeps      = 0;
     uint64_t evaluations = 0;       // forward checks after the classification pass
@@ -118,6 +140,14 @@ public:
   bool
   compareWithCache(const Sig& sig, uint64_t& differing) const;
 
+  // Compare a solved table with a cache file in the format used before
+  // 2026-10-05 (no symmetry, 64^n * 2 entries), position by position: every
+  // legal position there must have the same value here, and every entry here
+  // must be a legal position there. Returns false if the table is not solved or
+  // there is no such file; otherwise `differing` counts the mismatches.
+  bool
+  compareWithOldCache(const Sig& sig, uint64_t& differing) const;
+
   // Test the backward move generator against the engine's own moves: for every
   // legal position P of `sig` and every move of P that stays in `sig` (neither a
   // capture nor a promotion), P must be among the predecessors of the position
@@ -128,7 +158,12 @@ public:
                     std::string& example) const;
 
 private:
-  std::map<Sig, std::vector<Wdl>> registry;  // solved tables by signature
+  struct Table
+  {
+    Layout           layout;
+    std::vector<Wdl> wdl;
+  };
+  std::map<Sig, Table> registry;  // solved tables by signature
 
   // `cacheDir` anchored to the executable's directory when it is relative
   // (absolute paths pass through unchanged). Falls back to `cacheDir` verbatim
@@ -137,6 +172,8 @@ private:
   // Cache file path for a signature, or "" if there is no cache dir. (Callers
   // check `cacheEnabled` themselves; compareWithCache reads it regardless.)
   std::string cachePath(const Sig& sig) const;
+  // Path of the signature's cache file in the format before 2026-10-05.
+  std::string oldCachePath(const Sig& sig) const;
   // Read and validate the cache file of `sig` into `table`; false on any
   // miss/mismatch/IO error.
   bool readCacheFile(const Sig& sig, std::vector<Wdl>& table) const;
@@ -150,11 +187,14 @@ private:
   // Context for the table currently being solved (so same-signature successors
   // can read the partially-filled table during relaxation).
   Sig                currentSig;
+  Layout             currentLayout;
   std::vector<Wdl>*  currentTable = nullptr;
 
   void solve(const Sig& sig, TableStats& stats);
-  void relaxFullSweeps(const Sig& sig, std::vector<Wdl>& table, TableStats& stats);
-  void relaxFrontier(const Sig& sig, std::vector<Wdl>& table, TableStats& stats);
+  void relaxFullSweeps(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
+                       TableStats& stats);
+  void relaxFrontier(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
+                     TableStats& stats);
   Wdl  valueOf(const ChessBoard& pos) const;
   Wdl  forwardValue(ChessBoard& pos) const;
 };

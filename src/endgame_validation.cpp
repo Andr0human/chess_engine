@@ -816,7 +816,7 @@ validateEndgame(const vector<string>& args)
         cout << ")";
         uint64_t w = 0, d = 0, l = 0;
         if (solver->distribution(men, w, d, l))
-          cout << "  full-legal WDL: win " << w << ", draw " << d
+          cout << "  WDL up to symmetry: win " << w << ", draw " << d
                << ", loss " << l;
         cout << '\n';
         g.oracle = solver.get();
@@ -953,8 +953,10 @@ solveEndgameTables(const vector<string>& args)
   //
   // A tool for working on the oracle itself. Solves every table the signature
   // needs from scratch -- the disk cache is neither read nor written -- prints
-  // each table's time, sweeps and forward checks, and compares each result with
-  // its cached copy byte for byte. `pieces` works as in egvalidate.
+  // each table's size, time, sweeps and forward checks, and compares each result
+  // with its cached copy byte for byte, or failing that with a cache file of the
+  // format before 2026-10-05 position by position. `pieces` works as in
+  // egvalidate.
   //
   //   sweep  -> use the original solve, which re-checks every undecided position
   //             on every sweep (the reference for timing)
@@ -1001,10 +1003,10 @@ solveEndgameTables(const vector<string>& args)
   }
 
   cout << std::left << std::setw(8) << "table" << std::right
-       << std::setw(10) << "seconds" << std::setw(8) << "sweeps"
-       << std::setw(14) << "checks" << "  cache";
+       << std::setw(12) << "entries" << std::setw(10) << "seconds"
+       << std::setw(8) << "sweeps" << std::setw(14) << "checks" << "  cache";
   if (wantCheck)
-    cout << "          backward moves";
+    cout << "                 backward moves";
   cout << '\n';
 
   double totalSeconds = 0;
@@ -1017,24 +1019,31 @@ solveEndgameTables(const vector<string>& args)
     totalSeconds += st.seconds;
     totalChecks += st.evaluations;
     cout << std::left << std::setw(8) << sigName(st.sig) << std::right
+         << std::setw(12) << st.entries
          << std::fixed << std::setprecision(2) << std::setw(10) << st.seconds
          << std::setw(8) << st.sweeps << std::setw(14) << st.evaluations << "  ";
 
     uint64_t differing = 0;
-    string cacheCol;
-    if (!solver.compareWithCache(st.sig, differing))
+    string cacheCol, oldNote;
+    bool compared = solver.compareWithCache(st.sig, differing);
+    if (!compared && solver.compareWithOldCache(st.sig, differing))
+    {
+      compared = true;
+      oldNote = " (old file)";
+    }
+    if (!compared)
     {
       cacheCol = "no file";
       ++uncompared;
     }
     else if (differing == 0)
-      cacheCol = "identical";
+      cacheCol = "identical" + oldNote;
     else
     {
-      cacheCol = std::to_string(differing) + " differ";
+      cacheCol = std::to_string(differing) + " differ" + oldNote;
       ++differ;
     }
-    cout << std::left << std::setw(15) << cacheCol << std::right;
+    cout << std::left << std::setw(22) << cacheCol << std::right;
 
     if (wantCheck)
     {
