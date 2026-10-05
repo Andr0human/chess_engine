@@ -32,8 +32,9 @@ namespace {
 // One extra man (beyond the two kings) to place on the board.
 struct Slot
 {
-  char fenChar;   // 'P', 'b', 'R', 'n', ... (case encodes colour)
-  bool isPawn;    // pawns are restricted to ranks 2-7
+  char  fenChar;   // 'P', 'b', 'R', 'n', ... (case encodes colour)
+  bool  isPawn;    // pawns are restricted to ranks 2-7
+  Piece piece;     // the engine's piece for fenChar
 };
 
 // Chebyshev (king) distance between two 0..63 square indices.
@@ -54,21 +55,6 @@ sideNotToMoveInCheck(const ChessBoard& pos, Color stm)
   return (stm == WHITE) ? inCheck<BLACK>(pos) : inCheck<WHITE>(pos);
 }
 
-// Map a piece letter to (fenChar, isPawn); returns false for kings / unknowns.
-bool
-parsePiece(char c, Slot& out)
-{
-  switch (std::toupper(static_cast<unsigned char>(c)))
-  {
-    case 'P': case 'N': case 'B': case 'R': case 'Q':
-      out.fenChar = c;
-      out.isPawn = (std::toupper(static_cast<unsigned char>(c)) == 'P');
-      return true;
-    default:
-      return false; // 'K'/'k' (kings are implicit) and anything else
-  }
-}
-
 // Map a piece letter (case = colour) to the engine's Piece encoding.
 Piece
 charToPiece(char c)
@@ -85,6 +71,22 @@ charToPiece(char c)
     default:  pt = NONE;   break;
   }
   return make_piece(white ? WHITE : BLACK, pt);
+}
+
+// Map a piece letter to a Slot; returns false for kings / unknowns.
+bool
+parsePiece(char c, Slot& out)
+{
+  switch (std::toupper(static_cast<unsigned char>(c)))
+  {
+    case 'P': case 'N': case 'B': case 'R': case 'Q':
+      out.fenChar = c;
+      out.isPawn = (std::toupper(static_cast<unsigned char>(c)) == 'P');
+      out.piece = charToPiece(c);
+      return true;
+    default:
+      return false; // 'K'/'k' (kings are implicit) and anything else
+  }
 }
 
 // Flip the colour of every piece letter (P<->p): turns one colouring of a
@@ -203,6 +205,12 @@ struct Walker
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
 
+  // The placed men, kept on the board as place() puts them down and lifts them,
+  // so a leaf reads it directly instead of building and parsing a FEN. Only what
+  // the move generator, the recognizer and the oracle read is kept: pieces, side
+  // to move, and no castling rights or en passant square (csep = 64).
+  ChessBoard pos;
+
   Tally               t;
   std::vector<string> falseFens;  // up to MAX_FALSE_FENS examples for this slice
   string              dump;       // dump lines for this slice (merged in task order)
@@ -245,8 +253,7 @@ struct Walker
   leaf()
   {
     ++t.geom;
-    const string fen = buildFen();
-    ChessBoard pos(fen);
+    pos.color = stm;
 
     if (sideNotToMoveInCheck(pos, stm))
     { ++t.rejInCheck; return; }
@@ -307,7 +314,7 @@ struct Walker
       {
         ++t.falseDraw;                                   // DANGEROUS
         if (falseFens.size() < MAX_FALSE_FENS)
-          falseFens.push_back(fen);
+          falseFens.push_back(buildFen());
       }
 
       // Per-bucket WDL: fold this position's oracle result into its feature
@@ -317,8 +324,10 @@ struct Walker
         const BucketTally::Result r = (truth == Wdl::WIN)  ? BucketTally::WIN
                                     : (truth == Wdl::DRAW) ? BucketTally::DRAW
                                                            : BucketTally::LOSS;
-        buckets.add(BucketProbe::current(), r, isDraw,
-                    wantSamples ? &fen : nullptr);
+        if (wantSamples)
+          buckets.add(BucketProbe::current(), r, isDraw, [this] { return buildFen(); });
+        else
+          buckets.add(BucketProbe::current(), r, isDraw);
         buckets.setNames(BucketProbe::names());
         buckets.setRoles(BucketProbe::roles());
       }
@@ -332,7 +341,7 @@ struct Walker
     // `oracle` (validated up front), so `oracle` is always set here when wantDump.
     if (wantDump && mismatch)
     {
-      dump += fen;
+      dump += buildFen();
       dump += " | ";
       dump += (isDraw ? 'D' : '.');
       dump += " | ";
@@ -342,9 +351,9 @@ struct Walker
   }
 
   // Place the man for `slot`, then recurse. Cheap geometric rejects (file fold,
-  // pawn rank, overlap, king adjacency) prune whole subtrees before the
-  // expensive FEN-build + parse + in-check test at the leaf. The white king
-  // (slot WK) is pre-placed by the caller, so workers enter at place(BK).
+  // pawn rank, overlap, king adjacency) prune whole subtrees before the in-check
+  // test and move generation at the leaf. The white king (slot WK) is pre-placed
+  // by the caller, so workers enter at place(BK).
   void
   place(int slot)
   {
@@ -384,7 +393,9 @@ struct Walker
         continue;
 
       square[slot] = sq;
+      pos.setPiece(Square(sq), sp.piece);
       place(slot + 1);
+      pos.removePiece(Square(sq), sp.piece);
     }
   }
 };
@@ -454,6 +465,9 @@ struct Generator
       w.capGate   = capGate;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
+      w.pos.reset();
+      w.pos.csep = 64;
+      w.pos.setPiece(Square(w.square[WK]), slots[WK].piece);
       w.place(BK);                          // white king fixed; recurse from black king down
     }
 
@@ -555,6 +569,46 @@ reportScorecard(const Generator& g, const string& pieceStr)
       cout << "    " << f << '\n';
   }
   cout << '\n';
+}
+
+// Thread budget. `threads <n>` caps the OpenMP team used by the solver and the
+// position generator so the harness need not saturate every core. 0 =
+// not given = default to HALF the hardware threads, leaving the machine usable.
+// Clamped to [1, hardware max]. Returns the team size.
+int
+setSolverThreads(const vector<string>& args)
+{
+  int reqThreads = 0;
+  if (utils::hasArg(args, "threads"))
+  {
+    try { reqThreads = std::stoi(utils::argValue(args, "threads")); }
+    catch (...) { reqThreads = 0; }
+    if (reqThreads < 1) reqThreads = 1;
+  }
+
+#ifdef _OPENMP
+  const int maxThreads = omp_get_max_threads();
+  if (reqThreads > maxThreads) reqThreads = maxThreads;
+  // Default (no explicit request): half the cores, at least 1.
+  const int usingThreads = reqThreads > 0 ? reqThreads : std::max(1, maxThreads / 2);
+  omp_set_num_threads(usingThreads);
+  return usingThreads;
+#else
+  (void)reqThreads;
+  return 1;
+#endif
+}
+
+// Human-readable name of a solver signature, e.g. "KRPKR": White first, each
+// side strongest man first.
+string
+sigName(const EgSolver::Sig& sig)
+{
+  string side[COLOR_NB];
+  for (PieceType pt : { KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN })
+    for (Piece p : sig)
+      if (type_of(p) == pt) side[color_of(p)] += "?PBNRQK"[pt];
+  return side[WHITE] + side[BLACK];
 }
 
 } // namespace
@@ -696,27 +750,7 @@ validateEndgame(const vector<string>& args)
     if (freezeN < 1) freezeN = 1;
   }
 
-  // Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
-  // (the only parallel stage) so the harness need not saturate every core. 0 =
-  // not given = default to HALF the hardware threads, leaving the machine usable.
-  // Clamped to [1, hardware max]; an unparseable value falls back to the default.
-  int reqThreads = 0;
-  if (utils::hasArg(args, "threads"))
-  {
-    try { reqThreads = std::stoi(utils::argValue(args, "threads")); }
-    catch (...) { reqThreads = 0; }
-    if (reqThreads < 1) reqThreads = 1;
-  }
-
-#ifdef _OPENMP
-  const int maxThreads = omp_get_max_threads();
-  if (reqThreads > maxThreads) reqThreads = maxThreads;
-  // Default (no explicit request): half the cores, at least 1.
-  const int usingThreads = reqThreads > 0 ? reqThreads : std::max(1, maxThreads / 2);
-  omp_set_num_threads(usingThreads);
-#else
-  const int usingThreads = 1;
-#endif
+  const int usingThreads = setSolverThreads(args);
 
   // ---- colourings to enumerate --------------------------------------------
   vector<string> colourings{ pieceArg };
@@ -752,8 +786,8 @@ validateEndgame(const vector<string>& args)
   for (const string& cs : colourings)
   {
     Generator g;
-    g.slots.push_back({'K', false}); // white king
-    g.slots.push_back({'k', false}); // black king
+    g.slots.push_back({'K', false, make_piece(WHITE, KING)});
+    g.slots.push_back({'k', false, make_piece(BLACK, KING)});
 
     vector<Slot> ex;
     char b = 0;
@@ -796,7 +830,7 @@ validateEndgame(const vector<string>& args)
         cout << ")";
         uint64_t w = 0, d = 0, l = 0;
         if (solver->distribution(men, w, d, l))
-          cout << "  full-legal WDL: win " << w << ", draw " << d
+          cout << "  WDL up to symmetry: win " << w << ", draw " << d
                << ", loss " << l;
         cout << '\n';
         g.oracle = solver.get();
@@ -924,4 +958,269 @@ validateEndgame(const vector<string>& args)
       dumped += g.t.missedDraw + g.t.falseDraw;
     cout << "Dumped " << dumped << " mismatched positions to " << dumpFile << '\n';
   }
+}
+
+void
+solveEndgameTables(const vector<string>& args)
+{
+  // elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [verify] [target]
+  //
+  // A tool for working on the oracle itself. Solves every table the signature
+  // needs from scratch -- the disk cache is neither read nor written -- prints
+  // each table's size, time, sweeps and forward checks, and compares each result
+  // with its cached copy byte for byte. `pieces` works as in egvalidate.
+  //
+  //   sweep  -> use the original solve, which re-checks every undecided position
+  //             on every sweep (the reference for timing)
+  //   check  -> also test the backward move generator on each table against the
+  //             engine's own moves
+  //   verify -> also check each table against its own moves (EgSolver::verify),
+  //             which needs no cache file
+  //   target -> solve only the named table, reading its sub-tables from the
+  //             cache (any that are missing are solved too)
+
+  const string pieceArg = utils::hasArg(args, "pieces")
+                        ? utils::argValue(args, "pieces")
+                        : string("Pb");
+
+  vector<Slot> slots;
+  char badChar = 0;
+  if (!parseExtras(pieceArg, slots, badChar))
+  {
+    cout << "Invalid piece in 'pieces " << pieceArg << "': '" << badChar << "'\n"
+            "  Use P/N/B/R/Q (white) or p/n/b/r/q (black). Kings are implicit.\n";
+    return;
+  }
+  vector<Piece> men;
+  for (char c : pieceArg)
+    men.push_back(charToPiece(c));
+
+  const int usingThreads = setSolverThreads(args);
+  const bool wantCheck = utils::hasArg(args, "check");
+  const bool wantVerify = utils::hasArg(args, "verify");
+
+  EgSolver solver;
+  solver.cacheEnabled = false;
+  solver.fullSweeps = utils::hasArg(args, "sweep");
+  solver.solveTargetOnly = utils::hasArg(args, "target");
+
+  cout << "Solving " << signatureOf(pieceArg)
+       << (solver.solveTargetOnly ? " only, " : " and its sub-tables, ")
+       << (solver.fullSweeps ? "full sweeps" : "re-checking predecessors only")
+       << " (" << usingThreads << " thread" << (usingThreads == 1 ? "" : "s")
+       << ")\n\n";
+
+  string err;
+  if (!solver.build(men, err))
+  {
+    cout << "Cannot solve: " << err << '\n';
+    return;
+  }
+
+  cout << std::left << std::setw(8) << "table" << std::right
+       << std::setw(12) << "entries" << std::setw(10) << "seconds"
+       << std::setw(8) << "sweeps" << std::setw(14) << "checks" << "  cache";
+  if (wantVerify)
+    cout << "                 verify";
+  if (wantCheck)
+    cout << (wantVerify ? "; backward moves" : "                 backward moves");
+  cout << '\n';
+
+  double totalSeconds = 0;
+  uint64_t totalChecks = 0;
+  int solved = 0, differ = 0, uncompared = 0, missedTables = 0, wrongTables = 0;
+  for (const EgSolver::TableStats& st : solver.lastBuild)
+  {
+    if (st.loaded) continue;
+    ++solved;
+    totalSeconds += st.seconds;
+    totalChecks += st.evaluations;
+    cout << std::left << std::setw(8) << sigName(st.sig) << std::right
+         << std::setw(12) << st.entries
+         << std::fixed << std::setprecision(2) << std::setw(10) << st.seconds
+         << std::setw(8) << st.sweeps << std::setw(14) << st.evaluations << "  ";
+
+    uint64_t differing = 0;
+    string cacheCol;
+    if (!solver.compareWithCache(st.sig, differing))
+    {
+      cacheCol = "no file";
+      ++uncompared;
+    }
+    else if (differing == 0)
+      cacheCol = "identical";
+    else
+    {
+      cacheCol = std::to_string(differing) + " differ";
+      ++differ;
+    }
+    cout << std::left << std::setw(22) << cacheCol << std::right;
+
+    if (wantVerify)
+    {
+      uint64_t positions = 0, wrong = 0;
+      string example;
+      solver.verify(st.sig, positions, wrong, example);
+      cout << "  " << positions << " positions, " << wrong << " wrong";
+      if (wrong)
+      {
+        cout << "  (first: " << example << ")";
+        ++wrongTables;
+      }
+      if (wantCheck)
+        cout << ";";
+    }
+
+    if (wantCheck)
+    {
+      uint64_t edges = 0, missing = 0;
+      string example;
+      solver.checkPredecessors(st.sig, edges, missing, example);
+      cout << "  " << edges << " checked, " << missing << " missed";
+      if (missing)
+      {
+        cout << "  (first: " << example << ")";
+        ++missedTables;
+      }
+    }
+    cout << '\n';
+  }
+
+  cout << "\nTotal: " << std::fixed << std::setprecision(2) << totalSeconds
+       << " s solving, " << totalChecks << " forward checks over "
+       << solved << " tables";
+  if (solver.tablesLoaded)
+    cout << " (" << solver.tablesLoaded << " sub-tables read from the cache)";
+  cout << ".\n";
+  cout << "Cache: " << (solved - differ - uncompared)
+       << " identical, " << differ << " differ, " << uncompared << " without a file.\n";
+  if (wantVerify)
+    cout << "Verify: " << (wrongTables == 0 ? "every entry consistent" :
+             std::to_string(wrongTables) + " tables with wrong entries") << ".\n";
+  if (wantCheck)
+    cout << "Backward moves: " << (missedTables == 0 ? "no misses" :
+             std::to_string(missedTables) + " tables with misses") << ".\n";
+}
+
+void
+probeEndgame(const vector<string>& args)
+{
+  // elsa egprobe fen <fen> [threads <n>] [nocache]
+  //
+  // The oracle's verdict on one position and on each of its moves, for checking
+  // a position by hand. Builds the tables for the position's material, reading
+  // them from the disk cache when they are there. Like every oracle verdict it
+  // assumes unlimited play: no 50-move rule, and no castling.
+
+  if (!utils::hasArg(args, "fen") || utils::argValue(args, "fen").empty())
+  {
+    cout << "egprobe needs a position: elsa egprobe fen \"<fen>\"\n";
+    return;
+  }
+  const string fen = utils::argValue(args, "fen");
+  ChessBoard pos(fen);
+  cout << "Fen = " << fen << '\n';
+
+  EgSolver::Sig sig;
+  vector<Piece> men;
+  int kings[COLOR_NB] = { 0, 0 };
+  for (Bitboard bb = pos.all(); bb; bb &= bb - 1)
+  {
+    const Piece p = pos.pieceOnSquare(Square(__builtin_ctzll(bb)));
+    sig.push_back(p);
+    if (type_of(p) == KING) ++kings[color_of(p)];
+    else                    men.push_back(p);
+  }
+
+  if (kings[WHITE] != 1 || kings[BLACK] != 1)
+  {
+    cout << "The position needs one king on each side.\n";
+    return;
+  }
+  if (sig.size() > static_cast<size_t>(EgSolver::MAX_MEN))
+  {
+    cout << "The position has " << sig.size() << " men; the oracle supports at most "
+         << EgSolver::MAX_MEN << ".\n";
+    return;
+  }
+  // The engine's check test doesn't count the enemy king, so adjacent kings
+  // would get past the check below and crash move generation.
+  if (kingDistance(__builtin_ctzll(pos.piece<WHITE, KING>()),
+                   __builtin_ctzll(pos.piece<BLACK, KING>())) <= 1)
+  {
+    cout << "Illegal position: the kings are adjacent.\n";
+    return;
+  }
+  if ((pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>()) & Rank18)
+  {
+    cout << "Illegal position: a pawn is on the first or last rank.\n";
+    return;
+  }
+  if (sideNotToMoveInCheck(pos, pos.color))
+  {
+    cout << "Illegal position: the side not to move is in check.\n";
+    return;
+  }
+  if (pos.csep & 1920)
+    cout << "Note: the oracle ignores the castling rights.\n";
+
+  const int usingThreads = setSolverThreads(args);
+  EgSolver solver;
+  solver.cacheEnabled = !utils::hasArg(args, "nocache");
+
+  cout << "Building oracle for " << sigName(sig)
+       << " (" << usingThreads << " thread" << (usingThreads == 1 ? "" : "s")
+       << ") ... " << std::flush;
+  const perf_clock start = perf::now();
+  string err;
+  if (!solver.build(men, err))
+  {
+    cout << "failed: " << err << '\n';
+    return;
+  }
+  const perf_time dur = perf::now() - start;
+  cout << "done (" << std::fixed << std::setprecision(1) << dur.count() << " s; "
+       << solver.tablesSolved << " solved, " << solver.tablesLoaded << " from cache)\n\n";
+
+  const auto name = [] (Wdl v)
+  {
+    switch (v)
+    {
+      case Wdl::WIN:  return "win";
+      case Wdl::DRAW: return "draw";
+      case Wdl::LOSS: return "loss";
+      default:        return "no verdict";
+    }
+  };
+  const string side = (pos.color == WHITE) ? "White" : "Black";
+
+  cout << side << " to move: " << name(solver.probe(pos)) << '\n';
+
+  const MoveList ml = generateMoves(pos);
+  if (!ml.anyMove())
+  {
+    cout << (ml.checkers ? "Checkmate.\n" : "Stalemate.\n");
+    return;
+  }
+
+  // Each move's result for the side that plays it: the reverse of the verdict on
+  // the position it reaches. Wins first, then draws, then losses.
+  MoveArray moves;
+  ml.getMoves(pos, moves);
+  vector<std::pair<Wdl, string>> results;
+  for (const Move mv : moves)
+  {
+    const string san = printMove(mv, pos);
+    pos.makeMove(mv);
+    const Wdl next = solver.probe(pos);
+    pos.unmakeMove();
+    const Wdl mine = (next == Wdl::WIN) ? Wdl::LOSS : (next == Wdl::LOSS) ? Wdl::WIN : next;
+    results.emplace_back(mine, san);
+  }
+  std::stable_sort(results.begin(), results.end(),
+                   [] (const auto& a, const auto& b) { return a.first > b.first; });
+
+  cout << "Moves, with the result for " << side << ":\n";
+  for (const auto& [v, san] : results)
+    cout << "  " << std::left << std::setw(8) << san << std::right << name(v) << '\n';
 }
