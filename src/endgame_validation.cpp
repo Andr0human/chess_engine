@@ -32,8 +32,9 @@ namespace {
 // One extra man (beyond the two kings) to place on the board.
 struct Slot
 {
-  char fenChar;   // 'P', 'b', 'R', 'n', ... (case encodes colour)
-  bool isPawn;    // pawns are restricted to ranks 2-7
+  char  fenChar;   // 'P', 'b', 'R', 'n', ... (case encodes colour)
+  bool  isPawn;    // pawns are restricted to ranks 2-7
+  Piece piece;     // the engine's piece for fenChar
 };
 
 // Chebyshev (king) distance between two 0..63 square indices.
@@ -54,21 +55,6 @@ sideNotToMoveInCheck(const ChessBoard& pos, Color stm)
   return (stm == WHITE) ? inCheck<BLACK>(pos) : inCheck<WHITE>(pos);
 }
 
-// Map a piece letter to (fenChar, isPawn); returns false for kings / unknowns.
-bool
-parsePiece(char c, Slot& out)
-{
-  switch (std::toupper(static_cast<unsigned char>(c)))
-  {
-    case 'P': case 'N': case 'B': case 'R': case 'Q':
-      out.fenChar = c;
-      out.isPawn = (std::toupper(static_cast<unsigned char>(c)) == 'P');
-      return true;
-    default:
-      return false; // 'K'/'k' (kings are implicit) and anything else
-  }
-}
-
 // Map a piece letter (case = colour) to the engine's Piece encoding.
 Piece
 charToPiece(char c)
@@ -85,6 +71,22 @@ charToPiece(char c)
     default:  pt = NONE;   break;
   }
   return make_piece(white ? WHITE : BLACK, pt);
+}
+
+// Map a piece letter to a Slot; returns false for kings / unknowns.
+bool
+parsePiece(char c, Slot& out)
+{
+  switch (std::toupper(static_cast<unsigned char>(c)))
+  {
+    case 'P': case 'N': case 'B': case 'R': case 'Q':
+      out.fenChar = c;
+      out.isPawn = (std::toupper(static_cast<unsigned char>(c)) == 'P');
+      out.piece = charToPiece(c);
+      return true;
+    default:
+      return false; // 'K'/'k' (kings are implicit) and anything else
+  }
 }
 
 // Flip the colour of every piece letter (P<->p): turns one colouring of a
@@ -203,6 +205,12 @@ struct Walker
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
 
+  // The placed men, kept on the board as place() puts them down and lifts them,
+  // so a leaf reads it directly instead of building and parsing a FEN. Only what
+  // the move generator, the recognizer and the oracle read is kept: pieces, side
+  // to move, and no castling rights or en passant square (csep = 64).
+  ChessBoard pos;
+
   Tally               t;
   std::vector<string> falseFens;  // up to MAX_FALSE_FENS examples for this slice
   string              dump;       // dump lines for this slice (merged in task order)
@@ -245,8 +253,7 @@ struct Walker
   leaf()
   {
     ++t.geom;
-    const string fen = buildFen();
-    ChessBoard pos(fen);
+    pos.color = stm;
 
     if (sideNotToMoveInCheck(pos, stm))
     { ++t.rejInCheck; return; }
@@ -307,7 +314,7 @@ struct Walker
       {
         ++t.falseDraw;                                   // DANGEROUS
         if (falseFens.size() < MAX_FALSE_FENS)
-          falseFens.push_back(fen);
+          falseFens.push_back(buildFen());
       }
 
       // Per-bucket WDL: fold this position's oracle result into its feature
@@ -317,8 +324,10 @@ struct Walker
         const BucketTally::Result r = (truth == Wdl::WIN)  ? BucketTally::WIN
                                     : (truth == Wdl::DRAW) ? BucketTally::DRAW
                                                            : BucketTally::LOSS;
-        buckets.add(BucketProbe::current(), r, isDraw,
-                    wantSamples ? &fen : nullptr);
+        if (wantSamples)
+          buckets.add(BucketProbe::current(), r, isDraw, [this] { return buildFen(); });
+        else
+          buckets.add(BucketProbe::current(), r, isDraw);
         buckets.setNames(BucketProbe::names());
         buckets.setRoles(BucketProbe::roles());
       }
@@ -332,7 +341,7 @@ struct Walker
     // `oracle` (validated up front), so `oracle` is always set here when wantDump.
     if (wantDump && mismatch)
     {
-      dump += fen;
+      dump += buildFen();
       dump += " | ";
       dump += (isDraw ? 'D' : '.');
       dump += " | ";
@@ -342,9 +351,9 @@ struct Walker
   }
 
   // Place the man for `slot`, then recurse. Cheap geometric rejects (file fold,
-  // pawn rank, overlap, king adjacency) prune whole subtrees before the
-  // expensive FEN-build + parse + in-check test at the leaf. The white king
-  // (slot WK) is pre-placed by the caller, so workers enter at place(BK).
+  // pawn rank, overlap, king adjacency) prune whole subtrees before the in-check
+  // test and move generation at the leaf. The white king (slot WK) is pre-placed
+  // by the caller, so workers enter at place(BK).
   void
   place(int slot)
   {
@@ -384,7 +393,9 @@ struct Walker
         continue;
 
       square[slot] = sq;
+      pos.setPiece(Square(sq), sp.piece);
       place(slot + 1);
+      pos.removePiece(Square(sq), sp.piece);
     }
   }
 };
@@ -454,6 +465,9 @@ struct Generator
       w.capGate   = capGate;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
+      w.pos.reset();
+      w.pos.csep = 64;
+      w.pos.setPiece(Square(w.square[WK]), slots[WK].piece);
       w.place(BK);                          // white king fixed; recurse from black king down
     }
 
@@ -557,8 +571,8 @@ reportScorecard(const Generator& g, const string& pieceStr)
   cout << '\n';
 }
 
-// Oracle thread budget. `threads <n>` caps the OpenMP team used by the solver
-// (the only parallel stage) so the harness need not saturate every core. 0 =
+// Thread budget. `threads <n>` caps the OpenMP team used by the solver and the
+// position generator so the harness need not saturate every core. 0 =
 // not given = default to HALF the hardware threads, leaving the machine usable.
 // Clamped to [1, hardware max]. Returns the team size.
 int
@@ -772,8 +786,8 @@ validateEndgame(const vector<string>& args)
   for (const string& cs : colourings)
   {
     Generator g;
-    g.slots.push_back({'K', false}); // white king
-    g.slots.push_back({'k', false}); // black king
+    g.slots.push_back({'K', false, make_piece(WHITE, KING)});
+    g.slots.push_back({'k', false, make_piece(BLACK, KING)});
 
     vector<Slot> ex;
     char b = 0;

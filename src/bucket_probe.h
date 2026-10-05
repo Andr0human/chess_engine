@@ -125,22 +125,23 @@ class BucketTally
     uint64_t totalBuckets    = 0;
   };
 
-  // Fold one call-set position into its bucket. Pass `fen` to keep it as an
-  // example of its class (draw vs decided) if the bucket still has room; pass
-  // nullptr to tally counts only -- see wantSamples in the harness.
+  // Fold one call-set position into its bucket, counts only -- see wantSamples
+  // in the harness.
   void
-  add(const Key& key, Result result, bool heurDraw, const std::string* fen = nullptr)
+  add(const Key& key, Result result, bool heurDraw)
+  { count(key, result, heurDraw); }
+
+  // The same, keeping the position as an example of its class (draw vs decided)
+  // if the bucket still has room. `makeFen` returns its FEN and is called only
+  // then, so most positions never build one.
+  template <typename MakeFen>
+  void
+  add(const Key& key, Result result, bool heurDraw, const MakeFen& makeFen)
   {
-    Row& r = rows[key];
-    ++r.n[static_cast<int>(result)];
-    if (heurDraw) ++r.n[3];
-
-    if (fen == nullptr)
-      return;
-
+    Row& r = count(key, result, heurDraw);
     std::vector<std::string>& s = (result == DRAW) ? r.drawFens : r.decFens;
     if (s.size() < MAX_SAMPLE)
-      s.push_back(*fen);
+      s.push_back(makeFen());
   }
 
   // Record the feature column labels / roles (identical for every bucket). Set
@@ -254,6 +255,15 @@ class BucketTally
     std::vector<std::string> drawFens;   // <= MAX_SAMPLE draw examples
     std::vector<std::string> decFens;    // <= MAX_SAMPLE win/loss examples
   };
+
+  Row&
+  count(const Key& key, Result result, bool heurDraw)
+  {
+    Row& r = rows[key];
+    ++r.n[static_cast<int>(result)];
+    if (heurDraw) ++r.n[3];
+    return r;
+  }
 
   // Drain examples from `src` into `dst` until the cap. Callers merge in task
   // order, so the samples that survive are the ones a serial run would have kept.

@@ -422,9 +422,10 @@ setupBoard(ChessBoard& pos, const Sig& sig, const Squares& sqs, int n, Color stm
 }
 
 // Geometry-only legality (no movegen): distinct squares, pawns on ranks 2-7,
-// kings not adjacent. Catches the bulk of illegal index slots cheaply.
+// kings not adjacent. Catches the bulk of illegal index slots cheaply. Core
+// takes a raw men span so probe() can avoid a Sig alloc.
 bool
-geometryLegal(const Sig& sig, const Squares& sqs, int n)
+geometryLegal(const Piece* men, const Squares& sqs, int n)
 {
   for (int i = 0; i < n; ++i)
     for (int j = i + 1; j < n; ++j)
@@ -433,17 +434,21 @@ geometryLegal(const Sig& sig, const Squares& sqs, int n)
   int wk = -1, bk = -1;
   for (int i = 0; i < n; ++i)
   {
-    if (type_of(sig[i]) == PAWN)
+    if (type_of(men[i]) == PAWN)
     {
       int r = rankOf(sqs[i]);
       if (r == 0 || r == 7) return false;
     }
-    if (type_of(sig[i]) == KING)
-      (color_of(sig[i]) == WHITE ? wk : bk) = sqs[i];
+    if (type_of(men[i]) == KING)
+      (color_of(men[i]) == WHITE ? wk : bk) = sqs[i];
   }
   if (wk >= 0 && bk >= 0 && kingDistance(wk, bk) <= 1) return false;
   return true;
 }
+
+bool
+geometryLegal(const Sig& sig, const Squares& sqs, int n)
+{ return geometryLegal(sig.data(), sqs, n); }
 
 // Read the men off a board into slot order, sorted by Piece; squares come out
 // of the bitboard in ascending order and the sort is stable, so identical men
@@ -976,6 +981,9 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
     lastBuild.push_back(std::move(stats));
   }
 
+  targetSig = target;
+  const auto it = registry.find(target);
+  targetTable = (it == registry.end()) ? nullptr : &it->second;   // none if insufficient
   return true;
 }
 
@@ -1154,17 +1162,23 @@ EgSolver::probe(const ChessBoard& pos) const
   std::array<Piece, MAX_MEN> men{};
   Squares sqs{};
   const int n = readMen(pos, men, sqs);
-  const Sig sig(men.begin(), men.begin() + n);
 
-  if (insufficient(sig))
+  if (insufficient(men.data(), n))
     return Wdl::DRAW;
-  if (!geometryLegal(sig, sqs, n))
+  if (!geometryLegal(men.data(), sqs, n))
     return Wdl::ILLEGAL;   // no entry for adjacent kings
 
-  const auto it = registry.find(sig);
-  if (it == registry.end())
-    return Wdl::ILLEGAL;   // signature not solved (shouldn't happen for built target)
-  const Wdl v = it->second.at(indexOf(it->second.layout, sqs, pos.color));
+  // The built target is found without a Sig or a registry search: egvalidate
+  // probes it once per generated position.
+  const Table* t = (targetTable && sameSig(men, n, targetSig)) ? targetTable : nullptr;
+  if (!t)
+  {
+    const auto it = registry.find(Sig(men.begin(), men.begin() + n));
+    if (it == registry.end())
+      return Wdl::ILLEGAL;   // signature not solved (shouldn't happen for built target)
+    t = &it->second;
+  }
+  const Wdl v = t->at(indexOf(t->layout, sqs, pos.color));
   return pos.enPassantSquare() == SQUARE_NB ? v : enPassantValue(pos, v);
 }
 

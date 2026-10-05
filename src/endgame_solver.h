@@ -197,6 +197,11 @@ private:
   };
   std::map<Sig, Table> registry;  // solved tables by signature
 
+  // The last build()'s target and its table (null when the target needs none),
+  // which probe() checks before searching the registry. Map entries never move.
+  Sig          targetSig;
+  const Table* targetTable = nullptr;
+
   // `cacheDir` anchored to the executable's directory when it is relative
   // (absolute paths pass through unchanged). Falls back to `cacheDir` verbatim
   // if the executable path can't be determined.
