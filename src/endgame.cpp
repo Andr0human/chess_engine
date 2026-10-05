@@ -150,6 +150,15 @@ isEndgame<Endgames::KPRK>(const ChessBoard& pos)
      and pos.count<ROOK>() == 1;
 }
 
+template <>
+inline bool
+isEndgame<Endgames::KBNKN>(const ChessBoard& pos)
+{
+  return pos.count<ALL   >() == 3
+     and pos.count<BISHOP>() == 1
+     and pos.count<KNIGHT>() == 2;
+}
+
 template <Endgames e>
 inline bool
 Endgame(const ChessBoard& pos) = delete;
@@ -1113,11 +1122,139 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
   return false;
 }
 
+// KBN vs KN. Mined against the 5-man oracle (`egvalidate pieces BNn oracle
+// nocapgate`): every clause is a box of feature thresholds that holds only draws
+// over the whole call set. Together they claim 240,194,590 of the 583,817,814
+// draws (41%) with no false draw, in both colourings. The boxes are data-mined,
+// so read them as "this region is drawn", not as chess rules.
+// KBNN vs K fall through to search.
+//
+// Notation: d = defender (the lone knight's side), a = attacker (bishop + knight);
+// k/b/n = king/bishop/knight, so `dk` is the defending king's square and `dkB` its
+// bitboard.
+template <>
+bool
+Endgame<Endgames::KBNKN>(const ChessBoard& pos)
+{
+  const Color atk = pos.count<WHITE, BISHOP>() ? WHITE : BLACK;
+  const Color def = ~atk;
+  if (popCount(pos.getPiece(atk, KNIGHT)) != 1)
+    return false;
+
+  const bool defToMove = pos.color == def;
+
+  const Bitboard akB = pos.getPiece(atk, KING  );
+  const Bitboard abB = pos.getPiece(atk, BISHOP);
+  const Bitboard anB = pos.getPiece(atk, KNIGHT);
+  const Bitboard dkB = pos.getPiece(def, KING  );
+  const Bitboard dnB = pos.getPiece(def, KNIGHT);
+
+  const Square ak = squareNo(akB), ab = squareNo(abB), an = squareNo(anB);
+  const Square dk = squareNo(dkB), dn = squareNo(dnB);
+  const Bitboard occ = pos.all();
+
+  const Bitboard akAtt = attackSquares<KING  >(ak, 0);
+  const Bitboard abAtt = attackSquares<BISHOP>(ab, occ);
+  const Bitboard anAtt = attackSquares<KNIGHT>(an, 0);
+  const Bitboard dkAtt = attackSquares<KING  >(dk, 0);
+  const Bitboard dnAtt = attackSquares<KNIGHT>(dn, 0);
+
+  // Squares the attacker covers, the bishop seeing through the defending king (a
+  // king cannot step back along the diagonal it is checked on).
+  const Bitboard atkCover = akAtt | anAtt | attackSquares<BISHOP>(ab, occ ^ dkB);
+
+  const auto edgeD = [] (Square s) {
+    const int r = s >> 3, f = s & 7;
+    return std::min(std::min(r, 7 - r), std::min(f, 7 - f));
+  };
+
+  // The side to move is in check.
+  const bool chk = defToMove ? ((abAtt | anAtt) & dkB) : (dnAtt & akB);
+
+  // Attacking men (king included) that hit the defending knight.
+  const int dnAtk = bool(akAtt & dnB) + bool(abAtt & dnB) + bool(anAtt & dnB);
+
+  // Moves to squares the attacker does not cover, for the defending knight and king.
+  const int dnSafe = popCount(dnAtt & ~dkB & ~atkCover);
+  const int dkSafe = popCount(dkAtt & ~dnB & ~atkCover);
+
+  // Defending king and knight share a diagonal -- the bishop's skewer line.
+  const bool bLine = attackSquares<BISHOP>(dk, 0) & dnB;
+
+  // Defending king's distance to the nearer corner of the bishop's colour (the
+  // only corners KBN can mate in).
+  const Bitboard bishCorners =
+    CornerSquares & ((abB & WhiteSquares) ? WhiteSquares : BlackSquares);
+  int dkCorner = 8;
+  for (Bitboard c = bishCorners; c != 0; c &= c - 1)
+    dkCorner = std::min(dkCorner, chebyshevDistance(dk, squareNo(c & -c)));
+
+  const int dkKnD  = chebyshevDistance(dk, dn);
+  const int akKnD  = chebyshevDistance(ak, dn);
+  const int kingsD = chebyshevDistance(ak, dk);
+  const int dkEdge = edgeD(dk);
+  const int akEdge = edgeD(ak);
+
+  if (defToMove)
+  {
+    // Attacking minors the defender hits and the attacker does not guard.
+    const int aHang = bool((dkAtt | dnAtt) & abB & ~(akAtt | anAtt))
+                    + bool((dkAtt | dnAtt) & anB & ~(akAtt | abAtt));
+
+    // Flight squares of the attacking king. At 0 or 1 it is boxed in by its own
+    // men and the defending knight can mate.
+    const int akSafe = popCount(akAtt & ~(abB | anB) & ~(dkAtt | dnAtt));
+
+    // The defender wins a loose minor (69.8M draws from the first clause alone,
+    // 187.7M from all ten), or keeps both men close together with free squares
+    // while the attacking king stands off.
+    return (!chk and dnAtk <= 1 and aHang >= 1 and akSafe >= 1)
+        or (!chk and dnAtk == 0 and dkKnD <= 4 and dkCorner <= 5 and kingsD >= 3
+                 and dnSafe >= 3 and dkSafe >= 4 and akEdge <= 1)
+        or (!chk and dnAtk == 0 and dkKnD <= 2 and akKnD >= 3
+                 and dnSafe >= 2 and dkSafe >= 3 and akSafe >= 2)
+        or (dnAtk == 0 and dkKnD <= 4 and kingsD >= 5 and dnSafe >= 3 and !bLine)
+        or (!chk and dkKnD <= 6 and kingsD >= 4 and akKnD >= 2
+                 and dnSafe >= 4 and dkSafe >= 5 and !bLine and akEdge <= 1)
+        or (!chk and dnAtk == 0 and dkKnD <= 5 and dkCorner >= 2 and akKnD >= 6
+                 and dnSafe >= 1 and dkSafe >= 4)
+        or (dnAtk == 0 and dkKnD == 3 and dkCorner >= 2
+                 and dnSafe >= 3 and dkSafe >= 4 and !bLine and akSafe >= 2)
+        or ( chk and dnAtk == 0 and dkKnD <= 2 and dkCorner >= 2 and dkCorner <= 5
+                 and dnSafe >= 2 and dkSafe >= 4 and !bLine and akEdge <= 2)
+        or ( chk and dnAtk == 0 and dkKnD <= 5 and akKnD >= 6
+                 and dnSafe >= 1 and dkSafe >= 4 and !bLine)
+        or (!chk and aHang >= 1 and !bLine and akSafe >= 1);
+  }
+
+  // Attacker to move: forks and skewers are live, so the drawn regions are small
+  // and mostly need the knight out of reach of the next move (52.5M draws).
+  const bool dnDef = dkAtt & dnB;                                   // knight guarded by its king
+  const int  bHit  = popCount(abAtt & ~occ                          // bishop moves that hit it
+                            & attackSquares<BISHOP>(dn, occ & ~abB));
+  const bool nHit  = anAtt & ~occ & attackSquares<KNIGHT>(dn, 0);   // a knight move hits it
+
+  return (!nHit and dnAtk == 0 and dkKnD <= 3 and kingsD >= 4 and akKnD >= 5
+               and dnSafe >= 1 and dkSafe >= 3 and !bLine)
+      or (dnAtk == 0 and dkKnD <= 2 and dkEdge >= 1 and akKnD >= 3 and dnSafe >= 3 and !bLine)
+      or (!nHit and !chk and dnAtk == 0 and dkKnD <= 4 and kingsD >= 6 and akKnD >= 3
+               and dnSafe >= 2 and dkSafe >= 2 and !bLine and akEdge <= 1)
+      or (bHit >= 1 and !nHit and dnAtk == 0 and dkKnD <= 4 and dkEdge >= 1
+               and akKnD >= 5 and !bLine)
+      or (dnDef and bHit <= 1 and !nHit and dnAtk == 0 and dkKnD <= 3
+               and dkCorner >= 3 and dkCorner <= 5 and dkSafe >= 4 and bLine)
+      or (dnAtk == 0 and dkKnD <= 2 and dkCorner <= 5 and kingsD >= 4
+               and dnSafe >= 3 and dkSafe >= 4 and !bLine)
+      or (dnDef and dnAtk <= 1 and dkEdge >= 1 and akKnD >= 3 and dkSafe >= 4 and !bLine)
+      or (!nHit and dnAtk == 0 and dkKnD <= 3 and dkEdge >= 1 and kingsD >= 4
+               and akKnD >= 3 and dnSafe >= 1 and !bLine);
+}
+
 bool
 isTheoreticalDraw(const ChessBoard& pos)
 {
   int pieceCount = pos.count<ALL>();
-  if (pieceCount > 2)
+  if (pieceCount > 3)
     return false;
 
   if (pieceCount == 0)
@@ -1159,6 +1296,12 @@ isTheoreticalDraw(const ChessBoard& pos)
 
     if (isEndgame<Endgames::KPRK>(pos))
       return Endgame<Endgames::KPRK>(pos);
+  }
+
+  if (pieceCount == 3)
+  {
+    if (isEndgame<Endgames::KBNKN>(pos))
+      return Endgame<Endgames::KBNKN>(pos);
   }
 
   return false;
