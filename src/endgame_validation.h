@@ -27,4 +27,11 @@ validateEndgame(const std::vector<std::string>& args);
 void
 solveEndgameTables(const std::vector<std::string>& args);
 
+/**
+ * @brief Print the oracle's verdict on one position and on each of its moves,
+ * building the tables its material needs. CLI entry point: `elsa egprobe`.
+ */
+void
+probeEndgame(const std::vector<std::string>& args);
+
 #endif

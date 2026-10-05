@@ -31,8 +31,9 @@
  * (piece count, pawn count), and solves bottom-up; everything is cached.
  *
  * Each table stores one entry per position up to board symmetry (see Layout),
- * about 1/8 of 64^n * 2 without pawns and under 1/2 with them. build() still
- * accepts at most 4 men.
+ * about 1/8 of 64^n * 2 without pawns and under 1/2 with them, at 2 bits per
+ * entry once solved (a byte while solving, which also needs UNKNOWN).
+ * Signatures of up to MAX_MEN men are supported.
  */
 
 // Perfect verdict for one position, side-to-move relative.
@@ -74,7 +75,7 @@ public:
 
   // Solve the whole capture/promotion DAG of the target signature (the two
   // kings plus `extras`) and cache every table. Returns false + sets `err` if
-  // the signature is unsupported (more than 4 men). Insufficient-material
+  // the signature is unsupported (more than MAX_MEN men). Insufficient-material
   // targets succeed trivially (every probe is DRAW).
   bool
   build(const std::vector<Piece>& extras, std::string& err);
@@ -157,11 +158,35 @@ public:
   checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
                     std::string& example) const;
 
+  // Check a solved table against its own moves: every entry must be ILLEGAL
+  // exactly when it is not a legal position stored there, and otherwise hold what
+  // one forward step over the solved tables gives (a win has a move to a loss, a
+  // loss has only moves to wins or is mate, a draw neither). The solve decides
+  // positions only through such steps from positions already decided, so its
+  // wins and losses are right by construction; this catches a draw that should
+  // have been decided, which is what a missed predecessor would leave. A solved
+  // table that passes is therefore the true one.
+  // Returns false if the table is not solved; otherwise `positions` counts the
+  // legal positions, `wrong` the entries that fail, and `example` describes the
+  // first failure.
+  bool
+  verify(const Sig& sig, uint64_t& positions, uint64_t& wrong,
+         std::string& example) const;
+
 private:
+  // A solved table: entry i is bits 2(i%4)..2(i%4)+1 of byte i/4, coded 0..3
+  // for ILLEGAL, LOSS, DRAW, WIN.
   struct Table
   {
-    Layout           layout;
-    std::vector<Wdl> wdl;
+    Layout               layout;
+    std::vector<uint8_t> packed;
+
+    Wdl
+    at(uint64_t i) const
+    {
+      const unsigned c = (packed[i >> 2] >> ((i & 3) * 2)) & 3u;
+      return c ? Wdl(c + 1) : Wdl::ILLEGAL;
+    }
   };
   std::map<Sig, Table> registry;  // solved tables by signature
 
@@ -174,9 +199,9 @@ private:
   std::string cachePath(const Sig& sig) const;
   // Path of the signature's cache file in the format before 2026-10-05.
   std::string oldCachePath(const Sig& sig) const;
-  // Read and validate the cache file of `sig` into `table`; false on any
+  // Read and validate the cache file of `sig` into `packed`; false on any
   // miss/mismatch/IO error.
-  bool readCacheFile(const Sig& sig, std::vector<Wdl>& table) const;
+  bool readCacheFile(const Sig& sig, std::vector<uint8_t>& packed) const;
   // Try to load `sig` from disk straight into the registry; false on any
   // miss/mismatch/IO error (caller then solves and saves).
   bool cacheLoad(const Sig& sig);
@@ -196,6 +221,9 @@ private:
   void relaxFrontier(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
                      TableStats& stats);
   Wdl  valueOf(const ChessBoard& pos) const;
+  template <typename Own>
+  Wdl  valueIn(const ChessBoard& pos, const Sig& sig, const Layout& layout,
+               const Own& own) const;
   Wdl  forwardValue(ChessBoard& pos) const;
 };
 

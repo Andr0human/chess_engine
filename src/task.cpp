@@ -167,9 +167,13 @@ helper()
   puts("**        frozen=inequalities as coordinates; maxk/top bound them, freeze <n> sets frozen slots\n");
 
   puts("** To re-solve the oracle tables of a signature and compare them with the cache, type:\n");
-  puts("** elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [target]\n");
+  puts("** elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [verify] [target]\n");
   puts("**   'sweep' uses the original full-sweep solve; 'check' tests the backward move generator;\n");
+  puts("**   'verify' checks each table against its own moves;\n");
   puts("**   'target' solves only the named table, reading its sub-tables from the cache\n");
+
+  puts("** To ask the oracle about one position (up to 5 men) and each of its moves, type:\n");
+  puts("** elsa egprobe fen <fen> [threads <n>] [nocache]\n");
 
   puts("** For tuning evaluation weights (Texel), type:\n");
   puts("** elsa tune [data <path.epd>] [iters <n>] [weights <list>]\n");
@@ -421,7 +425,8 @@ task(const vector<string>& args)
     {"isDraw",    [](const auto& arguments){ isDrawCheck(arguments); }},
     {"tune",      [](const auto& arguments){ tuneEval(arguments); }},
     {"egvalidate", [](const auto& arguments){ validateEndgame(arguments); }},
-    {"egsolve",    [](const auto& arguments){ solveEndgameTables(arguments); }}
+    {"egsolve",    [](const auto& arguments){ solveEndgameTables(arguments); }},
+    {"egprobe",    [](const auto& arguments){ probeEndgame(arguments); }}
   };
 
   string foundCommand;

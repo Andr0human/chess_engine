@@ -949,7 +949,7 @@ validateEndgame(const vector<string>& args)
 void
 solveEndgameTables(const vector<string>& args)
 {
-  // elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [target]
+  // elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [verify] [target]
   //
   // A tool for working on the oracle itself. Solves every table the signature
   // needs from scratch -- the disk cache is neither read nor written -- prints
@@ -962,6 +962,8 @@ solveEndgameTables(const vector<string>& args)
   //             on every sweep (the reference for timing)
   //   check  -> also test the backward move generator on each table against the
   //             engine's own moves
+  //   verify -> also check each table against its own moves (EgSolver::verify),
+  //             which needs no cache file
   //   target -> solve only the named table, reading its sub-tables from the
   //             cache (any that are missing are solved too)
 
@@ -983,6 +985,7 @@ solveEndgameTables(const vector<string>& args)
 
   const int usingThreads = setSolverThreads(args);
   const bool wantCheck = utils::hasArg(args, "check");
+  const bool wantVerify = utils::hasArg(args, "verify");
 
   EgSolver solver;
   solver.cacheEnabled = false;
@@ -1005,13 +1008,15 @@ solveEndgameTables(const vector<string>& args)
   cout << std::left << std::setw(8) << "table" << std::right
        << std::setw(12) << "entries" << std::setw(10) << "seconds"
        << std::setw(8) << "sweeps" << std::setw(14) << "checks" << "  cache";
+  if (wantVerify)
+    cout << "                 verify";
   if (wantCheck)
-    cout << "                 backward moves";
+    cout << (wantVerify ? "; backward moves" : "                 backward moves");
   cout << '\n';
 
   double totalSeconds = 0;
   uint64_t totalChecks = 0;
-  int solved = 0, differ = 0, uncompared = 0, missedTables = 0;
+  int solved = 0, differ = 0, uncompared = 0, missedTables = 0, wrongTables = 0;
   for (const EgSolver::TableStats& st : solver.lastBuild)
   {
     if (st.loaded) continue;
@@ -1045,6 +1050,21 @@ solveEndgameTables(const vector<string>& args)
     }
     cout << std::left << std::setw(22) << cacheCol << std::right;
 
+    if (wantVerify)
+    {
+      uint64_t positions = 0, wrong = 0;
+      string example;
+      solver.verify(st.sig, positions, wrong, example);
+      cout << "  " << positions << " positions, " << wrong << " wrong";
+      if (wrong)
+      {
+        cout << "  (first: " << example << ")";
+        ++wrongTables;
+      }
+      if (wantCheck)
+        cout << ";";
+    }
+
     if (wantCheck)
     {
       uint64_t edges = 0, missing = 0;
@@ -1068,7 +1088,120 @@ solveEndgameTables(const vector<string>& args)
   cout << ".\n";
   cout << "Cache: " << (solved - differ - uncompared)
        << " identical, " << differ << " differ, " << uncompared << " without a file.\n";
+  if (wantVerify)
+    cout << "Verify: " << (wrongTables == 0 ? "every entry consistent" :
+             std::to_string(wrongTables) + " tables with wrong entries") << ".\n";
   if (wantCheck)
     cout << "Backward moves: " << (missedTables == 0 ? "no misses" :
              std::to_string(missedTables) + " tables with misses") << ".\n";
+}
+
+void
+probeEndgame(const vector<string>& args)
+{
+  // elsa egprobe fen <fen> [threads <n>] [nocache]
+  //
+  // The oracle's verdict on one position and on each of its moves, for checking
+  // a position by hand. Builds the tables for the position's material, reading
+  // them from the disk cache when they are there. Like every oracle verdict it
+  // assumes unlimited play: no 50-move rule, and no castling or en passant.
+
+  if (!utils::hasArg(args, "fen") || utils::argValue(args, "fen").empty())
+  {
+    cout << "egprobe needs a position: elsa egprobe fen \"<fen>\"\n";
+    return;
+  }
+  const string fen = utils::argValue(args, "fen");
+  ChessBoard pos(fen);
+  cout << "Fen = " << fen << '\n';
+
+  EgSolver::Sig sig;
+  vector<Piece> men;
+  int kings[COLOR_NB] = { 0, 0 };
+  for (Bitboard bb = pos.all(); bb; bb &= bb - 1)
+  {
+    const Piece p = pos.pieceOnSquare(Square(__builtin_ctzll(bb)));
+    sig.push_back(p);
+    if (type_of(p) == KING) ++kings[color_of(p)];
+    else                    men.push_back(p);
+  }
+
+  if (kings[WHITE] != 1 || kings[BLACK] != 1)
+  {
+    cout << "The position needs one king on each side.\n";
+    return;
+  }
+  if (sig.size() > static_cast<size_t>(EgSolver::MAX_MEN))
+  {
+    cout << "The position has " << sig.size() << " men; the oracle supports at most "
+         << EgSolver::MAX_MEN << ".\n";
+    return;
+  }
+  if (sideNotToMoveInCheck(pos, pos.color))
+  {
+    cout << "Illegal position: the side not to move is in check.\n";
+    return;
+  }
+  if ((pos.csep & 1920) || !(pos.csep & 64))
+    cout << "Note: the oracle ignores the castling rights and en passant square.\n";
+
+  const int usingThreads = setSolverThreads(args);
+  EgSolver solver;
+  solver.cacheEnabled = !utils::hasArg(args, "nocache");
+
+  cout << "Building oracle for " << sigName(sig)
+       << " (" << usingThreads << " thread" << (usingThreads == 1 ? "" : "s")
+       << ") ... " << std::flush;
+  const perf_clock start = perf::now();
+  string err;
+  if (!solver.build(men, err))
+  {
+    cout << "failed: " << err << '\n';
+    return;
+  }
+  const perf_time dur = perf::now() - start;
+  cout << "done (" << std::fixed << std::setprecision(1) << dur.count() << " s; "
+       << solver.tablesSolved << " solved, " << solver.tablesLoaded << " from cache)\n\n";
+
+  const auto name = [] (Wdl v)
+  {
+    switch (v)
+    {
+      case Wdl::WIN:  return "win";
+      case Wdl::DRAW: return "draw";
+      case Wdl::LOSS: return "loss";
+      default:        return "no verdict";
+    }
+  };
+  const string side = (pos.color == WHITE) ? "White" : "Black";
+
+  cout << side << " to move: " << name(solver.probe(pos)) << '\n';
+
+  const MoveList ml = generateMoves(pos);
+  if (!ml.anyMove())
+  {
+    cout << (ml.checkers ? "Checkmate.\n" : "Stalemate.\n");
+    return;
+  }
+
+  // Each move's result for the side that plays it: the reverse of the verdict on
+  // the position it reaches. Wins first, then draws, then losses.
+  MoveArray moves;
+  ml.getMoves(pos, moves);
+  vector<std::pair<Wdl, string>> results;
+  for (const Move mv : moves)
+  {
+    const string san = printMove(mv, pos);
+    pos.makeMove(mv);
+    const Wdl next = solver.probe(pos);
+    pos.unmakeMove();
+    const Wdl mine = (next == Wdl::WIN) ? Wdl::LOSS : (next == Wdl::LOSS) ? Wdl::WIN : next;
+    results.emplace_back(mine, san);
+  }
+  std::stable_sort(results.begin(), results.end(),
+                   [] (const auto& a, const auto& b) { return a.first > b.first; });
+
+  cout << "Moves, with the result for " << side << ":\n";
+  for (const auto& [v, san] : results)
+    cout << "  " << std::left << std::setw(8) << san << std::right << name(v) << '\n';
 }

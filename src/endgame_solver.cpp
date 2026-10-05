@@ -49,18 +49,19 @@ using Squares = std::array<int, MAX_MEN>;
 // rather than silently trusted. Either mismatch => the file is ignored and the
 // table is re-solved. (Escape hatch for an un-versioned change: `nocache`.)
 constexpr char     CACHE_MAGIC[4]   = { 'E', 'G', 'W', '2' };
-constexpr uint32_t SOLVER_VERSION   = 2;
+constexpr uint32_t SOLVER_VERSION   = 3;
 
-// Fixed-size header prefixed to the raw Wdl bytes. Every field is re-validated
-// on load (incl. the signature itself and the trailing byte count), so a
-// collision or truncated/partial file can never feed the oracle wrong data.
+// Fixed-size header prefixed to the packed table (EgSolver::Table). Every field
+// is re-validated on load (incl. the signature itself and the trailing byte
+// count), so a collision or truncated/partial file can never feed the oracle
+// wrong data.
 struct CacheHeader
 {
   char     magic[4];
   uint32_t solverVer;
   uint32_t n;                // men count
   uint32_t pieces[MAX_MEN];  // the canonical signature (NO_PIECE-padded)
-  uint64_t total;            // == the layout's total == number of Wdl bytes that follow
+  uint64_t total;            // == the layout's total; (total + 3) / 4 bytes follow
 };
 
 // The format before 2026-10-05, read only by compareWithOldCache: no symmetry,
@@ -385,6 +386,29 @@ decodeIndex(const Layout& layout, uint64_t idx, Squares& sqs, Color& stm)
   sqs[layout.bk] = tables.pairSquares[layout.pawns][idx][1];
 }
 
+// Pack a solved table, in which no entry is UNKNOWN any more, at 2 bits per
+// entry (see EgSolver::Table).
+std::vector<uint8_t>
+pack(const std::vector<Wdl>& wdl)
+{
+  const int64_t bytes = static_cast<int64_t>((wdl.size() + 3) / 4);
+  std::vector<uint8_t> packed(static_cast<size_t>(bytes), 0);
+
+  #pragma omp parallel for schedule(static)
+  for (int64_t b = 0; b < bytes; ++b)
+  {
+    unsigned byte = 0;
+    for (unsigned j = 0; j < 4; ++j)
+    {
+      const size_t i = static_cast<size_t>(b) * 4 + j;
+      if (i < wdl.size() && wdl[i] != Wdl::ILLEGAL)
+        byte |= (static_cast<unsigned>(wdl[i]) - 1) << (j * 2);
+    }
+    packed[static_cast<size_t>(b)] = static_cast<uint8_t>(byte);
+  }
+  return packed;
+}
+
 // Materialise the position for `sig` with slot i on sqs[i], side to move `stm`.
 // Mirrors what FEN "... <stm> - - 0 1" would build (csep = 64 -> no castle/ep).
 void
@@ -539,8 +563,12 @@ forEachPredecessor(const Sig& sig, const Layout& layout, const Squares& sqs,
 
 // --------------------------------------------------------------------------
 
+// Value of a position whose signature is `sig`, whose entries `own(i)` gives,
+// or that of a solved table.
+template <typename Own>
 Wdl
-EgSolver::valueOf(const ChessBoard& pos) const
+EgSolver::valueIn(const ChessBoard& pos, const Sig& sig, const Layout& layout,
+                  const Own& own) const
 {
   std::array<Piece, MAX_MEN> men{};
   Squares sqs{};
@@ -549,15 +577,22 @@ EgSolver::valueOf(const ChessBoard& pos) const
   if (insufficient(men.data(), n))
     return Wdl::DRAW;
 
-  // Overwhelmingly common case: a quiet king/pawn move stays in the table we
-  // are currently solving. Resolve it without ever building a Sig (no alloc).
-  if (sameSig(men, n, currentSig))
-    return (*currentTable)[indexOf(currentLayout, sqs, pos.color)];
+  // Overwhelmingly common case: a quiet move stays in the given table. Resolve
+  // it without ever building a Sig (no alloc).
+  if (sameSig(men, n, sig))
+    return own(indexOf(layout, sqs, pos.color));
 
   // Rare: a capture/promotion successor, resolved in an already-solved child
   // table. Only here do we pay for a Sig to key the registry.
   const Table& t = registry.at(Sig(men.begin(), men.begin() + n));
-  return t.wdl[indexOf(t.layout, sqs, pos.color)];
+  return t.at(indexOf(t.layout, sqs, pos.color));
+}
+
+Wdl
+EgSolver::valueOf(const ChessBoard& pos) const
+{
+  const std::vector<Wdl>& table = *currentTable;
+  return valueIn(pos, currentSig, currentLayout, [&] (uint64_t i) { return table[i]; });
 }
 
 // One forward check of an undecided position: WIN if some move reaches a loss
@@ -642,7 +677,7 @@ EgSolver::solve(const Sig& sig, TableStats& stats)
       table[static_cast<size_t>(s)] = Wdl::DRAW;
 
   currentTable = nullptr;
-  registry.emplace(sig, Table{ layout, std::move(table) });
+  registry.emplace(sig, Table{ layout, pack(table) });
 }
 
 // The original method: every sweep re-checks every undecided position, until a
@@ -808,9 +843,9 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
   for (Piece p : extras) target.push_back(p);
   target = canonical(std::move(target));
 
-  if (target.size() > 4)
+  if (target.size() > MAX_MEN)
   {
-    err = "oracle supports at most 4 men";
+    err = "oracle supports at most " + std::to_string(MAX_MEN) + " men";
     return false;
   }
 
@@ -933,6 +968,88 @@ EgSolver::checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
   missing = m;
 }
 
+bool
+EgSolver::verify(const Sig& sig, uint64_t& positions, uint64_t& wrong,
+                 std::string& example) const
+{
+  const auto it = registry.find(sig);
+  if (it == registry.end())
+    return false;
+
+  const Table& table = it->second;
+  const Layout& layout = table.layout;
+  const auto own = [&] (uint64_t i) { return table.at(i); };
+  const int n = layout.n;
+  uint64_t p = 0, w = 0;
+  example.clear();
+
+  #pragma omp parallel
+  {
+    Squares sqs{};
+    Color stm = WHITE;
+    ChessBoard pos;
+
+    #pragma omp for schedule(dynamic, 4096) reduction(+ : p, w)
+    for (int64_t s = 0; s < static_cast<int64_t>(layout.total); ++s)
+    {
+      const uint64_t si = static_cast<uint64_t>(s);
+      decodeIndex(layout, si, sqs, stm);
+
+      Wdl expected = Wdl::ILLEGAL;
+      if (geometryLegal(sig, sqs, n) && indexOf(layout, sqs, stm) == si)
+      {
+        setupBoard(pos, sig, sqs, n, stm);
+        if (!sideNotToMoveInCheck(pos, stm))
+        {
+          ++p;
+          const MoveList ml = generateMoves(pos);
+          MoveArray moves;
+          ml.getMoves(pos, moves);
+
+          bool win = false, allWin = true;
+          for (const Move mv : moves)
+          {
+            pos.makeMove(mv);
+            const Wdl v = valueIn(pos, sig, layout, own);
+            pos.unmakeMove();
+            if (v == Wdl::LOSS) { win = true; break; }
+            if (v != Wdl::WIN)  allWin = false;
+          }
+
+          if (!ml.anyMove())
+            expected = stmInCheck(pos, stm) ? Wdl::LOSS : Wdl::DRAW;   // mate / stalemate
+          else
+            expected = win ? Wdl::WIN : allWin ? Wdl::LOSS : Wdl::DRAW;
+        }
+      }
+
+      const Wdl stored = table.at(si);
+      if (stored == expected)
+        continue;
+      ++w;
+      #pragma omp critical
+      {
+        if (example.empty())
+        {
+          static const char* const name[] = { "illegal", "unknown", "loss", "draw", "win" };
+          example = "entry " + std::to_string(si);
+          if (geometryLegal(sig, sqs, n))
+          {
+            setupBoard(pos, sig, sqs, n, stm);
+            example += " (" + pos.fen() + ")";
+          }
+          example += std::string(" holds ") + name[static_cast<int>(stored)]
+                   + ", expected " + name[static_cast<int>(expected)];
+        }
+      }
+    }
+  }
+
+  positions = p;
+  wrong = w;
+  return true;
+}
+
 Wdl
 EgSolver::probe(const ChessBoard& pos) const
 {
@@ -952,7 +1069,7 @@ EgSolver::probe(const ChessBoard& pos) const
   const auto it = registry.find(sig);
   if (it == registry.end())
     return Wdl::ILLEGAL;   // signature not solved (shouldn't happen for built target)
-  return it->second.wdl[indexOf(it->second.layout, sqs, pos.color)];
+  return it->second.at(indexOf(it->second.layout, sqs, pos.color));
 }
 
 bool
@@ -967,8 +1084,10 @@ EgSolver::distribution(const std::vector<Piece>& extras,
   if (it == registry.end()) return false;
 
   win = draw = loss = 0;
-  for (Wdl v : it->second.wdl)
+  const Table& t = it->second;
+  for (uint64_t i = 0; i < t.layout.total; ++i)
   {
+    const Wdl v = t.at(i);
     if (v == Wdl::WIN)       ++win;
     else if (v == Wdl::LOSS) ++loss;
     else if (v == Wdl::DRAW) ++draw;
@@ -1031,10 +1150,10 @@ EgSolver::oldCachePath(const Sig& sig) const
 bool
 EgSolver::cacheLoad(const Sig& sig)
 {
-  std::vector<Wdl> table;
-  if (!readCacheFile(sig, table))
+  std::vector<uint8_t> packed;
+  if (!readCacheFile(sig, packed))
     return false;
-  registry.emplace(sig, Table{ makeLayout(sig), std::move(table) });
+  registry.emplace(sig, Table{ makeLayout(sig), std::move(packed) });
   return true;
 }
 
@@ -1042,13 +1161,13 @@ bool
 EgSolver::compareWithCache(const Sig& sig, uint64_t& differing) const
 {
   const auto it = registry.find(sig);
-  std::vector<Wdl> cached;
-  if (it == registry.end() || !readCacheFile(sig, cached))
+  Table cached{ it == registry.end() ? Layout{} : it->second.layout, {} };
+  if (it == registry.end() || !readCacheFile(sig, cached.packed))
     return false;
 
   differing = 0;
-  for (size_t i = 0; i < cached.size(); ++i)
-    if (cached[i] != it->second.wdl[i]) ++differing;
+  for (uint64_t i = 0; i < cached.layout.total; ++i)
+    if (cached.at(i) != it->second.at(i)) ++differing;
   return true;
 }
 
@@ -1077,8 +1196,8 @@ EgSolver::compareWithOldCache(const Sig& sig, uint64_t& differing) const
   if (!in.read(reinterpret_cast<char*>(old.data()), static_cast<std::streamsize>(h.total)))
     return false;
 
-  const Layout& layout = it->second.layout;
-  const std::vector<Wdl>& wdl = it->second.wdl;
+  const Table& table = it->second;
+  const Layout& layout = table.layout;
   uint64_t d = 0;
 
   // Every legal position there has the same value here.
@@ -1094,14 +1213,14 @@ EgSolver::compareWithOldCache(const Sig& sig, uint64_t& differing) const
     idx >>= 1;
     for (int i = n - 1; i >= 0; --i, idx >>= 6)
       sqs[i] = static_cast<int>(idx & 63);
-    if (wdl[indexOf(layout, sqs, stm)] != v) ++d;
+    if (table.at(indexOf(layout, sqs, stm)) != v) ++d;
   }
 
   // Every entry here is a legal position there.
   #pragma omp parallel for schedule(static) reduction(+ : d)
   for (int64_t s = 0; s < static_cast<int64_t>(layout.total); ++s)
   {
-    if (wdl[static_cast<size_t>(s)] == Wdl::ILLEGAL) continue;
+    if (table.at(static_cast<uint64_t>(s)) == Wdl::ILLEGAL) continue;
 
     Squares sqs{};
     Color stm = WHITE;
@@ -1117,7 +1236,7 @@ EgSolver::compareWithOldCache(const Sig& sig, uint64_t& differing) const
 }
 
 bool
-EgSolver::readCacheFile(const Sig& sig, std::vector<Wdl>& table) const
+EgSolver::readCacheFile(const Sig& sig, std::vector<uint8_t>& packed) const
 {
   const std::string path = cachePath(sig);
   if (path.empty())
@@ -1140,9 +1259,9 @@ EgSolver::readCacheFile(const Sig& sig, std::vector<Wdl>& table) const
     if (h.pieces[i] != static_cast<uint32_t>(sig[i]))         return false;
   if (h.total != makeLayout(sig).total)                       return false;
 
-  table.assign(h.total, Wdl::ILLEGAL);
-  if (!in.read(reinterpret_cast<char*>(table.data()),
-               static_cast<std::streamsize>(h.total)))
+  packed.assign((h.total + 3) / 4, 0);
+  if (!in.read(reinterpret_cast<char*>(packed.data()),
+               static_cast<std::streamsize>(packed.size())))
     return false;
   // Reject a file with trailing junk (size must be exactly header + table).
   return in.peek() == std::ifstream::traits_type::eof();
@@ -1158,7 +1277,7 @@ EgSolver::cacheSave(const Sig& sig)
   const auto it = registry.find(sig);
   if (it == registry.end())
     return;
-  const std::vector<Wdl>& table = it->second.wdl;
+  const Table& table = it->second;
 
   std::error_code ec;
   std::filesystem::create_directories(resolvedCacheDir(), ec);   // best effort
@@ -1169,7 +1288,7 @@ EgSolver::cacheSave(const Sig& sig)
   h.n         = static_cast<uint32_t>(sig.size());
   for (size_t i = 0; i < sig.size() && i < MAX_MEN; ++i)
     h.pieces[i] = static_cast<uint32_t>(sig[i]);
-  h.total = table.size();
+  h.total = table.layout.total;
 
   // Atomic publish: write a temp file, then rename over the final path so a
   // crash mid-write never leaves a truncated table that later loads as garbage.
@@ -1178,8 +1297,8 @@ EgSolver::cacheSave(const Sig& sig)
     std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
     if (!out) return;
     out.write(reinterpret_cast<const char*>(&h), sizeof h);
-    out.write(reinterpret_cast<const char*>(table.data()),
-              static_cast<std::streamsize>(table.size()));
+    out.write(reinterpret_cast<const char*>(table.packed.data()),
+              static_cast<std::streamsize>(table.packed.size()));
     if (!out) { out.close(); std::filesystem::remove(tmp, ec); return; }
   }
   std::filesystem::rename(tmp, path, ec);
