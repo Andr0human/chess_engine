@@ -158,10 +158,11 @@ helper()
 
   puts("** To validate the draw recognizer over a material signature, type:\n");
   puts("** elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]\n");
-  puts("**                  [nocapgate] [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]\n");
+  puts("**                  [dumpfalse] [cube <file>] [nocapgate] [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]\n");
   puts("**   e.g. 'elsa egvalidate pieces Pb oracle threads 4'  (KPKB vs perfect WDL, 4 threads)\n");
   puts("**        add 'mirror' to also run the colour-mirror (KBKP) colour-symmetry self-check\n");
   puts("**        'nocapgate' keeps has-capture positions in the call set (diagnostic: search never asks there)\n");
+  puts("**        'dumpfalse' limits the dump to false draws; 'cube <file>' writes every emitted bucket as TSV (needs 'oracle')\n");
   puts("**        oracle tables cache under output/egcache/ (sub-second reload); 'nocache' forces a fresh solve\n");
   puts("**        bucket-probe searches (need 'oracle'): combos=feature subsets, sums=signed inequalities,\n");
   puts("**        frozen=inequalities as coordinates; maxk/top bound them, freeze <n> sets frozen slots\n");

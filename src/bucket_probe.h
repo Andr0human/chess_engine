@@ -248,6 +248,11 @@ class BucketTally
   void
   report(std::ostream& out, const std::string& title) const;
 
+  // Write every bucket as a tab-separated row: the feature values, then win,
+  // draw and loss. The first line names the columns.
+  void
+  writeTsv(std::ostream& out) const;
+
   private:
   struct Row
   {

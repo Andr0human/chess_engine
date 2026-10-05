@@ -341,6 +341,21 @@ BucketTally::summarize() const
 }
 
 void
+BucketTally::writeTsv(std::ostream& out) const
+{
+  for (const std::string& n : names)
+    out << n << '\t';
+  out << "win\tdraw\tloss\n";
+
+  for (const auto& [key, r] : rows)
+  {
+    for (int v : key)
+      out << v << '\t';
+    out << r.n[0] << '\t' << r.n[1] << '\t' << r.n[2] << '\n';
+  }
+}
+
+void
 BucketTally::report(std::ostream& out, const std::string& title) const
 {
   if (rows.empty())

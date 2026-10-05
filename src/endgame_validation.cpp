@@ -199,6 +199,7 @@ struct Walker
   int                       maxKingFile = 3;     // 3 = folded (a-d); 7 = allfiles self-check
   const EgSolver*           oracle   = nullptr;
   bool                      wantDump = false;
+  bool                      dumpFalseOnly = false;  // dump only the false draws
   bool                      wantSamples = false;   // keep example FENs per bucket
   bool                      capGate  = true;       // false = keep has-capture positions
 
@@ -339,7 +340,7 @@ struct Walker
     // `FEN | <D|.> | <W|D|L>` (recognizer verdict then truth). A missed draw is
     // exactly `| . | D`; a false draw is `| D | W` or `| D | L`. `dump` requires
     // `oracle` (validated up front), so `oracle` is always set here when wantDump.
-    if (wantDump && mismatch)
+    if (wantDump && mismatch && (!dumpFalseOnly || isDraw))
     {
       dump += buildFen();
       dump += " | ";
@@ -407,6 +408,7 @@ struct Generator
   vector<Slot> slots;          // index 0 = white king, 1 = black king, then extras
   int maxKingFile = 3;         // 3 = folded (a-d); 7 = allfiles self-check
   bool wantDump = false;
+  bool dumpFalseOnly = false;
   bool wantSamples = false;
   bool capGate = true;         // false = has-capture positions stay in the call set
   const EgSolver* oracle = nullptr;
@@ -461,6 +463,7 @@ struct Generator
       w.maxKingFile = maxKingFile;
       w.oracle    = oracle;
       w.wantDump  = wantDump;
+      w.dumpFalseOnly = dumpFalseOnly;
       w.wantSamples = wantSamples;
       w.capGate   = capGate;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
@@ -469,6 +472,16 @@ struct Generator
       w.pos.csep = 64;
       w.pos.setPiece(Square(w.square[WK]), slots[WK].piece);
       w.place(BK);                          // white king fixed; recurse from black king down
+
+      // Without samples a bucket row is pure counts, so the merge order cannot
+      // change the result: fold each slice in as it finishes and free it, rather
+      // than holding every slice's cube until the end (a 5-man pool would not fit).
+      if (!wantSamples)
+      {
+        #pragma omp critical(bucketMerge)
+        buckets.merge(w.buckets);
+        w.buckets = BucketTally();
+      }
     }
 
     // Reduce in task order. Sums are order-independent, but draining the false
@@ -483,7 +496,8 @@ struct Generator
           falseFens.push_back(f);
       if (wantDump)
         dump += w.dump;
-      buckets.merge(w.buckets);
+      if (wantSamples)
+        buckets.merge(w.buckets);
     }
   }
 };
@@ -617,7 +631,7 @@ void
 validateEndgame(const vector<string>& args)
 {
   // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles]
-  //                 [nocapgate] [dump <file>]
+  //                 [nocapgate] [dump <file>] [dumpfalse] [cube <file>]
   //
   // Exhaustively enumerate every legal position for a material signature -- the
   // two kings (always present, never passed) plus the extra men named by
@@ -660,6 +674,7 @@ validateEndgame(const vector<string>& args)
   // ---- options ------------------------------------------------------------
   const bool wantDump = utils::hasArg(args, "dump");
   const string dumpFile = wantDump ? utils::argValue(args, "dump") : string();
+  const bool dumpFalseOnly = utils::hasArg(args, "dumpfalse");   // dump only `| D | W/L`
   const bool noFold   = utils::hasArg(args, "allfiles");
   const bool wantMirror = utils::hasArg(args, "mirror");
   const bool wantOracle = utils::hasArg(args, "oracle");
@@ -722,6 +737,16 @@ validateEndgame(const vector<string>& args)
   // Any of the three replaces the raw per-bucket table: they all want the wide
   // emitted pool, whose cube runs to hundreds of thousands of rows.
   const bool wantSearch = wantCombos || wantSums || wantFrozen;
+
+  // `cube <file>` writes the whole emitted cube -- one row per full feature
+  // vector with its win/draw/loss counts -- for mining outside the engine.
+  const bool wantCube = utils::hasArg(args, "cube");
+  const string cubeFile = wantCube ? utils::argValue(args, "cube") : string();
+  if (wantCube && !wantOracle)
+  {
+    cout << "cube requires oracle (its counts are the oracle's WDL); pass 'oracle'.\n";
+    return;
+  }
 
   size_t combosMaxK = 4;
   if (utils::hasArg(args, "maxk"))
@@ -797,12 +822,13 @@ validateEndgame(const vector<string>& args)
 
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
+    g.dumpFalseOnly = dumpFalseOnly;
     g.capGate = !noCapGate;
 
     // Sample FENs serve the per-bucket table, which none of the searches print --
     // and a whole-pool cube has buckets by the hundred thousand, so collecting
     // examples there would cost a lot of memory to produce nothing readable.
-    g.wantSamples = !wantSearch;
+    g.wantSamples = !wantSearch && !wantCube;
 
     // Build the perfect WDL oracle for this colouring (its own capture/promotion
     // DAG), then bucket each call-set position against it inside leaf().
@@ -920,7 +946,20 @@ validateEndgame(const vector<string>& args)
         if (wantFrozen)
           reportFrozenSearch(cout, gens[i].buckets, combosMaxK, combosTopN, freezeN,
                              "Frozen-halfspace search " + tag);
-        if (!wantSearch)
+        if (wantCube)
+        {
+          const string path = gens.size() > 1 ? cubeFile + "." + colourings[i] : cubeFile;
+          std::ofstream cubeOut(path);
+          if (cubeOut)
+          {
+            gens[i].buckets.writeTsv(cubeOut);
+            cout << "Cube " << tag << ": " << gens[i].buckets.bucketCount()
+                 << " buckets written to " << path << "\n\n";
+          }
+          else
+            cout << "Could not open cube file: " << path << "\n\n";
+        }
+        else if (!wantSearch)
           gens[i].buckets.report(cout, "Bucket WDL " + tag);
       }
 
@@ -955,8 +994,9 @@ validateEndgame(const vector<string>& args)
   {
     uint64_t dumped = 0;
     for (const Generator& g : gens)
-      dumped += g.t.missedDraw + g.t.falseDraw;
-    cout << "Dumped " << dumped << " mismatched positions to " << dumpFile << '\n';
+      dumped += (dumpFalseOnly ? 0 : g.t.missedDraw) + g.t.falseDraw;
+    cout << "Dumped " << dumped << (dumpFalseOnly ? " false draws" : " mismatched positions")
+         << " to " << dumpFile << '\n';
   }
 }
 
