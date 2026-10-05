@@ -145,14 +145,6 @@ public:
   bool
   compareWithCache(const Sig& sig, uint64_t& differing) const;
 
-  // Compare a solved table with a cache file in the format used before
-  // 2026-10-05 (no symmetry, 64^n * 2 entries), position by position: every
-  // legal position there must have the same value here, and every entry here
-  // must be a legal position there. Returns false if the table is not solved or
-  // there is no such file; otherwise `differing` counts the mismatches.
-  bool
-  compareWithOldCache(const Sig& sig, uint64_t& differing) const;
-
   // Test the backward move generator against the engine's own moves: for every
   // legal position P of `sig` and every move of P that stays in `sig` (neither a
   // capture nor a promotion), P must be among the predecessors of the position
@@ -208,8 +200,6 @@ private:
   // Cache file path for a signature, or "" if there is no cache dir. (Callers
   // check `cacheEnabled` themselves; compareWithCache reads it regardless.)
   std::string cachePath(const Sig& sig) const;
-  // Path of the signature's cache file in the format before 2026-10-05.
-  std::string oldCachePath(const Sig& sig) const;
   // Read and validate the cache file of `sig` into `packed`; false on any
   // miss/mismatch/IO error.
   bool readCacheFile(const Sig& sig, std::vector<uint8_t>& packed) const;

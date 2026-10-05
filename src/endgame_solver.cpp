@@ -64,20 +64,6 @@ struct CacheHeader
   uint64_t total;            // == the layout's total; (total + 3) / 4 bytes follow
 };
 
-// The format before 2026-10-05, read only by compareWithOldCache: no symmetry,
-// slot i's square in 6 bits each, then the side to move (64^n * 2 entries).
-constexpr char     OLD_CACHE_MAGIC[4] = { 'E', 'G', 'W', '1' };
-constexpr uint32_t OLD_SOLVER_VERSION = 1;
-
-struct OldCacheHeader
-{
-  char     magic[4];
-  uint32_t solverVer;
-  uint32_t n;
-  uint32_t pieces[4];
-  uint64_t total;
-};
-
 // Absolute directory of the running executable, or an empty path if it can't
 // be determined. Lets the cache anchor beside the binary instead of the CWD,
 // so launching elsa from any directory reuses the same cache files.
@@ -1248,14 +1234,6 @@ EgSolver::cachePath(const Sig& sig) const
 {
   if (cacheDir.empty() || sig.size() > MAX_MEN)
     return {};
-  return resolvedCacheDir() + "/sig_" + sigKey(sig) + ".wdl2";
-}
-
-std::string
-EgSolver::oldCachePath(const Sig& sig) const
-{
-  if (cacheDir.empty() || sig.size() > 4)
-    return {};
   return resolvedCacheDir() + "/sig_" + sigKey(sig) + ".wdl";
 }
 
@@ -1280,70 +1258,6 @@ EgSolver::compareWithCache(const Sig& sig, uint64_t& differing) const
   differing = 0;
   for (uint64_t i = 0; i < cached.layout.total; ++i)
     if (cached.at(i) != it->second.at(i)) ++differing;
-  return true;
-}
-
-bool
-EgSolver::compareWithOldCache(const Sig& sig, uint64_t& differing) const
-{
-  const auto it = registry.find(sig);
-  const std::string path = oldCachePath(sig);
-  if (it == registry.end() || path.empty())
-    return false;
-
-  std::ifstream in(path, std::ios::binary);
-  OldCacheHeader h{};
-  if (!in || !in.read(reinterpret_cast<char*>(&h), sizeof h))
-    return false;
-
-  const int n = static_cast<int>(sig.size());
-  if (std::memcmp(h.magic, OLD_CACHE_MAGIC, sizeof h.magic) != 0) return false;
-  if (h.solverVer != OLD_SOLVER_VERSION)                          return false;
-  if (h.n != sig.size())                                          return false;
-  for (int i = 0; i < n; ++i)
-    if (h.pieces[i] != static_cast<uint32_t>(sig[i]))             return false;
-  if (h.total != (uint64_t(1) << (6 * n)) * 2)                    return false;
-
-  std::vector<Wdl> old(h.total);
-  if (!in.read(reinterpret_cast<char*>(old.data()), static_cast<std::streamsize>(h.total)))
-    return false;
-
-  const Table& table = it->second;
-  const Layout& layout = table.layout;
-  uint64_t d = 0;
-
-  // Every legal position there has the same value here.
-  #pragma omp parallel for schedule(static) reduction(+ : d)
-  for (int64_t s = 0; s < static_cast<int64_t>(h.total); ++s)
-  {
-    const Wdl v = old[static_cast<size_t>(s)];
-    if (v == Wdl::ILLEGAL) continue;
-
-    Squares sqs{};
-    uint64_t idx = static_cast<uint64_t>(s);
-    const Color stm = Color(idx & 1);
-    idx >>= 1;
-    for (int i = n - 1; i >= 0; --i, idx >>= 6)
-      sqs[i] = static_cast<int>(idx & 63);
-    if (table.at(indexOf(layout, sqs, stm)) != v) ++d;
-  }
-
-  // Every entry here is a legal position there.
-  #pragma omp parallel for schedule(static) reduction(+ : d)
-  for (int64_t s = 0; s < static_cast<int64_t>(layout.total); ++s)
-  {
-    if (table.at(static_cast<uint64_t>(s)) == Wdl::ILLEGAL) continue;
-
-    Squares sqs{};
-    Color stm = WHITE;
-    decodeIndex(layout, static_cast<uint64_t>(s), sqs, stm);
-    uint64_t idx = 0;
-    for (int i = 0; i < n; ++i)
-      idx = idx * 64 + static_cast<uint64_t>(sqs[i]);
-    if (old[idx * 2 + static_cast<uint64_t>(stm)] == Wdl::ILLEGAL) ++d;
-  }
-
-  differing = d;
   return true;
 }
 

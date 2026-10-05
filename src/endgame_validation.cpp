@@ -968,9 +968,7 @@ solveEndgameTables(const vector<string>& args)
   // A tool for working on the oracle itself. Solves every table the signature
   // needs from scratch -- the disk cache is neither read nor written -- prints
   // each table's size, time, sweeps and forward checks, and compares each result
-  // with its cached copy byte for byte, or failing that with a cache file of the
-  // format before 2026-10-05 position by position. `pieces` works as in
-  // egvalidate.
+  // with its cached copy byte for byte. `pieces` works as in egvalidate.
   //
   //   sweep  -> use the original solve, which re-checks every undecided position
   //             on every sweep (the reference for timing)
@@ -1043,23 +1041,17 @@ solveEndgameTables(const vector<string>& args)
          << std::setw(8) << st.sweeps << std::setw(14) << st.evaluations << "  ";
 
     uint64_t differing = 0;
-    string cacheCol, oldNote;
-    bool compared = solver.compareWithCache(st.sig, differing);
-    if (!compared && solver.compareWithOldCache(st.sig, differing))
-    {
-      compared = true;
-      oldNote = " (old file)";
-    }
-    if (!compared)
+    string cacheCol;
+    if (!solver.compareWithCache(st.sig, differing))
     {
       cacheCol = "no file";
       ++uncompared;
     }
     else if (differing == 0)
-      cacheCol = "identical" + oldNote;
+      cacheCol = "identical";
     else
     {
-      cacheCol = std::to_string(differing) + " differ" + oldNote;
+      cacheCol = std::to_string(differing) + " differ";
       ++differ;
     }
     cout << std::left << std::setw(22) << cacheCol << std::right;
