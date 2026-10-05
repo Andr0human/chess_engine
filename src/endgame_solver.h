@@ -84,10 +84,9 @@ public:
   bool
   build(const std::vector<Piece>& extras, std::string& err);
 
-  // Perfect WDL for an arbitrary legal position whose signature (or a position
-  // reachable from the built target) has been solved, en passant square
-  // included; castling rights are ignored. Never returns ILLEGAL/UNKNOWN for a
-  // legal input.
+  // Perfect WDL for a legal position whose signature has been solved (the built
+  // target or any table in its DAG), en passant square included; castling
+  // rights are ignored. Never returns ILLEGAL/UNKNOWN for a legal input.
   Wdl
   probe(const ChessBoard& pos) const;
 

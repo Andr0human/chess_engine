@@ -409,8 +409,10 @@ pack(const std::vector<Wdl>& wdl)
   return packed;
 }
 
-// Materialise the position for `sig` with slot i on sqs[i], side to move `stm`.
-// Mirrors what FEN "... <stm> - - 0 1" would build (csep = 64 -> no castle/ep).
+// Materialise the position for `sig` with slot i on sqs[i], side to move `stm`,
+// no castling and no en passant square (csep = 64). Unlike a FEN-built board,
+// the material weight and the hash stay zero and the move number keeps
+// reset()'s value; move generation and the legality checks don't read them.
 void
 setupBoard(ChessBoard& pos, const Sig& sig, const Squares& sqs, int n, Color stm)
 {

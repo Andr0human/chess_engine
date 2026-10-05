@@ -1151,6 +1151,19 @@ probeEndgame(const vector<string>& args)
          << EgSolver::MAX_MEN << ".\n";
     return;
   }
+  // The engine's check test doesn't count the enemy king, so adjacent kings
+  // would get past the check below and crash move generation.
+  if (kingDistance(__builtin_ctzll(pos.piece<WHITE, KING>()),
+                   __builtin_ctzll(pos.piece<BLACK, KING>())) <= 1)
+  {
+    cout << "Illegal position: the kings are adjacent.\n";
+    return;
+  }
+  if ((pos.piece<WHITE, PAWN>() | pos.piece<BLACK, PAWN>()) & Rank18)
+  {
+    cout << "Illegal position: a pawn is on the first or last rank.\n";
+    return;
+  }
   if (sideNotToMoveInCheck(pos, pos.color))
   {
     cout << "Illegal position: the side not to move is in check.\n";
