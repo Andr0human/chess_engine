@@ -26,6 +26,13 @@ kingBetweenQueens(const Square kingSq, const Bitboard queen1, const Bitboard que
          between(plt::upRightMasks[kingSq], plt::downLeftMasks[kingSq]);
 }
 
+// A king in a corner with its own piece next to it. The piece blocks one of
+// the king's flight squares, so a minor apiece (KBKB, KNKN, KBKN) can be lost
+// here. Every won position in those three signatures has this shape.
+static bool
+cornerBlockedByOwnPiece(const Bitboard king, const Bitboard piece)
+{ return (king & CornerSquares) and (chebyshevDistance(squareNo(king), squareNo(piece)) == 1); }
+
 // Ranks indexed relative to each side's home rank. Index 0 is unused.
 constexpr Bitboard relativeRank[COLOR_NB][9] = {
   { NoSquares, Rank8, Rank7, Rank6, Rank5, Rank4, Rank3, Rank2, Rank1 },  // BLACK
@@ -625,10 +632,56 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
 
 template <>
 inline bool
+Endgame<Endgames::KNNK>(const ChessBoard& pos)
+{
+  // A knight apiece (KNKN): drawn unless a king is cornered by its own knight.
+  if (pos.count<WHITE, KNIGHT>() == 1)
+  {
+    return !(cornerBlockedByOwnPiece(pos.piece<WHITE, KING>(), pos.piece<WHITE, KNIGHT>())
+          or cornerBlockedByOwnPiece(pos.piece<BLACK, KING>(), pos.piece<BLACK, KNIGHT>()));
+  }
+
+  // Two knights against a bare king can't force mate, so the only wins are
+  // positions where the bare king is already caught. All of them have the
+  // knight side to move, the bare king on an edge, the kings two squares
+  // apart, and at most one flight square. Anything else is a draw.
+  const Color atkSide = pos.count<WHITE, KNIGHT>() ? WHITE : BLACK;
+
+  if (pos.color != atkSide)
+    return true;
+
+  const Bitboard defKing = pos.getPiece(~atkSide, KING);
+
+  if (!(defKing & EdgeSquares))
+    return true;
+
+  const Square defKingSq = squareNo(defKing);
+  const Square atkKingSq = squareNo(pos.getPiece(atkSide, KING));
+
+  if (chebyshevDistance(atkKingSq, defKingSq) != 2)
+    return true;
+
+  // A knight's own square counts as covered even when the king could take it.
+  // That over-counts the net, which errs towards not claiming the draw.
+  const Bitboard knights = pos.getPiece(atkSide, KNIGHT);
+  const Bitboard covered = plt::kingMasks[atkKingSq]
+                         | plt::knightMasks[lsbIndex(knights)]
+                         | plt::knightMasks[msbIndex(knights)]
+                         | knights;
+
+  return popCount(plt::kingMasks[defKingSq] & ~covered) > 1;
+}
+
+template <>
+inline bool
 Endgame<Endgames::KBBK>(const ChessBoard& pos)
 {
+  // A bishop apiece (KBKB): drawn unless a king is cornered by its own bishop.
   if (pos.count<WHITE, BISHOP>() == 1)
-    return true;
+  {
+    return !(cornerBlockedByOwnPiece(pos.piece<WHITE, KING>(), pos.piece<WHITE, BISHOP>())
+          or cornerBlockedByOwnPiece(pos.piece<BLACK, KING>(), pos.piece<BLACK, BISHOP>()));
+  }
 
   const Bitboard bishops = pos.piece<WHITE, BISHOP>() | pos.piece<BLACK, BISHOP>();
   return !((bishops & WhiteSquares) and (bishops & BlackSquares));
@@ -637,7 +690,38 @@ Endgame<Endgames::KBBK>(const ChessBoard& pos)
 template <>
 inline bool
 Endgame<Endgames::KBNK>(const ChessBoard& pos)
-{ return pos.count<WHITE, ALL>() == 1; }
+{
+  // A minor apiece (KBKN): drawn unless a king is cornered by its own minor.
+  if (pos.count<WHITE, ALL>() == 1)
+  {
+    const Bitboard wMinor = pos.piece<WHITE, BISHOP>() | pos.piece<WHITE, KNIGHT>();
+    const Bitboard bMinor = pos.piece<BLACK, BISHOP>() | pos.piece<BLACK, KNIGHT>();
+
+    return !(cornerBlockedByOwnPiece(pos.piece<WHITE, KING>(), wMinor)
+          or cornerBlockedByOwnPiece(pos.piece<BLACK, KING>(), bMinor));
+  }
+
+  // Bishop and knight against a bare king: won, unless the bare king is to
+  // move and can take an undefended minor next to it. The attack masks ignore
+  // all blockers but the attacking king, so they can only over-count defence,
+  // which errs towards not claiming the draw.
+  const Color side = pos.count<WHITE, ALL>() > 0 ? BLACK : WHITE;
+
+  if (side != pos.color)
+    return false;
+
+  const Bitboard emyKing   = pos.getPiece(~side, KING);
+  const Square   kingSq    = squareNo(pos.getPiece(side, KING));
+  const Square   emyKingSq = squareNo(emyKing);
+
+  const Bitboard bishopMask = attackSquares<BISHOP>(squareNo(pos.getPiece(~side, BISHOP)), emyKing);
+  const Bitboard knightMask = attackSquares<KNIGHT>(squareNo(pos.getPiece(~side, KNIGHT)), emyKing);
+
+  const Bitboard hanging =
+    pos.getPiece(~side, ALL) & ~plt::kingMasks[emyKingSq] & ~bishopMask & ~knightMask;
+
+  return plt::kingMasks[kingSq] & hanging;
+}
 
 
 template <>
@@ -1137,7 +1221,7 @@ isTheoreticalDraw(const ChessBoard& pos)
   if (pieceCount == 2)
   {
     if (isEndgame<Endgames::KNNK>(pos))
-      return true;
+      return Endgame<Endgames::KNNK>(pos);
 
     if (isEndgame<Endgames::KPBK>(pos))
       return Endgame<Endgames::KPBK>(pos);
