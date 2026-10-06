@@ -20,17 +20,18 @@ using std::vector;
 
 namespace {
 
-// One cached training position: the white-relative component subtotals (weight-independent)
-// plus the game result label in {1.0, 0.5, 0.0}. Re-evaluating it for a candidate weight
-// set is pure arithmetic via evalFromComponents — no board, movegen or attack lookups.
+// One cached training position: its eval terms from White's side, which don't
+// depend on the weights, and the game result (1.0, 0.5 or 0.0). Scoring it with
+// new weights is plain arithmetic (evalFromComponents), with no board, move
+// generation or attack lookups.
 struct TuneEntry
 {
   EvalComponents ec;
   double result;
 };
 
-// White-relative static eval. evaluate() returns it side-to-move-relative as
-// score * side2move; multiplying by side2move again (it is +-1) recovers the white POV.
+// Static eval from White's side. evaluate() returns score * side2move, and
+// side2move is +-1, so multiplying by it again gives White's view.
 Score
 whiteRelativeEval(const ChessBoard& pos)
 {
@@ -59,15 +60,15 @@ meanSquaredError(const vector<TuneEntry>& data, double K, const EvalWeights& w)
   return total / double(data.size());
 }
 
-// Correctness gate: the cached-component reconstruction (evalFromComponents) must
-// reproduce the real white-relative eval bit-for-bit on tunable positions, and special
-// endgames must be flagged non-tunable (skipped). Returns false on any mismatch so the
-// caller can refuse to tune against a broken cache.
+// Self-check: on tunable positions evalFromComponents must give exactly the real
+// eval (from White's side), and the special endgames must be marked as not
+// tunable. Returns false on any mismatch, so the tuner never runs on a broken
+// cache.
 bool
 runSelfCheck()
 {
-  // startpos, a few middlegames, low-phase / pawn endgames, and special endgames
-  // (lone-king variants + bishop-pawn) that bypass the weighted eval.
+  // startpos, a few middlegames, low-phase and pawn endgames, and the special
+  // endgames that skip the weighted eval (lone king, bishop + pawn).
   static const std::array<const char*, 12> fens = {
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
@@ -129,7 +130,7 @@ parseResult(const string& token, double& out)
 }
 
 // Pads an EPD position (4 fields: board, side, castling, ep) to a full 6-field FEN so
-// the ChessBoard parser is happy; leaves already-complete FENs untouched.
+// ChessBoard can parse it. A full FEN is returned as it is.
 string
 toFullFen(const string& position)
 {
@@ -312,7 +313,7 @@ coordinateDescent(const vector<TuneEntry>& data, double K, EvalWeights best, int
 
     if (sweepStart - bestMse < STALL_GAIN)
     {
-      step *= 0.5;  // resolution exhausted; refine
+      step *= 0.5;  // no gain at this step size, so halve it
       cout << "  step " << std::fixed << std::setprecision(5) << step
            << "  mse " << std::setprecision(8) << bestMse
            << "  (" << iter << " sweeps)" << endl;
@@ -392,8 +393,8 @@ tuneDataset(const string& path, int maxIters, const string& reportPath,
   return true;
 }
 
-// Every *.epd in dirArg (default: the texel_dataset folder, relative to the usual output/
-// working dir), sorted. Empty, with a message, if there are none.
+// Every *.epd in dirArg, sorted. The default folder is texel_dataset, relative to the
+// usual output/ working directory. Returns an empty list, with a message, if there are none.
 vector<std::filesystem::path>
 listDatasets(const string& dirArg)
 {
@@ -1028,11 +1029,10 @@ tuneEval(const vector<string>& args)
   TunedWeights which;
   if (!parseTunedWeights(weightsArg, which)) return;
 
-  // --all: tune every *.epd in the dataset directory in turn, writing each result to
-  // its own tune_<stem>.txt (tune_partial_<stem>.txt with `weights`, so a subset run
-  // never overwrites a full one) alongside the stdout report. Directory defaults to the
-  // texel_dataset folder (relative to the usual output/ working dir); override with
-  // `dir <path>`.
+  // --all: tune every *.epd in the dataset folder in turn. Each result goes to stdout
+  // and to its own tune_<stem>.txt (tune_partial_<stem>.txt with `weights`, so a
+  // partial run never overwrites a full one). The folder defaults to texel_dataset,
+  // relative to the usual output/ working directory; change it with `dir <path>`.
   if (utils::hasArg(args, "--all") || utils::hasArg(args, "all"))
   {
     const string prefix = weightsArg.empty() ? "tune_" : "tune_partial_";

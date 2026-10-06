@@ -6,12 +6,12 @@
 #include "types.h"
 #include <array>
 
-// Slider occupancy indexing. With BMI2 the index is one PEXT -- the relevant
-// blockers gathered into a dense, collision-free integer -- instead of the
-// magic multiply-shift. -march=native enables BMI2 wherever the build machine
-// has it; build with -DNO_PEXT to force magics (A/B runs, portable binaries).
-// AMD Excavator, Zen 1 and Zen 2 have BMI2 but run PEXT in microcode, far
-// slower than the multiply, so -march=native on those keeps the magics.
+// Slider table indexing. With BMI2 the index is one PEXT instruction, which
+// packs the relevant blockers into a dense index with no collisions. Without
+// it, magic multiply-shift is used. -march=native turns on BMI2 when the
+// build machine has it. Build with -DNO_PEXT to force magics (for A/B runs or
+// portable binaries). AMD Excavator, Zen 1 and Zen 2 have BMI2 but PEXT is
+// very slow on them, so they keep the magics.
 #if defined(__BMI2__) && !defined(NO_PEXT) \
     && !defined(__bdver4__) && !defined(__znver1__) && !defined(__znver2__)
   #include <immintrin.h>
@@ -66,9 +66,8 @@ namespace plt
   void
   init();
 
-  // Offset of `occupied`'s relevant blockers within a square's slice of the
-  // sliding lookup table. The table builder and attackSquares<> both go
-  // through here, so the two can never index differently.
+  // Index of an occupancy within one square's part of the slider table. The
+  // table builder and attackSquares<> both use this, so they always agree.
   inline uint64_t
   sliderIndex(Bitboard occupied, Bitboard mask,
               [[maybe_unused]] uint64_t magic, [[maybe_unused]] int shift) noexcept
@@ -85,13 +84,13 @@ namespace plt
   inline constexpr const char* SLIDER_INDEXING = USE_PEXT ? "pext" : "magic";
 
 
-  // Square-to-square distance tables. 4 KB each, and constexpr rather than
-  // built in init(), so they are plain .rodata and carry no dependency on
-  // plt::init() having run -- unlike every mask table above.
+  // Square-to-square distance tables, 4 KB each. They are constexpr, not built
+  // in init(), so unlike the mask tables above they work before plt::init()
+  // runs.
   namespace detail
   {
-    // One walk, two metrics: chebyshev keeps the larger axis gap, manhattan the
-    // sum. `chebyshev` picks which, so the two tables cannot drift apart.
+    // Chebyshev distance is the larger of the rank and file gaps, Manhattan
+    // distance is their sum. One function builds both tables.
     constexpr array<array<uint8_t, SQUARE_NB>, SQUARE_NB>
     makeDistanceTable(bool chebyshev) noexcept
     {
@@ -114,10 +113,9 @@ namespace plt
   inline constexpr auto chebyshevTable = detail::makeDistanceTable(true);
   inline constexpr auto manhattanTable = detail::makeDistanceTable(false);
 
-  // King-move distance: chebyshev keeps only the larger of the two axis gaps,
-  // so a1-h8 and a1-h1 both read 7. Manhattan keeps the sum, and the pair pins
-  // down both gaps (manhattan - chebyshev is the smaller one), which is what
-  // tells a diagonal approach apart from a straight one.
+  // King-move distance: the larger of the rank and file gaps, so a1-h8 and
+  // a1-h1 are both 7. Manhattan distance is the sum, so manhattan - chebyshev
+  // is the smaller gap. Together they tell a diagonal path from a straight one.
   inline int
   chebyshevDistance(Square s1, Square s2) noexcept
   { return chebyshevTable[size_t(s1)][size_t(s2)]; }

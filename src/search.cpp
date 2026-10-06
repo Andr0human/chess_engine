@@ -27,14 +27,12 @@ prioritizeMoves(MoveArray& movesArray, size_t start)
   return start;
 }
 
-// Order the residual QUIET band by history score, descending.
+// Sort the QUIET stage by history score, highest first.
 //
-// Scored once into a parallel array rather than inside a comparator (the
-// orderCaptures pattern) — the band averages ~26 moves, so a comparator would
-// redo the same three-level lookup ~2n*log(n) times. The insertion sort is
-// stable under `<`, which matters: moves that have neither cut off nor been
-// refuted all sit at 0, and those keep their emission order instead of being
-// shuffled arbitrarily among themselves.
+// Scores are looked up once into an array, as in orderCaptures. The stage has
+// about 26 moves, and a comparator would repeat the lookup about 2n*log(n)
+// times. The insertion sort is stable, so moves with equal scores (most are 0)
+// keep their generation order.
 static void
 sortByHistory(Color color, MoveArray& movesArray, size_t start)
 {
@@ -83,12 +81,10 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   if (mTypes != MType::QUIET)
     std::sort(movesArray.begin() + prevS, movesArray.begin() + start, seeComparator);
 
-  // Bad-capture demotion. On the dedicated CAPTURES
-  // stage the band is now SEE-sorted descending, so SEE<0 captures sit at
-  // the back. Pull `start` left past them — they stay in the array and get
-  // picked up by the QUIET-tail stage (which plays everything remaining),
-  // i.e. *after* killers/PV/checks. Search effort no longer gets spent on
-  // e.g. QxP-defended-by-pawn before any quiet move is tried.
+  // On the CAPTURES stage the captures are now sorted by SEE, so the losing
+  // ones (SEE < 0) are at the back. Move `start` back past them. They stay in
+  // the array and are searched by the QUIET stage, which plays everything
+  // left, so they come after killers, PV moves and checks.
   if (mTypes == MType::CAPTURES)
   {
     while (start > prevS and seeScore(pos, movesArray[start - 1]) < 0)
@@ -106,14 +102,12 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
     }
   }
 
-  // History ordering of the residual QUIET band. Placed after the killer
-  // partition so killers keep their slot ahead of history, and only on the
-  // QUIET stage — the earlier stages are already ordered by SEE and would be
-  // scrambled by a key that only means anything for quiets.
+  // Sort the QUIET stage by history. This comes after the killers so they stay
+  // in front. The earlier stages are sorted by SEE, and history only applies
+  // to quiet moves.
   //
-  // `useHistory` is the call site's veto: it knows (and orderMoves doesn't) when
-  // the stage is about to break on move 0 under quiet futility, where the sort
-  // is pure waste — measured at ~29% of shallow quiet stages.
+  // useHistory is false when the caller knows quiet futility will stop the
+  // stage at its first move, so the sort would be wasted.
   if constexpr (USE_HISTORY)
   {
     if (hasFlag(mTypes, MType::QUIET) and useHistory)
@@ -123,14 +117,13 @@ orderMoves(const ChessBoard& pos, MoveArray& movesArray, MType mTypes, Ply ply, 
   return (hasFlag(mTypes, MType::QUIET)) ? movesArray.size() : start;
 }
 
-// Capture ordering for quiescence search. Unlike orderMoves(), every move here
-// is already known to be a capture, so the prioritize/killer/PV staging is dead
-// weight -- all that's left is the SEE sort. Scoring once into a parallel array
-// instead of inside a comparator cuts seeScore() calls from ~2n*log(n) to n.
+// Capture ordering for quiescence. Every move here is a capture, so only the
+// SEE sort from orderMoves() is needed. SEE is computed once per move into an
+// array, instead of about 2n*log(n) times inside a comparator.
 //
-// Returns the number of leading moves worth searching: every SEE >= 0 capture,
-// plus `floor` moves regardless, so a node whose captures all lose material
-// still searches its best try rather than collapsing to stand-pat.
+// Returns how many moves from the front to search: every capture with
+// SEE >= 0, and at least `floor` moves, so a node where every capture loses
+// material still tries its best one.
 size_t
 orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor)
 {
@@ -140,8 +133,9 @@ orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor)
   for (size_t i = 0; i < n; i++)
     scores[i] = seeScore(pos, movesArray[i]);
 
-  // Insertion sort, descending, moving scores[] in lockstep. Capture lists are
-  // short (rarely past a dozen), where this beats std::sort's setup cost.
+  // Insertion sort, highest first, moving scores[] along with the moves.
+  // Capture lists are short (rarely more than a dozen), and at that size this
+  // is faster than std::sort.
   for (size_t i = 1; i < n; i++)
   {
     const Move  move  = movesArray[i];
@@ -199,12 +193,10 @@ seeScore(const ChessBoard& pos, Move move)
   Bitboard removedPieces = 1ULL << ip;
   PieceType pieceOnSquare = type_of(pos.pieceOnSquare(ip));
 
-  // A promotion swaps the pawn for the promoted piece before the opponent can
-  // recapture. Credit that material gain, and hand see() the piece that
-  // actually lands on `fp` rather than the pawn that left `ip` -- otherwise
-  // every flavor of a promotion scores identically (0 undefended, -100
-  // defended), so the PROMOTION ordering stage cannot tell a queen from a
-  // bishop and capture-promotions sort by victim alone.
+  // A promotion turns the pawn into the new piece before the opponent can
+  // recapture. Add that gain, and pass see() the promoted piece, not the pawn.
+  // Otherwise every promotion would score the same (0 undefended, -100
+  // defended), and the PROMOTION stage couldn't tell a queen from a bishop.
   if (is_type<MType::PROMOTION>(move))
   {
     pieceOnSquare = PieceType(((move >> 18) & 3) + 2);

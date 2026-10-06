@@ -30,9 +30,9 @@
 bool
 isLegalMoveForPosition(Move move, const ChessBoard& pos);
 
-// Same contract as isLegalMoveForPosition, but skips full move generation:
-// only computes the work needed for the moving piece (geometric reachability
-// + post-move king-safety via super-piece scan from king square).
+// Same result as isLegalMoveForPosition, without full move generation. It
+// only checks the moving piece: that it can reach the square, and that its
+// king isn't attacked afterwards (scanning outward from the king square).
 bool
 isLegalMoveForPosition_V2(Move move, const ChessBoard& pos);
 

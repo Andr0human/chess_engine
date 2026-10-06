@@ -11,14 +11,14 @@
 using std::array;
 
 /**
- * Packed TT entry — 16 bytes total.
+ * Packed TT entry, 16 bytes.
  *
  * `data` layout (uint64_t):
- *   bits  0..23 → bestMove   (24 bits, matches Move encoding width)
- *   bits 24..31 → depth      (8 bits, unsigned)
- *   bits 32..33 → flag       (2 bits)
- *   bits 34..49 → eval       (16-bit signed, fits VALUE_INF = 16001)
- *   bits 50..63 → reserved   (14 bits — aging, etc.)
+ *   bits  0..23: bestMove (24 bits, same width as Move)
+ *   bits 24..31: depth    (8 bits, unsigned)
+ *   bits 32..33: flag     (2 bits)
+ *   bits 34..49: eval     (16-bit signed, fits VALUE_INF = 16001)
+ *   bits 50..63: unused   (14 bits, free for aging etc.)
  */
 class ZobristHashKey
 {
@@ -75,8 +75,8 @@ class TranspositionTable
   // used instead of modulo when calculating the table index.
   size_t ttSize = 0;
 
-  // ttSize - 1. Zero while the table is unallocated, and zero is *not* a safe
-  // mask -- it indexes slot 0 of a null pointer. Callers gate on USE_TT instead.
+  // ttSize - 1. Zero while nothing is allocated, and a probe would then read
+  // through a null pointer, so callers check USE_TT first.
   size_t ttMask = 0;
 
   ZobristHashKey* ttPrimary   = nullptr;
@@ -88,9 +88,8 @@ class TranspositionTable
 
   void freeTables();
 
-  // The per-entry half of a probe. Shared by lookupPosition() and
-  // lookupQuiescence() so the two cannot drift apart on the bound tests -- the
-  // only thing that differs between them is which tiers they walk.
+  // Checks one entry. lookupPosition() and lookupQuiescence() both use it, so
+  // their bound tests are the same. They differ only in which tiers they read.
   int
   probeEntry(const ZobristHashKey& key, uint64_t hashValue, Depth depth, Ply ply,
              Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
@@ -128,37 +127,25 @@ class TranspositionTable
   void
   recordPosition(uint64_t hashValue, Depth depth, Ply ply, Score eval, Flag flag, Move bestMove) noexcept;
 
-  // Store a quiescence result. Identical to recordPosition() at depth 0 but for
-  // one thing: it writes the primary tier only. recordPosition() writes the
-  // secondary unconditionally (always-replace), and q-nodes outnumber main-search
-  // nodes by an order of magnitude -- routing them there would let a single
-  // iteration's captures evict the entire always-replace tier, costing the main
-  // search more than the q-side could ever win back.
-  //
-  // Depth 0 is not a weakened bar on the way out either: the primary tier is
-  // depth-preferred, so a q-entry lands only in a slot that is empty or already
-  // holds a depth-0 entry. Every real search result outranks it and stays.
+  // Store a quiescence result at depth 0, in the primary tier only.
+  // recordPosition() always writes the secondary tier, and there are many more
+  // q-nodes than main-search nodes, so q-entries would push the main search's
+  // entries out of it. The primary tier keeps the deeper entry, so a q-entry
+  // only goes into a slot that is empty or already holds a depth-0 entry.
   void
   recordQuiescence(uint64_t hashValue, Ply ply, Score eval, Flag flag, Move bestMove) noexcept;
 
   int
   lookupPosition(uint64_t hashValue, Depth depth, Ply ply, Score alpha, Score beta, Move& outMove, bool& ttHit) const noexcept;
 
-  // Probe for a quiescent node: depth 0, and the primary tier only.
+  // Probe for a quiescence node: depth 0, primary tier only.
   //
-  // Skipping the secondary tier is the point of this function, not a corner cut.
-  // A q-probe misses far more often than it hits, and a miss that walks both
-  // tiers spends two random reads -- two likely cache misses -- to learn
-  // nothing. Everything a q-node can actually cut on is in the primary:
-  // recordQuiescence() writes nowhere else, and the deep main-search entries
-  // worth a cutoff are exactly what a depth-preferred tier is for. What the
-  // secondary holds and the primary does not is shallow and recent, and probing
-  // for it was measured on its own (probe-only, both tiers, no stores) at
-  // +0.02 ply with an interval spanning zero.
+  // Most q-probes miss, and a miss that reads both tiers costs two likely cache
+  // misses. The entries a q-node can cut on are in the primary tier anyway:
+  // recordQuiescence() only writes there, and it holds the deep main-search
+  // entries. Probing the secondary tier as well was tested and didn't help.
   //
-  // No hash move comes back. Ordering a q-node on it is a separate mechanism
-  // with a cost of its own; folding it in here would leave neither half
-  // separately measurable.
+  // It returns no hash move, because qsearch doesn't use one for ordering.
   Score
   lookupQuiescence(uint64_t hashValue, Ply ply, Score alpha, Score beta, bool& ttHit) const noexcept;
 

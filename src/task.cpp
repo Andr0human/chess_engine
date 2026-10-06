@@ -15,9 +15,9 @@ init(const vector<string>& args)
   perf_clock start = perf::now();
   plt::init();
 
-  // Zobrist keys must always be seeded — hashValue (and therefore repetition
-  // detection) depends on them even when the TT is disabled. Allocating the
-  // table itself stays gated behind USE_TT (resize() re-seeds, harmlessly).
+  // Always seed the Zobrist keys. hashValue, and so repetition detection,
+  // needs them even with the TT off. The table itself is only allocated with
+  // USE_TT (resize() seeds the keys again, which is harmless).
   tt.getRandomKeys();
 
   if constexpr (USE_TT) {
@@ -366,8 +366,8 @@ isDrawCheck(const vector<string>& args)
 
   cout << "Fen = " << fen << '\n';
 
-  // Mirror the search gate exactly: the recognizer is consulted on every
-  // non-terminal position, because search resolves checkmate and stalemate first.
+  // Same as search: the recognizer is called on every position that isn't
+  // checkmate or stalemate, because search checks for those first.
   const MoveList moves = generateMoves(pos);
 
   if (!moves.anyMove())

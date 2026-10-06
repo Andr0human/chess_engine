@@ -7,15 +7,13 @@
 extern Move pvArray[MAX_PV_ARRAY_SIZE];
 extern array<Varray<Move, KILLER_ARRAY_SIZE>, MAX_PLY> killerMoves;
 
-// Butterfly history table, [color][from][to] — 2 * 64 * 64 * 4 B = 32 KB.
-// Records how often a *quiet* move produced a beta cutoff, weighted by the
-// depth it did it at, and is used to order the residual QUIET stage that
-// otherwise runs in raw movegen emission order.
+// History table, [color][from][to], 2 * 64 * 64 * 4 B = 32 KB. Scores how
+// often a quiet move caused a beta cutoff, weighted by depth. Used to sort the
+// QUIET stage, which would otherwise be in generation order.
 //
-// Color indexing gotcha: Color is BLACK = 0, WHITE = 1 — inverted from the
-// usual convention. Indexing by pos.color is correct (it's just an index), but
-// any hand-written initializer or debug dump must not assume WHITE = 0. This
-// has bitten silently before; there is no compile error for getting it wrong.
+// Color is BLACK = 0, WHITE = 1, the opposite of the usual convention.
+// Indexing by pos.color is fine, but an initializer or debug dump written by
+// hand must not assume WHITE = 0. The compiler won't catch it.
 extern array<array<array<int32_t, SQUARE_NB>, SQUARE_NB>, COLOR_NB> historyTable;
 
 
@@ -28,36 +26,34 @@ resetPvLine();
 void
 clearKillers();
 
-// Zero the history table. Called per search alongside clearKillers(), so no state
-// carries between moves of a game.
+// Zero the history table. Called at the start of each search with
+// clearKillers(), so nothing carries over between moves of a game.
 void
 clearHistory();
 
-// Reward a quiet move that produced a beta cutoff at `depth`.
+// Reward a quiet move that caused a beta cutoff at `depth`.
 //
-// Gravity form: the increment shrinks as the entry grows, which bounds the
-// table in (-MAX_HISTORY, MAX_HISTORY) by construction and decays stale entries
-// on its own. The classic alternative — accumulate depth*depth and halve the
-// whole table on overflow — would need a periodic 32 KB sweep, and there is no
-// natural place in this codebase's control flow to hang one.
+// The bonus shrinks as the entry grows, which keeps every entry inside
+// (-MAX_HISTORY, MAX_HISTORY) and lets old entries fade. The usual
+// alternative, adding depth*depth and halving the table when it gets too big,
+// needs a pass over the whole table, and there's no good place to run one.
 void
 updateHistory(Color c, Move move, Depth depth);
 
-// Punish a quiet move that was searched at `depth` and did *not* cut off, while
-// a later quiet did. Without it the table only ever learns which moves are
-// good; the malus is what lets it learn which are bad, and it is what makes the
-// scores comparable between two moves that have both cut off a few times.
+// Penalize a quiet move that was searched at `depth` and didn't cut off, when
+// a later quiet move did. Without this the table only learns which moves are
+// good, not which are bad.
 //
-// Same gravity construction as updateHistory, sign-flipped -- see the .cpp for
-// why the algebra is `-= malus + h*malus/MAX` and not `-= malus - ...`.
+// Same update as updateHistory with the sign flipped. See the .cpp for why it
+// is `-= malus + h*malus/MAX` and not `-= malus - ...`.
 void
 penalizeHistory(Color c, Move move, Depth depth);
 
-// Ordering key for the residual QUIET stage. Never updated for captures, so a
-// SEE<0 capture demoted into that band by orderMoves() scores 0: it sinks below
-// every quiet that has ever cut off, and — once malus is on — floats above
-// every quiet that has been refuted into the negatives. Both are intended; a
-// bad capture is a better try than a quiet that has repeatedly failed.
+// Sort key for the QUIET stage. Captures never get history updates, so a
+// SEE < 0 capture that orderMoves() moved into this stage scores 0. It sorts
+// below every quiet move with a positive score and above every quiet move with
+// a negative one. That's intended: a bad capture is a better try than a quiet
+// move that keeps failing.
 inline int32_t
 historyScore(Color c, Move move)
 { return historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))]; }
@@ -81,12 +77,9 @@ is_type(Move m)
   if constexpr (mt == MType::CHECK)
     return (m >> 23) & 1;
 
-  // Bits 20 (CAPTURES) and 21 (PROMOTION) only -- a quiet move is one that is
-  // neither. The mask must NOT reach bit 22: that is the color bit, set on
-  // every move of the side whose Color is 1, and Color is BLACK = 0,
-  // WHITE = 1. Masking it in made this return false for all of White's moves,
-  // which silently emptied historyTable[WHITE] and White's killer slots (the
-  // sole call site gates both).
+  // Bits 20 (CAPTURES) and 21 (PROMOTION) only. A quiet move has neither.
+  // Don't include bit 22: it's the color bit, set on every White move
+  // (WHITE = 1), so none of White's moves would count as quiet.
   if constexpr (mt == MType::QUIET)
     return ((m >> 20) & 3) == 0;
 

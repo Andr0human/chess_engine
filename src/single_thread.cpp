@@ -31,14 +31,13 @@ bulkCount(ChessBoard& pos, Depth depth)
   return answer;
 }
 
-// Probe the table at a quiescent node. A q-node has no depth of its own, so it
-// asks for depth 0 -- a bar no stored entry can fail, since alphaBeta hands off
-// to qsearch at depth <= 0 and therefore never records below depth 1. That is
-// the point of probing here: a main-search score, backed by real depth, is
-// always usable at a q-node, and the q-node had no way to see it before.
+// Probe the TT at a quiescence node. A q-node asks for depth 0, which every
+// stored entry passes: the main search only stores at depth 1 or more, since
+// it calls qsearch at depth <= 0. So any main-search score for this position
+// can be used here.
 //
-// lookupQuiescence() rather than lookupPosition(): one tier, and no hash move.
-// Both restrictions are argued where it is declared.
+// lookupQuiescence() reads one tier and returns no hash move. tt.h explains
+// why.
 static Score
 qProbe(const ChessBoard& pos, Score alpha, Score beta, Ply ply)
 {
@@ -50,9 +49,8 @@ qProbe(const ChessBoard& pos, Score alpha, Score beta, Ply ply)
   info.qTtProbes++;
   if (ttHit) info.qTtHits++;
 
-  // Counted here because the caller returns on the spot and never reaches its
-  // own addQNode(). A node the table answered is still a node visited, and
-  // leaving it out would make the nps figure climb for doing less work.
+  // Counted here because the caller returns right away and never reaches its
+  // own addQNode(). Leaving it out would make nps rise for doing less work.
   if (ttValue != VALUE_UNKNOWN)
   {
     info.addQNode();
@@ -114,15 +112,13 @@ quiescenceSearch(ChessBoard& pos,
 
   info.addQNode();
 
-  // The window this node was handed, kept because `alpha` is about to be raised
-  // by the stand-pat and the bound flag has to be read against the original.
+  // The stand-pat may raise alpha, and the stored flag is decided against the
+  // original value.
   const Score origAlpha = alpha;
 
-  // A node in check is not stored. Its stand-pat is evaluate() on a position
-  // where the side to move may be mated next ply, and the move list it searches
-  // is captures only -- neither the score nor the refutation means what a
-  // reader would take it to mean. Confined to one path that is merely
-  // imprecise; published to the table it becomes wrong everywhere.
+  // Don't store a node in check. Its stand-pat is a static eval of a position
+  // that may be mate next ply, and only captures are searched, so the score
+  // isn't reliable enough to share through the TT.
   const bool storable = USE_TT and !myMoves.checkers;
 
   Move bestQMove = NULL_MOVE;
@@ -152,9 +148,8 @@ quiescenceSearch(ChessBoard& pos,
 
   if (!myMoves.exists<MType::CAPTURES>(pos) and !promoExists)
   {
-    // Nothing to search, so the stand-pat *is* this node's value, not a floor
-    // under it -- exact whenever it beat the incoming alpha, a fail-low
-    // otherwise.
+    // Nothing to search, so the stand-pat is this node's value. It's exact if
+    // it beat the original alpha, and an upper bound otherwise.
     qStore(alpha, alpha > origAlpha ? Flag::HASH_EXACT : Flag::HASH_ALPHA, NULL_MOVE);
     return alpha;
   }
@@ -207,11 +202,9 @@ quiescenceSearch(ChessBoard& pos,
     }
   }
 
-  // Falling out of the loop: exact if a move beat the incoming alpha, otherwise
-  // everything searched failed low and alpha is only an upper bound. The list
-  // orderCaptures() pruned is not a hole in that -- the moves it dropped are the
-  // SEE-losing ones qsearch declines to search at all, so this is the same value
-  // the node would have returned with no table in play.
+  // Exact if a move beat the original alpha, otherwise an upper bound. The
+  // captures orderCaptures() dropped don't change this: qsearch never searches
+  // them, with or without the TT.
   qStore(alpha, alpha > origAlpha ? Flag::HASH_EXACT : Flag::HASH_ALPHA, bestQMove);
 
   return alpha;
@@ -225,9 +218,8 @@ searchChild(ChessBoard& pos, const SearchContext& ctx, int R)
 {
   Score eval = -alphaBeta<ChildPv>(pos, ctx.child(ctx.depth - 1 - R, ctx.alpha, ctx.beta));
 
-  // Re-search a reduced move at full depth if it beats alpha.
-  // if timed-out, eval will be highly negative thus following code won't execute
-  // preventing the need to add searchStop()
+  // Re-search a reduced move at full depth if it beats alpha. On a timeout the
+  // eval is very negative, so no separate stop check is needed.
   if (R > 0 and eval > ctx.alpha)
     eval = -alphaBeta<ChildPv>(pos, ctx.child(ctx.depth - 1, ctx.alpha, ctx.beta));
 
@@ -394,13 +386,12 @@ playSubsetMoves(ChessBoard& pos,
         {
           updateHistory(pos.color, move, ns.depth);
 
-          // Penalize quiet moves that were searched but failed to cause a cutoff.
-          // History remains a quiet-move statistic. movesArray[0, moveNo) is
-          // exactly this node's searched moves in search order, across all
-          // stages: every stage appends to the same array, orderMoves never
-          // touches the band before `start`, and no move in that band is ever
+          // Penalize the quiet moves searched before this one, which didn't
+          // cause a cutoff. movesArray[0, moveNo) holds exactly the moves this
+          // node searched, in order: every stage appends to the same array,
+          // orderMoves never touches moves before `start`, and none are
           // skipped. A prune that `continue`s past a move would break this.
-          // The hash move is never in movesArray, so it escapes the malus.
+          // The hash move isn't in movesArray, so it is never penalized.
           if constexpr (USE_HISTORY_MALUS)
             for (size_t i = 0; i < moveNo; ++i)
               if (is_type<MType::QUIET>(movesArray[i]))
@@ -643,12 +634,10 @@ alphaBeta(ChessBoard& pos, SearchContext ctx)
   // Generate check data for move ordering.
   stagedGenerateMoves<GEN_CHECKS>(pos, myMoves);
 
-  // Remove the already-searched hash move from the remaining move list.
+  // Remove the hash move, which was already searched. removedMoves() then
+  // counts it, so LMR still sees the right move number.
   if (hashOutcome.searched)
     myMoves.removeMove(hashMove);
-
-  // removedMoves() already accounts for the hash move, so LMR sees the correct
-  // move number.
 
   MoveArray movesArray;
   bestMove = playAllMoves<PvNode,
@@ -803,9 +792,10 @@ search(ChessBoard board,
     // Put this iteration's best move first for the next iteration.
     info.promoteBestMove(pvArray[0]);
 
-    // Stop after finding a checkmate, but only once the completed depth (depth - 1 here)
-    // reaches it. A longer mate can come from TT entries stored on earlier moves, which
-    // need not be the shortest mate and ignore repetitions the opponent can now claim.
+    // Stop once a mate is found within the completed depth (depth - 1 here).
+    // A longer mate can come from TT entries stored on earlier moves. That mate
+    // may not be the shortest, and it ignores repetitions the opponent can now
+    // claim.
     const Score mateDistance = VALUE_MATE - (eval > 0 ? eval : -eval);
     if (withinValWindow and isMateScore(eval) and mateDistance <= 20 * (depth - 1)) break;
   }

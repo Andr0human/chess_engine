@@ -7,14 +7,14 @@
 #include <string>
 
 /**
- * @brief Dev-only harness for validating the hand-written endgame verdicts in
- * endgame.cpp (currently isTheoreticalDraw) against ground truth.
+ * @brief A development tool that checks the hand-written endgame rules in
+ * endgame.cpp (isTheoreticalDraw) against exact results.
  *
- * It exhaustively enumerates every legal position of a small material signature
- * and tallies what isTheoreticalDraw says about each. With the `oracle` option it
- * scores each verdict against the perfect WDL solver (endgame_solver.h) and prints
- * the draw-vs-decided confusion matrix; without it, only the heuristic's draw /
- * non-draw split. CLI entry point: `elsa egvalidate`.
+ * It walks every legal position of a small material and counts what
+ * isTheoreticalDraw says about each. With the `oracle` option it scores each
+ * verdict against the exact WDL solver (endgame_solver.h) and prints a
+ * draw-vs-decided scorecard. Without it, it prints only how many positions
+ * the rules call drawn. CLI entry point: `elsa egvalidate`.
  */
 void
 validateEndgame(const std::vector<std::string>& args);

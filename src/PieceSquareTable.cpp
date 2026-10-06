@@ -6,8 +6,8 @@
 // first row is rank 1. Black's entries are derived from them in buildPieceSquareTable().
 //
 // All twelve tables are Texel-tuned on the three datasets combined, with the weights held
-// fixed. The tuner holds each table's phase-weighted mean over the data where it started
-// (the king's excepted), so it moves pieces around without changing their material value.
+// fixed. The tuner keeps each table's phase-weighted mean over the data where it started
+// (except the king's), so it moves values between squares without changing material value.
 
 // The midgame tables were fitted square by square (`elsa tune pst --all tables mg unfold mg`)
 // with the endgame tables held fixed, so they are not left-right symmetric.

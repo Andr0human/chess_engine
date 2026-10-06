@@ -5,7 +5,7 @@
 using plt::passedPawnMasks;
 using plt::ruleOfSquares;
 
-// Table lookups -- see the metric note in lookup_table.h.
+// Distance helpers from lookup_table.h.
 using plt::chebyshevDistance;
 using plt::manhattanDistance;
 
@@ -661,8 +661,9 @@ Endgame<Endgames::KNNK>(const ChessBoard& pos)
   if (chebyshevDistance(atkKingSq, defKingSq) != 2)
     return true;
 
-  // A knight's own square counts as covered even when the king could take it.
-  // That over-counts the net, which errs towards not claiming the draw.
+  // A knight's own square counts as covered even if the king could take it.
+  // That can only overstate how trapped the king is, so it errs towards not
+  // claiming a draw.
   const Bitboard knights = pos.getPiece(atkSide, KNIGHT);
   const Bitboard covered = plt::kingMasks[atkKingSq]
                          | plt::knightMasks[lsbIndex(knights)]
@@ -703,8 +704,8 @@ Endgame<Endgames::KBNK>(const ChessBoard& pos)
 
   // Bishop and knight against a bare king: won, unless the bare king is to
   // move and can take an undefended minor next to it. The attack masks ignore
-  // all blockers but the attacking king, so they can only over-count defence,
-  // which errs towards not claiming the draw.
+  // every blocker except the attacking king, so they can only overstate the
+  // defence, which errs towards not claiming a draw.
   const Color side = pos.count<WHITE, ALL>() > 0 ? BLACK : WHITE;
 
   if (side != pos.color)
@@ -1089,11 +1090,9 @@ template <>
 inline bool
 Endgame<Endgames::KPRK>(const ChessBoard& pos)
 {
-  // Look from the PAWN side -- the defender fighting to hold the draw against the
-  // rook. Like KPQK/KPNK this covers both material configs: the opposite-side
-  // KP-vs-KR case (each side one non-king man) carries the draw logic; same-side
-  // KPR-vs-K falls through to the terminal return false (trivial win -- a safe
-  // missed-draw gap).
+  // Look from the pawn side, which defends against the rook. Like KPQK and
+  // KPNK, this covers both ways the material can be split. KP vs KR has the
+  // draw rules. KPR vs K is a win and falls through to return false.
   const Color side    = pos.count<WHITE, PAWN>() ? WHITE : BLACK;   // pawn (defender)
   const Color emySide = ~side;                                      // rook (attacker)
   const auto defToMove = int(side == pos.color);
@@ -1123,15 +1122,9 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
     const Bitboard kingCapMask    = attackSquares<KING>(myKingSq , 0);
     const Bitboard emyKingCapMask = attackSquares<KING>(emyKingSq, 0);
 
-    // Hanging-piece guards -- the KPRK pair of the KPKB/KRKB/KPKN family, one per
-    // side, because here BOTH men can hang: the defender is K+P (not a bare king)
-    // and the attacker's rook is capturable in turn.
-    //
-    // Free as written, on both paths (measured): gated tallies are bit-identical
-    // to no guard -- the capture gate already drops every position these fire on
-    // -- and gate-off they remove 13,011 claims, all 13,011 of them false draws,
-    // leaving agree-draw and missed-draw untouched. Contrast KPKN, where the same
-    // shape also cost 92,786 genuine draws.
+    // If the side to move can take the other side's man, leave it to search.
+    // Unlike KPBK, KRBK and KPNK there is one check for each side, because both
+    // men can hang here: the defender has a pawn, and the rook can be taken.
     if (defToMove and
        ((rook & plt::pawnCaptureMasks[side][pawnSq]) or
        (rook & kingCapMask & ~emyKingCapMask))
@@ -1147,38 +1140,34 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
     const int  akPawnD = chebyshevDistance(emyKingSq,  pawnSq);
     const int   rPawnD = chebyshevDistance(rookSq   ,  pawnSq);
 
-    // Rook-sac lever, hoisted out of the third rule so the probe can gate on it:
-    // can the rook reach the queening line on a square neither the defending king
-    // nor the pawn covers?
+    // Can the rook reach the promotion square's rank or file on a square that
+    // neither the defending king nor the pawn covers? Used by two rules below.
     const Bitboard reachMask = plt::lineMasks[promoSq]
                              & ~(plt::kingMasks[myKingSq] | plt::pawnCaptureMasks[side][pawnSq]);
     const bool rookReach = (rookMask & reachMask) != 0;
 
-    // Pawn one step from queening with the rook side to move. The defending king
-    // covers the queening square (dkPromoD <= 2) and the attacking king is too far
-    // from the pawn to help (akPawnD >= 4), so the rook is on its own: it must
-    // either give itself up for the pawn or let it queen and be skewered. Either
-    // way the game ends in bare kings. Exhaustively pure over the call set.
+    // Pawn one step from promoting, rook side to move. The defending king is
+    // near the promotion square (dkPromoD <= 2) and the attacking king is too
+    // far from the pawn to help (akPawnD >= 4). The rook has to give itself up
+    // for the pawn, or let it promote and win the new queen with a skewer.
+    // Either way only the kings are left.
     if (rookReach and defToMove == 0 and pawnRel == 7
         and dkPromoD <= 2 and akPawnD >= 4)
       return true;
 
-    // Self-block draw. The defending king sits on (or beside) its own queening
-    // square with the pawn two ranks back -- so it stands in the way of the very
-    // pawn it is escorting and the pawn side can never make progress; the rook
-    // simply shuffles. The akPawnD floor keeps the attacking king too far away to
-    // turn the position into a win instead, and it steps with dkPromoD because a
-    // king one square off the promotion square needs the extra tempo.
+    // The defending king is on or next to its own promotion square, with the
+    // pawn two ranks behind. The king blocks its own pawn, so the pawn side
+    // can't make progress, and the rook just waits. The akPawnD limit keeps the
+    // attacking king too far away to win. It goes up with dkPromoD, because a
+    // king one square off the promotion square needs an extra tempo.
     if (dkPromoD <= 1 and dkPawnD == 2 and akPawnD >= 5 + dkPromoD)
       return true;
 
-    // Same self-block shape (defending king on/beside the queening square, pawn two
-    // ranks back), but fenced by where the *attacker* stands rather than by its
-    // distance to the pawn: the rook king is a full board away from the queening
-    // square, so it can never join in. The two rook exclusions are the positions
-    // where the pawn side, on move, actually breaks through -- with the rook either
-    // level with the attacking king's distance or two files short of it, it lacks the
-    // tempo to both check and return, and the pawn queens.
+    // The same blocking shape, limited by where the attacking king is instead
+    // of its distance to the pawn: it is far from the promotion square
+    // (akPromoD >= 6) and can't come back in time. The two rook exclusions are
+    // where the pawn side breaks through. With rPawnD equal to akPromoD or two
+    // less, the rook can't both give check and get back, and the pawn promotes.
     if (dkPromoD <= 1 and pawnRel == 6 and akPromoD >= 6
         and rPawnD != akPromoD and rPawnD != akPromoD - 2
     ) return true;

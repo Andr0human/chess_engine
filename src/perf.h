@@ -49,7 +49,7 @@ namespace perf
 
 
   /**
-   * @brief Returns the time_elpased by a function
+   * @brief Returns the time a function takes to run
    * 
    * Not applicable for template or non-static member functions.
    * 
@@ -72,9 +72,9 @@ namespace perf
 
 
   /**
-   * @brief Returns the value & time_elapsed by func. as a pair.
-   * 
-   * Not applicable for void, template or non-static member functions. (use perf::Time instead for voids)
+   * @brief Returns the function's value and the time it took, as a pair.
+   *
+   * Not applicable for void, template or non-static member functions. (Use perf::time for void functions.)
    * 
    * @tparam _Callable 
    * @tparam _Args 

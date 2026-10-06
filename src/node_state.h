@@ -7,10 +7,9 @@
 
 
 /**
- * The inputs a parent hands to alphaBeta: window, remaining depth, ply, PV row
- * and extension budget. Small and trivially copyable -- passed by value down
- * the recursion. Children are built with child(), which is the one place the
- * negamax window flip (-beta, -alpha) and the ply / PV-row step are written.
+ * What a parent passes to alphaBeta: the window, depth left, ply, PV row and
+ * extension count. Small, so it is passed by value. child() builds a child's
+ * context: it flips the window to (-beta, -alpha) and steps the ply and PV row.
  */
 struct SearchContext
 {
@@ -22,16 +21,15 @@ struct SearchContext
   int numExtensions;
   bool doNull = true;
 
-  // NOTE: PV-ness is deliberately *not* stored here. It is a compile-time
-  // property (`template <bool PvNode>` on alphaBeta and the play* helpers),
-  // since a node is only ever handed its parent's PvNode or a literal false.
+  // Whether the node is a PV node isn't stored here. It's a template parameter
+  // (`template <bool PvNode>` on alphaBeta and the play* helpers), because a
+  // child always gets either its parent's PvNode or false.
 
   constexpr int pvNextIndex() const noexcept { return pvIndex + MAX_PLY - ply; }
 
-  // Context for a child searched at `childDepth` with this node's window
-  // [a, b] -- pass the window as seen from *this* side; the flip happens here.
-  // numExtensions is inherited as-is (post-extension when called after the
-  // extension policy has run), and doNull resets to true.
+  // Context for a child searched to childDepth. Pass the window [a, b] as this
+  // node sees it, and child() flips it. numExtensions is copied (including this
+  // node's extension, once it has been applied), and doNull resets to true.
   constexpr SearchContext
   child(Depth childDepth, Score a, Score b) const noexcept
   { return SearchContext{-b, -a, childDepth, ply + 1, pvNextIndex(), numExtensions, true}; }
@@ -47,49 +45,44 @@ struct SearchContext
 
 
 /**
- * Per-node search state shared across playAllMoves / playSubsetMoves /
- * playMove inside the alpha-beta recursion. Extends the node's SearchContext:
- * `alpha` and `hashf` mutate as moves improve the bound / trigger cutoffs,
- * `depth` / `numExtensions` are bumped once by the extension policy; the rest
- * are constant within a node.
+ * Per-node state used by playAllMoves, playSubsetMoves and playMove. It adds
+ * to the node's SearchContext. alpha and hashf change as moves raise alpha or
+ * cut off. depth and numExtensions change once, when the extension is applied.
+ * The rest stay fixed within a node.
  */
 struct NodeState : SearchContext
 {
   Flag hashf = Flag::HASH_ALPHA;
 
-  // Node static eval, computed at most once per node (lazy) and reused across
-  // RFP / razoring / futility / improving. nullopt until first requested.
+  // Static eval, computed the first time it's needed and reused by RFP,
+  // razoring and futility. nullopt until then.
   std::optional<Score> staticEval = std::nullopt;
 
-  // Quiet-move futility flag, set in alphaBeta when the node's static eval sits
-  // a depth-scaled margin below alpha. Consumed in the QUIET stage of
-  // playSubsetMoves to skip the residual quiet moves once one move is searched.
+  // Set in alphaBeta when the static eval is a depth-scaled margin below alpha.
+  // playSubsetMoves then skips the remaining quiet moves once one move has been
+  // searched.
   bool quietFutile = false;
 
-  // Set when playSubsetMoves bails out mid-node on shouldStop(). At that point
-  // `alpha` only reflects the moves that happened to be searched before the
-  // clock ran out, so the node must NOT be written to the TT — a partial bound
-  // stored at full depth outlives the iteration and poisons later searches.
-  // Carried as state rather than re-testing shouldStop() at the store site so
-  // the abort costs no extra clock read on the hot path.
+  // Set when playSubsetMoves stops early on shouldStop(). alpha then only
+  // covers the moves searched before time ran out, so the node must not be
+  // stored in the TT, where the partial result would outlive this iteration.
+  // A flag means the store doesn't need another clock check.
   bool aborted = false;
 
-  // The quiet-futility skip test, in one place because two sites must agree on
-  // it: playSubsetMoves breaks out of the QUIET stage on it, and playAllMoves
-  // reads it to decide whether ordering that stage is worth paying for. Let the
-  // two expressions drift apart and the failure isn't a wasted sort — it's an
-  // unsorted band that does get searched, i.e. a silent move-ordering change.
+  // Whether to skip the remaining quiet moves. playSubsetMoves stops the QUIET
+  // stage on it, and playAllMoves uses it to skip sorting that stage. Both must
+  // use the same test, or a stage could be searched without being sorted.
   constexpr bool skipsQuiets(Move bestMove) const noexcept
   { return quietFutile and bestMove != NULL_MOVE; }
 };
 
 
 /**
- * Outcome of the TT-hash-move fast path inside alphaBeta.
- *   searched = true  -> the move was legal and searched; caller must drop it
- *                       from myMoves before staged movegen re-emits it.
- *   result.has_value -> caller should propagate this value out of alphaBeta
- *                       (timeout, or beta cutoff already TT-recorded inside).
+ * Result of searching the TT hash move first in alphaBeta.
+ *   searched = true:  the move was legal and searched. The caller must remove
+ *                     it from myMoves so it isn't searched again.
+ *   result has value: alphaBeta should return it (a timeout, or a beta cutoff
+ *                     that is already stored in the TT).
  */
 struct HashMoveOutcome
 {
