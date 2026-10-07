@@ -18,9 +18,9 @@ using   Weight =  int32_t;
 
 const std::string START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-// Reported in the UCI `id name` line, which is how GUIs, tournament managers and
-// rating lists label the engine — without it, games from two different builds are
-// indistinguishable in an arena log. Bump this in the commit that gets tagged.
+// Sent in the UCI `id name` line. GUIs and tournament managers use it to label
+// the engine, so different builds can be told apart in an arena log. Bump the
+// version in the commit that gets tagged.
 const std::string ENGINE_NAME = "Elsa";
 const std::string ENGINE_VERSION = "4.0.0";
 
@@ -89,8 +89,8 @@ enum Search
   MAX_DEPTH = 40,
   LMR_LIMIT = 4,
 
-  // Maximum value used by the butterfly history gravity update.
-  // The update keeps history values within (-MAX_HISTORY, MAX_HISTORY).
+  // Limit for history scores. The updates keep every entry within
+  // (-MAX_HISTORY, MAX_HISTORY).
   MAX_HISTORY = 16384,
 
   EXTENSION_LIMIT = 8,
@@ -116,22 +116,15 @@ enum Search
   NULL_MOVE = 0,
 };
 
-// alphaBeta does not have its own ply limit. Normally, depth decreases by 1
-// per ply, but searchExtension can add up to EXTENSION_LIMIT back to the
-// search. This means a root search can reach MAX_DEPTH + EXTENSION_LIMIT.
+// alphaBeta has no ply limit of its own. Depth drops by 1 per ply, but
+// searchExtension can add up to EXTENSION_LIMIT, so a search can reach ply
+// MAX_DEPTH + EXTENSION_LIMIT.
 //
-// The per-ply tables are sized using MAX_PLY. killerMoves has MAX_PLY entries,
-// while pvArray uses a triangular layout where the row for ply k starts at
-// MAX_PLY * k - k * (k - 1) / 2. At k == MAX_PLY, this points past the end of
-// the array.
-//
-// If ply reaches MAX_PLY, the PV update can also calculate a copy length of -1.
-// The overlapping copy then runs past the expected NULL_MOVE terminator and can
-// corrupt memory. This caused a 0xC0000005 access violation during a root search
-// at depth 33 when MAX_PLY was 40.
-//
-// Keep the strict inequality to ensure there is always room for the deepest
-// possible search ply.
+// The per-ply tables are sized by MAX_PLY. killerMoves has MAX_PLY entries,
+// and in pvArray the row for ply k starts at MAX_PLY * k - k * (k - 1) / 2,
+// which is past the end of the array at k == MAX_PLY. At that ply the PV copy
+// length is also -1, so the copy runs past its NULL_MOVE terminator and
+// corrupts memory. MAX_PLY must be strictly greater than the deepest ply.
 static_assert(MAX_PLY > MAX_DEPTH + EXTENSION_LIMIT,
               "MAX_PLY must exceed MAX_DEPTH + EXTENSION_LIMIT, or an "
               "extension-saturated search indexes pvArray out of bounds");

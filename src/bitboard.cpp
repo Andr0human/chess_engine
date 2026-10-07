@@ -285,12 +285,11 @@ ChessBoard::makeMoveDoublePawnPush(Square ip, Square fp) noexcept
   pieceBb[own + 1] ^= (1ULL << ip) ^ (1ULL << fp);
   pieceBb[own + 7] ^= (1ULL << ip) ^ (1ULL << fp);
 
-  // Set the en passant square only when an enemy pawn attacks it. A square nobody
-  // can capture on doesn't change the position, and hashing it anyway made the
-  // position after a double push look different from the same position a few
-  // moves later, so threeMoveRepetition() missed repetitions that started there
-  // (fastchess: "PV continues after threefold repetition"). makeMove() has already
-  // cleared the old square.
+  // Set the en passant square only when an enemy pawn attacks it. A square no
+  // pawn can capture on doesn't change the position. If it were hashed, the
+  // position right after a double push would hash differently from the same
+  // position later, and threeMoveRepetition() would miss the repetition.
+  // makeMove() has already cleared the old square.
   if (plt::pawnCaptureMasks[color][epSq] & pieceBb[make_piece(~color, PAWN)])
   {
     csep = (csep & 1920) | epSq;
@@ -570,16 +569,16 @@ ChessBoard::generateHashkey() const
 void
 ChessBoard::makeNullMove()
 {
-  // Save full state so unmakeNullMove can restore it verbatim. A null move is
-  // never irreversible, so (unlike undoInfoPush) we never reset the stack.
+  // Save the full state so unmakeNullMove can restore it exactly. A null move
+  // is reversible, so unlike undoInfoPush the stack is never reset.
   undoInfo[undoInfoStackCounter++] = UndoInfo(NULL_MOVE, csep, hashValue, halfmove, pieceSquare);
 
-  // An en-passant target cannot survive a null move — drop it from the hash
-  // before csep is cleared (read while csep still holds the old value).
+  // A null move clears the en passant square. Remove it from the hash while
+  // csep still holds it.
   if (enPassantSquare() != SQUARE_NB)
     hashValue ^= tt.hashKey(enPassantSquare() + 1);
 
-  // Flip side-to-move in the hash, mirroring every real move (hashKey(0)).
+  // Flip the side to move in the hash (hashKey(0)), as every real move does.
   hashValue ^= tt.hashKey(0);
 
   csep = (csep & 1920) ^ SQUARE_NB;

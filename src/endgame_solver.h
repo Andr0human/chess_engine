@@ -11,24 +11,25 @@
 #include "bitboard.h"
 
 /**
- * @brief Self-contained perfect WDL oracle for small material signatures.
+ * @brief Exact win/draw/loss oracle for small material signatures.
  *
- * This is the "oracle" stage of the endgame-verdict validation harness. Given a
- * material signature it solves, by backward induction, the perfect win/draw/loss
- * value of EVERY legal position, then answers O(1) probes. Positions are decided
- * only by a forward check of their moves; after one full sweep, a backward move
- * generator picks which positions to re-check (the predecessors of those just
- * decided), so draws are not re-checked on every sweep.
+ * egvalidate uses this as its oracle. For a material signature it works out
+ * the exact win/draw/loss value of every legal position by backward induction,
+ * then answers each probe with one table lookup. A position is only decided by
+ * checking its moves. After the first full sweep, a backward move generator
+ * picks which positions to check again (the predecessors of the ones just
+ * decided), so draws aren't checked again on every sweep.
  *
- * Verdicts are **side-to-move relative** and computed under **infinite play**:
- * there is no 50-move / DTZ notion, only "with unlimited time, can the side to
- * move force mate / be forced to lose / neither". That is the correct match to
- * isTheoreticalDraw, which is a static recognizer with no move counter.
+ * Values are from the side to move's point of view and assume unlimited play.
+ * There is no 50-move rule, only whether the side to move can force mate, will
+ * be mated, or neither. That matches isTheoreticalDraw, which has no move
+ * counter.
  *
- * Captures and promotions leave the signature, so a target like KPKB is solved
- * on top of a small DAG of sub-tablebases (KPK, KQKB, ... down to the
- * insufficient-material leaves). build() discovers that DAG, orders it by
- * (piece count, pawn count), and solves bottom-up; everything is cached.
+ * Captures and promotions change the signature, so a target like KPKB is
+ * solved on top of smaller tables (KPK, KQKB, ... down to positions with
+ * insufficient material). build() finds those tables, orders them by
+ * (piece count, pawn count) and solves the smallest first. Every table is
+ * cached.
  *
  * A table holds positions without an en passant square. A position with one
  * (after a double push next to an enemy pawn) also has the en passant capture,
@@ -44,7 +45,7 @@
 enum class Wdl : uint8_t
 {
   ILLEGAL = 0,   // not a real position (overlap, kings adjacent, side-not-to-move in check, ...)
-  UNKNOWN = 1,   // transient: undecided during relaxation (never returned by probe)
+  UNKNOWN = 1,   // only used while solving (probe never returns it)
   LOSS    = 2,   // side to move is lost (mated under best play)
   DRAW    = 3,
   WIN     = 4,   // side to move wins under best play
@@ -77,16 +78,16 @@ public:
     uint64_t total  = 0;       // entries in the table
   };
 
-  // Solve the whole capture/promotion DAG of the target signature (the two
-  // kings plus `extras`) and cache every table. Returns false + sets `err` if
-  // the signature is unsupported (more than MAX_MEN men). Insufficient-material
-  // targets succeed trivially (every probe is DRAW).
+  // Solve the target signature (the two kings plus `extras`) and every smaller
+  // table its captures and promotions lead to, and cache them all. Returns
+  // false and sets `err` if the signature has more than MAX_MEN men. A target
+  // with insufficient material always succeeds (every probe is DRAW).
   bool
   build(const std::vector<Piece>& extras, std::string& err);
 
-  // Perfect WDL for a legal position whose signature has been solved (the built
-  // target or any table in its DAG), en passant square included; castling
-  // rights are ignored. Never returns ILLEGAL/UNKNOWN for a legal input.
+  // Exact WDL for a legal position whose signature has been solved (the target
+  // or any of its smaller tables), en passant square included. Castling rights
+  // are ignored. Never returns ILLEGAL or UNKNOWN for a legal position.
   Wdl
   probe(const ChessBoard& pos) const;
 
@@ -96,23 +97,23 @@ public:
   distribution(const std::vector<Piece>& extras,
                uint64_t& win, uint64_t& draw, uint64_t& loss) const;
 
-  // ---- disk persistence ---------------------------------------------------
-  // Each solved signature table is a pure function of the engine's move
-  // generation, so it is cached to disk and reloaded verbatim on a later run.
-  // Tables are keyed by their raw Piece bytes (case-proof on NTFS, unlike FEN
-  // chars) under `cacheDir`. A loaded table is bit-identical to a freshly solved
-  // one, so probe() is unaffected; the cache is an optimization that can never
-  // feed wrong data (every header field + file size is re-validated on load).
+  // ---- disk cache ---------------------------------------------------------
+  // A solved table depends only on the engine's move generation, so it is
+  // saved to disk and loaded as is on later runs. Files under `cacheDir` are
+  // named by the raw Piece bytes, because FEN letters would clash on NTFS,
+  // which ignores case. A loaded table is identical to a freshly solved one.
+  // Every header field and the file size are checked on load, so a bad file
+  // is never used.
   //
-  // A relative `cacheDir` is anchored to the *executable's* directory, not the
-  // process CWD, so the cache always lands beside the binary (the default
-  // "egcache" => <exe-dir>/egcache, i.e. output/egcache for the normal build)
-  // regardless of where elsa is launched from. Set an absolute path to override.
+  // A relative `cacheDir` is taken from the executable's folder, not the
+  // working directory, so the cache is always next to the binary (the default
+  // "egcache" is output/egcache for the normal build). Use an absolute path to
+  // put it elsewhere.
   bool        cacheEnabled = true;
   std::string cacheDir     = "egcache";
 
-  // How the last build() resolved its DAG: tables computed vs loaded from disk.
-  // Lets the caller report warm-vs-cold without timing each table.
+  // How the last build() got its tables: solved, or loaded from disk. Lets the
+  // caller report whether the cache was used without timing each table.
   int tablesSolved = 0;
   int tablesLoaded = 0;
 
@@ -154,16 +155,15 @@ public:
   checkPredecessors(const Sig& sig, uint64_t& edges, uint64_t& missing,
                     std::string& example) const;
 
-  // Check a solved table against its own moves: every entry must be ILLEGAL
-  // exactly when it is not a legal position stored there, and otherwise hold what
-  // one forward step over the solved tables gives (a win has a move to a loss, a
-  // loss has only moves to wins or is mate, a draw neither). The solve decides
-  // positions only through such steps from positions already decided, so its
-  // wins and losses are right by construction; this catches a draw that should
-  // have been decided, which is what a missed predecessor would leave. A solved
-  // table that passes is therefore the true one. A move that reaches a position
-  // with an en passant square is valued by that position's own moves, not by
-  // enPassantValue.
+  // Check a solved table against its own moves. An entry must be ILLEGAL
+  // exactly when it isn't a legal position stored there. Otherwise it must
+  // match one forward step over the solved tables: a win has a move to a loss,
+  // a loss has only moves to wins (or is mate), and a draw has neither. The
+  // solver only decides a position from positions already decided, so its wins
+  // and losses are always right. This catches a draw that should have been
+  // decided, which is what a missed predecessor would leave, so a table that
+  // passes is correct. A move to a position with an en passant square is
+  // valued by that position's own moves, not by enPassantValue.
   // Returns false if the table is not solved; otherwise `positions` counts the
   // legal positions, `wrong` the entries that fail, and `example` describes the
   // first failure.
@@ -193,25 +193,26 @@ private:
   Sig          targetSig;
   const Table* targetTable = nullptr;
 
-  // `cacheDir` anchored to the executable's directory when it is relative
-  // (absolute paths pass through unchanged). Falls back to `cacheDir` verbatim
-  // if the executable path can't be determined.
+  // `cacheDir`, taken from the executable's folder if it is relative. An
+  // absolute path is returned as is, and so is `cacheDir` if the executable's
+  // path can't be found.
   std::string resolvedCacheDir() const;
-  // Cache file path for a signature, or "" if there is no cache dir. (Callers
-  // check `cacheEnabled` themselves; compareWithCache reads it regardless.)
+  // Cache file path for a signature, or "" if there is no cache folder.
+  // Callers check `cacheEnabled` themselves (compareWithCache reads the file
+  // either way).
   std::string cachePath(const Sig& sig) const;
-  // Read and validate the cache file of `sig` into `packed`; false on any
-  // miss/mismatch/IO error.
+  // Read and check the cache file of `sig` into `packed`. False if the file is
+  // missing, doesn't match, or can't be read.
   bool readCacheFile(const Sig& sig, std::vector<uint8_t>& packed) const;
-  // Try to load `sig` from disk straight into the registry; false on any
-  // miss/mismatch/IO error (caller then solves and saves).
+  // Load `sig` from disk into the registry. False if the file is missing,
+  // doesn't match, or can't be read; the caller then solves and saves it.
   bool cacheLoad(const Sig& sig);
-  // Persist the already-solved registry[sig] (atomic temp-then-rename). Best
-  // effort: IO failures are swallowed -- the cache is never load-bearing.
+  // Save the solved registry[sig], writing a temp file and renaming it. Write
+  // errors are ignored, since the cache only saves time.
   void cacheSave(const Sig& sig);
 
-  // Context for the table currently being solved (so same-signature successors
-  // can read the partially-filled table during relaxation).
+  // The table being solved, so moves that stay in the same signature can read
+  // the partly filled table.
   Sig                currentSig;
   Layout             currentLayout;
   std::vector<Wdl>*  currentTable = nullptr;

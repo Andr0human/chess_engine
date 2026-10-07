@@ -46,9 +46,8 @@ kingDistance(int a, int b)
   return std::max(std::abs(r1 - r2), std::abs(f1 - f2));
 }
 
-// Is the side that is NOT to move sitting in check? That position is illegal
-// (it would have been the other side's move). Reuses the engine's own attack
-// detection so this matches exactly what search would compute.
+// Is the side not to move in check? Such a position is illegal. Uses the
+// engine's own check test, so it gives the same answer as search.
 bool
 sideNotToMoveInCheck(const ChessBoard& pos, Color stm)
 {
@@ -89,8 +88,8 @@ parsePiece(char c, Slot& out)
   }
 }
 
-// Flip the colour of every piece letter (P<->p): turns one colouring of a
-// material into its colour-mirror (e.g. "Pb" -> "pB").
+// Flip the colour of every piece letter (P <-> p). This turns a colouring into
+// its colour mirror, e.g. "Pb" -> "pB".
 string
 flipCase(const string& s)
 {
@@ -102,8 +101,8 @@ flipCase(const string& s)
   return r;
 }
 
-// Do two piece strings name the same multiset of men? If so, a colouring is its
-// own colour-mirror (e.g. "Pp") and there is no distinct second colouring.
+// Do two piece strings name the same men? If so, the material is its own
+// colour mirror (e.g. "Pp") and there is no second colouring.
 bool
 sameMaterial(string a, string b)
 {
@@ -140,33 +139,30 @@ parseExtras(const string& s, vector<Slot>& extras, char& badChar)
   return true;
 }
 
-// Exhaustive generator over a fixed piece set (the two kings plus `extras`).
+// Walks every position of a fixed set of men: the two kings plus `extras`.
 //
-// Symmetry: the position is folded by vertical mirror, canonicalised on the
-// WHITE KING's file (restricted to a-d). This is valid for any material -- the
-// game is left-right symmetric with no castling/en-passant in play -- and since
-// there is exactly one white king and no central file, every mirror orbit has
-// size exactly 2, so folding the white king to a-d picks each orbit's
-// representative once: no orbit dropped, none double-counted.
+// Positions are folded by the left-right mirror, keeping the white king on
+// files a-d. This works for any material, because there is no castling or en
+// passant here. A position and its mirror always differ, and exactly one of
+// them has the white king on files a-d, so each pair is counted once.
 constexpr int    WK = 0;          // slot index of the white king
 constexpr int    BK = 1;          // slot index of the black king
 constexpr size_t MAX_FALSE_FENS = 64;
 
-// All tallies for one colouring. Each worker accumulates its own and they are
-// summed at the end; summation is order-independent so the parallel total equals
-// the serial total exactly.
+// All counts for one colouring. Each worker keeps its own, and they are added
+// up at the end, so the parallel total equals the serial one.
 struct Tally
 {
   // Enumeration counters.
   uint64_t geom = 0, rejInCheck = 0;
   uint64_t legal = 0, legalW = 0, legalB = 0;
-  uint64_t rejTerminal = 0, rejCaptures = 0;
-  uint64_t quiet = 0, quietW = 0, quietB = 0;
+  uint64_t rejTerminal = 0;
+  uint64_t callSet = 0, callSetW = 0, callSetB = 0;
   uint64_t heurDraw = 0, heurNonDraw = 0, heurDrawW = 0, heurDrawB = 0;
 
-  // Oracle scorecard (only when an oracle is present). The 4-bucket confusion
-  // matrix of isTheoreticalDraw vs perfect WDL, plus the oracle's own W/D/L
-  // split over the call set. `falseDraw` is the dangerous bucket.
+  // Oracle scorecard, filled only when there is an oracle: isTheoreticalDraw
+  // against the exact result in four buckets, and the oracle's own win, draw and
+  // loss counts over the call set. `falseDraw` is the one that must stay 0.
   uint64_t agreeDraw = 0, agreeNondraw = 0, missedDraw = 0, falseDraw = 0;
   uint64_t oWin = 0, oDraw = 0, oLoss = 0, oBad = 0;
 
@@ -175,8 +171,8 @@ struct Tally
   {
     geom += o.geom; rejInCheck += o.rejInCheck;
     legal += o.legal; legalW += o.legalW; legalB += o.legalB;
-    rejTerminal += o.rejTerminal; rejCaptures += o.rejCaptures;
-    quiet += o.quiet; quietW += o.quietW; quietB += o.quietB;
+    rejTerminal += o.rejTerminal;
+    callSet += o.callSet; callSetW += o.callSetW; callSetB += o.callSetB;
     heurDraw += o.heurDraw; heurNonDraw += o.heurNonDraw;
     heurDrawW += o.heurDrawW; heurDrawB += o.heurDrawB;
     agreeDraw += o.agreeDraw; agreeNondraw += o.agreeNondraw;
@@ -186,12 +182,11 @@ struct Tally
   }
 };
 
-// One worker enumerates the subtree under a single fixed (side-to-move, white
-// king square) and writes only its own Tally / false-FEN list / dump buffer.
-// All the shared state it touches is read-only: the slot layout, the magic
-// attack tables (read by generateMoves), the pure isTheoreticalDraw, and the
-// solved oracle (probe() is const). So many workers run with no locking, and
-// the per-task slices are disjoint -- summing reproduces the serial result.
+// One worker walks every position for one side to move and one white king
+// square. It writes only its own counts, false-draw FENs and dump text.
+// Everything shared is only read: the slots, the attack tables, isTheoreticalDraw
+// and the solved oracle. So workers need no locks, and since their slices don't
+// overlap, adding them up gives the serial result.
 struct Walker
 {
   const vector<Slot>*       slots    = nullptr;
@@ -201,23 +196,22 @@ struct Walker
   bool                      wantDump = false;
   bool                      dumpFalseOnly = false;  // dump only the false draws
   bool                      wantSamples = false;   // keep example FENs per bucket
-  bool                      capGate  = true;       // false = keep has-capture positions
 
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
 
-  // The placed men, kept on the board as place() puts them down and lifts them,
-  // so a leaf reads it directly instead of building and parsing a FEN. Only what
-  // the move generator, the recognizer and the oracle read is kept: pieces, side
-  // to move, and no castling rights or en passant square (csep = 64).
+  // The men placed so far. place() puts them on and takes them off, so leaf()
+  // can use the board directly instead of building a FEN. It holds only what
+  // movegen, the recognizer and the oracle read: the pieces and the side to
+  // move, with no castling rights or en passant square (csep = 64).
   ChessBoard pos;
 
   Tally               t;
   std::vector<string> falseFens;  // up to MAX_FALSE_FENS examples for this slice
   string              dump;       // dump lines for this slice (merged in task order)
 
-  // Per-bucket oracle WDL. Populated only when BucketProbe is enabled and an
-  // oracle is present; folded into the Generator's tally after the sweep.
+  // Oracle results per feature bucket. Filled only when BucketProbe is on and
+  // there is an oracle. Merged into the Generator's buckets.
   BucketTally buckets;
 
   string
@@ -262,29 +256,16 @@ struct Walker
     ++t.legal;
     (stm == WHITE ? t.legalW : t.legalB)++;
 
-    // Match the engine's gate exactly: isTheoreticalDraw is consulted only on
-    // non-terminal positions with no captures available for the side to move
-    // (single_thread.cpp:51, :331). Positions the search would never hand to the
-    // recognizer must not pollute the tally.
-    //
-    // `capGate = false` (CLI `nocapgate`) relaxes only the capture half of that
-    // gate: has-capture positions stay in the call set and are still counted in
-    // rejCaptures, so the tally shows what the recognizer *would* say on the
-    // superset the search never asks about. Terminal positions stay excluded
-    // either way -- search resolves mate/stalemate before the recognizer runs.
+    // Search asks isTheoreticalDraw only after it has handled checkmate and
+    // stalemate, so those are left out here too.
     const MoveList moves = generateMoves(pos);
     if (!moves.anyMove())
     { ++t.rejTerminal; return; }            // checkmate / stalemate
-    if (moves.exists<MType::CAPTURES>(pos))
-    {
-      ++t.rejCaptures;                      // a capture is available
-      if (capGate) return;
-    }
 
-    ++t.quiet;
-    (stm == WHITE ? t.quietW : t.quietB)++;
+    ++t.callSet;
+    (stm == WHITE ? t.callSetW : t.callSetB)++;
 
-    BucketProbe::reset();   // recognizer emits iff it buckets this position
+    BucketProbe::reset();   // the recognizer fills it only if it buckets this position
     const bool isDraw = isTheoreticalDraw(pos);
     if (isDraw)
     {
@@ -294,8 +275,8 @@ struct Walker
     else
       ++t.heurNonDraw;
 
-    // Oracle verdict (side-to-move relative) as a single char, also appended to
-    // the dump so a mismatch can be read by truth: 'W'/'L'/'D', '?' = bad.
+    // The oracle's verdict for the side to move as one letter: W, L or D, or ?
+    // if it has none. The dump prints it next to the recognizer's verdict.
     char oracleCh = 0;
     bool mismatch = false;   // recognizer disagrees with the oracle
     if (oracle)
@@ -306,20 +287,20 @@ struct Walker
       if      (truth == Wdl::WIN)  { ++t.oWin;  oracleCh = 'W'; }
       else if (truth == Wdl::LOSS) { ++t.oLoss; oracleCh = 'L'; }
       else if (truth == Wdl::DRAW) { ++t.oDraw; oracleCh = 'D'; }
-      else                         { ++t.oBad;  oracleCh = '?'; }  // ILLEGAL/UNKNOWN -- should never happen
+      else                         { ++t.oBad;  oracleCh = '?'; }  // ILLEGAL or UNKNOWN, should never happen
 
       if (isDraw && oracleDraw)        ++t.agreeDraw;
       else if (!isDraw && !oracleDraw) ++t.agreeNondraw;
-      else if (!isDraw && oracleDraw)  ++t.missedDraw;   // safe coverage gap
-      else                                               // heuristic draw, truth decided
+      else if (!isDraw && oracleDraw)  ++t.missedDraw;   // a draw not found, which is safe
+      else                                               // called a draw, but the game is decided
       {
-        ++t.falseDraw;                                   // DANGEROUS
+        ++t.falseDraw;                                   // a bug: search would throw the result away
         if (falseFens.size() < MAX_FALSE_FENS)
           falseFens.push_back(buildFen());
       }
 
-      // Per-bucket WDL: fold this position's oracle result into its feature
-      // bucket so the harness can tell which buckets are pure-draw.
+      // Add this position's oracle result to its feature bucket, to find the
+      // buckets that are all draws.
       if (BucketProbe::enabled && BucketProbe::fired())
       {
         const BucketTally::Result r = (truth == Wdl::WIN)  ? BucketTally::WIN
@@ -336,10 +317,11 @@ struct Walker
       mismatch = (isDraw != oracleDraw);
     }
 
-    // dump: only positions where the recognizer and the oracle disagree --
-    // `FEN | <D|.> | <W|D|L>` (recognizer verdict then truth). A missed draw is
-    // exactly `| . | D`; a false draw is `| D | W` or `| D | L`. `dump` requires
-    // `oracle` (validated up front), so `oracle` is always set here when wantDump.
+    // The dump lists only positions where the recognizer and the oracle
+    // disagree, as `FEN | <D or .> | <W, D or L>`: the recognizer's verdict, then
+    // the oracle's. A missed draw is `| . | D`, and a false draw is `| D | W` or
+    // `| D | L`. `dump` needs `oracle` (checked at the start), so the oracle is
+    // always set here.
     if (wantDump && mismatch && (!dumpFalseOnly || isDraw))
     {
       dump += buildFen();
@@ -351,10 +333,10 @@ struct Walker
     }
   }
 
-  // Place the man for `slot`, then recurse. Cheap geometric rejects (file fold,
-  // pawn rank, overlap, king adjacency) prune whole subtrees before the in-check
-  // test and move generation at the leaf. The white king (slot WK) is pre-placed
-  // by the caller, so workers enter at place(BK).
+  // Place the man for `slot`, then the ones after it. Cheap tests (king file,
+  // pawn rank, overlap, adjacent kings) skip whole branches before leaf() does
+  // the check test and move generation. The caller places the white king, so
+  // workers start at place(BK).
   void
   place(int slot)
   {
@@ -365,11 +347,11 @@ struct Walker
 
     for (int sq = 0; sq < 64; ++sq)
     {
-      // Vertical-mirror fold: white king canonicalised to files a-d.
+      // Mirror fold: the white king stays on files a-d.
       if (slot == WK && (sq & 7) > maxKingFile)
         continue;
 
-      // Pawns live on ranks 2-7 (rank index 1..6) only.
+      // Pawns only go on ranks 2-7 (rank index 1 to 6).
       if (sp.isPawn)
       {
         int r = sq >> 3;
@@ -381,15 +363,15 @@ struct Walker
         if (square[j] == sq) { overlap = true; break; }
       if (overlap) continue;
 
-      // Identical men (same fenChar -> same colour and type) are
-      // interchangeable: placing them independently would generate each
-      // position k! times. Enforce a strict ascending-square order across
-      // identical slots so every multiset placement is emitted exactly once.
-      // (square[prevSame] is already set: prevSame < slot, placed earlier.)
+      // Identical men (same fenChar, so same colour and type) can swap squares
+      // without changing the position. Placed freely, each position would come
+      // up once per ordering, so each one must stand on a higher square than
+      // the one before. square[prevSame] is set, since that slot came earlier.
       if ((*prevSame)[slot] >= 0 && sq <= square[(*prevSame)[slot]])
         continue;
 
-      // Kings never adjacent (checked the moment the black king lands).
+      // The kings can't stand next to each other. Checked as soon as the
+      // black king is placed.
       if (slot == BK && kingDistance(square[WK], sq) <= 1)
         continue;
 
@@ -401,8 +383,8 @@ struct Walker
   }
 };
 
-// Drives the enumeration for one colouring: owns the slot layout and the merged
-// results, and fans the work out across (side-to-move, white-king square) tasks.
+// Runs the walk for one colouring. It holds the slots and the merged results,
+// and splits the work into one task per side to move and white king square.
 struct Generator
 {
   vector<Slot> slots;          // index 0 = white king, 1 = black king, then extras
@@ -410,19 +392,18 @@ struct Generator
   bool wantDump = false;
   bool dumpFalseOnly = false;
   bool wantSamples = false;
-  bool capGate = true;         // false = has-capture positions stay in the call set
   const EgSolver* oracle = nullptr;
 
   std::array<int, 16> prevSame{}; // nearest earlier slot with same fenChar, or -1
 
-  // Merged results (summed / concatenated from the workers in task order).
+  // Results from all workers, merged in task order.
   Tally               t;
   std::vector<string> falseFens;
   string              dump;
   BucketTally         buckets;
 
-  // Precompute, for each slot, the nearest earlier slot carrying the same
-  // fenChar (or -1). Drives the identical-piece ordering constraint in place().
+  // For each slot, find the nearest earlier slot with the same fenChar, or -1.
+  // place() uses it to keep identical men in order.
   void
   computePrevSame()
   {
@@ -434,11 +415,10 @@ struct Generator
     }
   }
 
-  // Enumerate both sides to move in parallel. Each (stm, white-king square) is an
-  // independent task over a disjoint slice of the space, so the per-task tallies
-  // sum to the serial total exactly; merging the false-FEN lists and dump buffers
-  // in task order (WHITE before BLACK, king square ascending) reproduces the
-  // serial *ordering* too -- the parallel run is bit-identical to the serial one.
+  // Walk both sides to move in parallel. Each task (side to move, white king
+  // square) covers its own slice, so the counts add up to the serial total. The
+  // false-draw FENs and the dump are merged in task order (White first, then by
+  // king square), so the output is exactly the same as a serial run.
   void
   run()
   {
@@ -448,7 +428,7 @@ struct Generator
     vector<Task> tasks;
     for (Color c : {WHITE, BLACK})
       for (int sq = 0; sq < 64; ++sq)
-        if ((sq & 7) <= maxKingFile)        // honour the white-king file fold
+        if ((sq & 7) <= maxKingFile)        // the white king file fold
           tasks.push_back({c, sq});
 
     const int n = static_cast<int>(tasks.size());
@@ -465,17 +445,16 @@ struct Generator
       w.wantDump  = wantDump;
       w.dumpFalseOnly = dumpFalseOnly;
       w.wantSamples = wantSamples;
-      w.capGate   = capGate;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
       w.pos.reset();
       w.pos.csep = 64;
       w.pos.setPiece(Square(w.square[WK]), slots[WK].piece);
-      w.place(BK);                          // white king fixed; recurse from black king down
+      w.place(BK);                          // white king is placed; place the rest
 
-      // Without samples a bucket row is pure counts, so the merge order cannot
-      // change the result: fold each slice in as it finishes and free it, rather
-      // than holding every slice's cube until the end (a 5-man pool would not fit).
+      // Without samples a bucket row is only counts, so merge order doesn't
+      // matter. Merge each slice as it finishes and free it. Keeping every slice
+      // until the end wouldn't fit in memory for 5 men.
       if (!wantSamples)
       {
         #pragma omp critical(bucketMerge)
@@ -484,9 +463,8 @@ struct Generator
       }
     }
 
-    // Reduce in task order. Sums are order-independent, but draining the false
-    // FENs and dump in order keeps the output deterministic regardless of how
-    // the threads were scheduled.
+    // Merge in task order. The sums don't depend on the order, but the
+    // false-draw FENs and the dump do, and this keeps them the same on every run.
     for (int i = 0; i < n; ++i)
     {
       Walker& w = workers[static_cast<size_t>(i)];
@@ -502,7 +480,7 @@ struct Generator
   }
 };
 
-// Print one colouring's tally block (no header / footer).
+// Print the counts for one colouring.
 void
 reportColouring(const Generator& g, const string& pieceStr)
 {
@@ -518,19 +496,13 @@ reportColouring(const Generator& g, const string& pieceStr)
        << ", stm Black " << g.t.legalB << ")\n";
   cout << "  rejected (terminal)   : " << g.t.rejTerminal
        << "  (checkmate / stalemate -- no moves)\n";
-  if (g.capGate)
-    cout << "  rejected (has capture): " << g.t.rejCaptures
-         << "  (search skips the recognizer here)\n";
-  else
-    cout << "  KEPT     (has capture): " << g.t.rejCaptures
-         << "  (** capture gate disabled -- search never asks about these **)\n";
-  cout << "Recognizer call set     : " << g.t.quiet
-       << "  (stm White " << g.t.quietW
-       << ", stm Black " << g.t.quietB << ")\n";
+  cout << "Recognizer call set     : " << g.t.callSet
+       << "  (stm White " << g.t.callSetW
+       << ", stm Black " << g.t.callSetB << ")\n";
 
   const auto pct = [&] (uint64_t n) {
-    return g.t.quiet
-      ? (100.0 * static_cast<double>(n) / static_cast<double>(g.t.quiet))
+    return g.t.callSet
+      ? (100.0 * static_cast<double>(n) / static_cast<double>(g.t.callSet))
       : 0.0;
   };
 
@@ -543,8 +515,8 @@ reportColouring(const Generator& g, const string& pieceStr)
        << "  (" << pct(g.t.heurNonDraw) << "% of call set)\n\n";
 }
 
-// Print the oracle confusion matrix for one colouring: isTheoreticalDraw's
-// boolean label vs the solver's perfect WDL, collapsed to draw-vs-decided.
+// Print the oracle scorecard for one colouring: isTheoreticalDraw's verdict
+// against the solver's exact result, each taken as draw or decided.
 void
 reportScorecard(const Generator& g, const string& pieceStr)
 {
@@ -552,10 +524,6 @@ reportScorecard(const Generator& g, const string& pieceStr)
 
   cout << "--- Oracle scorecard " << signatureOf(pieceStr)
        << " (pieces " << pieceStr << ") ---\n";
-  if (!g.capGate)
-    cout << "** capture gate DISABLED: the call set includes has-capture positions,\n"
-            "   which the search never hands to the recognizer. A FALSE-DRAW below is\n"
-            "   hypothetical, not a live bug. **\n";
   cout << "Call-set positions scored : " << total << '\n';
   cout << "Oracle WDL (side-to-move)  : win " << g.t.oWin
        << ", draw " << g.t.oDraw << ", loss " << g.t.oLoss;
@@ -585,10 +553,9 @@ reportScorecard(const Generator& g, const string& pieceStr)
   cout << '\n';
 }
 
-// Thread budget. `threads <n>` caps the OpenMP team used by the solver and the
-// position generator so the harness need not saturate every core. 0 =
-// not given = default to HALF the hardware threads, leaving the machine usable.
-// Clamped to [1, hardware max]. Returns the team size.
+// Set the OpenMP thread count for the solver and the position walk from
+// `threads <n>`, kept between 1 and the hardware maximum. Without it, use half
+// the hardware threads so the machine stays usable. Returns the count used.
 int
 setSolverThreads(const vector<string>& args)
 {
@@ -603,7 +570,7 @@ setSolverThreads(const vector<string>& args)
 #ifdef _OPENMP
   const int maxThreads = omp_get_max_threads();
   if (reqThreads > maxThreads) reqThreads = maxThreads;
-  // Default (no explicit request): half the cores, at least 1.
+  // Not given: half the threads, at least 1.
   const int usingThreads = reqThreads > 0 ? reqThreads : std::max(1, maxThreads / 2);
   omp_set_num_threads(usingThreads);
   return usingThreads;
@@ -631,32 +598,32 @@ void
 validateEndgame(const vector<string>& args)
 {
   // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles]
-  //                 [nocapgate] [dump <file>] [dumpfalse] [cube <file>]
+  //                 [dump <file>] [dumpfalse] [cube <file>]
+  //                 [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]
   //
-  // Exhaustively enumerate every legal position for a material signature -- the
-  // two kings (always present, never passed) plus the extra men named by
-  // `pieces` -- and tally isTheoreticalDraw over the recognizer's call set
-  // (legal, non-terminal, no capture available; see single_thread.cpp:51,331).
+  // Walk every legal position of one material: the two kings (always there,
+  // never named) plus the men named by `pieces`. Count what isTheoreticalDraw
+  // says over its call set, which is every legal position that isn't checkmate
+  // or stalemate. Those are the positions search asks it about.
   //
   //   pieces P    -> white pawn                  (KPK)
   //   pieces Pb   -> white pawn + black bishop    (KPKB, the default)
   //   pieces Rn   -> white rook + black knight    (KRKN)
-  // Case encodes colour: UPPER = white, lower = black. Kings are implicit.
+  // Upper case is white, lower case is black. Kings are implicit.
   //
-  // By default only the named colouring is enumerated. `mirror` adds the
-  // colour-mirror (e.g. Pb and pB), related by colour-swap + rank-flip: a
-  // correct (colour-symmetric) recognizer must give identical call-set and draw
-  // counts for the two, so the pair is a built-in colour-symmetry self-check.
-  // The oracle build is per-colouring, so `mirror` roughly doubles the runtime;
-  // a self-mirror material (e.g. Pp) has only one colouring regardless.
+  // Only the named colouring is walked by default. `mirror` adds its colour
+  // mirror (e.g. Pb and pB): colours swapped and the board flipped. A recognizer
+  // that treats both colours the same must give the same call set and draw
+  // counts for both, so this checks that. The oracle is built per colouring, so
+  // `mirror` about doubles the run time. Material like Pp is its own mirror and
+  // has only one colouring.
   //
-  // `allfiles` disables the white-king fold (each tally must then double).
+  // `allfiles` turns off the white king fold (every count should then double).
   //
-  // The oracle's solved tables are cached under output/egcache/ (keyed by
-  // signature), so the first build pays the full solve and later runs on the
-  // same/overlapping material load in well under a second. `nocache` forces a
-  // fresh solve and skips persisting -- use it after a movegen change that did
-  // not bump the cache's SOLVER_VERSION.
+  // The oracle's tables are cached in output/egcache/ by signature. The first
+  // build solves them, and later runs on the same or overlapping material load
+  // in under a second. `nocache` solves from scratch and saves nothing. Use it
+  // after a movegen change that didn't bump SOLVER_VERSION.
 
   const string pieceArg = utils::hasArg(args, "pieces")
                         ? utils::argValue(args, "pieces")
@@ -679,8 +646,9 @@ validateEndgame(const vector<string>& args)
   const bool wantMirror = utils::hasArg(args, "mirror");
   const bool wantOracle = utils::hasArg(args, "oracle");
 
-  // The dump records only recognizer/oracle disagreements, so it needs the
-  // oracle's truth -- reject `dump` without `oracle` rather than emitting nothing.
+  // The dump lists only positions where the recognizer and the oracle disagree,
+  // so it needs the oracle. Refuse `dump` without `oracle` instead of writing
+  // nothing.
   if (wantDump && !wantOracle)
   {
     cout << "dump requires oracle (the truth column defines a mismatch); "
@@ -690,18 +658,11 @@ validateEndgame(const vector<string>& args)
   const bool noCache  = utils::hasArg(args, "nocache");
   const int maxKingFile = noFold ? 7 : 3;
 
-  // `nocapgate` drops the capture half of the engine's call gate, so the call set
-  // becomes every legal non-terminal position. The recognizer is never actually
-  // consulted on has-capture positions, so this is a diagnostic (how the
-  // recognizer behaves on the superset), not a correctness sweep -- any FALSE-DRAW
-  // it surfaces is unreachable from search until that gate changes.
-  const bool noCapGate = utils::hasArg(args, "nocapgate");
-
-  // `combos` automates the feature-set search: instead of hand-editing the emit
-  // to one candidate vector and re-sweeping per combination, the recognizer emits
-  // its whole candidate pool once and this rolls that cube up onto every subset
-  // of size 1..maxk, ranked per size. One sweep covers every subset -- the rollup
-  // is exact, since bucket rows are pure counts (BucketTally::project).
+  // `combos` searches feature subsets. The recognizer emits its whole pool of
+  // candidate features once, and this projects the results onto every subset of
+  // 1 to maxk features, ranking the subsets of each size. One walk covers every
+  // subset. The projection is exact, because bucket rows are only counts
+  // (BucketTally::project).
   const bool wantCombos = utils::hasArg(args, "combos");
   if (wantCombos && !wantOracle)
   {
@@ -710,12 +671,12 @@ validateEndgame(const vector<string>& args)
     return;
   }
 
-  // `sums` searches signed linear rules (`+a -b -c >= t`) over the TERM-tagged
-  // features instead of bare coordinates; `frozen` mines those rules and then hands
-  // the best few to the subset search as boolean coordinates. Independent of
-  // `combos` and of each other -- each answers a different question (which
-  // coordinates matter / which inequality cuts / does an inequality beat raw
-  // coordinates), so asking for two prints two tables rather than picking a winner.
+  // `sums` searches rules of the form `+a -b -c >= t` over the TERM-tagged
+  // features, instead of single features. `frozen` finds those rules, then gives
+  // the best few to the subset search as yes/no features. `combos`, `sums` and
+  // `frozen` each answer a different question: which features matter, which
+  // inequality splits the positions, and whether an inequality beats the plain
+  // features. Asking for more than one prints a table for each.
   const bool wantSums = utils::hasArg(args, "sums");
   if (wantSums && !wantOracle)
   {
@@ -724,8 +685,8 @@ validateEndgame(const vector<string>& args)
     return;
   }
 
-  // `freeze <n>` sets the slot count and implies `frozen`, so neither has to be
-  // written with the other. A bare `frozen` takes the default.
+  // `freeze <n>` sets how many rules `frozen` uses and also turns `frozen` on.
+  // A bare `frozen` uses the default.
   const bool wantFrozen = utils::hasArg(args, "frozen") || utils::hasArg(args, "freeze");
   if (wantFrozen && !wantOracle)
   {
@@ -734,12 +695,12 @@ validateEndgame(const vector<string>& args)
     return;
   }
 
-  // Any of the three replaces the raw per-bucket table: they all want the wide
-  // emitted pool, whose cube runs to hundreds of thousands of rows.
+  // Any of the three replaces the plain per-bucket table. They all use the wide
+  // feature pool, which has far too many buckets to print.
   const bool wantSearch = wantCombos || wantSums || wantFrozen;
 
-  // `cube <file>` writes the whole emitted cube -- one row per full feature
-  // vector with its win/draw/loss counts -- for mining outside the engine.
+  // `cube <file>` writes every bucket to a file, one row per feature vector with
+  // its win, draw and loss counts, for mining outside the engine.
   const bool wantCube = utils::hasArg(args, "cube");
   const string cubeFile = wantCube ? utils::argValue(args, "cube") : string();
   if (wantCube && !wantOracle)
@@ -764,9 +725,9 @@ validateEndgame(const vector<string>& args)
     if (combosTopN < 1) combosTopN = 1;
   }
 
-  // How many mined halfspaces `frozen` spends as feature coordinates. Two is enough
-  // to see whether an inequality outranks the raw pool without burying the subset
-  // table under coordinates that all cut the same way.
+  // How many rules `frozen` adds as features. Two is enough to see whether a rule
+  // beats the plain features, without filling the table with rules that all
+  // split the positions the same way.
   size_t freezeN = 2;
   if (utils::hasArg(args, "freeze"))
   {
@@ -785,10 +746,10 @@ validateEndgame(const vector<string>& args)
   if (haveMirror)
     colourings.push_back(mirror);
 
-  // ---- dump (shared across colourings) ------------------------------------
-  // Each worker buffers its slice in memory; the merged text is written to the
-  // file in task order after enumeration. Open it up front to fail fast (before
-  // the long oracle solve) if the path is not writable.
+  // ---- dump (one file for all colourings) ---------------------------------
+  // Each worker keeps its text in memory, and it is all written in task order
+  // at the end. Open the file now, so a bad path fails before the long oracle
+  // solve.
   std::ofstream out;
   if (wantDump)
   {
@@ -803,7 +764,7 @@ validateEndgame(const vector<string>& args)
   // ---- enumerate ----------------------------------------------------------
   const perf_clock start = perf::now();
 
-  // Collect per-bucket features only when we have an oracle to pair them with.
+  // Collect bucket features only when there is an oracle to score them against.
   BucketProbe::enabled = wantOracle;
 
   vector<Generator> gens;
@@ -823,15 +784,14 @@ validateEndgame(const vector<string>& args)
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
     g.dumpFalseOnly = dumpFalseOnly;
-    g.capGate = !noCapGate;
 
-    // Sample FENs serve the per-bucket table, which none of the searches print --
-    // and a whole-pool cube has buckets by the hundred thousand, so collecting
-    // examples there would cost a lot of memory to produce nothing readable.
+    // Example FENs are only for the per-bucket table, which the searches and
+    // `cube` don't print. The whole pool has so many buckets that keeping
+    // examples would cost a lot of memory for nothing.
     g.wantSamples = !wantSearch && !wantCube;
 
-    // Build the perfect WDL oracle for this colouring (its own capture/promotion
-    // DAG), then bucket each call-set position against it inside leaf().
+    // Build the oracle for this colouring, with the smaller tables its captures
+    // and promotions lead to. leaf() checks each position against it.
     if (wantOracle)
     {
       auto solver = std::make_unique<EgSolver>();
@@ -886,10 +846,6 @@ validateEndgame(const vector<string>& args)
                   : "white king folded to files a-d")
        << ", both sides to move; " << usingThreads << " thread"
        << (usingThreads == 1 ? "" : "s") << ")\n";
-  if (noCapGate)
-    cout << "Capture gate DISABLED ('nocapgate'): call set = every legal "
-            "non-terminal position,\n  including the has-capture ones the search "
-            "never hands to the recognizer.\n";
   if (haveMirror)
     cout << "Colourings: " << pieceArg << " (" << signatureOf(pieceArg)
          << ") and colour-mirror " << mirror
@@ -906,15 +862,16 @@ validateEndgame(const vector<string>& args)
   for (size_t i = 0; i < gens.size(); ++i)
     reportColouring(gens[i], colourings[i]);
 
-  // Colour-symmetry self-check: the two colourings are colour-swap + rank-flip
-  // images, a bijection preserving legality, the call gate, and the true
-  // result -- so a colour-symmetric recognizer must tally identically.
+  // Colour check: each position of one colouring matches one position of the
+  // other, with colours swapped and the board flipped. Legality, the call set
+  // and the true result all carry over, so a recognizer that treats both
+  // colours the same must give the same counts.
   if (haveMirror)
   {
-    const bool callOk = gens[0].t.quiet    == gens[1].t.quiet;
+    const bool callOk = gens[0].t.callSet  == gens[1].t.callSet;
     const bool drawOk = gens[0].t.heurDraw == gens[1].t.heurDraw;
     cout << "Colour-symmetry self-check (the two colourings must tally identically):\n";
-    cout << "  call set : " << gens[0].t.quiet << " vs " << gens[1].t.quiet
+    cout << "  call set : " << gens[0].t.callSet << " vs " << gens[1].t.callSet
          << "   " << (callOk ? "OK" : "MISMATCH") << '\n';
     cout << "  draws    : " << gens[0].t.heurDraw << " vs " << gens[1].t.heurDraw
          << "   " << (drawOk ? "OK" : "MISMATCH") << '\n';
@@ -933,10 +890,9 @@ validateEndgame(const vector<string>& args)
 
         const string tag = signatureOf(colourings[i]) + " (pieces " + colourings[i] + ")";
 
-        // Under any search flag the emitted pool is wide, so the raw per-bucket
-        // table is thousands of unreadable rows -- the searches are the point.
-        // Print whichever were asked for; they compose, and the raw table is the
-        // no-flag default.
+        // With a search flag the feature pool is wide, so the plain per-bucket
+        // table would be too long to read. Print each search that was asked
+        // for. The plain table is printed only when no search and no cube was.
         if (wantCombos)
           reportSubsetSearch(cout, gens[i].buckets, combosMaxK, combosTopN,
                              "Feature-subset search " + tag);
@@ -963,8 +919,8 @@ validateEndgame(const vector<string>& args)
           gens[i].buckets.report(cout, "Bucket WDL " + tag);
       }
 
-    // The two colourings are colour-swap + rank-flip images, so the safe and
-    // dangerous buckets must match exactly -- a check on the oracle itself.
+    // The two colourings mirror each other, so their missed-draw and
+    // false-draw counts must match. This also checks the oracle.
     if (haveMirror && gens[0].oracle && gens[1].oracle)
     {
       const bool fdOk = gens[0].t.falseDraw  == gens[1].t.falseDraw;
@@ -984,9 +940,8 @@ validateEndgame(const vector<string>& args)
   else
     cout << "NOTE: no oracle (pass 'oracle' for the WDL scorecard) -- these are\n"
             "      the heuristic's labels, not correctness.\n";
-  // Measured to here, not before the report block: the bucket-probe searches
-  // (combos/sums/frozen) do their mining inside the report phase, so freezing the
-  // clock earlier undercounts by the entire search -- the bulk of the wall time.
+  // Timed up to here, after the report, because the combos, sums and frozen
+  // searches run while reporting and take most of the time.
   const perf_time dur = perf::now() - start;
   cout << "Elapsed: " << dur.count() << " s\n";
 
@@ -1006,9 +961,9 @@ solveEndgameTables(const vector<string>& args)
   // elsa egsolve [pieces <set>] [threads <n>] [sweep] [check] [verify] [target]
   //
   // A tool for working on the oracle itself. Solves every table the signature
-  // needs from scratch -- the disk cache is neither read nor written -- prints
-  // each table's size, time, sweeps and forward checks, and compares each result
-  // with its cached copy byte for byte. `pieces` works as in egvalidate.
+  // needs from scratch, without reading or writing the disk cache. Prints each
+  // table's size, time, sweeps and forward checks, and compares each table with
+  // its cached copy byte for byte. `pieces` works as in egvalidate.
   //
   //   sweep  -> use the original solve, which re-checks every undecided position
   //             on every sweep (the reference for timing)

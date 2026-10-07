@@ -93,76 +93,60 @@ class SearchData
 
   uint64_t nodes, qNodes;
 
-  // Cumulative node count over the entire search (all depths, main + q).
-  // Unlike `nodes`/`qNodes` this is NEVER cleared by resetNodeCount(), so it
-  // feeds the UCI `nodes`/`nps` fields, which GUIs expect to be cumulative.
+  // Nodes searched so far over all iterations, main search and quiescence.
+  // resetNodeCount() doesn't clear it. It feeds the UCI nodes and nps fields,
+  // which GUIs expect to be cumulative.
   Nodes searchedNodes = 0;
 
   nanoseconds allotedTime;
 
   double timeForSearch = 0;  // seconds
 
-  // Clock-poll throttle state. shouldStop() runs at every search checkpoint, so
-  // several times per searched node; reading the clock that often costs real
-  // time, because high_resolution_clock is a syscall-grade counter read rather
-  // than something the compiler can hoist. The clock is instead read once per
-  // CLOCK_POLL_INTERVAL calls and the verdict cached, with the calls in between
-  // answered from `timedOut`.
-  //
-  // Mutable because shouldStop() is const and called from const contexts all
-  // over the search; the throttle is an implementation detail of the query, not
-  // observable state.
-  //
-  // No staleness window to worry about on the true side: time only moves
-  // forward, so once a real read reports expiry every later read does too. Both
-  // members reset per search, via the `info = SearchData(...)` assignment.
+  // shouldStop() runs several times per node, and reading the clock that often
+  // is slow. So the clock is read once every CLOCK_POLL_INTERVAL calls and the
+  // result is cached in timedOut. Once time is up it stays up, so the cached
+  // value is never wrong for long. Both reset with each new SearchData.
+  // Mutable because shouldStop() is const.
   mutable int pollCountdown = CLOCK_POLL_INTERVAL;
   mutable bool timedOut = false;
 
   public:
 
-  // Transposition-table instrumentation, accumulated over the whole search:
-  //   ttProbes   — nodes that probed the TT
-  //   ttHits     — of those, the position was found (hash match)
-  //   ttCutoffs  — of those hits, the entry was deep enough to return a bound
+  // TT counters for the whole search:
+  //   ttProbes:  nodes that probed the TT
+  //   ttHits:    probes that found the position
+  //   ttCutoffs: hits deep enough to return a score
   uint64_t ttProbes = 0, ttHits = 0, ttCutoffs = 0;
 
-  // Quiescence-side TT instrumentation, kept separate from the counters above
-  // because the two measure different things: a q-node probes at depth 0, a bar
-  // no stored entry can fail, so qTtCutoffs/qTtHits is a reading of bound
-  // usability alone, where ttCutoffs/ttHits is dominated by the depth test.
+  // The same counters for quiescence. They are kept separate because a q-node
+  // probes at depth 0, which every stored entry passes. So here cutoffs/hits
+  // only measures whether the bound was usable, while in the main search it is
+  // mostly the depth test.
   uint64_t qTtProbes = 0, qTtHits = 0, qTtCutoffs = 0;
 
-  // Hash-move (TT best move) instrumentation, accumulated over the whole search:
-  //   ttMoveProvided   — nodes where the TT handed back a usable best move
-  //   hashMoveInList   — of those, the move was legal here and tried first
-  //   hashMoveCutoffs  — of those, the hash move alone produced a beta cutoff
+  // Hash move counters:
+  //   ttMoveProvided:  nodes where the TT gave a best move
+  //   hashMoveInList:  of those, the move was legal and searched first
+  //   hashMoveCutoffs: of those, the hash move alone caused a beta cutoff
   uint64_t ttMoveProvided = 0, hashMoveInList = 0, hashMoveCutoffs = 0;
 
-  // PV-node instrumentation: nodes that had a usable TT cutoff available but
-  // declined it because they were on the principal variation. This is the
-  // entire cost of the PV-node rule — each one is a node that searched its
-  // moves instead of returning a stored score. Compare against ttCutoffs to
-  // see what fraction of the table's work we gave up.
+  // PV nodes that had a usable TT cutoff but searched anyway, since PV nodes
+  // don't take TT cutoffs. Compare with ttCutoffs to see what that costs.
   uint64_t pvTtCutoffsDeclined = 0;
 
-  // PVS instrumentation, accumulated over the whole search:
-  //   pvsScouts     — non-first moves searched with a null window
-  //   pvsResearches — of those, the scout beat alpha and forced a full re-search
-  // A high researches/scouts ratio means move ordering is feeding PVS bad
-  // first moves — that ratio is the signal to watch.
+  // PVS counters:
+  //   pvsScouts:     later moves searched with a null window
+  //   pvsResearches: scouts that beat alpha and were searched again
+  // A high researches/scouts ratio means move ordering puts bad moves first.
   uint64_t pvsScouts = 0, pvsResearches = 0;
 
   private:
 
   Varray<Move, MAX_PLY> pvLine;
 
-  // How much of pvLine the search actually walked, i.e. the length before
-  // extendPvFromTt() appended its tail. isPartOfPv() — which drives the
-  // MType::PV ordering bucket via is_type<MType::PV> — must stay bounded by
-  // this: the TT tail is reconstructed for display, and letting it widen the
-  // set of moves promoted in ordering would make a cosmetic fix perturb the
-  // search at every node.
+  // Length of pvLine before extendPvFromTt() added moves from the TT.
+  // isPartOfPv() only looks at this part, so moves added for display don't
+  // change move ordering.
   size_t pvSearchedLen = 0;
 
   Varray<pair<Move, Score>, MAX_DEPTH + 1> moveEvals;
@@ -194,82 +178,59 @@ class SearchData
     return res;
   }
 
-  // Rebuild the tail of a PV that pvArray truncated.
+  // Fill in the end of a PV that pvArray cut short.
   //
-  // The triangular pvArray only records moves at nodes that actually searched
-  // moves and raised alpha. A node that returns early — a TT cutoff above all,
-  // but also the draw / RFP / razoring / NMP exits — hands its parent a score
-  // with no move attached, so the printed line stops dead there (a depth-11
-  // search showing three moves). The score is still a real depth-11 score; the
-  // moves are just missing from the display.
+  // pvArray only gets a move from a node that searched its moves and raised
+  // alpha. A node that returns early (a TT cutoff, a draw, RFP, razoring, NMP)
+  // passes up a score with no move, so the printed PV stops there even though
+  // the score comes from the full depth.
   //
-  // They aren't lost, though: the node that cut off has a TT entry, and so does
-  // every node beyond it, written by whichever iteration searched them for real.
-  // So walk the table's best moves onward from the position the raw PV ended at.
+  // The TT still has those moves, so follow the table's best moves on from the
+  // end of the PV. probePvMove() only returns a move from an exact entry
+  // searched to at least the depth left at that point. Without that check, one
+  // wrong move would send the walk through positions that were never on the
+  // PV. A short PV is better than a wrong one.
   //
-  // The walk is *verified*: probePvMove() only answers from an exact-bound entry
-  // searched to at least the depth still remaining at that point in the line, so
-  // the tail stops at the first link the table cannot vouch for. An unverified
-  // walk chains — one unproven move and every later probe describes a position
-  // that was never on the PV, fabricating an arbitrarily long fake tail. A short
-  // honest tail beats a long invented one.
-  //
-  // The appended moves are for display only — see pvSearchedLen for why they
-  // are fenced off from isPartOfPv().
+  // The added moves are only for display (see pvSearchedLen).
   void
   extendPvFromTt(ChessBoard pos, Depth rootDepth)
   {
-    // With the TT disabled there is no table to walk, and nothing allocated to
-    // walk it in: ttMask is 0, so a probe would read slot 0 of a null pointer.
+    // With the TT off nothing is allocated, and a probe would read through a
+    // null pointer.
     if constexpr (!USE_TT)
       return;
 
-    // A line that ended inside quiescence ended *naturally*; appending
-    // main-search moves would splice them into the "(...)" tail of the
-    // readable PV, misrepresenting them as quiescence moves.
+    // A PV that ends in quiescence is complete. Adding main-search moves would
+    // put them inside the "(...)" quiescence part of the printed PV.
     if (pvLine.size() > 0 and (pvLine.back() & quiescenceMove()))
       return;
 
     while (pvLine.size() < pvLine.capacity())
     {
-      // The game ends here, so the line does. The table cannot tell us this:
-      // the Zobrist key encodes neither the halfmove clock nor the game
-      // history, so an entry stored on a low-clock path legitimately answers a
-      // probe made on a dead-clock one and probePvMove()'s depth/bound
-      // verification waves it straight through. Without this the walk appended
-      // four plies to a line the 50-move rule ends after nine (running the
-      // counter 99 -> 103), and re-played a repetition cycle the search had
-      // just scored as a draw.
-      //
-      // This also subsumes the walk's own repetition guard (two positions can
-      // each store the other's move as best — a king/rook shuffle — and the
-      // walk would bounce between them until it filled the line to capacity
-      // with a fake PV). `pos` is a by-value copy carrying the whole undoInfo
-      // stack, so threeMoveRepetition() sees the searched prefix and the
-      // pre-root game history too, not just the moves made below.
+      // Stop at a 50-move or repetition draw. The TT can't tell: the hash key
+      // has neither the halfmove clock nor the game history, so an entry from
+      // another path passes probePvMove()'s checks. This also stops the walk
+      // from bouncing between two positions that store each other's move.
+      // `pos` is a copy with the full undo stack, so threeMoveRepetition() sees
+      // the PV so far and the game before the root too.
       if (pos.fiftyMoveDraw() or pos.threeMoveRepetition())
         break;
 
-      // Depth still owed at this point in the line. pvLine.size() is exactly the
-      // ply we are standing on (the prefix moves have all been made on `pos`), so
-      // a node genuinely on this iteration's PV was searched at `rootDepth - ply`
-      // -- extensions only ever push that higher, and reductions never apply on
-      // the PV, so demanding at least this much admits the real entries and
-      // rejects leftovers from shallower iterations.
+      // Depth left at this ply. pvLine.size() is the current ply, and a node on
+      // this iteration's PV was searched to at least rootDepth - ply
+      // (extensions only add depth, and the PV is never reduced). Asking for
+      // that much rejects entries left by shallower iterations.
       //
-      // Do NOT clamp this to 1 to keep the walk going past rootDepth. Stopping
-      // early in extension-saturated lines is the lesser evil: a floor of 1
-      // re-admits depth-1 entries, which is exactly what let the fabricated
-      // tail through.
+      // Don't clamp this to 1 to walk past rootDepth. A floor of 1 lets depth-1
+      // entries back in, and those produce fake moves.
       const Depth remaining = rootDepth - Depth(pvLine.size());
       if (remaining < 1)
         break;
 
       const Move move = tt.probePvMove(pos.hashValue, remaining);
 
-      // No entry (the position was never stored, e.g. a terminal node), no entry
-      // the table will vouch for at this depth/bound, or the entry belongs to a
-      // 64-bit key collision and its move is nonsense here.
+      // Stop if there's no entry, the entry isn't exact or deep enough, or the
+      // move isn't legal here (a hash key collision).
       if (move == NULL_MOVE or !isLegalMoveForPosition(move, pos))
         break;
 
@@ -287,27 +248,21 @@ class SearchData
   : startTime(perf::now()), side(pos.color), nodes(0), qNodes(0),
     allotedTime(std::chrono::duration_cast<nanoseconds>(std::chrono::duration<double>(_allotedTime)))
   {
-    // generateChecksData: MType::CHECK ordering below is silently a no-op
-    // without it — is_type<MType::CHECK> reads data only GEN_CHECKS fills.
+    // `true` also generates the check data that MType::CHECK ordering needs.
     const MoveList myMoves = generateMoves(pos, true);
     MoveArray movesArray;
     myMoves.getMoves(pos, movesArray);
 
-    // Iteration 1 has no search results to order by, so seed the root list with
-    // the same static ordering the rest of the tree uses. Written as successive
-    // per-stage calls rather than one combined mask, mirroring playAllMoves: a
-    // combined mask would skip bad-capture demotion (gated on
-    // `mTypes == MType::CAPTURES` exactly) and SEE-sort captures/promotions/
-    // checks as one band instead of three.
+    // The first iteration has no results to order by, so order the root moves
+    // the same way as the rest of the tree. Order one stage at a time, as
+    // playAllMoves does. A single combined mask would skip the bad-capture
+    // demotion (only done when mTypes == MType::CAPTURES) and would SEE-sort
+    // captures, promotions and checks as one group.
     //
-    // Two stages are deliberately absent:
-    //   PV     — is_type<MType::PV> reads the *global* `info`, which is still
-    //            the previous search's object until our caller assigns over it,
-    //            and resetPvLine() doesn't clear it. There is no PV for this
-    //            position yet anyway.
-    //   KILLER — clearKillers() runs immediately before us; the table is empty.
-    // History is likewise cleared, hence useHistory=false throughout: the sort
-    // would be a provable no-op over all-zero scores.
+    // PV and KILLER are left out. is_type<MType::PV> reads the global `info`,
+    // which still holds the previous search, and there's no PV yet anyway. The
+    // killer table was just cleared. History was cleared too, so useHistory is
+    // false.
     size_t start = 0;
     start = orderMoves(pos, movesArray, MType::CAPTURES,  0, start, false);
     start = orderMoves(pos, movesArray, MType::PROMOTION, 0, start, false);
@@ -320,9 +275,8 @@ class SearchData
       moveNodes.push(make_pair(move, make_pair(0, 0)));
   }
 
-  // Read access to the validated principal variation (built by addResult;
-  // every move legality-checked). Used by the UCI info printer so it emits a
-  // legal PV instead of walking the raw pvArray (whose tail can be stale).
+  // The PV built by addResult, with every move checked for legality. The UCI
+  // info line prints this instead of the raw pvArray, whose tail can be stale.
   const Varray<Move, MAX_PLY>&
   getPvLine() const noexcept
   { return pvLine; }
@@ -347,13 +301,10 @@ class SearchData
     return duration >= allotedTime;
   }
 
-  // Abort predicate polled at every search checkpoint: true when the time
-  // budget is spent OR the UCI layer asked to stop. Used in place of
-  // timeOver() at the abort gates so `stop` (and `go infinite`) work.
-  //
-  // The `searchStop` half is tested on every call — it is a plain relaxed load,
-  // and throttling it would delay the UCI `stop` response by a poll interval
-  // for no gain. Only the clock read is throttled (see CLOCK_POLL_INTERVAL).
+  // True when the time is up or the UCI thread asked to stop. The search
+  // checks this instead of timeOver() so that `stop` and `go infinite` work.
+  // searchStop is cheap to read, so it is checked on every call and `stop`
+  // takes effect at once. Only the clock read is throttled.
   bool
   shouldStop() const noexcept
   {
@@ -380,10 +331,9 @@ class SearchData
   {
     pvLine.clear();
 
-    // Bounded by pvLine's capacity, not MAX_PV_ARRAY_SIZE: the root's row in
-    // the triangular pvArray is only the first MAX_PLY entries, so a full-length
-    // legal line would otherwise run off it into the ply-1 row (and the extra
-    // moves would be silently dropped by Varray::push anyway).
+    // Bounded by pvLine's capacity, not MAX_PV_ARRAY_SIZE. The root's row in
+    // pvArray is only MAX_PLY entries long, so reading further would run into
+    // the ply-1 row.
     for (size_t i = 0; i < pvLine.capacity(); i++)
     {
       if (!isLegalMoveForPosition(pv[i], pos))
@@ -392,14 +342,13 @@ class SearchData
       pos.makeMove(pv[i]);
     }
 
-    // Everything up to here was genuinely searched — freeze that bound before
-    // the TT tail goes on, so move ordering only ever sees the searched prefix.
+    // Everything so far was searched. Record its length before adding moves
+    // from the TT, so move ordering only uses the searched part.
     pvSearchedLen = pvLine.size();
 
-    // `pos` now sits at the end of the raw line — walk the TT onward from here
-    // to recover the moves an early-returning node never wrote to pvArray.
-    // `depth` is the iteration that produced this line; the walk needs it to
-    // know how much search each recovered move still has to be backed by.
+    // `pos` is now at the end of the PV. Walk the TT from here to recover the
+    // moves that early-returning nodes didn't write to pvArray. The walk needs
+    // this iteration's depth to check each entry.
     extendPvFromTt(pos, depth);
 
     moveEvals.push(make_pair(pv[0], eval * (2 * side - 1)));
@@ -427,8 +376,8 @@ class SearchData
   pair<Move, Score> lastIterationResult() const noexcept
   { return moveEvals.back(); }
 
-  // The move to play: search() keeps the current best at the front of the root
-  // list via promoteBestMove, including one found by an unfinished iteration.
+  // The move to play. search() keeps the best move at the front of the root
+  // list with promoteBestMove, including one from an unfinished iteration.
   Move
   bestMoveFound() const noexcept
   { return moveNodes[0].first; }
@@ -437,8 +386,8 @@ class SearchData
   totalSearchedNodes() const noexcept
   { return searchedNodes; }
 
-  // Nodes per second over the whole search so far. Guards against a zero
-  // elapsed time on very fast first iterations.
+  // Nodes per second over the whole search so far. Handles zero elapsed time,
+  // which can happen on very fast first iterations.
   Nodes
   nps() const noexcept
   {
@@ -497,25 +446,18 @@ class SearchData
            << " | " << "PV" << "\n";
   }
 
-  // Reorder root moves for the next iteration: move `bestMove` to the front and
-  // leave every other move where it is. Do not sort the tail by subtree size —
-  // node count measures how expensive a move was to refute, not how good it
-  // is, so a cheap-subtree move — refuted quickly *because* it is bad, but
-  // also a strong move whose subtree collapsed on a cutoff — would get buried
-  // at the back. Root LMR is keyed on list index (rootReduction, up to R=3 at
-  // depth >= 6), so burial costs search depth, not just order. Node counts
-  // are still recorded — insertMoveToList / totalNodes / print all read them —
-  // they just don't drive ordering.
+  // Move bestMove to the front of the root list for the next iteration and
+  // keep the other moves in order. Don't sort the rest by node count. A small
+  // subtree can mean a bad move that was refuted quickly, or a good move whose
+  // subtree cut off early. Root LMR reduces by list position (up to R=3 at
+  // depth >= 6), so a good move pushed to the back would lose depth. Node
+  // counts are still recorded for printing.
   void
   promoteBestMove(Move bestMove)
   {
-    // Aspiration fail-low: rootAlphaBeta returns without ever writing
-    // pvArray[0], since by definition no move beat alpha. Fall back to the last
-    // completed iteration's best move — moveEvals is seeded in the constructor
-    // and only appended on completed iterations, so back() is always a legal
-    // move of this position. (Pinning nothing leaves the list untouched, and
-    // the previous iteration already put its best move in slot 0 — this
-    // matters the moment anything reorders the tail again.)
+    // On an aspiration fail-low no move beat alpha, so rootAlphaBeta never
+    // wrote pvArray[0]. Use the best move of the last completed iteration.
+    // moveEvals is seeded in the constructor, so back() is always a legal move.
     if (bestMove == NULL_MOVE)
     {
       if (moveEvals.size() == 0)
@@ -527,10 +469,8 @@ class SearchData
     {
       if (filter(bestMove) == filter(moveNodes[i].first))
       {
-        // Rotate, not swap. With the sort gone the tail carries meaningful
-        // order, and std::swap would fling whatever held slot 0 out to
-        // position i. rotate(begin, begin+i, begin+i+1) lifts element i to the
-        // front, shifts 0..i-1 right by one, and leaves everything past i alone.
+        // Rotate instead of swap so the other moves keep their order. This
+        // moves element i to the front and shifts 0..i-1 right by one.
         std::rotate(moveNodes.begin(), moveNodes.begin() + i, moveNodes.begin() + i + 1);
         break;
       }
@@ -574,9 +514,9 @@ class SearchData
   }
 };
 
-// SEE-orders a pure capture list for quiescence search, in place (SEE
-// descending). `floor` sets how many leading moves are kept even when their
-// SEE score is negative. Returns the count of leading moves worth searching.
+// Sorts a capture list for quiescence by SEE, best first, in place. The first
+// `floor` moves are kept even if their SEE is negative. Returns how many moves
+// from the front should be searched.
 size_t
 orderCaptures(const ChessBoard& pos, MoveArray& movesArray, size_t floor);
 

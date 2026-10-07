@@ -1,37 +1,56 @@
-# Tab-completion for the `elsa` chess engine CLI (PowerShell).
+# Tab completion for the elsa command line (PowerShell).
 #
-# Install: dot-source this file from your PowerShell profile, e.g.
-#   . "C:\Users\ayush\OneDrive\Desktop\Ayush\Chess\chess_engine\Utility\completions\elsa.ps1"
+# To install, dot-source this file from your PowerShell profile:
+#   . <path to repo>\Utility\completions\elsa.ps1
 #
-# Then `elsa <Tab>` cycles subcommands; after a subcommand, its flags are offered.
-# Subcommand list mirrors src/task.cpp::task() (commandMap) + the default `uci` loop.
+# `elsa <Tab>` cycles through the subcommands. Once a subcommand is typed, its
+# flags are offered too. After `difficulty` it offers the difficulty levels.
+# After any other flag that takes a value it offers file and folder names.
+# Keep the subcommand list in step with commandMap in src/task.cpp, plus `uci`,
+# and the flags in step with `elsa help`.
 
 Register-ArgumentCompleter -Native -CommandName elsa,elsa.exe -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
     $subcommands = @('help','accuracy','speed','go','count','movegen','static',
-                     'bestmove','readyOk','isDraw','tune','egvalidate','uci')
+                     'bestmove','readyOk','isDraw','tune','egvalidate','egsolve',
+                     'egprobe','uci')
 
     $flagsBySub = @{
-        go         = @('fen','time','depth','debug')
+        go         = @('fen','time','depth','hash','debug')
         count      = @('fen','depth')
         movegen    = @('fen','depth','output')
         static     = @('fen')
-        bestmove   = @('fen','difficulty','depth','time')
+        bestmove   = @('fen','difficulty','depth','time','hash')
         isDraw     = @('fen')
-        egvalidate = @('pieces','oracle','threads','mirror','nocache','allfiles','dump')
-        tune       = @('data','iters','--all','dir')
+        egvalidate = @('pieces','oracle','threads','mirror','nocache','allfiles',
+                       'dump','dumpfalse','cube','combos','sums','frozen','freeze',
+                       'maxk','top')
+        egsolve    = @('pieces','threads','sweep','check','verify','target')
+        egprobe    = @('fen','threads','nocache')
+        tune       = @('data','iters','weights','--all','dir','pst','tables',
+                       'unfold','free')
+        uci        = @('hash')
     }
 
-    $tokens   = $commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() }
-    $prevWord = if ($tokens.Count) { $tokens[-1] } else { '' }
+    # Flags followed by a value.
+    $valueFlags = @('fen','depth','time','hash','output','pieces','threads','dump',
+                    'cube','freeze','maxk','top','data','iters','weights','dir',
+                    'tables','unfold')
 
-    # value-completion: `elsa bestmove difficulty <Tab>`
+    # @() keeps $tokens an array when there is only one token. While a word is
+    # half typed it is the last token, so the word before it is one further back.
+    $tokens   = @($commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() })
+    $prevWord = if ($wordToComplete) { $tokens[-2] } else { $tokens[-1] }
+
     if ($prevWord -eq 'difficulty') {
         return @('beginner','easy','medium','hard','expert') |
             Where-Object { $_ -like "$wordToComplete*" } |
             ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
     }
+
+    # Returning nothing makes PowerShell offer file and folder names.
+    if ($valueFlags -contains $prevWord) { return }
 
     $activeSub  = $tokens | Where-Object { $subcommands -contains $_ } | Select-Object -First 1
     $candidates =

@@ -45,12 +45,11 @@ class EvalData
   { return pos.count<BLACK, PAWN>() + pieces[BLACK] == 0; }
 };
 
-// Runtime-tunable evaluation blend weights (mg/eg split). Each weight scales a
-// per-component subtotal before the midgame/endgame scores are blended. A single
-// global instance is mutated in place by the tuner between iterations (the engine is
-// single-threaded). Mobility and threats are midgame-only and king-distance is
-// endgame-only, matching how midGameScore/endGameScore use them. Mobility is split
-// per piece type so the tuner can rebalance among bishop / knight / rook / queen.
+// Eval weights, split into midgame and endgame. Each weight scales one term
+// before the midgame and endgame scores are blended. The tuner changes the one
+// global instance between iterations. Mobility and threats are midgame-only and
+// king distance is endgame-only, as in midGameScore and endGameScore. Mobility
+// has one weight per piece type so the tuner can balance them.
 struct EvalWeights
 {
   float materialWeightMg      = 1.0f;
@@ -66,7 +65,7 @@ struct EvalWeights
   float distanceWeightEg      = 1.0f;  // endgame-only king-distance term
   float bishopPairWeightMg    =  40.0f;
   float bishopPairWeightEg    =  55.0f;  // pair worth more in open endgames
-  float rookFileWeightMg      =  16.0f;  // x units: open~32cp, semi-open~16cp (mg-only)
+  float rookFileWeightMg      =  16.0f;  // per unit: open file ~32cp, semi-open ~16cp (midgame-only)
   float isolatedPawnWeightMg  = -16.0f;  // penalty; weight carries the sign
   float isolatedPawnWeightEg  =  -4.0f;  // eg isolani much milder than mg
 };
@@ -82,24 +81,25 @@ Score
 evaluate(const ChessBoard& pos);
 
 
-// White-relative per-component eval subtotals for one position, cached by the tuner so
-// each iteration is pure arithmetic (no board/movegen). The blend is linear in the
-// weights given these subtotals + phase, so evalFromComponents() reproduces
-// evaluate<false>() (white-relative) exactly. `tunable` is false for special endgames
-// (loneKing / bishopPawn) which bypass the weighted eval -- those must be skipped.
+// Eval terms for one position, White minus Black. The tuner caches these so
+// each iteration is plain arithmetic, with no board or move generation. The
+// eval is linear in the weights, so evalFromComponents() gives exactly what
+// evaluate<false>() gives (from White's side). `tunable` is false for the
+// special endgames that skip the weighted eval (lone king, and king + bishop +
+// pawn vs king). The tuner skips those.
 struct EvalComponents
 {
   bool  tunable = false;
   float phase   = 0.0f;
-  // midgame components. Mobility is stored per piece type as raw popcount sums, so
-  // the tuner sees an unbiased per-piece subtotal.
+  // Midgame terms. Mobility is stored per piece type as raw popcount
+  // differences.
   float matMg = 0.0f, ptMg = 0.0f, threats = 0.0f;
   float mobBishop = 0.0f, mobKnight = 0.0f, mobRook = 0.0f, mobQueen = 0.0f;
-  // eval batch: bishopPair (-1/0/+1) and isolated (whiteIso-blackIso) feed BOTH
-  // phases; rookFileMg is mg-only. All white-relative unit diffs.
+  // bishopPair (-1/0/+1) and isolated (White's isolated pawns minus Black's)
+  // are used in both phases. rookFileMg is midgame-only.
   float bishopPair = 0.0f, rookFileMg = 0.0f, isolated = 0.0f;
-  // endgame components; pawnEg is the endgame pawn-structure subtotal
-  // (passers / king-escort / safe-promote + doubled). No midgame counterpart.
+  // Endgame terms. pawnEg is the endgame pawn structure score (passed pawns,
+  // king support, safe promotion, doubled pawns). It has no midgame version.
   float matEg = 0.0f, ptEg = 0.0f, pawnEg = 0.0f, distance = 0.0f;
 };
 
@@ -117,8 +117,8 @@ struct PhaseSums
 PhaseSums
 phaseSumsFromComponents(const EvalComponents& ec, const EvalWeights& w);
 
-// Mirrors evaluate()'s arithmetic exactly, including the int truncation of the
-// mg/eg subscores before the phase blend.
+// Does exactly what evaluate() does, including truncating the midgame and
+// endgame scores to int before the phase blend.
 Score
 evalFromComponents(const EvalComponents& ec, const EvalWeights& w);
 

@@ -9,8 +9,8 @@ using std::min;
 
 EvalWeights evalWeights;
 
-// Table lookups -- see the metric note in lookup_table.h. `distance` is the
-// evaluation's long-standing name for the manhattan metric.
+// Distance helpers from lookup_table.h. In the eval, `distance` means
+// Manhattan distance.
 using plt::chebyshevDistance;
 using plt::manhattanDistance;
 
@@ -20,35 +20,34 @@ distance(Square s, Square t)
 
 
 // ---------------------------------------------------------------------------
-// Internal eval types. Implementation details of evaluate() -- the header exposes
-// only what callers and the tuner need (EvalData / EvalWeights / EvalComponents).
+// Types used only inside evaluate(). The header only has what callers and the
+// tuner need (EvalData, EvalWeights, EvalComponents).
 // ---------------------------------------------------------------------------
 
-// Fixed-point denominator for the king-safety chain.
+// Fixed-point scale for the king safety terms.
 //
-// openFilesScore and lackOfSafety are ratios whose integer division truncates:
-// `lackOfSafety = 2 * openFiles * (4 - kingMobility) / (defenders + 1)` evaluates to
-// 4/9 for a castled king behind an intact pawn shield, i.e. 0, which would zero the
-// whole `attackValue * lackOfSafety` channel -- every "my pieces are aimed at their
-// king" term vanishing for exactly the positions where the attack is being built.
-// Carrying those quantities in KS_SCALE-ths and dividing out once, at the end of
-// threats(), keeps the chain continuous.
+// openFilesScore and lackOfSafety are ratios, and integer division rounds them
+// down. For a castled king behind an unbroken pawn shield,
+// `lackOfSafety = 2 * openFiles * (4 - kingMobility) / (defenders + 1)` is 4/9,
+// which rounds to 0 and removes the whole attackValue * lackOfSafety term. So
+// these values are multiplied by KS_SCALE and divided back once, at the end of
+// threats().
 //
-// attackValue's own `/ 4` is deliberately left truncating (see sideAttacks()): fixing
-// it is a scale change, not a precision fix. With that one exception threatsScore
-// keeps its original scale, so the tuned threatsWeightMg still applies. Worst-case
-// intermediate is ~4e7, well inside int32.
+// attackValue's `/ 4` still rounds down (see sideAttacks()). Apart from that,
+// threatsScore has the same scale as without KS_SCALE, so the tuned
+// threatsWeightMg still fits. The largest intermediate value is about 4e7,
+// well inside int32.
 constexpr Score KS_SCALE = 64;
 
-// Per-colour attack summary, built once per eval and shared by king safety, king
-// mobility and the mobility subtotals. All three consumers want the same attack sets
-// over the same `pos.all()` occupancy, so one pass feeds them all: 14 magic lookups
-// at full midgame material instead of the ~56 a per-consumer pass would cost.
+// Attack sets for one side, built once per eval and used by king safety, king
+// mobility and mobility. All three need the same attacks with the same
+// occupancy, so one pass serves them all: 14 attack lookups with full material
+// instead of about 56.
 struct AttackInfo
 {
-  Bitboard bishop, knight, rook, queen;  // per-type unions -- mobility scores each type
-  Bitboard all;                          // ... plus pawns and king, for king mobility
-  Score attackValue;                     // king-ring pressure, in KS_SCALE-ths
+  Bitboard bishop, knight, rook, queen;  // per piece type, for mobility
+  Bitboard all;                          // the above plus pawns and king, for king mobility
+  Score attackValue;                     // attacks near the enemy king, scaled by KS_SCALE
 };
 
 struct EvalAttacks
@@ -56,15 +55,15 @@ struct EvalAttacks
   AttackInfo side[COLOR_NB];  // indexed by Color (BLACK = 0, WHITE = 1)
 };
 
-// White-relative piece-count differences, computed once and consumed by the midgame
-// material score, the endgame material score and the king-distance term.
+// Piece-count differences (White minus Black), computed once. Used by the
+// midgame and endgame material scores and the king distance term.
 struct MaterialDiffs
 {
   int pawn, bishop, knight, rook, queen;
 };
 
-// Subtotals that BOTH phases consume, so midGameScore() and endGameScore() share one
-// computation rather than each doing its own.
+// Terms used by both phases, so midGameScore() and endGameScore() compute them
+// once.
 struct SharedTerms
 {
   MaterialDiffs material;
@@ -74,9 +73,9 @@ struct SharedTerms
   int isolated;
 };
 
-// White-relative per-piece-type mobility subtotals (raw popcount diffs, no per-piece
-// scaling -- the EvalWeights scalars do that). Used by both the live eval and the
-// Texel cache so the two stay in lockstep.
+// Mobility per piece type, White minus Black. These are raw popcount
+// differences; the EvalWeights values scale them. The eval and the tuner's
+// cache both use this, so they always match.
 struct MobilityDiffs
 {
   float bishop, knight, rook, queen;
@@ -93,10 +92,11 @@ struct MobilityDiffs
 
 #ifndef THREATS
 
-// One pass over the pieces of type `pt`: unions their attack sets and scores king-ring
-// pressure at the same time. kingOuterMasks is built as the outer ring with kingMasks
-// and the king square removed (lookup_table.cpp, buildKingOuterTable), so the two rings
-// are disjoint and one attack set can be tested against both.
+// One pass over the pieces of type `pt`. Collects their attacks and scores the
+// ones that reach the squares around the enemy king. kingOuterMasks is the outer
+// ring without kingMasks and the king square (buildKingOuterTable in
+// lookup_table.cpp), so the two rings don't overlap and one attack set can be
+// tested against both.
 template <Color cMy, PieceType pt, Score incInner, Score incOuter>
 static Bitboard
 collectAttacks(const ChessBoard& pos, Bitboard occupied, Square kingSqEmy, Score& ksValue)
@@ -136,10 +136,9 @@ sideAttacks(const ChessBoard& pos)
            | pawnAttackSquares<cMy>(pos)
            | attackSquares<KING>(kingSqMy, occupied);
 
-  // Deliberately keeps the original integer `/ 4` before lifting into KS_SCALE-ths.
-  // Dropping this truncation too is a scale change, not a precision fix: it inflates a
-  // quantity that multiplies lackOfSafety (which reaches ~260 for an exposed king) by
-  // ~75%, which the tuned threatsWeightMg no longer fits. It needs a retune first.
+  // The integer `/ 4` is kept before scaling by KS_SCALE. Without the rounding,
+  // attackValue would grow by about 75%. It is multiplied by lackOfSafety (up to
+  // about 260 for an exposed king), so threatsWeightMg would need retuning.
   info.attackValue = (ksValue / 4) * KS_SCALE;
 
   return info;
@@ -173,7 +172,7 @@ template <Color cMy>
 static Score
 attackDistanceScore(const ChessBoard& pos)
 {
-  // Hoisted: shared by all five calls below.
+  // Used by all five calls below.
   const Square emyKingSq = squareNo(pos.piece<~cMy, KING>());
   Score distanceScore = VALUE_ZERO;
 
@@ -203,13 +202,13 @@ openFilesScore(const ChessBoard& pos)
 
     columnBb <<= 1;
   }
-  // KS_SCALE-ths of the original `(score / 4) + 1`. The 1<<(7-dist) ramp above is
-  // still a step function -- smoothing its shape is a separate change; this only
-  // stops the divide from quantising it further.
+  // `(score / 4) + 1`, scaled by KS_SCALE. The 1<<(7-dist) values above are
+  // still a step function. The scale only stops the division from rounding
+  // them further.
   return (score * KS_SCALE) / 4 + KS_SCALE;
 }
 
-// `emyAttacks` is the opposing colour attack union, already built by sideAttacks().
+// `emyAttacks` is the other side's attacks, already built by sideAttacks().
 template <Color cMy>
 static Score
 kingMobilityScore(const ChessBoard& pos, const AttackInfo& emyAttacks)
@@ -283,17 +282,18 @@ threatsImpl(const ChessBoard& pos, const EvalAttacks& atk)
   Score defendersCountWhite = defendersCount<WHITE>(pos);
   Score defendersCountBlack = defendersCount<BLACK>(pos);
 
-  // attackValue* and openFileDeduction* arrive in KS_SCALE-ths; everything below stays
-  // in KS_SCALE-ths and is divided out once, at threatsScore.
+  // attackValue* and openFileDeduction* are scaled by KS_SCALE. Everything below
+  // stays scaled, and the scale is divided out once, in threatsScore.
   Score lackOfSafetyWhite = 2 * (openFileDeductionWhite * (4 - kingMobilityWhite)) / (defendersCountWhite + 1);
   Score lackOfSafetyBlack = 2 * (openFileDeductionBlack * (4 - kingMobilityBlack)) / (defendersCountBlack + 1);
 
-  // attackValue * lackOfSafety is KS_SCALE^2; distanceScore is unscaled and has to be
-  // lifted into KS_SCALE-ths to be added to it.
+  // attackValue * lackOfSafety is scaled by KS_SCALE^2, so divide by KS_SCALE
+  // once. distanceScore isn't scaled, so multiply it by KS_SCALE before adding.
   Score currentAttackWhite = (attackValueWhite * lackOfSafetyBlack) / KS_SCALE + (distanceScoreWhite * KS_SCALE) / (defendersCountBlack + 1);
   Score currentAttackBlack = (attackValueBlack * lackOfSafetyWhite) / KS_SCALE + (distanceScoreBlack * KS_SCALE) / (defendersCountWhite + 1);
 
-  // Likewise: attackersLeft is a plain count, openFileDeduction^2 is KS_SCALE^2.
+  // Same here: attackersLeft is a plain count, and openFileDeduction^2 is scaled
+  // by KS_SCALE^2.
   Score longTermAttackWhite = ((attackersLeftWhite * attackersLeftWhite * KS_SCALE) + (openFileDeductionBlack * openFileDeductionBlack) / KS_SCALE) / (32 + defendersCountBlack);
   Score longTermAttackBlack = ((attackersLeftBlack * attackersLeftBlack * KS_SCALE) + (openFileDeductionWhite * openFileDeductionWhite) / KS_SCALE) / (32 + defendersCountWhite);
 
@@ -301,8 +301,8 @@ threatsImpl(const ChessBoard& pos, const EvalAttacks& atk)
 
   if (debug)
   {
-    // The king-safety chain runs in KS_SCALE-ths (see KS_SCALE); print the values it
-    // actually represents, not the raw fixed-point integers.
+    // The king safety values are scaled by KS_SCALE. Print the real values, not
+    // the scaled integers.
     const auto ks = [](Score v) { return double(v) / double(KS_SCALE); };
 
     cout << "-------------------- THREATS --------------------\n"
@@ -331,8 +331,8 @@ threatsImpl(const ChessBoard& pos, const EvalAttacks& atk)
   return threatsScore;
 }
 
-// Public entry point (evaluation.h): builds the attack maps itself. evaluate() calls
-// threatsImpl() directly so it can share the maps with mobility and king safety.
+// The public version (evaluation.h), which builds the attack sets itself.
+// evaluate() calls threatsImpl() directly so it can share them with mobility.
 template <bool debug>
 Score
 threats(const ChessBoard& pos)
@@ -442,8 +442,8 @@ mobilityDiffs(const EvalAttacks& atk)
   };
 }
 
-// Board-wide inputs are hoisted above the caller pawn loop and passed in, rather
-// than re-derived for every pawn.
+// The caller computes the board-wide inputs once and passes them in, instead
+// of computing them for every pawn.
 template <Color cMy>
 static bool
 isPassedPawn(Bitboard emyPawns, Square pawnSq)
@@ -532,10 +532,10 @@ template <Color winningSide, bool debug>
 static Score
 loneKingEndGame(const ChessBoard& pos, const MaterialDiffs& md)
 {
-  // Pushes the losing king toward a corner (distanceScore pulls the winning
-  // king closer to it for the mate). With a bishop + knight, only the corner
-  // matching the bishop's square colour is a forced win, so centreScore below
-  // is biased toward that pair of corners specifically.
+  // Pushes the losing king toward a corner, and distanceScore brings the
+  // winning king closer for the mate. With bishop and knight, only the corners
+  // of the bishop's colour are a forced win, so centreScore below adds a bonus
+  // for those two corners.
 
   constexpr Color losingSide  = ~winningSide;
 
@@ -592,7 +592,7 @@ pawnStructureScoreEndgame(const ChessBoard& pos, const EvalData& ed)
     column <<= 1;
   }
 
-  // Loop invariants: neither these nor the passed-pawn helper inputs vary per pawn.
+  // These are the same for every pawn, so compute them once.
   const Bitboard emyPawns = pos.piece<cEmy, PAWN>();
   const Square       kpos = squareNo(pos.piece< cMy, KING>());
   const Square      ekpos = squareNo(pos.piece<cEmy, KING>());
@@ -703,8 +703,9 @@ evaluate(const ChessBoard& pos)
     return score * side2move;
   }
 
-  // Built once and shared: the attack maps feed king safety AND mobility; material,
-  // piece-square, bishopPair and isolated feed both the midgame and the endgame subscore.
+  // Computed once and shared. The attack sets are used by king safety and
+  // mobility. Material, piece-square, bishop pair and isolated pawns are used by
+  // both the midgame and the endgame score.
   const EvalAttacks atk = computeAttacks(pos);
   const SharedTerms shared = {
     material,
@@ -747,15 +748,15 @@ extractEvalComponents(const ChessBoard& pos)
   float phase = ed.phase;
   int pieceCount = pos.count<ALL>();
 
-  // Special endgames bypass the weighted eval entirely (see evaluate()): their score
-  // does not depend on the 9 weights, so they are not tunable.
+  // These special endgames skip the weighted eval (see evaluate()). Their score
+  // doesn't use the weights, so they can't be tuned.
   if (pieceCount < 3)
   {
     if (pieceCount == 2
     and pos.count<PAWN  >() == 1
     and pos.count<BISHOP>() == 1
     and pos.count<WHITE, ALL>() == 1)
-      return ec;  // bishopPawnEndgame, tunable = false
+      return ec;  // minorPiecePawnEndgame, tunable = false
   }
 
   if ((pos.count<PAWN>() == 0) and (ed.pieces[WHITE] == 0 or ed.pieces[BLACK] == 0))

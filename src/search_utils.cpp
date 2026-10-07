@@ -35,8 +35,8 @@ clearHistory()
 void
 updateHistory(Color c, Move move, Depth depth)
 {
-  // depth is >= 1 here: alphaBeta hands depth <= 0 to quiescenceSearch before
-  // any move is staged, so the bonus is always positive.
+  // depth is at least 1 here, since alphaBeta hands depth <= 0 to
+  // quiescenceSearch, so the bonus is always positive.
   const int bonus = int(depth) * int(depth);
   int32_t& h = historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))];
 
@@ -51,9 +51,9 @@ penalizeHistory(Color c, Move move, Depth depth)
   const int malus = int(depth) * int(depth);
   int32_t& h = historyTable[c][size_t(from_sq(move))][size_t(to_sq(move))];
 
-  // Use the same gravity update as the bonus, mirrored around zero.
-  // The '+' is intentional: as h becomes more negative, the malus decreases
-  // and approaches -MAX_HISTORY instead of growing without bound.
+  // The same update as the bonus, mirrored around zero. The '+' is on purpose:
+  // as h gets more negative the malus shrinks, so h approaches -MAX_HISTORY
+  // instead of growing without limit.
   h -= int32_t(malus + int(h) * malus / int(MAX_HISTORY));
 }
 

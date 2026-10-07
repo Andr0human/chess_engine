@@ -9,8 +9,8 @@
 #include <filesystem>
 #include <fstream>
 
-// For locating the running executable, so the disk cache anchors beside the
-// binary rather than to the (caller-controlled) working directory.
+// For finding the running executable, so the disk cache is kept next to the
+// binary instead of in the working directory.
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -43,18 +43,17 @@ constexpr int MAX_MEN = EgSolver::MAX_MEN;
 // Square of each slot's man, in slot order.
 using Squares = std::array<int, MAX_MEN>;
 
-// On-disk cache format. MAGIC tags the layout; SOLVER_VERSION tags the *meaning*
-// of the bytes and MUST be bumped whenever the solver, move generation, or
-// legality test changes, so stale tables from an older engine are rejected
-// rather than silently trusted. Either mismatch => the file is ignored and the
-// table is re-solved. (Escape hatch for an un-versioned change: `nocache`.)
+// Cache file format. CACHE_MAGIC marks the layout. SOLVER_VERSION marks what
+// the bytes mean, and must be bumped whenever the solver, move generation or
+// the legality test changes, so tables from an older engine are rejected. On
+// either mismatch the file is ignored and the table is solved again. (If a
+// change wasn't versioned, run with `nocache`.)
 constexpr char     CACHE_MAGIC[4]   = { 'E', 'G', 'W', '2' };
 constexpr uint32_t SOLVER_VERSION   = 4;
 
-// Fixed-size header prefixed to the packed table (EgSolver::Table). Every field
-// is re-validated on load (incl. the signature itself and the trailing byte
-// count), so a collision or truncated/partial file can never feed the oracle
-// wrong data.
+// Fixed-size header before the packed table (EgSolver::Table). Every field is
+// checked on load, including the signature and the byte count, so a wrong,
+// truncated or partly written file is never used.
 struct CacheHeader
 {
   char     magic[4];
@@ -64,9 +63,9 @@ struct CacheHeader
   uint64_t total;            // == the layout's total; (total + 3) / 4 bytes follow
 };
 
-// Absolute directory of the running executable, or an empty path if it can't
-// be determined. Lets the cache anchor beside the binary instead of the CWD,
-// so launching elsa from any directory reuses the same cache files.
+// Folder of the running executable, or an empty path if it can't be found.
+// The cache goes next to the binary instead of the working directory, so
+// running elsa from any folder uses the same cache files.
 std::filesystem::path
 exeDir()
 {
@@ -118,11 +117,11 @@ pawnCount(const Sig& sig)
   return n;
 }
 
-// Material with which no checkmate position exists at all -> every position is
-// a draw, no table needed. (Bare kings, or one lone minor.) NOTE: this is
-// strictly the "no mate is even constructible" set: KK, KNK, KBK. Two minors,
-// a rook, a queen, or a pawn all admit mate positions and must be solved.
-// Core takes a raw men span so the hot path (valueOf) can avoid a Sig alloc.
+// Material with which no checkmate is possible at all, so every position is a
+// draw and no table is needed: bare kings, or a single minor (KK, KNK, KBK).
+// Two minors, a rook, a queen or a pawn can all give mate and must be solved.
+// This version takes a plain array so the hot path (valueOf) doesn't allocate
+// a Sig.
 bool
 insufficient(const Piece* men, int n)
 {
@@ -148,10 +147,10 @@ bool
 sideNotToMoveInCheck(const ChessBoard& pos, Color stm)
 { return (stm == WHITE) ? inCheck<BLACK>(pos) : inCheck<WHITE>(pos); }
 
-// Signatures reachable from `sig` by ONE capture or ONE promotion. The
-// transitive closure of this relation reaches every signature reachable by any
-// single legal move (a combined capture-promotion = promote then capture), so
-// it is enough to discover the whole sub-tablebase DAG.
+// Signatures reachable from `sig` by one capture or one promotion. Applying
+// this repeatedly reaches every signature any legal move can lead to (a
+// capture that promotes counts as a promotion and then a capture), so it finds
+// every smaller table the target needs.
 void
 childSignatures(const Sig& sig, std::set<Sig>& out)
 {
@@ -409,9 +408,10 @@ setupBoard(ChessBoard& pos, const Sig& sig, const Squares& sqs, int n, Color stm
   pos.csep = 64;
 }
 
-// Geometry-only legality (no movegen): distinct squares, pawns on ranks 2-7,
-// kings not adjacent. Catches the bulk of illegal index slots cheaply. Core
-// takes a raw men span so probe() can avoid a Sig alloc.
+// Legality from geometry alone, without move generation: distinct squares,
+// pawns on ranks 2-7, kings not next to each other. This cheaply rules out most
+// illegal entries. This version takes a plain array so probe() doesn't
+// allocate a Sig.
 bool
 geometryLegal(const Piece* men, const Squares& sqs, int n)
 {
@@ -438,11 +438,11 @@ bool
 geometryLegal(const Sig& sig, const Squares& sqs, int n)
 { return geometryLegal(sig.data(), sqs, n); }
 
-// Read the men off a board into slot order, sorted by Piece; squares come out
-// of the bitboard in ascending order and the sort is stable, so identical men
-// end up by square. Returns the number of men, which the caller guarantees is
-// at most MAX_MEN. Allocation-free -- this is the hot path (called once per
-// successor probe, billions of times during a solve).
+// Read the men off a board in slot order, sorted by Piece. Squares come out of
+// the bitboard in ascending order and the sort is stable, so identical men end
+// up sorted by square. Returns the number of men, which the caller guarantees
+// is at most MAX_MEN. It doesn't allocate, because it runs once for every
+// successor probed, billions of times during a solve.
 int
 readMen(const ChessBoard& pos, std::array<Piece, MAX_MEN>& men, Squares& sqs)
 {
@@ -465,7 +465,7 @@ readMen(const ChessBoard& pos, std::array<Piece, MAX_MEN>& men, Squares& sqs)
   return n;
 }
 
-// Does the canonical men span equal an already-canonical signature? (No alloc.)
+// Whether the sorted men match a signature, without allocating.
 bool
 sameSig(const std::array<Piece, MAX_MEN>& men, int n, const Sig& sig)
 {
@@ -571,15 +571,15 @@ EgSolver::valueIn(const ChessBoard& pos, const Sig& sig, const Layout& layout,
   if (insufficient(men.data(), n))
     return Wdl::DRAW;
 
-  // Overwhelmingly common case: a quiet move stays in the given table. Resolve
-  // it without ever building a Sig (no alloc).
+  // The usual case: a quiet move stays in this table. Look it up without
+  // building a Sig.
   Wdl v;
   if (sameSig(men, n, sig))
     v = own(indexOf(layout, sqs, pos.color));
   else
   {
-    // Rare: a capture/promotion successor, resolved in an already-solved child
-    // table. Only here do we pay for a Sig to key the registry.
+    // Rare: a capture or promotion leads into a smaller table that is already
+    // solved. Only this case builds a Sig to look up the registry.
     const Table& t = registry.at(Sig(men.begin(), men.begin() + n));
     v = t.at(indexOf(t.layout, sqs, pos.color));
   }
@@ -693,11 +693,12 @@ EgSolver::solve(const Sig& sig, TableStats& stats)
   currentLayout = layout;
   currentTable = &table;
 
-  // Pass 1: classify illegal / terminal / interior(UNKNOWN). Every index is
-  // independent, so this fans out across cores. Each thread keeps its own board
-  // (its undo stack is a member, so distinct boards never alias) and writes only
-  // its own slots. The unused reflection of a position with both kings on the
-  // diagonal (see indexOf) stays ILLEGAL, so each position is checked once.
+  // Pass 1: mark each entry illegal, terminal (mate or stalemate), or UNKNOWN.
+  // Entries are independent, so this runs in parallel. Each thread has its own
+  // board (the undo stack is a member, so boards never share one) and writes
+  // only its own entries. The unused reflection of a position with both kings
+  // on the diagonal (see indexOf) stays ILLEGAL, so each position is checked
+  // once.
   #pragma omp parallel
   {
     Squares sqs{};
@@ -723,11 +724,11 @@ EgSolver::solve(const Sig& sig, TableStats& stats)
     }
   }
 
-  // Relaxation to a fixpoint: a node is WIN if any successor is a LOSS for the
-  // opponent, LOSS if every successor is a WIN for the opponent; otherwise it
-  // settles to DRAW. Values only ever flip UNKNOWN -> WIN/LOSS (monotone), and
-  // the fixpoint does not depend on the order positions are checked in, so both
-  // methods reach the same table.
+  // Then repeat until nothing changes. A position is a WIN if some move reaches
+  // a LOSS for the opponent, a LOSS if every move reaches a WIN for the
+  // opponent, and otherwise a DRAW. Values only change from UNKNOWN to WIN or
+  // LOSS, and the result doesn't depend on the order positions are checked in,
+  // so both methods give the same table.
   if (fullSweeps)
     relaxFullSweeps(sig, layout, table, stats);
   else
@@ -743,20 +744,20 @@ EgSolver::solve(const Sig& sig, TableStats& stats)
   registry.emplace(sig, Table{ layout, pack(table) });
 }
 
-// The original method: every sweep re-checks every undecided position, until a
-// sweep decides nothing. The number of sweeps is about the longest win in the
-// table, and the draws are re-checked on every one of them.
+// The original method: every sweep checks every undecided position again,
+// until a sweep decides nothing. There are about as many sweeps as the longest
+// win in the table, and the draws are checked again in every one.
 //
-// Each sweep runs in parallel. The race on `table` is benign: a uint8 store is
-// atomic on x86, and the only transitions are UNKNOWN -> WIN/LOSS, both final.
-// A thread that reads a sibling's just-written WIN/LOSS merely converges
-// faster; one that still reads UNKNOWN (treated as "not WIN, not LOSS") simply
-// defers that node to a later sweep. A node is finalized LOSS only when *all*
-// its successors are already WIN (final), so no node is ever decided wrongly --
-// the fixpoint reached is bit-identical to the serial version. Each thread
-// collects the indices it could not yet decide into a local list; those are
-// merged to form the next sweep's worklist. Every table up to 5 men has fewer
-// than 2^32 entries, so uint32 indices suffice.
+// Each sweep runs in parallel. The threads race on `table`, but harmlessly: a
+// uint8 store is atomic on x86, and the only changes are UNKNOWN to WIN or
+// LOSS, which are final. A thread that sees another thread's new WIN or LOSS
+// just finishes sooner. One that still sees UNKNOWN (treated as neither WIN
+// nor LOSS) leaves that position for a later sweep. A position only becomes a
+// LOSS when all its successors are already WIN, which is final, so nothing is
+// decided wrongly and the result is the same as a serial run. Each thread
+// collects the positions it couldn't decide yet, and together they make the
+// next sweep's list. Every table up to 5 men has fewer than 2^32 entries, so
+// uint32 indices are enough.
 void
 EgSolver::relaxFullSweeps(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
                           TableStats& stats)
@@ -818,11 +819,11 @@ EgSolver::relaxFullSweeps(const Sig& sig, const Layout& layout, std::vector<Wdl>
 // changes nothing.
 //
 // The positions to check are kept as bitsets over the table, one bit per entry,
-// so duplicates collapse for free and each sweep walks the table in index order.
-// Each word of `cur` is read and cleared by one thread; `next` is set by many,
-// hence the atomic OR. The race on `table` is the benign one described above:
-// a position decided during a sweep is a predecessor's trigger for the next
-// sweep, whether or not the predecessor already saw it in this one.
+// so duplicates merge for free and each sweep walks the table in index order.
+// Each word of `cur` is read and cleared by one thread. `next` is set by many,
+// hence the atomic OR. The race on `table` is harmless, as above: a position
+// decided during a sweep queues its predecessors for the next sweep, whether
+// or not they already saw it in this one.
 void
 EgSolver::relaxFrontier(const Sig& sig, const Layout& layout, std::vector<Wdl>& table,
                         TableStats& stats)
@@ -912,7 +913,7 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
     return false;
   }
 
-  // Discover the full DAG of signatures that must be solved.
+  // Find every signature that has to be solved.
   std::set<Sig> seen;
   std::vector<Sig> needed;
   std::queue<Sig> q;
@@ -931,9 +932,10 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
     for (const Sig& k : kids) q.push(k);
   }
 
-  // Bottom-up order: fewer men first, and pawnless before pawnful at equal
-  // count (a pawn only leaves its table by promoting -> a pawnless table of the
-  // same count, or being captured -> a smaller table; both solved earlier).
+  // Smallest first: fewer men first, and at the same count, no pawns before
+  // pawns. A pawn only leaves its table by promoting (into a pawnless table of
+  // the same count) or by being captured (into a smaller table), and both are
+  // solved earlier.
   std::sort(needed.begin(), needed.end(),
             [] (const Sig& a, const Sig& b)
             {
@@ -941,10 +943,10 @@ EgSolver::build(const std::vector<Piece>& extras, std::string& err)
               return pawnCount(a) < pawnCount(b);
             });
 
-  // Solve bottom-up. Each table is a pure function of move generation, so a
-  // cached copy on disk is reloaded verbatim (sub-second) instead of recomputed;
-  // a miss solves and then persists for next time. Children are cached by their
-  // own signature, so they are shared across any target that reaches them.
+  // Solve in that order. A table depends only on move generation, so a copy
+  // on disk is loaded as is (in under a second) instead of being solved again.
+  // A missing table is solved and saved for next time. Smaller tables are
+  // cached under their own signature, so every target that needs one shares it.
   tablesSolved = tablesLoaded = 0;
   lastBuild.clear();
   for (const Sig& s : needed)
@@ -1207,13 +1209,13 @@ EgSolver::resolvedCacheDir() const
     if (!ed.empty())
       return (ed / base).string();
   }
-  return cacheDir;   // absolute, or exe path unknown -> resolves CWD-relative
+  return cacheDir;   // absolute, or exe path unknown (then relative to the working directory)
 }
 
 namespace {
 
-// Key = the canonical signature's raw Piece bytes in hex. Bytes (not FEN
-// letters) because NTFS is case-insensitive: 'P' and 'p' would collide.
+// The key is the signature's raw Piece bytes in hex. Bytes, not FEN letters,
+// because NTFS ignores case and 'P' and 'p' would clash.
 std::string
 sigKey(const Sig& sig)
 {
@@ -1276,8 +1278,8 @@ EgSolver::readCacheFile(const Sig& sig, std::vector<uint8_t>& packed) const
   if (!in.read(reinterpret_cast<char*>(&h), sizeof h))
     return false;
 
-  // Validate every field: a mismatch (old format, stale solver, key collision,
-  // truncated file) is treated as a miss so we re-solve rather than trust it.
+  // Check every field. Any mismatch (old format, old solver, key collision,
+  // truncated file) counts as a miss, and the table is solved again.
   if (std::memcmp(h.magic, CACHE_MAGIC, sizeof h.magic) != 0) return false;
   if (h.solverVer != SOLVER_VERSION)                          return false;
   if (h.n != sig.size())                                      return false;
@@ -1316,8 +1318,8 @@ EgSolver::cacheSave(const Sig& sig)
     h.pieces[i] = static_cast<uint32_t>(sig[i]);
   h.total = table.layout.total;
 
-  // Atomic publish: write a temp file, then rename over the final path so a
-  // crash mid-write never leaves a truncated table that later loads as garbage.
+  // Write a temp file, then rename it over the real path, so a crash during
+  // the write never leaves a truncated table behind.
   const std::string tmp = path + ".tmp";
   {
     std::ofstream out(tmp, std::ios::binary | std::ios::trunc);

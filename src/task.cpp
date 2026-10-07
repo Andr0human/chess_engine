@@ -15,9 +15,9 @@ init(const vector<string>& args)
   perf_clock start = perf::now();
   plt::init();
 
-  // Zobrist keys must always be seeded — hashValue (and therefore repetition
-  // detection) depends on them even when the TT is disabled. Allocating the
-  // table itself stays gated behind USE_TT (resize() re-seeds, harmlessly).
+  // Always seed the Zobrist keys. hashValue, and so repetition detection,
+  // needs them even with the TT off. The table itself is only allocated with
+  // USE_TT (resize() seeds the keys again, which is harmless).
   tt.getRandomKeys();
 
   if constexpr (USE_TT) {
@@ -158,10 +158,9 @@ helper()
 
   puts("** To validate the draw recognizer over a material signature, type:\n");
   puts("** elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles] [dump <file>]\n");
-  puts("**                  [dumpfalse] [cube <file>] [nocapgate] [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]\n");
+  puts("**                  [dumpfalse] [cube <file>] [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]\n");
   puts("**   e.g. 'elsa egvalidate pieces Pb oracle threads 4'  (KPKB vs perfect WDL, 4 threads)\n");
   puts("**        add 'mirror' to also run the colour-mirror (KBKP) colour-symmetry self-check\n");
-  puts("**        'nocapgate' keeps has-capture positions in the call set (diagnostic: search never asks there)\n");
   puts("**        'dumpfalse' limits the dump to false draws; 'cube <file>' writes every emitted bucket as TSV (needs 'oracle')\n");
   puts("**        oracle tables cache under output/egcache/ (sub-second reload); 'nocache' forces a fresh solve\n");
   puts("**        bucket-probe searches (need 'oracle'): combos=feature subsets, sums=signed inequalities,\n");
@@ -367,21 +366,14 @@ isDrawCheck(const vector<string>& args)
 
   cout << "Fen = " << fen << '\n';
 
-  // Mirror the search gate exactly (single_thread.cpp:51, :331): the recognizer
-  // is consulted only on non-terminal positions with no capture available for
-  // the side to move. Report which branch the position falls into.
+  // Same as search: the recognizer is called on every position that isn't
+  // checkmate or stalemate, because search checks for those first.
   const MoveList moves = generateMoves(pos);
 
   if (!moves.anyMove())
   {
     cout << (moves.checkers ? "Terminal: checkmate" : "Terminal: stalemate")
          << "  (recognizer not consulted)\n";
-    return;
-  }
-
-  if (moves.exists<MType::CAPTURES>(pos))
-  {
-    cout << "Capture available  (search skips the recognizer here)\n";
     return;
   }
 

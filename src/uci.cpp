@@ -25,23 +25,21 @@ using std::stringstream;
 namespace
 {
 
-// Serialises every write to stdout. See uciSend() in uci.h for why std::cout
-// has no lock of its own here.
+// Guards every write to stdout. uciSend() in uci.h explains why it's needed.
 std::mutex g_outMutex;
 
-// Persistent board across commands within a session.
+// The board, kept across commands for the whole session.
 ChessBoard g_board(START_FEN);
 
-// The search runs on this worker so the UCI loop stays responsive to
-// stop/quit/isready while thinking. Only one search runs at a time (it owns
-// the global `info` and the shared TT), so callers stop-and-join the previous
-// worker before starting anything that touches that shared state.
+// The search runs on this thread so the UCI loop can still answer stop, quit
+// and isready while it thinks. Only one search runs at a time, since it uses
+// the global `info` and the TT. Stop and join the old worker before starting
+// anything that touches them.
 std::thread g_worker;
 
-// Raise the abort flag (polled by the search via SearchData::shouldStop) and
-// wait for the worker to unwind and emit its `bestmove`. Safe to call when no
-// search is running. `searchStop` is left set; handleGo clears it before the
-// next launch.
+// Set the stop flag (the search checks it in SearchData::shouldStop) and wait
+// for the worker to finish and print `bestmove`. Safe to call when no search
+// is running. searchStop stays set; handleGo clears it before the next search.
 void
 stopAndJoin()
 {
@@ -82,10 +80,9 @@ handlePosition(stringstream& ss)
   }
   else if (token == "fen")
   {
-    // Read FEN fields until we hit "moves" or the stream ends. FEN is
-    // typically six space-separated fields, but we don't rely on the
-    // count — we stop on the "moves" sentinel so we don't accidentally
-    // swallow it (or stop one token short of it).
+    // Read FEN fields until "moves" or the end of the line. A FEN usually has
+    // six fields, but don't count on it. Stop at "moves" so it isn't read as
+    // part of the FEN.
     fen.clear();
     while (ss >> token)
     {
@@ -114,30 +111,29 @@ handlePosition(stringstream& ss)
   }
 }
 
-// A fixed slice of the clock reserved for move-transmission / process latency
-// so we never plan to think right up to the flag. In-process (Chessmate) this
-// is nearly free, but over an external GUI's stdio pipes (cutechess/fastchess)
-// the go→bestmove round-trip latency is real and un-budgeted; a self-play
-// sanity run flagged once on time even in-process (zero margin). 40 ms sits
-// comfortably above typical pipe latency without eating meaningfully into
-// think time at blitz. Tune up if time-losses ever appear over an external GUI.
+// Time kept back for sending the move and for process latency, so the engine
+// never plans to think right up to the flag. In-process (Chessmate) the
+// latency is almost zero, but over an external GUI's pipes (cutechess,
+// fastchess) it is real. 40 ms is above normal pipe latency and costs little
+// thinking time at blitz. Raise it if games are lost on time with an external
+// GUI.
 constexpr double MOVE_OVERHEAD = 0.040;  // seconds
 
-// Decide how long to search given the side-to-move's remaining clock and
+// Decide how long to search, given the side to move's remaining clock and
 // increment (both in milliseconds). Returns the budget in seconds.
 double
 decideSearchTime(long long sideTimeMs, long long sideIncMs)
 {
-  // Shave the overhead off the usable clock up front so both the budget formula
-  // and the 62% cap below plan against time we can actually afford to spend.
+  // Take the overhead off the clock first, so the budget formula and the 62%
+  // cap below only plan with time that can really be spent.
   const double timeLeft  =
       std::max(0.0, double(sideTimeMs) / 1000.0 - MOVE_OVERHEAD);  // seconds
   const double increment = double(sideIncMs)  / 1000.0;            // seconds
 
-  // Estimate moves remaining from how much material is left: a full board
-  // (weight 7880) implies ~32 moves to go; as material comes off the estimate
-  // shrinks, so each remaining move gets a larger slice. Material weights
-  // match Unity's PositionWeight(): P100 N320 B300 R500 Q900.
+  // Estimate the moves left from the material left. A full board (weight 7880)
+  // means about 32 moves to go. The estimate shrinks as material comes off, so
+  // each move gets a bigger share. The piece values match Unity's
+  // PositionWeight(): P100 N320 B300 R500 Q900.
   const double maxMoves  = 32.0;
   const double maxWeight = 7880.0;
   const double currentWeight =
@@ -155,16 +151,15 @@ decideSearchTime(long long sideTimeMs, long long sideIncMs)
   // Never spend more than 62% of the remaining clock on one move.
   searchTime = std::min(searchTime, 0.62 * timeLeft);
 
-  // Floor at 1 ms so the search always gets a sane positive budget
-  // (matches the Mathf.Max(1, ...) the Unity send site applied).
+  // At least 1 ms, so the search always gets a positive budget (the same floor
+  // as Unity's Mathf.Max(1, ...)).
   return std::max(searchTime, 0.001);
 }
 
-// Stand-in for "no time limit": a budget so large the clock can never end the
-// search, leaving `stop` (or the depth limit) as the only terminator. Used for
-// `go infinite` and for any `go` that names no time constraint at all. Kept as
-// a finite number of seconds rather than an infinity so the duration_cast in
-// SearchData stays well-defined; 1e9 s is ~1e18 ns, comfortably inside int64.
+// Means "no time limit": so many seconds that the clock never ends the
+// search, and only `stop` or the depth limit does. Used for `go infinite` and
+// for a `go` with no time limit. It's a finite number so the duration_cast in
+// SearchData stays well defined. 1e9 s is about 1e18 ns, which fits in int64.
 constexpr double NO_TIME_LIMIT = 1e9;  // seconds
 
 void
@@ -200,37 +195,34 @@ handleGo(stringstream& ss)
     {
       moveTimeSec = NO_TIME_LIMIT;
     }
-    // Unknown tokens are ignored silently.
+    // Unknown tokens are ignored.
   }
 
   if (moveTimeSec < 0)
   {
-    // No explicit movetime. A time budget is only appropriate when the GUI
-    // actually gave us a time constraint: with a clock we manage it ourselves,
-    // but `go depth <n>` (and a bare `go`) name no time at all and must run
-    // until the depth limit or an async `stop` — capping those at a default
-    // makes the GUI's setting silently inert. En Croissant's analysis pane
-    // sends exactly these forms (`go depth 20` ... `stop`), so a default cap
-    // here would return a shallower search than the requested depth.
+    // No movetime. Only use a time budget if the GUI gave a time limit. With a
+    // clock the engine manages its own time. `go depth <n>` and a bare `go`
+    // give no time, so they run until the depth limit or `stop`. A default
+    // cap would stop them early: En Croissant's analysis sends `go depth 20`
+    // and later `stop`, and would get a shallower search than it asked for.
     long long sideTime = (g_board.color == WHITE) ? wtime : btime;
     long long sideInc  = (g_board.color == WHITE) ? winc  : binc;
 
     if (sideTime > 0)
       moveTimeSec = decideSearchTime(sideTime, sideInc);
     else if (sawClock)
-      // A clock was sent but the side to move has none left (flagged, or a
-      // malformed value). Nothing to manage; answer with the floor rather than
-      // thinking forever on a lost clock.
+      // A clock was sent but the side to move has no time left (flagged, or a
+      // bad value). Search for the default time instead of thinking forever.
       moveTimeSec = double(DEFAULT_SEARCH_TIME);
     else
       moveTimeSec = NO_TIME_LIMIT;
   }
 
-  // Stop any prior search and launch this one on the worker. The board is
-  // copied into the lambda so later `position` edits can't disturb a running
-  // search. The worker prints `bestmove` when search() returns — whether it
-  // ended by depth/time or an async `stop`. Iterative-deepening table dumps go
-  // to a discarded sink; only the UCI `info`/`bestmove` lines reach stdout.
+  // Stop any running search and start this one on the worker. The board is
+  // copied into the lambda so a later `position` can't change a running
+  // search. The worker prints `bestmove` when search() returns, whether it hit
+  // the depth or time limit or got `stop`. The per-depth table goes to a sink
+  // that is thrown away, so only `info` and `bestmove` lines reach stdout.
   stopAndJoin();
   searchStop.store(false, std::memory_order_relaxed);
 
@@ -241,9 +233,8 @@ handleGo(stringstream& ss)
   });
 }
 
-// `setoption name <id> [value <x>]`. Hash is the only option we advertise;
-// anything else is accepted and ignored, which is what the loop did with every
-// setoption before this existed.
+// `setoption name <id> [value <x>]`. Hash is the only option advertised. Any
+// other option is accepted and ignored.
 void
 handleSetOption(stringstream& ss)
 {
@@ -259,16 +250,15 @@ handleSetOption(stringstream& ss)
   if (name != "Hash" or token != "value")
     return;
 
-  // Read as a number rather than stoul'd from a string, so GUI-supplied text
-  // cannot throw on a thread that has no handler for it. A malformed value
-  // leaves the table exactly as it was.
+  // Read as a number instead of with stoul, so bad text from the GUI can't
+  // throw on a thread with no handler. A bad value leaves the table as it was.
   unsigned long long mb = 0;
   if (!(ss >> mb))
     return;
 
-  // resize() frees and reallocates both tables, so it must not run under a live
-  // search -- same reason ucinewgame stops first. Every stored entry goes with
-  // it, which is what the GUI asked for.
+  // resize() frees and reallocates both tables, so it can't run during a
+  // search (ucinewgame stops first for the same reason). All stored entries
+  // are lost, which is expected.
   stopAndJoin();
   if constexpr (USE_TT) {
     tt.resize(size_t(mb));
@@ -328,8 +318,8 @@ uciLoop()
     }
     else if (cmd == "stop")
     {
-      // Raise the abort flag; the worker observes it at its next checkpoint,
-      // unwinds, and prints `bestmove`. It is joined on the next go/quit.
+      // Set the stop flag. The worker sees it at its next check, returns and
+      // prints `bestmove`. It is joined on the next go or quit.
       searchStop.store(true, std::memory_order_relaxed);
     }
     else if (cmd == "setoption")
@@ -341,10 +331,10 @@ uciLoop()
       stopAndJoin();
       break;
     }
-    // Silently accept: debug, register, ponderhit, etc.
+    // Ignore the rest: debug, register, ponderhit, etc.
   }
 
-  // Reached on EOF (stdin closed) without an explicit `quit`: never let a
-  // joinable std::thread destruct, which would std::terminate the process.
+  // Reached when stdin closes without `quit`. Destroying a joinable
+  // std::thread would terminate the process, so join it first.
   stopAndJoin();
 }

@@ -16,7 +16,7 @@ thread_local bool             BucketProbe::tlValid = false;
 
 namespace {
 
-// Render a feature vector as "(v0,v1,...)" / a name list as "(n0, n1, ...)".
+// Write a feature vector as "(v0,v1,...)" or a name list as "(n0, n1, ...)".
 template <typename T>
 std::string
 joinTuple(const std::vector<T>& v, const char* sep)
@@ -32,10 +32,10 @@ joinTuple(const std::vector<T>& v, const char* sep)
   return os.str();
 }
 
-// Both reports are driven entirely by what the recognizer emits, so an empty
-// tally means no emit site is planted -- the normal state between mining
-// sessions, since the scaffolding is stripped back out before each push. Say so
-// instead of printing nothing, which reads as a broken tool.
+// The reports show only what the recognizer emits, so an empty tally means it
+// has no emit() call. That is normal when no mining is going on, since the emit
+// calls are taken out before pushing. Say so instead of printing nothing, which
+// would look like a broken tool.
 void
 reportNoFeatures(std::ostream& out, const std::string& title)
 {
@@ -47,9 +47,9 @@ reportNoFeatures(std::ostream& out, const std::string& title)
          "        BucketProbe::emit({{\"feat0\", v0}, {\"feat1\", v1}, ...});\n\n";
 }
 
-// The sum search runs on the TERM-tagged features only, so an untagged pool is
-// not an error -- it means this recognizer has declared no vocabulary that adds
-// up. Say which knob supplies it rather than printing an empty table.
+// The sum search uses only TERM features, so having none isn't an error. It
+// means the recognizer tagged no features that can be added up. Say how to tag
+// them instead of printing an empty table.
 void
 reportNoTerms(std::ostream& out, const std::string& title)
 {
@@ -60,7 +60,7 @@ reportNoTerms(std::ostream& out, const std::string& title)
          "      BucketProbe::emit({{\"pawnR\", pawnR, BucketProbe::TERM}, ...});\n\n";
 }
 
-// Render a signed sum as the rule it stands for: "+pawnR -kPromoD >= 4".
+// Write a signed sum as the rule it stands for: "+pawnR -kPromoD >= 4".
 std::string
 ruleString(const std::vector<std::string>& termNames, const std::vector<int>& sigma,
            bool upper, int t)
@@ -79,8 +79,8 @@ ruleString(const std::vector<std::string>& termNames, const std::vector<int>& si
   return os.str();
 }
 
-// One mined halfspace: a coefficient per TERM, a threshold, and which side of it
-// the rule claims.
+// One rule found by the sum search: a coefficient per TERM, a threshold, and
+// which side of the threshold the rule claims as drawn.
 struct SumCand
 {
   std::vector<int> sigma;          // coefficient per TERM, in {-1,0,+1}
@@ -89,10 +89,10 @@ struct SumCand
   uint64_t         score = 0;      // draws claimable on that side
 };
 
-// Everything the sum search learns from one cube: the TERM pool it drew on, and
-// every admissible halfspace at each L0, best first. Kept separate from the
-// printing so the freeze pass can mine the same rules and spend them as feature
-// coordinates instead of tabling them.
+// What the sum search finds in one cube: the TERM features it used, and every
+// valid rule for each count of nonzero coefficients (L0), best first. Kept apart
+// from the printing so the frozen search can use the same rules as features
+// instead of printing them.
 struct SumMining
 {
   std::vector<size_t>               pool;        // cube indices of the TERMs
@@ -100,9 +100,8 @@ struct SumMining
   std::vector<std::vector<SumCand>> byL0;        // byL0[k-1]: candidates at L0 == k
 };
 
-// Evaluate a mined halfspace against a full-cube key. `sigma` is indexed by TERM,
-// `pool` maps that back to the cube's coordinate, so this reads the same key the
-// mining flattened.
+// Does the rule hold for this full cube key? `sigma` is indexed by TERM, and
+// `pool` maps each TERM back to its place in the key.
 bool
 holds(const SumCand& c, const std::vector<size_t>& pool, const BucketTally::Key& key)
 {
@@ -112,11 +111,11 @@ holds(const SumCand& c, const std::vector<size_t>& pool, const BucketTally::Key&
   return c.upper ? (s >= c.t) : (s <= c.t);
 }
 
-// The search itself: for every sign vector over the TERM pool, re-key the cube by
-// the raw sum and find the extreme threshold past which no bucket holds a decided
-// position. See reportSumSearch's header comment for why the sum stays unclamped,
-// why the first nonzero coefficient may be pinned, and why both directions are
-// scanned regardless.
+// The search itself: for every sign choice over the TERM features, re-key the
+// cube by the sum and find the furthest threshold past which no bucket holds a
+// decided position. reportSumSearch's comment in bucket_probe.h explains why
+// the sum isn't clamped, why the first nonzero coefficient is always +1, and why
+// both directions are scanned.
 SumMining
 mineSums(const BucketTally& cube, size_t maxL0)
 {
@@ -134,10 +133,10 @@ mineSums(const BucketTally& cube, size_t maxL0)
   if (maxL0 == 0)
     return out;
 
-  // Flatten the cube's TERM coordinates once. Every sign vector rescans this, so
-  // it has to be a contiguous walk: remap() would re-allocate a key per row per
-  // candidate, which is affordable for one re-key (see the sweep tables in
-  // reportSumSearch) but not for thousands.
+  // Copy the cube's TERM values into one flat array once. Every sign choice
+  // reads all of it, so it must be fast. remap() allocates a key per row, which
+  // is fine for one re-key (like the sum table in reportSumSearch) but not for
+  // thousands.
   const std::vector<BucketTally::Bucket> all = cube.buckets();
   const size_t                           R   = all.size();
 
@@ -156,8 +155,9 @@ mineSums(const BucketTally& cube, size_t maxL0)
     decOf[r]  = all[r].decided;
   }
 
-  // A sum of maxL0 terms is bounded by maxL0 * maxAbs either way, so the whole
-  // sweep indexes into one small array -- no map, no clamping, no lost tail.
+  // A sum of maxL0 terms lies between -maxL0 * maxAbs and +maxL0 * maxAbs, so
+  // the sums index one small array. No map is needed, and nothing is clamped or
+  // lost at the ends.
   const int    off  = static_cast<int>(maxL0) * maxAbs;
   const size_t span = static_cast<size_t>(2 * off + 1);
 
@@ -178,8 +178,8 @@ mineSums(const BucketTally& cube, size_t maxL0)
         if (mask & (uint64_t{1} << j))
           bits.push_back(j);
 
-      // Signs for the chosen terms, first pinned to +1 (its negation is the same
-      // cut, and both sides of every cut get scanned below).
+      // Signs for the chosen terms, with the first always +1. Its negation
+      // splits the positions the same way, and both sides are scanned below.
       for (uint64_t sgn = 0; sgn < (uint64_t{1} << (k - 1)); ++sgn)
       {
         std::vector<int> sigma(m, 0);
@@ -204,8 +204,8 @@ mineSums(const BucketTally& cube, size_t maxL0)
           hiIdx = std::max(hiIdx, idx);
         }
 
-        // Where the decided positions stop is where the rule may start. Claiming
-        // `sum >= t` is admissible exactly for t above the highest decided sum.
+        // A rule can only start where the decided positions stop. Claiming
+        // `sum >= t` is valid exactly when t is above the highest decided sum.
         size_t hiDec = loIdx, loDec = hiIdx;
         bool   anyDec = false;
         for (size_t i = loIdx; i <= hiIdx; ++i)
@@ -226,9 +226,9 @@ mineSums(const BucketTally& cube, size_t maxL0)
 
         if (!anyDec)
         {
-          // No decided position anywhere: the whole call set of this recognizer is
-          // drawn, so the sum discriminates nothing. One degenerate row says that
-          // without pretending the two directions are distinct rules.
+          // No decided position at all: every position in the call set is a
+          // draw, so the sum tells nothing apart. Add one row that claims it
+          // all, instead of two rules for the two directions.
           claim(true, loIdx, hiIdx, static_cast<int>(loIdx) - off);
           continue;
         }
@@ -240,8 +240,8 @@ mineSums(const BucketTally& cube, size_t maxL0)
       }
     }
 
-    // Best recall first, then a deterministic order: the bucket-count tiebreak the
-    // subset search uses is meaningless here (a halfspace is always two buckets).
+    // Highest score first, then a fixed order. The subset search breaks ties by
+    // bucket count, but that means nothing here, since a rule always gives two.
     std::sort(cands.begin(), cands.end(), [](const SumCand& a, const SumCand& b) {
       if (a.score != b.score) return a.score > b.score;
       if (a.sigma != b.sigma) return a.sigma < b.sigma;
@@ -252,10 +252,9 @@ mineSums(const BucketTally& cube, size_t maxL0)
   return out;
 }
 
-// The ceiling on any search over this cube, printed in both report headers. No
-// rule expressible in these features can claim more than the draws the cube
-// holds, and none is admissible where the decided positions sit -- so a run that
-// scores 0 is only news once you can see how much was on the table to begin with.
+// The most any search over this cube could claim, printed at the top of both
+// reports. No rule over these features can claim more than the cube's draws.
+// Seeing it makes a score of 0 easier to judge.
 std::string
 cubeCeiling(const BucketTally& cube)
 {
@@ -296,9 +295,9 @@ BucketTally::positionCount() const
   return n;
 }
 
-// A part's draw example is still a draw of the union, and likewise for the decided
-// class, so samples carry across every re-key unchanged -- remap() handles that.
-// In practice they are empty here: `combos`, the only caller, turns sampling off.
+// A draw example from a merged bucket is still a draw of the new bucket, and
+// the same goes for decided ones, so remap() keeps the examples. Here there are
+// none anyway: the searches are the only callers, and they turn examples off.
 BucketTally
 BucketTally::project(const std::vector<size_t>& featIdx) const
 {
@@ -386,9 +385,9 @@ BucketTally::report(std::ostream& out, const std::string& title) const
     if (pureDraw)
       pureDrawTotal += draw;
 
-    // Decided-to-draw ratio: carve-out efficiency (false-draws killed per draw
-    // sacrificed if this whole bucket is turned into a return-false). A pure-
-    // decided bucket (no draws) is infinitely favourable -> "inf".
+    // Decided positions per draw: how many false draws a `return false` for
+    // this whole bucket would remove for each draw it gives up. A bucket with no
+    // draws prints "inf".
     std::ostringstream ratioStr;
     if (draw == 0)
       ratioStr << (decided == 0 ? "0.00" : "inf");
@@ -410,8 +409,8 @@ BucketTally::report(std::ostream& out, const std::string& title) const
         << "   " << (pureDraw ? "PURE-DRAW"
                     : pureDecided ? "PURE-DECIDED" : "mixed") << '\n';
 
-    // Examples of each class beneath their bucket. On a `mixed` bucket, reading
-    // the two lists against each other is what reveals the missing feature.
+    // Examples of each kind under their bucket. On a mixed bucket, comparing
+    // the two lists shows what feature is missing.
     for (const std::string& f : r.drawFens)
       out << "      draw> " << f << '\n';
     for (const std::string& f : r.decFens)
@@ -463,9 +462,9 @@ reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
   {
     std::vector<Cand> cands;
 
-    // Enumerate every size-k subset of the pool via popcount over bitmasks. The
-    // pool is small (a handful of features), so the 2^n scan is negligible next
-    // to the projection work it drives.
+    // Go through every subset of size k, as bitmasks with k bits set. The pool
+    // has only a few features, so scanning all 2^n masks costs little next to
+    // the projections.
     for (uint64_t mask = 1; mask < (uint64_t{1} << n); ++mask)
     {
       if (static_cast<size_t>(std::popcount(mask)) != k)
@@ -486,8 +485,8 @@ reportSubsetSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
     if (cands.empty())
       continue;
 
-    // Best score first; ties broken toward the coarser subset (fewer buckets =
-    // simpler rule), then by pool order so the output is deterministic.
+    // Best score first. Ties go to the subset with fewer buckets (a simpler
+    // rule), then to pool order, so the output is always the same.
     std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) {
       if (a.score != b.score)               return a.score > b.score;
       if (a.totalBuckets != b.totalBuckets) return a.totalBuckets < b.totalBuckets;
@@ -534,8 +533,8 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
     return;
   }
 
-  // The sum search draws only on the TERM pool: FLAGs are excluded by their tag,
-  // not by their sign, so they never enter a candidate at all.
+  // The sum search uses only TERM features. FLAGs are left out by their tag, so
+  // they are never part of a candidate.
   const SumMining          mined     = mineSums(cube, maxL0);
   const std::vector<size_t>& pool     = mined.pool;
   const std::vector<std::string>& termNames = mined.termNames;
@@ -567,9 +566,10 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
   {
     const std::vector<SumCand>& cands = mined.byL0[k - 1];
 
-    // Unlike the subset search, an empty size is a real and common outcome here: a
-    // halfspace claims an entire tail, so one decided position at either extreme
-    // sinks every threshold. Say so -- silence reads as a broken search.
+    // Unlike in the subset search, finding nothing at a size is common here. A
+    // rule claims everything past its threshold, so decided positions at both
+    // ends rule out every threshold. Say so, since printing nothing would look
+    // like a broken search.
     if (cands.empty())
     {
       out << "  L0=" << k << "   no admissible rule: every halfspace at this size"
@@ -591,9 +591,9 @@ reportSumSearch(std::ostream& out, const BucketTally& cube, size_t maxL0,
           << std::right << std::setw(12) << cands[i].score << '\n';
     out << '\n';
 
-    // The full sweep behind the winner: one re-key of the cube by its sum, which
-    // is what remap() is for. Reading down it shows the threshold as a fact rather
-    // than a fitted number -- the row where PURE-DRAW stops *is* the constant.
+    // Print the best rule's full table: the cube re-keyed by its sum with
+    // remap(). Reading down it shows where the threshold comes from: it is the
+    // row where the PURE-DRAW buckets stop.
     const SumCand& best = cands[0];
     const std::vector<int>& sigma = best.sigma;
     cube.remap(
@@ -628,9 +628,9 @@ reportFrozenSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
     return;
   }
 
-  // Pick across every L0 at once: unlike the per-L0 tables, which exist to show
-  // where the marginal gain stops paying, a frozen slot just wants the strongest
-  // discriminator available -- its own L0 has already been paid for.
+  // Pick from every L0 at once. The per-L0 tables are there to show when one
+  // more coefficient stops being worth it. A frozen rule just needs to be the
+  // strongest one available.
   std::vector<SumCand> ranked;
   for (const std::vector<SumCand>& cs : mined.byL0)
     ranked.insert(ranked.end(), cs.begin(), cs.end());
@@ -641,8 +641,9 @@ reportFrozenSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
     return a.upper > b.upper;
   });
 
-  // One slot per sign vector: two thresholds on the same cut are the same
-  // discriminator twice, and the duplicate would crowd out a distinct one.
+  // One rule per sign choice. Two thresholds on the same sum split the
+  // positions in nearly the same way, and the copy would push out a different
+  // rule.
   std::vector<SumCand> frozen;
   for (const SumCand& c : ranked)
   {
@@ -674,18 +675,17 @@ reportFrozenSearch(std::ostream& out, const BucketTally& cube, size_t maxK,
         << "claims " << f.score << " draws\n";
   out << '\n';
 
-  // Append the frozen halfspaces as coordinates. Bucket count is unchanged -- each
-  // is a function of TERMs already in the key, so no two keys can collide and none
-  // can split. The cube stays the same sufficient statistic; it just gained a
-  // vocabulary the subset search can name.
+  // Add the frozen rules to each key. The bucket count doesn't change: each rule
+  // depends only on TERMs already in the key, so no two keys merge and none
+  // splits. The subset search can now pick the rules as features.
   std::vector<std::string>       newNames = cube.featureNames();
   std::vector<BucketTally::Role> newRoles = cube.featureRoles();
   newRoles.resize(cube.featureCount(), BucketProbe::FLAG);
   for (const SumCand& f : frozen)
   {
     newNames.push_back(ruleString(mined.termNames, f.sigma, f.upper, f.t));
-    // A frozen halfspace is a boolean, so it is a FLAG. Tagging it TERM would let a
-    // later sum add halfspaces to distances -- a sum of sums, which has no unit.
+    // A frozen rule is 0 or 1, so it is a FLAG. As a TERM, a later sum could
+    // add it to distances, which would have no unit.
     newRoles.push_back(BucketProbe::FLAG);
   }
 

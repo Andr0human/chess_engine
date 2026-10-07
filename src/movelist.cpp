@@ -200,10 +200,9 @@ MoveList::fillPawns(
         }
       }
 
-      // Fast path: no hash-move suppression, or this (from,to) isn't the
-      // suppressed pair — emit all four flavors. promoSuppress == 0 is the
-      // common case; the (from,to) compare alone gates the slow path since
-      // a real promoSuppress always carries non-zero from|to bits.
+      // Usual case: no promotion was removed, or it isn't this (from, to), so
+      // add all four. Comparing (from, to) is enough, because a set
+      // promoSuppress always has non-zero from|to bits.
       if ((moveB & 0xFFF) != (promoSuppress & 0xFFF))
       {
         movesArray.push(moveQ);
@@ -255,9 +254,8 @@ MoveList::countMoves() const noexcept
   while (mask > 0)
     moveCount += popCount(destSquares[nextSquare(mask)]);
 
-  // Promotion suppression keeps the shared destSquares bit set so the other
-  // three flavors still emit; the pawn-loop above counted all 4, so subtract
-  // the one fillPawns will skip. promoSuppress == 0 means no suppression.
+  // A removed promotion keeps its shared destSquares bit, so the pawn loop
+  // above counted all four. Subtract the one fillPawns skips.
   if (promoSuppress)
     moveCount -= 1;
 
@@ -294,13 +292,12 @@ MoveList::getMoves(const ChessBoard& pos, MoveArray& movesArray) const noexcept
 {
   const Move colorBit = Move(color) << 22;
 
-  // MType::PROMOTION as an mt1 *selector* means "the quiet pawn moves that land
-  // on the last rank" -- the subset getMoves<QUIET> already emits with bit 21
-  // set, and the one qsearch was missing (promotion-captures carry bit 20 and
-  // so arrive with CAPTURES). The fills below still run as MType::QUIET, so the
-  // emitted encoding is bit-identical to the normal quiet path: fillPawns ORs
-  // in the promotion bit itself for Rank18 destinations. Only the destination
-  // mask and the skipped piece/king loops differ.
+  // With mt1 = MType::PROMOTION this returns only the quiet pawn moves to the
+  // last rank, for qsearch. Capture promotions have the capture bit and come
+  // with CAPTURES. The fills still run as MType::QUIET, so the moves are
+  // encoded exactly as on the normal quiet path (fillPawns sets the promotion
+  // bit for Rank18 squares). Only the destination mask differs, and the piece
+  // and king loops are skipped.
   constexpr bool quietPawns = hasFlag(mt1, MType::QUIET) or hasFlag(mt1, MType::PROMOTION);
   constexpr bool pieceMoves = hasFlag(mt1, MType::QUIET) or hasFlag(mt1, MType::CAPTURES);
   constexpr Bitboard quietMask =
@@ -416,22 +413,20 @@ template <>
 bool
 MoveList::exists<MType::PROMOTION>(const ChessBoard& pos) const noexcept
 {
-  // Quiet promotions only -- promotion-captures already answer to
-  // exists<CAPTURES>, since they carry the capture bit. Mirrors the PROMOTION
-  // branch of getMoves: pawn sources only, single pushes only, Rank18 only.
+  // Quiet promotions only. Capture promotions have the capture bit, so
+  // exists<CAPTURES> covers them. Matches the PROMOTION case in getMoves:
+  // pawns only, single pushes only, Rank18 only.
 
-  // Cheapest possible reject first: no pawn one rank from promoting. Color is
-  // BLACK = 0, WHITE = 1, and BLACK pushes toward Rank1 -- hence Rank2 in slot
-  // 0 and Rank7 in slot 1, not the other way round.
+  // Quick check first: no pawn is one step from promoting. Color is
+  // BLACK = 0, WHITE = 1, and Black pushes toward Rank1, so Rank2 is slot 0
+  // and Rank7 is slot 1.
   constexpr Bitboard prePromoRank[COLOR_NB] = { Rank2, Rank7 };
   if ((myPawns & prePromoRank[color]) == 0)
     return false;
 
-  // Load-bearing, not an optimization: in double check pieceMovement() never
-  // runs, so pawnDestSquares[] is left uninitialized (the constructor zeroes
-  // checkers/initSquares/enpassantPawns but not the dest arrays). getMoves
-  // guards its own pawn section the same way. Reading slot 3 below is only
-  // safe once this has returned.
+  // Needed for correctness, not speed. In double check pieceMovement() never
+  // runs, so pawnDestSquares[] isn't set (the constructor doesn't zero it).
+  // getMoves has the same check. Slot 3 below is only safe to read after it.
   if (checkers >= 2)
     return false;
 
@@ -576,9 +571,9 @@ MoveList::removeMove(Move m) noexcept
 
   if (pt == PAWN)
   {
-    // Promotion: don't clear the destSquares bit (it's shared by all four
-    // Q/R/N/B flavors). Stash bits 0..11 (from|to) and bits 18..19 (piece)
-    // so fillPawns can skip just the one flavor at emission time.
+    // Promotion: keep the destSquares bit, since all four promotions share it.
+    // Save bits 0..11 (from|to) and 18..19 (piece) so fillPawns skips just
+    // this one.
     if ((m >> 21) & 1)
     {
       promoSuppress = m & 0xC0FFF;
@@ -586,9 +581,8 @@ MoveList::removeMove(Move m) noexcept
       return;
     }
 
-    // En passant: encoded as a capture (bit 20) with captured-piece field
-    // (bits 15..17) == NONE, since fillEnpassantPawns leaves that field zero
-    // (the captured pawn isn't on the destination square).
+    // En passant: a capture (bit 20) whose captured-piece field (bits 15..17)
+    // is NONE, because the captured pawn isn't on the destination square.
     const bool isCapture     = (m >> 20) & 1;
     const PieceType captured = PieceType((m >> 15) & 7);
     if (isCapture and captured == NONE)
@@ -598,9 +592,9 @@ MoveList::removeMove(Move m) noexcept
       return;
     }
 
-    // Per-square stored pawn (pinned): the from-square is in initSquares.
-    // Pinned-pawn captures and single/double pushes from a pinned square
-    // land here. (Promotions handled above.)
+    // Pinned pawns are stored per square, so their from-square is in
+    // initSquares. Their captures and pushes are removed here (promotions
+    // were handled above).
     if (fromBit & initSquares)
     {
       destSquares[fromSq] &= ~toBit;
@@ -610,8 +604,8 @@ MoveList::removeMove(Move m) noexcept
       return;
     }
 
-    // Bulk shift-pawn move — identify the bucket from the to-from delta.
-    // Bucket layout (see pawnMovement / fillShiftPawns):
+    // Other pawn moves are stored in four bitboards. Find which one from
+    // to - from (see pawnMovement and fillShiftPawns):
     //   white (color=1): [0]=+9 (right cap), [1]=+7 (left cap), [2]=+16 (dpush), [3]=+8 (spush)
     //   black (color=0): [0]=-7,             [1]=-9,            [2]=-16,        [3]=-8
     const int delta = int(toSq) - int(fromSq);
@@ -622,15 +616,15 @@ MoveList::removeMove(Move m) noexcept
       case   7: case  -9: bucket = 1; break;
       case  16: case -16: bucket = 2; break;
       case   8: case  -8: bucket = 3; break;
-      default: return; // not a legal pawn delta — silently ignore
+      default: return; // not a pawn move, ignore it
     }
     pawnDestSquares[bucket] &= ~toBit;
     ++removedMovesCount;
     return;
   }
 
-  // Knight, bishop, rook, queen, king (castling included — king's 2-square
-  // hop sits in destSquares[king_sq] like any other king destination).
+  // Knight, bishop, rook, queen and king. Castling is stored in
+  // destSquares[king square] like any other king move.
   destSquares[fromSq] &= ~toBit;
   if (destSquares[fromSq] == 0)
     initSquares &= ~fromBit;

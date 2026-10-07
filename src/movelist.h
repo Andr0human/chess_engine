@@ -25,16 +25,14 @@ public:
 
   Bitboard enpassantPawns;
 
-  // Single-promo suppression for the hash-move-before-movegen path.
-  // Packs (from | to<<6) in bits 0..11 and the promo-piece encoding in
-  // bits 18..19 (0=B, 1=N, 2=R, 3=Q — same layout as a real Move). Value
-  // 0 (from==to==0 — impossible) means no suppression.
+  // One promotion that removeMove() took out. Holds from | to<<6 in bits 0..11
+  // and the promotion piece in bits 18..19 (0=B, 1=N, 2=R, 3=Q, as in a Move).
+  // 0 means nothing was removed, since from == to == 0 can't happen.
   Move promoSuppress;
 
-  // Number of times removeMove has been called with effect on this list.
-  // Used as the moveNo bias inside playSubsetMoves so LMR's `moveNo <
-  // LMR_LIMIT` gate accounts for moves searched outside the playAllMoves
-  // loop (i.e. the hash-move fast path).
+  // How many moves removeMove() has taken out. playSubsetMoves adds it to
+  // moveNo, so LMR's `moveNo < LMR_LIMIT` check counts the hash move that was
+  // searched before the staged moves.
   uint16_t removedMovesCount;
 
   // Squares that give check to the enemy king, indexed by piece type:
@@ -84,9 +82,8 @@ public:
   size_t
   countMoves() const noexcept;
 
-  // Short-circuiting "does at least one move exist?" — same semantics as
-  // countMoves() != 0 but stops at the first move found. Used for the
-  // mate/stalemate terminal test where the count itself is irrelevant.
+  // True if there is at least one legal move. Same as countMoves() != 0 but
+  // stops at the first move. Used for the mate and stalemate test.
   bool
   anyMove() const noexcept;
 
@@ -98,14 +95,12 @@ public:
   bool
   exists(const ChessBoard& pos) const noexcept;
 
-  // Remove a single move from the MoveList so subsequent getMoves<>() calls
-  // skip it. Used by the hash-move-before-movegen path to drop the already-
-  // searched hash move without a post-hoc swap+popBack on MoveArray.
+  // Remove one move so later getMoves<>() calls skip it. Used to drop the hash
+  // move after it has been searched.
   //
-  // Promotions: all four flavors (Q/R/B/N) share one destSquares bit, so we
-  // can't clear the bit without dropping the other three legitimate flavors.
-  // Instead, stash (from,to)+piece into promoSuppress; fillPawns skips that
-  // one flavor at emission time.
+  // The four promotions (Q/R/B/N) share one destSquares bit, so clearing the
+  // bit would remove all four. Instead the move is saved in promoSuppress and
+  // fillPawns skips just that one.
   void
   removeMove(Move m) noexcept;
 

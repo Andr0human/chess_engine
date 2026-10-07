@@ -15,7 +15,7 @@ class Varray {
 
   public:
 
-  // Deliberately user-provided: a defaulted ctor would make `Varray<...> x{}`
+  // Written out on purpose: a defaulted constructor would make `Varray<...> x{}`
   // zero-fill all Nm slots. Slots >= Nc are never read.
   Varray() : Nc(0) {}
 

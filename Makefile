@@ -58,31 +58,23 @@ SOURCEDIRS	:= $(shell find $(SRC) -type d)
 # LIBDIRS		:= $(shell find $(LIB) -type d)
 endif
 
-# Delete/mkdir command must match the *recipe* shell, not the OS. On Windows, GNU
-# make runs recipes through sh.exe when it's on PATH (MSYS2 / Git Bash) and only
-# falls back to cmd.exe otherwise. `del` is a cmd builtin and is "command not
-# found" under sh -- which, combined with the `-` (ignore-error) prefix on the
-# clean recipe, silently turns `make clean` into a no-op and leaves stale .o's.
+# The delete and mkdir commands must match the shell that runs the recipes, not
+# the OS. On Windows, GNU make runs recipes with sh.exe when it is on PATH
+# (MSYS2, Git Bash) and with cmd.exe otherwise. `del` only exists in cmd, so
+# under sh `make clean` would fail, and the `-` prefix would hide the failure.
 #
-# Detect coreutils by probing PATH for `rm`, NOT by inspecting $(SHELL): $(SHELL)
-# defaults to /bin/sh and so always contains "sh", even on a bare MinGW install
-# with no sh.exe/rm.exe present -- which picked `rm` and then failed at recipe
-# time with CreateProcess e=2 (make runs metacharacter-free lines directly). If
-# `rm` is on PATH it works whether the line runs directly or via sh; if it isn't,
-# there is no sh either, make falls back to cmd.exe, and `del` is the builtin.
-# RMQUIET silences "Could Not Find" when a clean target is already absent: `del`
-# writes that to stderr, so `2>NUL` drops it; `rm -f` is silent already, so it is
-# empty on the coreutils branches.
+# So check whether `rm` is on PATH. Checking $(SHELL) doesn't work, because it
+# is /bin/sh even on a plain MinGW install with no sh.exe. If rm is found, use
+# it. If not, there is no sh either, recipes run in cmd.exe, and del works.
+# RMQUIET hides del's "Could Not Find" message when there's nothing to delete.
+# rm -f is already quiet.
 #
-# IMPORTANT: the `where rm` probe below must NOT redirect to NUL. This $(shell ...)
-# runs at parse time through *make's* shell -- which is sh.exe when MSYS2/Git Bash
-# is on PATH. Under sh, `NUL` is a plain filename (not the cmd.exe null device), so
-# `2>NUL` here would create a stray 0-byte `NUL` file in the repo root on every make
-# invocation. We can't redirect portably yet (the shell isn't known until this probe
-# resolves), so we don't: `where rm` is silent on stdout/stderr when rm is found, and
-# only prints a harmless one-line "Could not find" to the console on cmd-only systems
-# where rm is absent. RMQUIET (= 2>NUL only on the cmd/del branch) is safe because it
-# is used inside recipes, which by then run via cmd.exe where NUL is the real device.
+# Don't redirect `where rm` to NUL. This $(shell ...) runs in make's own shell,
+# which is sh.exe when MSYS2 or Git Bash is on PATH, and there `2>NUL` creates a
+# file named NUL in the repo root. Without a redirect, `where rm` prints nothing
+# when rm exists and one harmless "Could not find" line when it doesn't.
+# RMQUIET is only used in recipes, which then run in cmd.exe, where NUL is the
+# null device.
 ifeq ($(OS),Windows_NT)
   ifeq ($(shell where rm),)
     FIXPATH = $(subst /,\,$1)
