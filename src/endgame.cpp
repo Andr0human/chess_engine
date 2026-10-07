@@ -163,8 +163,7 @@ isEndgame<Endgames::KBNKN>(const ChessBoard& pos)
 {
   return pos.count<ALL   >() == 3
      and pos.count<BISHOP>() == 1
-     and pos.count<KNIGHT>() == 2
-     and pos.count<WHITE, KNIGHT>() == 1;
+     and pos.count<KNIGHT>() == 2;
 }
 
 template <Endgames e>
