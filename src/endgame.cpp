@@ -9,6 +9,11 @@ using plt::ruleOfSquares;
 using plt::chebyshevDistance;
 using plt::manhattanDistance;
 
+// The dispatcher, declared here so a recognizer can ask about the position after
+// a capture (`isTheoreticalDraw(pos.play(from, to))`).
+static bool
+isTheoreticalDraw(const EgBoard& pos);
+
 
 // TODO: KRRK, KRNK
 
@@ -55,7 +60,7 @@ constexpr Bitboard rank4to7[COLOR_NB] = {
 };
 
 static int
-getRuleOfSquareIndex(const ChessBoard& pos, Color side, Square pawnSq)
+getRuleOfSquareIndex(const EgBoard& pos, Color side, Square pawnSq)
 {
   const int sideAdvantage = int(side == pos.color);
   const int incFactor     = 2 * int(side) - 1;
@@ -76,26 +81,26 @@ getRuleOfSquareIndex(const ChessBoard& pos, Color side, Square pawnSq)
 
 template <Endgames e>
 inline bool
-isEndgame(const ChessBoard& pos) = delete;
+isEndgame(const EgBoard& pos) = delete;
 
 template <>
 inline bool
-isEndgame<Endgames::KPK>(const ChessBoard& pos)
+isEndgame<Endgames::KPK>(const EgBoard& pos)
 { return pos.count<ALL>() == 1 and pos.count<PAWN>() == 1; }
 
 template <>
 inline bool
-isEndgame<Endgames::KNK>(const ChessBoard& pos)
+isEndgame<Endgames::KNK>(const EgBoard& pos)
 { return pos.count<ALL>() == 1 and pos.count<KNIGHT>() == 1; }
 
 template <>
 inline bool
-isEndgame<Endgames::KBK>(const ChessBoard& pos)
+isEndgame<Endgames::KBK>(const EgBoard& pos)
 { return pos.count<ALL>() == 1 and pos.count<BISHOP>() == 1; }
 
 template <>
 inline bool
-isEndgame<Endgames::KPBK>(const ChessBoard& pos)
+isEndgame<Endgames::KPBK>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 2
      and pos.count<PAWN  >() == 1
@@ -104,7 +109,7 @@ isEndgame<Endgames::KPBK>(const ChessBoard& pos)
 
 template <>
 inline bool
-isEndgame<Endgames::KPQK>(const ChessBoard& pos)
+isEndgame<Endgames::KPQK>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 2
      and pos.count<PAWN  >() == 1
@@ -113,17 +118,17 @@ isEndgame<Endgames::KPQK>(const ChessBoard& pos)
 
 template <>
 inline bool
-isEndgame<Endgames::KBBK>(const ChessBoard& pos)
+isEndgame<Endgames::KBBK>(const EgBoard& pos)
 { return pos.count<ALL>() == 2 and pos.count<BISHOP>() == 2; }
 
 template <>
 inline bool
-isEndgame<Endgames::KNNK>(const ChessBoard& pos)
+isEndgame<Endgames::KNNK>(const EgBoard& pos)
 { return pos.count<ALL>() == 2 and pos.count<KNIGHT>() == 2; }
 
 template <>
 inline bool
-isEndgame<Endgames::KBNK>(const ChessBoard& pos)
+isEndgame<Endgames::KBNK>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 2
      and pos.count<BISHOP>() == 1
@@ -132,7 +137,7 @@ isEndgame<Endgames::KBNK>(const ChessBoard& pos)
 
 template<>
 inline bool
-isEndgame<Endgames::KRBK>(const ChessBoard& pos)
+isEndgame<Endgames::KRBK>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 2
      and pos.count<ROOK  >() == 1
@@ -141,7 +146,7 @@ isEndgame<Endgames::KRBK>(const ChessBoard& pos)
 
 template <>
 inline bool
-isEndgame<Endgames::KPNK>(const ChessBoard& pos)
+isEndgame<Endgames::KPNK>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 2
      and pos.count<PAWN  >() == 1
@@ -150,7 +155,7 @@ isEndgame<Endgames::KPNK>(const ChessBoard& pos)
 
 template <>
 inline bool
-isEndgame<Endgames::KPRK>(const ChessBoard& pos)
+isEndgame<Endgames::KPRK>(const EgBoard& pos)
 {
   return pos.count<ALL >() == 2
      and pos.count<PAWN>() == 1
@@ -159,7 +164,7 @@ isEndgame<Endgames::KPRK>(const ChessBoard& pos)
 
 template <>
 inline bool
-isEndgame<Endgames::KBNKN>(const ChessBoard& pos)
+isEndgame<Endgames::KBNKN>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 3
      and pos.count<BISHOP>() == 1
@@ -168,11 +173,11 @@ isEndgame<Endgames::KBNKN>(const ChessBoard& pos)
 
 template <Endgames e>
 inline bool
-Endgame(const ChessBoard& pos) = delete;
+Endgame(const EgBoard& pos) = delete;
 
 template <>
 inline bool
-Endgame<Endgames::KPK>(const ChessBoard& pos)
+Endgame<Endgames::KPK>(const EgBoard& pos)
 {
   const Color side = pos.count<WHITE, PAWN>() ? WHITE : BLACK;
   const Color emySide = ~side;
@@ -284,7 +289,7 @@ Endgame<Endgames::KPK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KPBK>(const ChessBoard& pos)
+Endgame<Endgames::KPBK>(const EgBoard& pos)
 {
   // Evaluate from the bishop side.
   const Color side2move = pos.color;
@@ -437,7 +442,7 @@ Endgame<Endgames::KPBK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KPQK>(const ChessBoard& pos)
+Endgame<Endgames::KPQK>(const EgBoard& pos)
 {
   // Look from the pawn side (the side that does not hold the queen)
   const Color side2move = pos.color;
@@ -641,7 +646,7 @@ Endgame<Endgames::KPQK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KNNK>(const ChessBoard& pos)
+Endgame<Endgames::KNNK>(const EgBoard& pos)
 {
   // A knight apiece (KNKN): drawn unless a king is cornered by its own knight.
   if (pos.count<WHITE, KNIGHT>() == 1)
@@ -684,7 +689,7 @@ Endgame<Endgames::KNNK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KBBK>(const ChessBoard& pos)
+Endgame<Endgames::KBBK>(const EgBoard& pos)
 {
   // A bishop apiece (KBKB): drawn unless a king is cornered by its own bishop.
   if (pos.count<WHITE, BISHOP>() == 1)
@@ -699,7 +704,7 @@ Endgame<Endgames::KBBK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KBNK>(const ChessBoard& pos)
+Endgame<Endgames::KBNK>(const EgBoard& pos)
 {
   // A minor apiece (KBKN): drawn unless a king is cornered by its own minor.
   if (pos.count<WHITE, ALL>() == 1)
@@ -736,7 +741,7 @@ Endgame<Endgames::KBNK>(const ChessBoard& pos)
 
 template <>
 bool
-Endgame<Endgames::KRBK>(const ChessBoard& pos)
+Endgame<Endgames::KRBK>(const EgBoard& pos)
 {
   if ((pos.count<WHITE, ALL>() == 2) or (pos.count<BLACK, ALL>() == 2))
     return false;
@@ -998,7 +1003,7 @@ Endgame<Endgames::KRBK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KPNK>(const ChessBoard& pos)
+Endgame<Endgames::KPNK>(const EgBoard& pos)
 {
   // Evaluate from the knight side.
   const Color side2move = pos.color;
@@ -1097,7 +1102,7 @@ Endgame<Endgames::KPNK>(const ChessBoard& pos)
 
 template <>
 inline bool
-Endgame<Endgames::KPRK>(const ChessBoard& pos)
+Endgame<Endgames::KPRK>(const EgBoard& pos)
 {
   // Look from the pawn side, which defends against the rook. Like KPQK and
   // KPNK, this covers both ways the material can be split. KP vs KR has the
@@ -1207,7 +1212,7 @@ Endgame<Endgames::KPRK>(const ChessBoard& pos)
 // bitboard.
 template <>
 bool
-Endgame<Endgames::KBNKN>(const ChessBoard& pos)
+Endgame<Endgames::KBNKN>(const EgBoard& pos)
 {
   const Color atk = pos.count<WHITE, BISHOP>() ? WHITE : BLACK;
   const Color def = ~atk;
@@ -1323,8 +1328,8 @@ Endgame<Endgames::KBNKN>(const ChessBoard& pos)
                and akKnD >= 3 and dnSafe >= 1 and !bLine);
 }
 
-bool
-isTheoreticalDraw(const ChessBoard& pos)
+static bool
+isTheoreticalDraw(const EgBoard& pos)
 {
   int pieceCount = pos.count<ALL>();
   if (pieceCount > 3)
@@ -1378,4 +1383,14 @@ isTheoreticalDraw(const ChessBoard& pos)
   }
 
   return false;
+}
+
+bool
+isTheoreticalDraw(const ChessBoard& pos)
+{
+  // Search calls this at every node; leave before building the EgBoard.
+  if (pos.count<ALL>() > 3)
+    return false;
+
+  return isTheoreticalDraw(EgBoard(pos));
 }
