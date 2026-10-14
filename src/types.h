@@ -146,6 +146,7 @@ enum class Endgames: uint8_t
   KBBK,
   KNNK,
   KRBK,
+  KRNK,
   KPNK,
   KPRK,
   KBNKN,
