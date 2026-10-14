@@ -155,6 +155,11 @@ isEndgame<Endgames::KRNK>(const EgBoard& pos)
 
 template <>
 inline bool
+isEndgame<Endgames::KRKR>(const EgBoard& pos)
+{ return pos.count<ALL>() == 2 and pos.count<ROOK>() == 2; }
+
+template <>
+inline bool
 isEndgame<Endgames::KPNK>(const EgBoard& pos)
 {
   return pos.count<ALL   >() == 2
@@ -1165,6 +1170,231 @@ Endgame<Endgames::KRNK>(const EgBoard& pos)
   return false;
 }
 
+// KR vs KR helpers. Notation: u = the side to move ("us"), t = the other side
+// ("them"); k/r = king/rook, so `tr` is the other side's rook square and `trB`
+// its bitboard.
+
+// The side to move wins at once: it takes the other rook and KR vs K is won (the
+// king can't take back, isn't stalemated and can't take the rook next), a rook
+// check skewers the other rook, or a rook move mates. False when a rook is
+// missing.
+static bool
+krkrWinsAtOnce(const EgBoard& pos)
+{
+  const Color us = pos.color, them = ~us;
+
+  const Bitboard ukB = pos.getPiece(us  , KING);
+  const Bitboard urB = pos.getPiece(us  , ROOK);
+  const Bitboard tkB = pos.getPiece(them, KING);
+  const Bitboard trB = pos.getPiece(them, ROOK);
+  if (not urB or not trB)
+    return false;
+
+  const Square uk = squareNo(ukB), ur = squareNo(urB);
+  const Square tk = squareNo(tkB), tr = squareNo(trB);
+  const Bitboard occ = pos.all();
+
+  const Bitboard ukAtt = attackSquares<KING>(uk, 0);
+  const Bitboard urAtt = attackSquares<ROOK>(ur, occ);
+  const Bitboard tkAtt = attackSquares<KING>(tk, 0);
+
+  // After taking, their king needs a move, and taking our rook mustn't be one.
+  const auto takeWins = [&] (Square from) {
+    const EgBoard  next = pos.play(from, tr);
+    const Bitboard nkB  = next.getPiece(us, KING), nrB = next.getPiece(us, ROOK);
+    const Bitboard flights = tkAtt & ~attackSquares<KING>(squareNo(nkB), 0)
+                                   & ~attackSquares<ROOK>(squareNo(nrB), next.all() ^ tkB);
+    return flights != 0 and not (flights & nrB);
+  };
+
+  if ((urAtt & trB & ~tkAtt) and takeWins(ur)) return true;
+  if ((ukAtt & trB & ~tkAtt) and takeWins(uk)) return true;
+
+  for (Bitboard t = urAtt & ~occ; t != 0; t &= t - 1)
+  {
+    const Square   s  = squareNo(t & -t);
+    const Bitboard sB = t & -t;
+    const Bitboard o  = occ ^ urB ^ sB;
+    const Bitboard sAtt  = attackSquares<ROOK>(s , o);
+    const Bitboard trAtt = attackSquares<ROOK>(tr, o);
+
+    if (not (sAtt & tkB) or (trAtt & ukB))
+      continue;   // no check, or our king is left in check
+
+    const Bitboard xray    = attackSquares<ROOK>(s, o ^ tkB);
+    const Bitboard flights = tkAtt & ~(ukAtt | xray | trB);
+    const bool kTakes = tkAtt & sB & ~ukAtt;
+    const bool rTakes = trAtt & sB;
+    const bool rBlock = trAtt & sAtt & attackSquares<ROOK>(tk, o);
+
+    // Mate.
+    if (not (kTakes or rTakes or rBlock) and flights == 0)
+      return true;
+
+    // A skewer: their rook stands behind the king, and the king can't step next
+    // to it to take back (or our king guards the square).
+    if (not (kTakes or rTakes) and (xray & trB)
+        and ((ukAtt & trB) or not (flights & attackSquares<KING>(tr, 0))))
+      return true;
+  }
+
+  return false;
+}
+
+// Calls `f(next)` for each legal move of the side to move, and stops early when
+// `f` returns false. Returns false if it was stopped.
+template <typename F>
+static bool
+krkrEachMove(const EgBoard& pos, F f)
+{
+  const Color us = pos.color, them = ~us;
+
+  const Bitboard ukB = pos.getPiece(us  , KING);
+  const Bitboard urB = pos.getPiece(us  , ROOK);
+  const Bitboard tkB = pos.getPiece(them, KING);
+  const Bitboard trB = pos.getPiece(them, ROOK);
+
+  const Square uk = squareNo(ukB), ur = squareNo(urB), tr = squareNo(trB);
+  const Bitboard occ   = pos.all();
+  const Bitboard tkAtt = attackSquares<KING>(squareNo(tkB), 0);
+
+  for (Bitboard t = attackSquares<KING>(uk, 0) & ~urB & ~tkAtt; t != 0; t &= t - 1)
+  {
+    const Bitboard sB = t & -t;
+    if ((sB & trB) or not (attackSquares<ROOK>(tr, occ ^ ukB) & sB))
+      if (not f(pos.play(uk, squareNo(sB))))
+        return false;
+  }
+
+  for (Bitboard t = attackSquares<ROOK>(ur, occ) & ~(ukB | tkB); t != 0; t &= t - 1)
+  {
+    const Bitboard sB = t & -t;
+    if ((sB & trB) or not (attackSquares<ROOK>(tr, (occ ^ urB) | sB) & ukB))
+      if (not f(pos.play(ur, squareNo(sB))))
+        return false;
+  }
+
+  return true;
+}
+
+// Every legal move of the side to move leaves the other side an immediate win,
+// and there is at least one such move.
+static bool
+krkrEveryMoveLoses(const EgBoard& pos)
+{
+  bool any = false;
+  const bool all = krkrEachMove(pos, [&] (const EgBoard& next) {
+    any = true;
+    return krkrWinsAtOnce(next);
+  });
+  return any and all;
+}
+
+// The side to move gives a check (a rook move, or a king step that uncovers the
+// rook) after which every reply leaves it an immediate win.
+static bool
+krkrWinsByCheck(const EgBoard& pos)
+{
+  const Color us = pos.color, them = ~us;
+  const Bitboard tkB = pos.getPiece(them, KING);
+
+  bool wins = false;
+  krkrEachMove(pos, [&] (const EgBoard& next) {
+    const Bitboard urB = next.getPiece(us, ROOK);
+    if (urB and next.getPiece(them, ROOK)
+        and (attackSquares<ROOK>(squareNo(urB), next.all()) & tkB))
+      wins = krkrEveryMoveLoses(next);
+    return not wins;
+  });
+  return wins;
+}
+
+// Quiet draws: the side to move is out of check, has no immediate win and no
+// winning check, and the kings are at least two squares apart. Kings two or
+// three apart have their own exceptions (mating nets).
+static bool
+krkrQuietDraw(const EgBoard& pos)
+{
+  const Color us = pos.color, them = ~us;
+
+  const Bitboard ukB = pos.getPiece(us  , KING);
+  const Bitboard urB = pos.getPiece(us  , ROOK);
+  const Bitboard tkB = pos.getPiece(them, KING);
+  const Bitboard trB = pos.getPiece(them, ROOK);
+  if (not urB or not trB)
+    return false;
+
+  const Square uk = squareNo(ukB), ur = squareNo(urB);
+  const Square tk = squareNo(tkB), tr = squareNo(trB);
+  const Bitboard occ = pos.all();
+
+  const Bitboard ukAtt = attackSquares<KING>(uk, 0);
+  const Bitboard tkAtt = attackSquares<KING>(tk, 0);
+  const Bitboard trAtt = attackSquares<ROOK>(tr, occ);
+  if (trAtt & ukB)
+    return false;
+
+  const int  kingsD  = chebyshevDistance(uk, tk);
+  const bool ukEdge  = ukB & EdgeSquares;
+  const bool tkEdge  = tkB & EdgeSquares;
+  if (kingsD < 2)
+    return false;
+
+  // Kings two apart, their king off the edge. Not when the rooks hit each other,
+  // our rook hangs with our king on the edge, our king is in a corner a knight's
+  // jump from theirs, or our king is on the edge with its rook beside it and
+  // their king facing it (a back-rank net).
+  if (kingsD == 2)
+  {
+    const bool rHit  = attackSquares<ROOK>(ur, occ) & trB;
+    const bool uHang = (tkAtt | trAtt) & urB & ~ukAtt;
+    const bool kJump = attackSquares<KNIGHT>(uk, 0) & tkB;
+    const bool kOpp  = (uk >> 3) == (tk >> 3) or (uk & 7) == (tk & 7);
+
+    if (tkEdge or rHit or (uHang and ukEdge) or ((ukB & CornerSquares) and kJump)
+        or (ukEdge and kOpp and (ukAtt & urB)))
+      return false;
+  }
+
+  // Kings three apart, their king on an edge square next to its rook and ours off
+  // the edge: a mating net.
+  if (kingsD == 3 and tkEdge and not (tkB & CornerSquares) and not ukEdge and (tkAtt & trB))
+    return false;
+
+  return not krkrWinsAtOnce(pos) and not krkrWinsByCheck(pos);
+}
+
+// KR vs KR. Checked against the 4-man oracle (`egvalidate pieces Rr oracle`): it
+// claims 6,904,932 of the 7,569,032 draws (91%) with no false draw. The game is
+// drawn unless a tactic decides it: the side to move takes a loose rook, skewers
+// it, mates or wins with a check, or the kings stand close in a mating net.
+// KRRK falls through to search.
+template <>
+bool
+Endgame<Endgames::KRKR>(const EgBoard& pos)
+{
+  if ((pos.count<WHITE, ALL>() == 2) or (pos.count<BLACK, ALL>() == 2))
+    return false;
+
+  if (krkrQuietDraw(pos))
+    return true;
+
+  // In check, a reply reaches a quiet draw and every other reply reaches one too
+  // or loses at once (it leaves the other side an immediate win).
+  const Bitboard ukB = pos.getPiece( pos.color, KING);
+  const Bitboard trB = pos.getPiece(~pos.color, ROOK);
+  if (not (attackSquares<ROOK>(squareNo(trB), pos.all()) & ukB))
+    return false;
+
+  bool drawn = false;
+  const bool all = krkrEachMove(pos, [&] (const EgBoard& next) {
+    if (krkrQuietDraw(next))
+      return drawn = true;
+    return krkrWinsAtOnce(next);
+  });
+  return drawn and all;
+}
+
 template <>
 inline bool
 Endgame<Endgames::KPNK>(const EgBoard& pos)
@@ -1493,7 +1723,7 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
 }
 
 // KRB vs KR. Checked against the 5-man oracle (`egvalidate pieces Rbr oracle`):
-// it claims 204,848,220 of the 473,847,914 draws (43%) with no false draw, in
+// it claims 214,024,168 of the 473,847,914 draws (45%) with no false draw, in
 // both colourings. The
 // early blocks rule out tactics and mates that decide the game; the claims after
 // them are quiet regions, each with its own exceptions. KRRKB and KRRBK fall
@@ -1742,6 +1972,18 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
       return true;
   }
 
+  // The defending rook takes the bishop: KR vs KR with the attacker to move. Ask
+  // the 4-man recognizer (it sees a recapture as an immediate win). Not when the
+  // defender may have better: the rooks hit each other, its king hits the
+  // attacking rook, or its king can take the bishop instead and that isn't a
+  // known draw. Nor with the attacking king in a corner two squares from the
+  // defending king (a mating net). `arLift & dkB` means the capture is illegal.
+  if (defToMove and (drAtt & abB) and not (arLift & dkB)
+      and not rHit and not (dkAtt & arB) and not ((akB & CornerSquares) and kingsD == 2)
+      and not ((dkAtt & abB & ~(akAtt | arAtt)) and not isTheoreticalDraw(pos.play(dk, ab)))
+      and isTheoreticalDraw(pos.play(dr, ab)))
+    return true;
+
   // The defending king stands off the bishop's colour, out of check and far
   // enough from the attacking king (further when it is on the edge). The
   // defender holds unless it can win a loose piece (those can be defender
@@ -1923,6 +2165,9 @@ isTheoreticalDraw(const EgBoard& pos)
 
     if (isEndgame<Endgames::KRNK>(pos))
       return Endgame<Endgames::KRNK>(pos);
+
+    if (isEndgame<Endgames::KRKR>(pos))
+      return Endgame<Endgames::KRKR>(pos);
 
     if (isEndgame<Endgames::KPNK>(pos))
       return Endgame<Endgames::KPNK>(pos);
