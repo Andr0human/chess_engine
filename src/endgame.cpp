@@ -2132,11 +2132,12 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
 }
 
 // KRN vs KR. Checked against the 5-man oracle (`egvalidate pieces RNr oracle`):
-// it claims 173,119,746 of the 494,956,894 draws (35%) with no false draw, in
-// both colourings. Only positions with the defender to move are claimed: the
-// rook takes the rook or the knight into a 4-man draw, or the position is
-// quiet. Exclusions before each claim rule out mates and tactics that decide
-// the game. KRRKN and KRRNK fall through to search.
+// it claims 204,895,170 of the 494,956,894 draws (41%) with no false draw, in
+// both colourings. With the defender to move, the rook takes the rook or the
+// knight into a 4-man draw, or the position is quiet. With the attacker to
+// move, all five men stand on one line, or the defending king is far from the
+// knight and the attacking king. Exclusions before each claim rule out mates
+// and tactics that decide the game. KRRKN and KRRNK fall through to search.
 //
 // Notation: d = defender (the lone rook's side), a = attacker (rook + knight);
 // k/r/n = king/rook/knight, so `dr` is the defending rook's square and `drB` its
@@ -2167,9 +2168,8 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   const Bitboard dkAtt = attackSquares<KING  >(dk, 0);
   const Bitboard drAtt = attackSquares<ROOK  >(dr, occ);
 
-  // Attacker to move: nothing is claimed. The tests below find the rook
-  // captures and knight forks that win outright, the first filter for a claim
-  // on this side.
+  // Attacker to move. The tests below rule out the rook captures, knight forks
+  // and skewers that win outright, before the claims.
   if (pos.color == atk)
   {
     // After the attacker takes the rook, the lone defending king on k must not
@@ -2190,27 +2190,106 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
     if (nxr or rxr or kxr)
       return false;
 
-    // The knight forks the king and rook. Nothing can take it on the fork
-    // square, a knight's move from both. It can't move when pinned or when its
-    // king is in check. The king must step away, and the defender holds if it
-    // takes the rook, or if after NxR it can take the rook or is stalemated.
-    if (not (attackSquares<ROOK>(dr, occ ^ anB) & akB))
-    {
-      const Bitboard aAfter = akAtt | attackSquares<KNIGHT>(dr, 0) | attackSquares<ROOK>(ar, occ ^ anB ^ dkB);
-      for (Bitboard t = anAtt & ~occ & attackSquares<KNIGHT>(dk, 0) & attackSquares<KNIGHT>(dr, 0); t; t &= t - 1)
+    // The knight forks the king on k and the rook, with the attacking rook on r
+    // (occupancy o). Nothing can take it on the fork square, a knight's move
+    // from both. It can't move when pinned or when its king is in check, or
+    // after the king took it. The king must step away, and the defender holds
+    // if it takes the rook, or if after NxR it can take the rook or is
+    // stalemated.
+    const auto forks = [&] (Square k, Square r, Bitboard o) {
+      const Bitboard kB = 1ULL << k, rB = 1ULL << r;
+      if ((kB & anB) or (attackSquares<ROOK>(dr, o ^ anB) & akB))
+        return false;
+      const Bitboard aAfter = akAtt | attackSquares<KNIGHT>(dr, 0) | attackSquares<ROOK>(r, o ^ anB ^ kB);
+      for (Bitboard t = anAtt & ~o & attackSquares<KNIGHT>(k, 0) & attackSquares<KNIGHT>(dr, 0); t; t &= t - 1)
       {
         const Bitboard sB  = t & -t;
         const Bitboard nS  = attackSquares<KNIGHT>(squareNo(sB), 0);
-        const Bitboard esc = dkAtt & ~drB & ~(akAtt | nS | attackSquares<ROOK>(ar, occ ^ anB ^ sB ^ dkB));
-        bool holds = esc & arB;
-        for (Bitboard u = esc & ~arB; u != 0 and not holds; u &= u - 1)
-          holds = not wins(squareNo(u & -u), aAfter, arB);
+        const Bitboard esc = attackSquares<KING>(k, 0) & ~drB & ~(akAtt | nS | attackSquares<ROOK>(r, o ^ anB ^ sB ^ kB));
+        bool holds = esc & rB;
+        for (Bitboard u = esc & ~rB; u != 0 and not holds; u &= u - 1)
+          holds = not wins(squareNo(u & -u), aAfter, rB);
         if (not holds)
-          return false;
+          return true;
       }
+      return false;
+    };
+    if (forks(dk, ar, occ))
+      return false;
+
+    // The rook on r skewers the king on k (occupancy o): it checks from s with
+    // the defending rook behind the king, so the rook can't take on s or block,
+    // and the move must not expose the attacking king. The king must step off
+    // the line and RxR wins, unless the king can take on s or step next to its
+    // unguarded rook and take back. That step still loses to a knight fork.
+    const auto skewers = [&] (Square r, Square k, Bitboard o) {
+      const Bitboard kB = 1ULL << k;
+      for (Bitboard t = attackSquares<ROOK>(r, o) & ~o & attackSquares<ROOK>(k, o); t; t &= t - 1)
+      {
+        const Bitboard sB   = t & -t;
+        const Bitboard occS = o ^ (1ULL << r) ^ sB;
+        const Bitboard thru = attackSquares<ROOK>(squareNo(sB), occS ^ kB);
+        if (not (thru & drB) or (attackSquares<ROOK>(dr, occS) & (akB | sB)))
+          continue;
+        const Bitboard esc  = attackSquares<KING>(k, 0) & ~drB & ~(akAtt | anAtt | thru);
+        Bitboard       back = ((akAtt | anAtt) & drB) ? 0 : esc & attackSquares<KING>(dr, 0);
+        bool           lost = not (esc & sB);
+        for (; back != 0 and lost; back &= back - 1)
+          lost = forks(squareNo(back & -back), squareNo(sB), occS ^ kB ^ (back & -back));
+        if (lost)
+          return true;
+      }
+      return false;
+    };
+    if (skewers(ar, dk, occ))
+      return false;
+
+    // The rook checks from s and every king step walks into a skewer or a
+    // knight fork. The defending rook must not take on s, block, or leave the
+    // attacking king in check, and the king must not take on s.
+    for (Bitboard t = arAtt & ~occ & attackSquares<ROOK>(dk, occ); t; t &= t - 1)
+    {
+      const Bitboard sB   = t & -t;
+      const Square   s    = squareNo(sB);
+      const Bitboard occS = occ ^ arB ^ sB;
+      const Bitboard line = attackSquares<ROOK>(s, occS) & attackSquares<ROOK>(dk, occS);
+      if (attackSquares<ROOK>(dr, occS) & (akB | sB | line))
+        continue;
+      const Bitboard esc = dkAtt & ~drB & ~(akAtt | anAtt | attackSquares<ROOK>(s, occS ^ dkB));
+      bool lost = not (esc & sB);
+      for (Bitboard u = esc; u != 0 and lost; u &= u - 1)
+      {
+        const Square   e    = squareNo(u & -u);
+        const Bitboard occE = occS ^ dkB ^ (u & -u);
+        lost = skewers(s, e, occE) or forks(e, s, occE);
+      }
+      if (lost)
+        return false;
     }
 
-    return false;
+    const auto mIndex = msbIndex(occ);
+    const auto lIndex = lsbIndex(occ);
+    const auto pieceOnSameRank = (abs(mIndex - lIndex) <= 8) and ((lIndex >> 3) == (mIndex >> 3));
+    // Squares are numbered rank by rank, so lsb and msb on one rank put every
+    // piece on it. A file has no such ordering: mask lsb's file instead.
+    const bool pieceOnSameFile = not (occ & ~(FileA << (lIndex & 7)));
+    const bool rHit = drAtt & arB;
+
+    if (pieceOnSameRank or pieceOnSameFile)
+      return rHit;
+
+    // The defending king is far from the knight and the attacking king, so no
+    // fork or mating net is in reach. Distances are in king steps. A piece on
+    // dk's rank or file can uncover a check or check with tempo, so it counts
+    // as far only at 7, and the knight also counts as far at Manhattan
+    // distance 8. A king in a corner needs one step more, and the attacking
+    // king must not be in check (its rook can hang).
+    const Bitboard dkLines = attackSquares<ROOK>(dk, 0);
+    const int      kD      = chebyshevDistance(dk, ak);
+    const int      nD      = chebyshevDistance(dk, an);
+    const bool     akFar   = kD == 7 or (kD >= ((dkB & CornerSquares) ? 5 : 4) and not (dkLines & akB));
+    const bool     anFar   = nD == 7 or ((nD >= 5 or manhattanDistance(dk, an) >= 8) and not (dkLines & anB));
+    return not (drAtt & akB) and akFar and anFar;
   }
 
   // Defender to move.
