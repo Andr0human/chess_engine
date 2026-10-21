@@ -194,6 +194,15 @@ isEndgame<Endgames::KRBKR>(const EgBoard& pos)
      and pos.count<BISHOP>() == 1;
 }
 
+template <>
+inline bool
+isEndgame<Endgames::KRNKR>(const EgBoard& pos)
+{
+  return pos.count<ALL   >() == 3
+     and pos.count<ROOK  >() == 2
+     and pos.count<KNIGHT>() == 1;
+}
+
 template <Endgames e>
 inline bool
 Endgame(const EgBoard& pos) = delete;
@@ -2122,6 +2131,330 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   return false;
 }
 
+// KRN vs KR. Checked against the 5-man oracle (`egvalidate pieces RNr oracle`):
+// it claims 173,119,746 of the 494,956,894 draws (35%) with no false draw, in
+// both colourings. Only positions with the defender to move are claimed: the
+// rook takes the rook or the knight into a 4-man draw, or the position is
+// quiet. Exclusions before each claim rule out mates and tactics that decide
+// the game. KRRKN and KRRNK fall through to search.
+//
+// Notation: d = defender (the lone rook's side), a = attacker (rook + knight);
+// k/r/n = king/rook/knight, so `dr` is the defending rook's square and `drB` its
+// bitboard.
+template <>
+bool
+Endgame<Endgames::KRNKR>(const EgBoard& pos)
+{
+  const Color atk = pos.count<WHITE, KNIGHT>() ? WHITE : BLACK;
+  const Color def = ~atk;
+
+  if (popCount(pos.getPiece(atk, ROOK)) != 1)
+    return false;
+
+  const Bitboard akB = pos.getPiece(atk, KING  );
+  const Bitboard arB = pos.getPiece(atk, ROOK  );
+  const Bitboard anB = pos.getPiece(atk, KNIGHT);
+  const Bitboard dkB = pos.getPiece(def, KING  );
+  const Bitboard drB = pos.getPiece(def, ROOK  );
+
+  const Square ak = squareNo(akB), ar = squareNo(arB), an = squareNo(anB);
+  const Square dk = squareNo(dkB), dr = squareNo(drB);
+  const Bitboard occ = pos.all();
+
+  const Bitboard akAtt = attackSquares<KING  >(ak, 0);
+  const Bitboard arAtt = attackSquares<ROOK  >(ar, occ);
+  const Bitboard anAtt = attackSquares<KNIGHT>(an, 0);
+  const Bitboard dkAtt = attackSquares<KING  >(dk, 0);
+  const Bitboard drAtt = attackSquares<ROOK  >(dr, occ);
+
+  // Attacker to move: nothing is claimed. The tests below find the rook
+  // captures and knight forks that win outright, the first filter for a claim
+  // on this side.
+  if (pos.color == atk)
+  {
+    // After the attacker takes the rook, the lone defending king on k must not
+    // take the attacking rook (KN vs K) or be stalemated. aAtt is every square
+    // the attacker then hits, with the rook's lines seen through the king.
+    const auto wins = [&] (Square k, Bitboard aAtt, Bitboard rookB) {
+      const Bitboard m = attackSquares<KING>(k, 0) & ~aAtt;
+      return not (m & rookB) and (m != 0 or (aAtt & (1ULL << k)));
+    };
+
+    // The knight, the rook or the king takes the rook.
+    const bool nxr = (anAtt & drB)
+      and wins(dk, akAtt | attackSquares<KNIGHT>(dr, 0) | attackSquares<ROOK>(ar, occ ^ anB ^ dkB), arB);
+    const bool rxr = (arAtt & drB)
+      and wins(dk, akAtt | anAtt | attackSquares<ROOK>(dr, occ ^ arB ^ dkB), drB);
+    const bool kxr = (akAtt & drB) and not (dkAtt & drB)
+      and wins(dk, attackSquares<KING>(dr, 0) | anAtt | attackSquares<ROOK>(ar, occ ^ akB ^ dkB), arB);
+    if (nxr or rxr or kxr)
+      return false;
+
+    // The knight forks the king and rook. Nothing can take it on the fork
+    // square, a knight's move from both. It can't move when pinned or when its
+    // king is in check. The king must step away, and the defender holds if it
+    // takes the rook, or if after NxR it can take the rook or is stalemated.
+    if (not (attackSquares<ROOK>(dr, occ ^ anB) & akB))
+    {
+      const Bitboard aAfter = akAtt | attackSquares<KNIGHT>(dr, 0) | attackSquares<ROOK>(ar, occ ^ anB ^ dkB);
+      for (Bitboard t = anAtt & ~occ & attackSquares<KNIGHT>(dk, 0) & attackSquares<KNIGHT>(dr, 0); t; t &= t - 1)
+      {
+        const Bitboard sB  = t & -t;
+        const Bitboard nS  = attackSquares<KNIGHT>(squareNo(sB), 0);
+        const Bitboard esc = dkAtt & ~drB & ~(akAtt | nS | attackSquares<ROOK>(ar, occ ^ anB ^ sB ^ dkB));
+        bool holds = esc & arB;
+        for (Bitboard u = esc & ~arB; u != 0 and not holds; u &= u - 1)
+          holds = not wins(squareNo(u & -u), aAfter, arB);
+        if (not holds)
+          return false;
+      }
+    }
+
+    return false;
+  }
+
+  // Defender to move.
+  const auto edgeD = [] (Square s) {
+    const int r = s >> 3, f = s & 7;
+    return std::min(std::min(r, 7 - r), std::min(f, 7 - f));
+  };
+
+  const int kingsD = chebyshevDistance(ak, dk);
+  const int dkEdge = edgeD(dk);
+
+  // The defending king is in check.
+  const bool chk = (arAtt | anAtt) & dkB;
+
+  // The rooks hit each other. A rook trade leaves KN vs K.
+  const bool rHit = drAtt & arB;
+
+  // Squares the attacker covers. The rook sees through the defending king (it
+  // cannot step back along the line it is checked on).
+  const Bitboard atkCover = akAtt | anAtt | attackSquares<ROOK>(ar, occ ^ dkB);
+
+  // The attacking rook's lines with the defending rook lifted off its square.
+  const Bitboard drLift = occ ^ drB;
+  const Bitboard arLift = attackSquares<ROOK>(ar, drLift);
+
+  if (not chk)
+  {
+    // The defending rook mates in one: a rook move checks the attacking king,
+    // the king has no square to go to, and the rook or knight can neither take
+    // the checking rook nor block the check. Only a king on the edge can be
+    // mated by a rook.
+    if (edgeD(ak) == 0)
+    {
+      for (Bitboard t = drAtt & attackSquares<ROOK>(ak, occ) & ~dkB; t != 0; t &= t - 1)
+      {
+        const Bitboard sB     = t & -t;
+        const Square   s      = squareNo(sB);
+        const Bitboard o      = drLift | sB;
+        const Bitboard arLeft = arB & ~sB;
+        const Bitboard anLeft = anB & ~sB;
+        const Bitboard arO    = attackSquares<ROOK>(ar, o);
+
+        // A rook pinned to its king by the attacking rook can't move off the
+        // line.
+        if (arLeft and (arO & dkB))
+          continue;
+
+        // Each king square is guarded by the rook (seen through the king,
+        // 8/8/8/1r6/8/8/8/K1kN1R2 b) or the defending king, or holds the
+        // king's own rook or knight (8/8/8/1r6/8/8/R7/KNk5 b). The king takes
+        // the checking rook unless the defending king guards it.
+        if (akAtt & ~dkAtt & ~attackSquares<ROOK>(s, o ^ akB) & ~(arLeft | anLeft))
+          continue;
+
+        // The rook or knight takes the checking rook or blocks the check.
+        const Bitboard stop = sB | (attackSquares<ROOK>(s, o) & attackSquares<ROOK>(ak, o));
+        if ((arLeft and (arO & stop)) or (anLeft and (anAtt & stop)))
+          continue;
+
+        return false;
+      }
+    }
+
+    // The attacking king in a corner is open to a mating attack. With the
+    // defending king two away, it already covers the corner king's flights.
+    // Three away, with the attacking rook on one of its king's lines and the
+    // defending king off them: the defending king steps a knight's jump from
+    // the corner and the rook threatens mate on the other line
+    // (8/8/8/8/2r5/8/3k1N2/K4R2 b, Kc2).
+    if (akB & CornerSquares)
+    {
+      const Bitboard akLines = attackSquares<ROOK>(ak, 0);
+
+      if (kingsD == 2)
+        return false;
+      if (kingsD == 3 and (akLines & arB) and not (akLines & dkB)
+          and (dkAtt & attackSquares<KNIGHT>(ak, 0) & ~atkCover))
+        return false;
+    }
+
+    // Back-rank attack: the kings are two apart, the attacking king is on the
+    // edge with the defending king two lines in front of it, and the defending
+    // rook reaches one of the attacking king's lines.
+    if (kingsD == 2
+        and (((akB & Rank18) and std::abs((ak >> 3) - (dk >> 3)) == 2) or
+             ((akB & FileAH) and std::abs((ak  & 7) - (dk  & 7)) == 2))
+        and (drAtt & ~dkB & attackSquares<ROOK>(ak, arB | anB)))
+      return false;
+  }
+
+  // RxN gives check and doesn't reach a known KR vs KR draw: it may win for the
+  // defender.
+  const bool rxnWins = (drAtt & anB) and (attackSquares<ROOK>(an, drLift) & akB)
+                   and not (arLift & dkB) and not isTheoreticalDraw(pos.play(dr, an));
+
+  // The defending rook takes the attacking rook. Illegal when the knight
+  // gives check.
+  if (rHit and not (anAtt & dkB) and not rxnWins)
+  {
+    // The rook is guarded, so RxR is answered by a recapture into KN vs K.
+    if ((anAtt & arB) or ((akAtt & arB) and not (dkAtt & arB)))
+      return true;
+
+    // Unguarded: RxR leaves KR vs KN.
+    if (not (dkAtt & arB) and isTheoreticalDraw(pos.play(dr, ar)))
+      return true;
+  }
+
+  // The defending king stands between its rook and the attacking king.
+  const bool discChk = attackSquares<ROOK>(dr, occ ^ dkB) & akB;
+
+  // A defender rook move checks the attacking king and hits the attacking rook
+  // behind it or beside it (seen through the king), from a square nothing can
+  // take the rook on: not the knight or the rook, and the king only when the
+  // defending king doesn't guard it.
+  bool dSkew = false;
+  for (Bitboard t = drAtt & ~occ & ~anAtt & ~arLift & (~akAtt | dkAtt); t != 0 and not dSkew; t &= t - 1)
+  {
+    const Square   s = squareNo(t & -t);
+    const Bitboard o = drLift | (t & -t);
+    dSkew = (attackSquares<ROOK>(s, o) & akB) and (attackSquares<ROOK>(s, o ^ akB) & arB);
+  }
+
+  // The attacking king is on an edge and its rook on the next line in: a rook
+  // check along the edge drives the king onto its rook's line. Defender rook
+  // moves that give that check.
+  Bitboard edgeLine = 0;
+  if (((ak >> 3) == 0 and (ar >> 3) == 1) or ((ak >> 3) == 7 and (ar >> 3) == 6))
+    edgeLine |= Rank1 << (8 * (ak >> 3));
+  if (((ak & 7) == 0 and (ar & 7) == 1) or ((ak & 7) == 7 and (ar & 7) == 6))
+    edgeLine |= FileA << (ak & 7);
+  const bool edgeSkew = drAtt & ~occ & edgeLine & attackSquares<ROOK>(ak, drLift);
+
+  // Two checks win the rook: the check along the edge can't be taken or
+  // blocked, every flight is on the rook's line and too far from it to guard
+  // it, and from each flight a second check from a safe square skewers king
+  // and rook. The knight doesn't guard the rook.
+  const auto twoChecks = [&] () {
+    if (anAtt & arB)
+      return false;
+    for (Bitboard t = drAtt & ~occ & edgeLine; t != 0; t &= t - 1)
+    {
+      const Bitboard s1B = t & -t;
+      const Square   s1  = squareNo(s1B);
+      const Bitboard o1  = drLift | s1B;
+      const Bitboard r1  = attackSquares<ROOK>(s1, o1);
+      const Bitboard ar1 = attackSquares<ROOK>(ar, o1);
+      if (not (r1 & akB) or ((anAtt | ar1) & (s1B | (r1 & attackSquares<ROOK>(ak, o1))))
+          or ((akAtt & s1B) and not (dkAtt & s1B)))
+        continue;
+
+      const Bitboard flights = akAtt & ~(arB | anB | dkAtt | s1B) & ~attackSquares<ROOK>(s1, o1 ^ akB);
+      bool wins = flights != 0;
+      for (Bitboard f = flights; f != 0 and wins; f &= f - 1)
+      {
+        const Bitboard fB = f & -f;
+        const Square   fs = squareNo(fB);
+        const Bitboard o2 = (o1 ^ akB) | fB;
+        bool skew = false;
+        if (chebyshevDistance(fs, ar) >= 3)
+          for (Bitboard u = attackSquares<ROOK>(s1, o2) & ~o2; u != 0 and not skew; u &= u - 1)
+          {
+            const Bitboard s2B = u & -u;
+            const Square   s2  = squareNo(s2B);
+            const Bitboard o3  = (o2 ^ s1B) | s2B;
+            const Bitboard r2  = attackSquares<ROOK>(s2, o3);
+            skew = (r2 & fB) and (attackSquares<ROOK>(s2, o3 ^ fB) & arB)
+                   and not ((anAtt | attackSquares<ROOK>(ar, o3)) & (s2B | (r2 & attackSquares<ROOK>(fs, o3))))
+                   and not ((attackSquares<KING>(fs, 0) & s2B) and not (dkAtt & s2B));
+          }
+        wins = skew;
+      }
+      if (wins)
+        return true;
+    }
+    return false;
+  };
+  const bool edgeTwo = edgeSkew and twoChecks();
+
+  // The defending rook takes the knight: KR vs KR with the attacker to move.
+  if ((drAtt & anB) and not (arLift & dkB)
+      and not rHit and not (dkAtt & arB) and not ((akB & CornerSquares) and kingsD <= 3)
+      and not dSkew and not discChk and not edgeTwo
+      and isTheoreticalDraw(pos.play(dr, an)))
+    return true;
+
+  // Quiet: no check, no rook trade, and the attacking rook out of the
+  // defending king's reach.
+  if (chk or rHit or (dkAtt & arB))
+    return false;
+
+  // Moves of the defending king to squares the attacker does not cover.
+  const int dkSafe = popCount(dkAtt & ~drB & ~atkCover);
+
+  // Defending rook moves to squares where it is not lost: the knight does not
+  // hit it, and the attacking king and rook either do not hit it or the
+  // defending king guards it (RxR KxR is KN vs K).
+  const Bitboard drSafeSq = ~anAtt & (~(akAtt | arLift) | dkAtt);
+  const int drSafe = popCount(drAtt & ~dkB & drSafeSq);
+
+  if (dSkew or dkSafe == 0 or discChk or drSafe < 3 or edgeTwo or rxnWins)
+    return false;
+
+  // The defending king on the edge with few safe squares off it: a mating net.
+  const int dkIn = popCount(dkAtt & ~drB & ~atkCover & ~(Rank18 | FileAH));
+  if (dkEdge == 0 and ((kingsD == 3 and dkIn <= 1) or (kingsD <= 5 and dkIn == 0)))
+    return false;
+
+  // Knight tactics against the rook. The battery: the knight stands between
+  // the attacking rook and the defending rook. RxN fails when the rook guards
+  // the knight.
+  const bool drHang  = ((akAtt | arAtt | anAtt) & drB) and not (dkAtt & drB);
+  const int  drND    = chebyshevDistance(dr, an);
+  const bool battery = attackSquares<ROOK>(ar, occ ^ anB) & ~arAtt & drB;
+  if (drHang and drND == 1 and (arAtt & anB))
+    return false;
+  if (battery and (dkB & CornerSquares))
+    return false;
+  if (dkEdge == 0 and drHang and drND == 2 and (kingsD == 3 or dkSafe == 1))
+    return false;
+  if (dkEdge == 0 and kingsD == 3 and drND == 1 and (arAtt & anB))
+    return false;
+
+  // The kings two apart. Not with the defending king on the edge (a mating
+  // net), nor facing the attacking king on its edge (the defender's back-rank
+  // attack). A knight's jump apart, a loose rook or a discovered check from
+  // the knight loses for the defender.
+  if (kingsD == 2)
+  {
+    const int fileD = std::abs((ak & 7) - (dk & 7));
+    const int rankD = std::abs((ak >> 3) - (dk >> 3));
+    const bool nDisc = attackSquares<ROOK>(ar, occ ^ anB) & dkB;
+
+    if (dkEdge == 0)
+      return false;
+    if ((fileD == 0 or rankD == 0) and edgeD(ak) == 0)
+      return false;
+    if (fileD != rankD and fileD != 0 and rankD != 0 and (drHang or nDisc))
+      return false;
+  }
+
+  return true;
+}
+
 static bool
 isTheoreticalDraw(const EgBoard& pos)
 {
@@ -2183,6 +2516,9 @@ isTheoreticalDraw(const EgBoard& pos)
 
     if (isEndgame<Endgames::KRBKR>(pos))
       return Endgame<Endgames::KRBKR>(pos);
+
+    if (isEndgame<Endgames::KRNKR>(pos))
+      return Endgame<Endgames::KRNKR>(pos);
   }
 
   return false;

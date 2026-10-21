@@ -152,6 +152,7 @@ enum class Endgames: uint8_t
   KPRK,
   KBNKN,
   KRBKR,
+  KRNKR,
 };
 
 enum Value: Score
