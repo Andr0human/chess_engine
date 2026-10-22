@@ -1539,10 +1539,11 @@ Endgame<Endgames::KPRK>(const EgBoard& pos)
 }
 
 // KBN vs KN. Mined against the 5-man oracle (`egvalidate pieces BNn oracle
-// nocapgate`): every clause is a box of feature thresholds that holds only draws
-// over the whole call set. Together they claim 240,194,590 of the 583,817,814
-// draws (41%) with no false draw, in both colourings. The boxes are data-mined,
-// so read them as "this region is drawn", not as chess rules.
+// nocapgate`): apart from one knight fork, every clause is a box of feature
+// thresholds that holds only draws over the whole call set. Together they claim
+// 244,975,754 of the 583,817,814 draws (42%) with no false draw, in both
+// colourings. The boxes are data-mined, so read them as "this region is drawn",
+// not as chess rules.
 // KBNN vs K fall through to search.
 //
 // Notation: d = defender (the lone knight's side), a = attacker (bishop + knight);
@@ -1615,6 +1616,17 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
     // Flight squares of the attacking king. At 0 or 1 it is boxed in by its own
     // men and the defending knight can mate.
     const int akSafe = popCount(akAtt & ~(abB | anB) & ~(dkAtt | dnAtt));
+
+    // The knight forks the attacking king and bishop from a square the attacking
+    // knight doesn't cover; the king and bishop can't reach it. The king must
+    // step away, and NxB leaves KN vs KN, or KN vs K after a recapture. The king
+    // needs a square to step to, or the check is mate. The knight can't go when
+    // its king is in check or when it is pinned. This adds 4.78M draws the
+    // clauses below miss, and each guard is needed.
+    if (not chk and not xrays<BISHOP>(ab, occ, dnB, dkB))
+      for (Bitboard t = knightForkSquares(dn, ak, ab, occ) & ~anAtt; t != 0; t &= t - 1)
+        if (akAtt & ~(abB | anB | dkAtt | attackSquares<KNIGHT>(squareNo(t & -t), 0)))
+          return true;
 
     // The defender wins a loose minor (69.8M draws from the first clause alone,
     // 187.7M from all ten), or keeps both men close together with free squares
