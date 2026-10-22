@@ -119,4 +119,106 @@ namespace eg
 
   template bool rookMatesInOne<KNIGHT>(const EgBoard& pos);
   template bool rookMatesInOne<BISHOP>(const EgBoard& pos);
+
+  bool
+  loneKingLoses(const Square k, const Bitboard aAtt, const Bitboard rookB)
+  {
+    const Bitboard m = attackSquares<KING>(k, 0) & ~aAtt;
+    return not (m & rookB) and (m != 0 or (aAtt & (1ULL << k)));
+  }
+
+  bool
+  knightForks(const EgBoard& pos, const Square k, const Square r, const Bitboard o)
+  {
+    const Color atk = pos.color, def = ~atk;
+
+    const Bitboard akB = pos.getPiece(atk, KING  );
+    const Bitboard anB = pos.getPiece(atk, KNIGHT);
+    const Bitboard drB = pos.getPiece(def, ROOK  );
+    const Square   dr  = squareNo(drB);
+    const Bitboard kB  = 1ULL << k, rB = 1ULL << r;
+
+    if ((kB & anB) or (attackSquares<ROOK>(dr, o ^ anB) & akB))
+      return false;
+
+    const Bitboard akAtt  = attackSquares<KING>(squareNo(akB), 0);
+    const Bitboard aAfter = akAtt | attackSquares<KNIGHT>(dr, 0) | attackSquares<ROOK>(r, o ^ anB ^ kB);
+
+    for (Bitboard t = attackSquares<KNIGHT>(squareNo(anB), 0) & ~o
+                    & attackSquares<KNIGHT>(k, 0) & attackSquares<KNIGHT>(dr, 0); t; t &= t - 1)
+    {
+      const Bitboard sB  = t & -t;
+      const Bitboard nS  = attackSquares<KNIGHT>(squareNo(sB), 0);
+      const Bitboard esc = attackSquares<KING>(k, 0) & ~drB & ~(akAtt | nS | attackSquares<ROOK>(r, o ^ anB ^ sB ^ kB));
+
+      bool holds = esc & rB;
+      for (Bitboard u = esc & ~rB; u != 0 and not holds; u &= u - 1)
+        holds = not loneKingLoses(squareNo(u & -u), aAfter, rB);
+      if (not holds)
+        return true;
+    }
+
+    return false;
+  }
+
+  template <PieceType Minor>
+  bool
+  rookSkewers(const EgBoard& pos, const Square r, const Square k, const Bitboard o)
+  {
+    const Color atk = pos.color, def = ~atk;
+
+    const Bitboard akB = pos.getPiece(atk, KING );
+    const Bitboard amB = pos.getPiece(atk, Minor);
+    const Bitboard drB = pos.getPiece(def, ROOK );
+    const Square   am  = squareNo(amB), dr = squareNo(drB);
+    const Bitboard kB  = 1ULL << k;
+
+    const Bitboard akAtt = attackSquares<KING>(squareNo(akB), 0);
+
+    for (Bitboard t = attackSquares<ROOK>(r, o) & ~o & attackSquares<ROOK>(k, o); t; t &= t - 1)
+    {
+      const Bitboard sB   = t & -t;
+      const Bitboard occS = o ^ (1ULL << r) ^ sB;
+      const Bitboard thru = attackSquares<ROOK>(squareNo(sB), occS ^ kB);
+      if (not (thru & drB) or (attackSquares<ROOK>(dr, occS) & (akB | sB)))
+        continue;
+
+      // The minor's squares once the king has stepped off k, and whether it
+      // guards the rook on dr after RxR.
+      const Bitboard amAtt  = attackSquares<Minor>(am, occS ^ kB);
+      const bool     guards = (akAtt | attackSquares<Minor>(am, occS ^ kB ^ sB)) & drB;
+
+      const Bitboard esc  = attackSquares<KING>(k, 0) & ~drB & ~(akAtt | amAtt | thru);
+      Bitboard       back = guards ? 0 : esc & attackSquares<KING>(dr, 0);
+      bool           lost = not (esc & sB);
+
+      if constexpr (Minor == KNIGHT)
+      {
+        for (; back != 0 and lost; back &= back - 1)
+          lost = knightForks(pos, squareNo(back & -back), squareNo(sB), occS ^ kB ^ (back & -back));
+      }
+      else
+      {
+        // A bishop move after that step can pin the rook to its king (attacked
+        // twice, guarded once) or check the king away from it. Any bishop move
+        // that hits the rook or the king counts, unless the king took the bishop.
+        for (; back != 0 and lost; back &= back - 1)
+        {
+          const Bitboard eB   = back & -back;
+          const Bitboard occE = occS ^ kB ^ eB;
+          const Bitboard bTo  = attackSquares<BISHOP>(am, occE) & ~occE;
+          lost = not (eB & amB)
+             and (bTo & (attackSquares<BISHOP>(dr, occE) | attackSquares<BISHOP>(squareNo(eB), occE)));
+        }
+      }
+
+      if (lost)
+        return true;
+    }
+
+    return false;
+  }
+
+  template bool rookSkewers<KNIGHT>(const EgBoard& pos, Square r, Square k, Bitboard o);
+  template bool rookSkewers<BISHOP>(const EgBoard& pos, Square r, Square k, Bitboard o);
 }

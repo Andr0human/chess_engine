@@ -68,6 +68,34 @@ namespace eg
   template <PieceType Minor>
   bool
   rookMatesInOne(const EgBoard& pos);
+
+  // KRB vs KR and KRN vs KR with the attacker to move. These take the attacking
+  // rook's square r, the defending king's square k and the occupancy o, so a
+  // caller can ask about the position after a move or two.
+
+  // The rook on r skewers the king on k: it checks from s with the defending
+  // rook behind the king, so the rook can't take on s or block, and the move
+  // must not expose the attacking king. The king must step off the line and
+  // RxR wins, unless the king can take on s or step next to its unguarded rook
+  // and take back. That step still loses to a knight fork, or to a bishop move
+  // that hits the rook or the king.
+  template <PieceType Minor>
+  bool
+  rookSkewers(const EgBoard& pos, Square r, Square k, Bitboard o);
+
+  // KRN vs KR. The knight forks the king on k and the defending rook, with the
+  // attacking rook on r. Nothing can take it on the fork square, a knight's
+  // move from both. It can't move when pinned or when its king is in check, or
+  // after the king took it. The king must step away, and the defender holds if
+  // it takes the rook, or if after NxR it can take the rook or is stalemated.
+  bool
+  knightForks(const EgBoard& pos, Square k, Square r, Bitboard o);
+
+  // After the attacker takes the defending rook, the lone king on k loses unless
+  // it can take the rook on `rookB` or is stalemated. `aAtt` is every square the
+  // attacker then hits, with the rook's lines seen through the king.
+  bool
+  loneKingLoses(Square k, Bitboard aAtt, Bitboard rookB);
 }
 
 #endif
