@@ -1,5 +1,6 @@
 
 #include "endgame.h"
+#include "endgame_utils.h"
 #include "attacks.h"
 
 using plt::passedPawnMasks;
@@ -9,6 +10,9 @@ using plt::ruleOfSquares;
 using plt::chebyshevDistance;
 using plt::manhattanDistance;
 
+// Helpers shared by the recognizers.
+using namespace eg;
+
 // The dispatcher, declared here so a recognizer can ask about the position after
 // a capture (`isTheoreticalDraw(pos.play(from, to))`).
 static bool
@@ -16,68 +20,6 @@ isTheoreticalDraw(const EgBoard& pos);
 
 
 // TODO: KRRK
-
-static bool
-kingBetweenQueens(const Square kingSq, const Bitboard queen1, const Bitboard queen2)
-{
-  auto between = [&](Bitboard pos, Bitboard neg) {
-    return ((pos & queen1) and (neg & queen2)) or
-           ((pos & queen2) and (neg & queen1));
-  };
-
-  return between(plt::upMasks[kingSq],      plt::downMasks[kingSq])      or
-         between(plt::leftMasks[kingSq],    plt::rightMasks[kingSq])     or
-         between(plt::upLeftMasks[kingSq],  plt::downRightMasks[kingSq]) or
-         between(plt::upRightMasks[kingSq], plt::downLeftMasks[kingSq]);
-}
-
-// A king in a corner with its own piece next to it. The piece blocks one of
-// the king's flight squares, so a minor apiece (KBKB, KNKN, KBKN) can be lost
-// here. Every won position in those three signatures has this shape.
-static bool
-cornerBlockedByOwnPiece(const Bitboard king, const Bitboard piece)
-{ return (king & CornerSquares) and (chebyshevDistance(squareNo(king), squareNo(piece)) == 1); }
-
-// Ranks indexed relative to each side's home rank. Index 0 is unused.
-constexpr Bitboard relativeRank[COLOR_NB][9] = {
-  { NoSquares, Rank8, Rank7, Rank6, Rank5, Rank4, Rank3, Rank2, Rank1 },  // BLACK
-  { NoSquares, Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8 },  // WHITE
-};
-
-constexpr Bitboard rank2to6[COLOR_NB] = {
-  AllSquares ^ (Rank18 | Rank2),
-  AllSquares ^ (Rank18 | Rank7)
-};
-
-constexpr Bitboard rank3to5[COLOR_NB] = {
-  Rank4 | Rank5 | Rank6,
-  Rank3 | Rank4 | Rank5
-};
-
-constexpr Bitboard rank4to7[COLOR_NB] = {
-  Rank4 | Rank5 | Rank6 | Rank7,
-  Rank2 | Rank3 | Rank4 | Rank5
-};
-
-static int
-getRuleOfSquareIndex(const EgBoard& pos, Color side, Square pawnSq)
-{
-  const int sideAdvantage = int(side == pos.color);
-  const int incFactor     = 2 * int(side) - 1;
-
-  const Bitboard myKing = pos.getPiece(side, KING);
-  const Bitboard   pawn = pos.getPiece(side, PAWN);
-
-  int ruleOfSquareIndex = pawnSq;
-
-  if (!sideAdvantage)
-    ruleOfSquareIndex -= 8 * incFactor;
-
-  if ((pawn & relativeRank[side][2]) and (myKing & ~plt::pawnMasks[side][pawnSq]))
-    ruleOfSquareIndex += 8 * incFactor;
-
-  return ruleOfSquareIndex;
-}
 
 template <Endgames e>
 inline bool
@@ -1066,11 +1008,6 @@ Endgame<Endgames::KRNK>(const EgBoard& pos)
   const Bitboard dkAtt = attackSquares<KING  >(dk, 0);
   const Bitboard dnAtt = attackSquares<KNIGHT>(dn, 0);
 
-  const auto edgeD = [] (Square s) {
-    const int r = s >> 3, f = s & 7;
-    return std::min(std::min(r, 7 - r), std::min(f, 7 - f));
-  };
-
   // The side to move is in check.
   const bool chk = defToMove ? (arAtt & dkB) : (dnAtt & akB);
 
@@ -1092,8 +1029,8 @@ Endgame<Endgames::KRNK>(const EgBoard& pos)
   const int kingsD = chebyshevDistance(ak, dk);
   const int dkND   = chebyshevDistance(dk, dn);
   const int akND   = chebyshevDistance(ak, dn);
-  const int dkEdge = edgeD(dk);
-  const int nEdge  = edgeD(dn);
+  const int dkEdge = edgeDistance(dk);
+  const int nEdge  = edgeDistance(dn);
 
   // The defender to move takes the rook: KN vs K or K vs K.
   if (defToMove and rHang)
@@ -1644,11 +1581,6 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
   // king cannot step back along the diagonal it is checked on).
   const Bitboard atkCover = akAtt | anAtt | attackSquares<BISHOP>(ab, occ ^ dkB);
 
-  const auto edgeD = [] (Square s) {
-    const int r = s >> 3, f = s & 7;
-    return std::min(std::min(r, 7 - r), std::min(f, 7 - f));
-  };
-
   // The side to move is in check.
   const bool chk = defToMove ? ((abAtt | anAtt) & dkB) : (dnAtt & akB);
 
@@ -1673,8 +1605,8 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
   const int dkKnD  = chebyshevDistance(dk, dn);
   const int akKnD  = chebyshevDistance(ak, dn);
   const int kingsD = chebyshevDistance(ak, dk);
-  const int dkEdge = edgeD(dk);
-  const int akEdge = edgeD(ak);
+  const int dkEdge = edgeDistance(dk);
+  const int akEdge = edgeDistance(ak);
 
   if (defToMove)
   {
@@ -1768,11 +1700,6 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   const Bitboard dkAtt = attackSquares<KING  >(dk, 0);
   const Bitboard drAtt = attackSquares<ROOK  >(dr, occ);
 
-  const auto edgeD = [] (Square s) {
-    const int r = s >> 3, f = s & 7;
-    return std::min(std::min(r, 7 - r), std::min(f, 7 - f));
-  };
-
   // The side to move is in check.
   const bool chk = defToMove ? ((arAtt | abAtt) & dkB) : (drAtt & akB);
 
@@ -1810,8 +1737,8 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   const bool dkOffB = not (dkB & abColour);
 
   const int kingsD = chebyshevDistance(ak, dk);
-  const int dkEdge = edgeD(dk);
-  const int akEdge = edgeD(ak);
+  const int dkEdge = edgeDistance(dk);
+  const int akEdge = edgeDistance(ak);
 
   // Attacker to move and able to take the defending rook: 104M attacker wins
   // against 7M draws, so leave it to search. The bishop can't take while the
@@ -2293,13 +2220,8 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   }
 
   // Defender to move.
-  const auto edgeD = [] (Square s) {
-    const int r = s >> 3, f = s & 7;
-    return std::min(std::min(r, 7 - r), std::min(f, 7 - f));
-  };
-
   const int kingsD = chebyshevDistance(ak, dk);
-  const int dkEdge = edgeD(dk);
+  const int dkEdge = edgeDistance(dk);
 
   // The defending king is in check.
   const bool chk = (arAtt | anAtt) & dkB;
@@ -2321,7 +2243,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
     // the king has no square to go to, and the rook or knight can neither take
     // the checking rook nor block the check. Only a king on the edge can be
     // mated by a rook.
-    if (edgeD(ak) == 0)
+    if (edgeDistance(ak) == 0)
     {
       for (Bitboard t = drAtt & attackSquares<ROOK>(ak, occ) & ~dkB; t != 0; t &= t - 1)
       {
@@ -2525,7 +2447,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
 
     if (dkEdge == 0)
       return false;
-    if ((fileD == 0 or rankD == 0) and edgeD(ak) == 0)
+    if ((fileD == 0 or rankD == 0) and edgeDistance(ak) == 0)
       return false;
     if (fileD != rankD and fileD != 0 and rankD != 0 and (drHang or nDisc))
       return false;
