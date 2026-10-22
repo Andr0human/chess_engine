@@ -1751,38 +1751,9 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
       return false;
   }
 
-  // Back-rank mates for the defender: the kings are two apart, the attacking
-  // king is on the edge with the defending king two lines in front of it, and
-  // the defending rook reaches one of the attacking king's lines.
-  if (defToMove and (not chk) and (kingsD == 2))
-  {
-    if ((((akB & Rank18) and std::abs((ak >> 3) - (dk >> 3)) == 2) or
-         ((akB & FileAH) and std::abs((ak  & 7) - (dk  & 7)) == 2)) and
-         (drAtt & ~dkB & attackSquares<ROOK>(ak, arB | abB))
-    ) return false;
-
-    // Both kings on the same edge: the rook mates on the square between them when
-    // the attacking king's other squares are taken and nothing can take the rook
-    // (the defending king guards it, so the attacking king can't).
-    if (((akB & Rank18) and (ak >> 3) == (dk >> 3)) or
-        ((akB & FileAH) and (ak  & 7) == (dk  & 7)))
-    {
-      const Square   m    = Square((ak + dk) / 2);
-      const Bitboard mB   = 1ULL << m;
-      const Bitboard occM = drLift | mB;
-      const Bitboard arM  = arB & ~mB, abM = abB & ~mB;   // a piece on m is taken
-
-      const bool hitsM  = (arM and (attackSquares<ROOK  >(ar, occM) & mB))
-                       or (abM and (attackSquares<BISHOP>(ab, occM) & mB));
-      const bool hitsDk = (arM and (attackSquares<ROOK  >(ar, occM) & dkB))
-                       or (abM and (attackSquares<BISHOP>(ab, occM) & dkB));
-      const Bitboard flights = akAtt & ~(dkAtt | arM | abM | mB
-                                         | attackSquares<ROOK>(m, occM ^ akB));
-
-      if ((drAtt & mB) and not hitsM and not hitsDk and flights == 0)
-        return false;
-    }
-  }
+  // The defending rook mates in one, or threatens a back-rank mate.
+  if (defToMove and not chk and (rookMatesInOne<BISHOP>(pos) or backRankThreat(pos)))
+    return false;
 
   // Skewer: the defender is in check and the bishop hits its rook, directly or
   // through the king. The king must step away and BxR leaves KRB vs K, unless the
@@ -2239,41 +2210,9 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
 
   if (not chk)
   {
-    // The defending rook mates in one: a rook move checks the attacking king,
-    // the king has no square to go to, and the rook or knight can neither take
-    // the checking rook nor block the check. Only a king on the edge can be
-    // mated by a rook.
-    if (edgeDistance(ak) == 0)
-    {
-      for (Bitboard t = drAtt & attackSquares<ROOK>(ak, occ) & ~dkB; t != 0; t &= t - 1)
-      {
-        const Bitboard sB     = t & -t;
-        const Square   s      = squareNo(sB);
-        const Bitboard o      = drLift | sB;
-        const Bitboard arLeft = arB & ~sB;
-        const Bitboard anLeft = anB & ~sB;
-        const Bitboard arO    = attackSquares<ROOK>(ar, o);
-
-        // A rook pinned to its king by the attacking rook can't move off the
-        // line.
-        if (arLeft and (arO & dkB))
-          continue;
-
-        // Each king square is guarded by the rook (seen through the king,
-        // 8/8/8/1r6/8/8/8/K1kN1R2 b) or the defending king, or holds the
-        // king's own rook or knight (8/8/8/1r6/8/8/R7/KNk5 b). The king takes
-        // the checking rook unless the defending king guards it.
-        if (akAtt & ~dkAtt & ~attackSquares<ROOK>(s, o ^ akB) & ~(arLeft | anLeft))
-          continue;
-
-        // The rook or knight takes the checking rook or blocks the check.
-        const Bitboard stop = sB | (attackSquares<ROOK>(s, o) & attackSquares<ROOK>(ak, o));
-        if ((arLeft and (arO & stop)) or (anLeft and (anAtt & stop)))
-          continue;
-
-        return false;
-      }
-    }
+    // The defending rook mates in one, or threatens a back-rank mate.
+    if (rookMatesInOne<KNIGHT>(pos) or backRankThreat(pos))
+      return false;
 
     // The attacking king in a corner is open to a mating attack. With the
     // defending king two away, it already covers the corner king's flights.
@@ -2291,15 +2230,6 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
           and (dkAtt & attackSquares<KNIGHT>(ak, 0) & ~atkCover))
         return false;
     }
-
-    // Back-rank attack: the kings are two apart, the attacking king is on the
-    // edge with the defending king two lines in front of it, and the defending
-    // rook reaches one of the attacking king's lines.
-    if (kingsD == 2
-        and (((akB & Rank18) and std::abs((ak >> 3) - (dk >> 3)) == 2) or
-             ((akB & FileAH) and std::abs((ak  & 7) - (dk  & 7)) == 2))
-        and (drAtt & ~dkB & attackSquares<ROOK>(ak, arB | anB)))
-      return false;
   }
 
   // RxN gives check and doesn't reach a known KR vs KR draw: it may win for the

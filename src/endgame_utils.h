@@ -51,6 +51,23 @@ namespace eg
 
   int
   getRuleOfSquareIndex(const EgBoard& pos, Color side, Square pawnSq);
+
+  // KRB vs KR and KRN vs KR. The defender (the lone rook's side) is to move and
+  // not in check; the attacker has a rook and a `Minor`.
+
+  // A back-rank threat: the kings are two apart, the attacking king is on the
+  // edge with the defending king two lines in front of it, and the defending
+  // rook reaches one of the attacking king's lines.
+  bool
+  backRankThreat(const EgBoard& pos);
+
+  // The defending rook mates in one: a rook move checks the attacking king, the
+  // king has no square to go to, and the rook or minor can neither take the
+  // checking rook nor block the check. Only a king on the edge can be mated by
+  // a rook.
+  template <PieceType Minor>
+  bool
+  rookMatesInOne(const EgBoard& pos);
 }
 
 #endif
