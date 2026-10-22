@@ -764,10 +764,9 @@ Endgame<Endgames::KRBK>(const EgBoard& pos)
 
   // Positions known to be decided.
 
-  // Pinned bishop that cannot be saved.
-  const Bitboard rookXray = attackSquares<ROOK>(rookSq, occupied ^ bishop);
-
-  if (rookOnBish and ((rookXray & ~rookNow) & king) and
+  // Pinned bishop that cannot be saved. A rook that checks the king along
+  // another line doesn't pin it.
+  if (xrays<ROOK>(rookSq, occupied, bishop, king) and !(rookNow & king) and
      (distBtwKingAndBish > 2) and
      (!defToMove or (distBtwKings > 2))
   ) return false;
@@ -1015,16 +1014,14 @@ Endgame<Endgames::KRNK>(const EgBoard& pos)
   const bool rHang = (dkAtt | dnAtt) & arB & ~akAtt;
 
   // The rook pins the knight to its king.
-  const bool nPin = (arAtt & dnB) and (attackSquares<ROOK>(ar, occ ^ dnB) & dkB);
+  const bool nPin = xrays<ROOK>(ar, occ, dnB, dkB);
 
   // A knight move to an empty square that hits both the attacking king and rook.
-  const bool nFork = dnAtt & ~occ & attackSquares<KNIGHT>(ak, 0) & attackSquares<KNIGHT>(ar, 0);
+  const bool nFork = knightForkSquares(dn, ak, ar, occ);
 
   // The attacking king stands between its rook and the knight, and the knight's
   // king is behind the knight on the same line: a king step pins the knight.
-  const bool discPin = not (arAtt & dnB)
-                   and (attackSquares<ROOK>(ar, occ ^ akB) & dnB)
-                   and (attackSquares<ROOK>(ar, occ ^ akB ^ dnB) & dkB);
+  const bool discPin = not (arAtt & dnB) and xrays<ROOK>(ar, occ ^ akB, dnB, dkB);
 
   const int kingsD = chebyshevDistance(ak, dk);
   const int dkND   = chebyshevDistance(dk, dn);
@@ -1418,8 +1415,9 @@ Endgame<Endgames::KPNK>(const EgBoard& pos)
        !((chebyshevDistance(emyKingSq, pawnSq) <= 1 + !defToMove) and ((knightF - pawnF) * (emyKingF - pawnF) >= 0))
     ) return true;
 
+    // The knight forks the attacking king and the pawn.
     if (defToMove and
-       (plt::knightMasks[pawnSq] & plt::knightMasks[emyKingSq] & plt::knightMasks[knightSq] & ~myKing) and
+       knightForkSquares(knightSq, emyKingSq, pawnSq, pos.all()) and
       !(myKing & plt::pawnCaptureMasks[emySide][pawnSq]) and
        (emyKing & ~CornerSquares)
     ) return true;
@@ -1710,7 +1708,7 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   const bool rHit = drAtt & arB;
 
   // The defending rook pins the bishop to its king.
-  const bool bPin = (drAtt & abB) and (attackSquares<ROOK>(dr, occ ^ abB) & akB);
+  const bool bPin = xrays<ROOK>(dr, occ, abB, akB);
 
   // Squares the attacker covers against the defending king. The sliders see
   // through the king (it cannot step back along the line it is checked on).
@@ -1917,12 +1915,12 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
       return false;
 
     // RxB+ skewers the attacking king and rook.
-    if ((drOnB & akB) and (attackSquares<ROOK>(ab, drLift ^ akB) & arB))
+    if ((drAtt & abB) and xrays<ROOK>(ab, drLift, akB, arB))
       return false;
 
     // The defending king stands between its rook and the attacking king: a
     // discovered check.
-    if (attackSquares<ROOK>(dr, occ ^ dkB) & akB)
+    if (xrays<ROOK>(dr, occ, dkB, akB))
       return false;
 
     // The attacking king is on the edge three squares away, and in a corner or
@@ -1970,21 +1968,17 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   // ruled out above). The exceptions are those tactics and two mating nets.
   if (not defToMove and not chk and dkEdge >= 1 and kingsD >= 3)
   {
-    // The attacking sliders' lines seen through each other.
-    const Bitboard dMen     = dkB | drB;
-    const Bitboard abThruAr = attackSquares<BISHOP>(ab, occ ^ arB);
-    const Bitboard arThruAb = attackSquares<ROOK  >(ar, occ ^ abB);
+    const Bitboard dMen = dkB | drB;
 
     // Batteries: the bishop sees the defending king or rook through its own
     // rook, or the rook through its own bishop.
-    if (((abAtt & arB) and (abThruAr & dMen)) or ((arAtt & abB) and (arThruAb & dMen)))
+    if (xrays<BISHOP>(ab, occ, arB, dMen) or xrays<ROOK>(ar, occ, abB, dMen))
       return false;
 
     // The attacking king blocks its bishop's or rook's line to the defending king
     // or rook (the other attacking piece may block it too): a king move
     // discovers the attack.
-    if ((attackSquares<BISHOP>(ab, occ ^ akB ^ arB) & dMen & ~abThruAr)
-        or (attackSquares<ROOK>(ar, occ ^ akB ^ abB) & dMen & ~arThruAb))
+    if (xrays<BISHOP>(ab, occ ^ arB, akB, dMen) or xrays<ROOK>(ar, occ ^ abB, akB, dMen))
       return false;
 
     // A bishop move checks the king and hits the rook (a fork, or a skewer
@@ -1997,7 +1991,7 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
       const Bitboard x = o ^ arB;
       if ((attackSquares<BISHOP>(s, o) & dkB) and (attackSquares<BISHOP>(s, x ^ dkB) & drB))
         return false;
-      if ((attackSquares<BISHOP>(s, x) & drB) and (attackSquares<BISHOP>(s, x ^ drB) & dkB))
+      if (xrays<BISHOP>(s, x, drB, dkB))
         return false;
     }
 
@@ -2008,14 +2002,13 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
     // The bishop stands in the way of a skewer: with it lifted off the board, a
     // rook move checks the king with the rook behind. A bishop move with tempo
     // clears the line (8/8/8/8/k7/r7/1b1K3R/8 b, Bc3+ and Ra2+).
-    for (Bitboard t = arThruAb & ~occ; t != 0; t &= t - 1)
+    for (Bitboard t = attackSquares<ROOK>(ar, occ ^ abB) & ~occ; t != 0; t &= t - 1)
     {
       const Bitboard sB = t & -t;
       const Square   s  = squareNo(sB);
       const Bitboard o  = (occ ^ arB ^ abB) | sB;
-      const bool lifted = (attackSquares<ROOK>(s, o) & dkB) and (attackSquares<ROOK>(s, o ^ dkB) & drB);
-      const bool inLine = (arAtt & sB) and (attackSquares<ROOK>(s, o | abB) & dkB)
-                      and (attackSquares<ROOK>(s, (o | abB) ^ dkB) & drB);
+      const bool lifted = xrays<ROOK>(s, o, dkB, drB);
+      const bool inLine = (arAtt & sB) and xrays<ROOK>(s, o | abB, dkB, drB);
       if (lifted and not inLine)
         return false;
     }
@@ -2204,7 +2197,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   }
 
   // The defending king stands between its rook and the attacking king.
-  const bool discChk = attackSquares<ROOK>(dr, occ ^ dkB) & akB;
+  const bool discChk = xrays<ROOK>(dr, occ, dkB, akB);
 
   // A defender rook move checks the attacking king and hits the attacking rook
   // behind it or beside it (seen through the king), from a square nothing can
@@ -2215,7 +2208,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   {
     const Square   s = squareNo(t & -t);
     const Bitboard o = drLift | (t & -t);
-    dSkew = (attackSquares<ROOK>(s, o) & akB) and (attackSquares<ROOK>(s, o ^ akB) & arB);
+    dSkew = xrays<ROOK>(s, o, akB, arB);
   }
 
   // The attacking king is on an edge and its rook on the next line in: a rook
@@ -2261,7 +2254,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
             const Square   s2  = squareNo(s2B);
             const Bitboard o3  = (o2 ^ s1B) | s2B;
             const Bitboard r2  = attackSquares<ROOK>(s2, o3);
-            skew = (r2 & fB) and (attackSquares<ROOK>(s2, o3 ^ fB) & arB)
+            skew = xrays<ROOK>(s2, o3, fB, arB)
                    and not ((anAtt | attackSquares<ROOK>(ar, o3)) & (s2B | (r2 & attackSquares<ROOK>(fs, o3))))
                    and not ((attackSquares<KING>(fs, 0) & s2B) and not (dkAtt & s2B));
           }
@@ -2308,7 +2301,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   // the knight.
   const bool drHang  = ((akAtt | arAtt | anAtt) & drB) and not (dkAtt & drB);
   const int  drND    = chebyshevDistance(dr, an);
-  const bool battery = attackSquares<ROOK>(ar, occ ^ anB) & ~arAtt & drB;
+  const bool battery = xrays<ROOK>(ar, occ, anB, drB);
   if (drHang and drND == 1 and (arAtt & anB))
     return false;
   if (battery and (dkB & CornerSquares))
@@ -2326,7 +2319,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   {
     const int fileD = std::abs((ak & 7) - (dk & 7));
     const int rankD = std::abs((ak >> 3) - (dk >> 3));
-    const bool nDisc = attackSquares<ROOK>(ar, occ ^ anB) & dkB;
+    const bool nDisc = xrays<ROOK>(ar, occ, anB, dkB);
 
     if (dkEdge == 0)
       return false;

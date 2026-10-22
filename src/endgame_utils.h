@@ -3,6 +3,7 @@
 #define ENDGAME_UTILS_H
 
 #include "endgame.h"
+#include "attacks.h"
 
 // Helpers shared by the recognizers in endgame.cpp.
 namespace eg
@@ -28,7 +29,7 @@ namespace eg
     Rank2 | Rank3 | Rank4 | Rank5
   };
 
-  // The next two are defined here so the recognizers inline them. From
+  // The one-liners below are defined here so the recognizers inline them. From
   // endgame_utils.cpp, LTO leaves them as calls.
 
   // How many squares `s` is from the nearest edge: 0 on the edge, 3 in the centre.
@@ -45,6 +46,20 @@ namespace eg
   inline bool
   cornerBlockedByOwnPiece(const Bitboard king, const Bitboard piece)
   { return (king & CornerSquares) and (plt::chebyshevDistance(squareNo(king), squareNo(piece)) == 1); }
+
+  // A slider on s hits `front`, and with front lifted it hits `back`. With back
+  // behind front on the line, that is a pin, a battery, a skewer or a discovered
+  // attack. It also holds when the slider hits back directly along another line.
+  template <PieceType Slider>
+  inline bool
+  xrays(const Square s, const Bitboard occ, const Bitboard front, const Bitboard back)
+  { return (attackSquares<Slider>(s, occ) & front) and (attackSquares<Slider>(s, occ ^ front) & back); }
+
+  // Empty squares from which a knight on n hits both a and b: its fork squares.
+  // Only a knight on a or b could take the knight there.
+  inline Bitboard
+  knightForkSquares(const Square n, const Square a, const Square b, const Bitboard occ)
+  { return attackSquares<KNIGHT>(n, 0) & ~occ & attackSquares<KNIGHT>(a, 0) & attackSquares<KNIGHT>(b, 0); }
 
   bool
   kingBetweenQueens(Square kingSq, Bitboard queen1, Bitboard queen2);

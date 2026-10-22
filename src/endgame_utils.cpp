@@ -144,8 +144,7 @@ namespace eg
     const Bitboard akAtt  = attackSquares<KING>(squareNo(akB), 0);
     const Bitboard aAfter = akAtt | attackSquares<KNIGHT>(dr, 0) | attackSquares<ROOK>(r, o ^ anB ^ kB);
 
-    for (Bitboard t = attackSquares<KNIGHT>(squareNo(anB), 0) & ~o
-                    & attackSquares<KNIGHT>(k, 0) & attackSquares<KNIGHT>(dr, 0); t; t &= t - 1)
+    for (Bitboard t = knightForkSquares(squareNo(anB), k, dr, o); t; t &= t - 1)
     {
       const Bitboard sB  = t & -t;
       const Bitboard nS  = attackSquares<KNIGHT>(squareNo(sB), 0);
