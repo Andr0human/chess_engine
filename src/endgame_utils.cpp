@@ -42,7 +42,7 @@ namespace eg
   int
   bishopCornerDistance(const Square k, const Bitboard bishop)
   {
-    const Bitboard corners = CornerSquares & ((bishop & WhiteSquares) ? WhiteSquares : BlackSquares);
+    const Bitboard corners = CornerSquares & bishopColourSquares(bishop);
 
     int d = 8;
     for (Bitboard c = corners; c != 0; c &= c - 1)

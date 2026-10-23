@@ -386,8 +386,7 @@ Endgame<Endgames::KPBK>(const EgBoard& pos)
       (emyKing & passedPawnMasks[side][pawnSq]) and
       ((side == WHITE ? emyKingR > kingR + increment : emyKingR < kingR - increment)
     or (emyKing & (relativeRank[side][7] | relativeRank[side][8]))) and
-      (((cornerMask & WhiteSquares) and !(bishop & WhiteSquares))
-    or ((cornerMask & BlackSquares) and !(bishop & BlackSquares)))
+      !(cornerMask & bishopColourSquares(bishop))
   ) return true;
 
   // Not a theoretical draw if, pawn is protected by bishop or king
@@ -818,8 +817,7 @@ Endgame<Endgames::KRBK>(const EgBoard& pos)
   const bool offRim = (kingEdgeD >= 1) and (bishopEdgeD >= 1);
 
   // Whether the defending king is on the bishop's colour.
-  const bool kingOnBishColour =
-    bool(king & WhiteSquares) == bool(bishop & WhiteSquares);
+  const bool kingOnBishColour = bool(king & bishopColourSquares(bishop));
 
   // Distance from the defending king to the nearer bishop-coloured corner.
   const int badCornerD = bishopCornerDistance(kingSq, bishop);
@@ -1726,9 +1724,8 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   // Defending rook moves to squares where it is not lost.
   const int drSafe = rookSafeMoves<BISHOP>(pos, atk);
 
-  // Squares of the bishop's colour. A king off them can never be checked by it.
-  const Bitboard abColour = (abB & WhiteSquares) ? WhiteSquares : BlackSquares;
-  const bool dkOffB = not (dkB & abColour);
+  // A king off the bishop's colour can never be checked by it.
+  const bool dkOffB = not (dkB & bishopColourSquares(abB));
 
   const int kingsD = chebyshevDistance(ak, dk);
   const int dkEdge = edgeDistance(dk);

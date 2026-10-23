@@ -61,6 +61,11 @@ namespace eg
   knightForkSquares(const Square n, const Square a, const Square b, const Bitboard occ)
   { return attackSquares<KNIGHT>(n, 0) & ~occ & attackSquares<KNIGHT>(a, 0) & attackSquares<KNIGHT>(b, 0); }
 
+  // The squares of the bishop's colour, the only ones it can ever reach.
+  inline Bitboard
+  bishopColourSquares(const Bitboard bishop)
+  { return (bishop & WhiteSquares) ? WhiteSquares : BlackSquares; }
+
   bool
   kingBetweenQueens(Square kingSq, Bitboard queen1, Bitboard queen2);
 
