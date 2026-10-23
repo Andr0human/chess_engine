@@ -66,6 +66,19 @@ namespace eg
   bishopColourSquares(const Bitboard bishop)
   { return (bishop & WhiteSquares) ? WhiteSquares : BlackSquares; }
 
+  // The men of side c that hit square s, with the sliders' lines through the
+  // board as it stands. Pawns are left out.
+  inline Bitboard
+  attackers(const EgBoard& pos, const Square s, const Color c)
+  {
+    const Bitboard occ = pos.all();
+    const Bitboard qB  = pos.getPiece(c, QUEEN);
+    return (attackSquares<KING  >(s, 0  ) & pos.getPiece(c, KING  ))
+         | (attackSquares<KNIGHT>(s, 0  ) & pos.getPiece(c, KNIGHT))
+         | (attackSquares<BISHOP>(s, occ) & (pos.getPiece(c, BISHOP) | qB))
+         | (attackSquares<ROOK  >(s, occ) & (pos.getPiece(c, ROOK  ) | qB));
+  }
+
   bool
   kingBetweenQueens(Square kingSq, Bitboard queen1, Bitboard queen2);
 
