@@ -821,13 +821,8 @@ Endgame<Endgames::KRBK>(const EgBoard& pos)
   const bool kingOnBishColour =
     bool(king & WhiteSquares) == bool(bishop & WhiteSquares);
 
-  // Distance from the defending king to the bishop-coloured corners.
-  const Bitboard badCorners =
-    CornerSquares & ((bishop & WhiteSquares) ? WhiteSquares : BlackSquares);
-
-  int badCornerD = 8;
-  for (Bitboard c = badCorners; c != 0; c &= c - 1)
-    badCornerD = std::min(badCornerD, chebyshevDistance(kingSq, squareNo(c & -c)));
+  // Distance from the defending king to the nearer bishop-coloured corner.
+  const int badCornerD = bishopCornerDistance(kingSq, bishop);
 
   // Draws where the bishop is protected by its king.
   if (distBtwKingAndBish <= 2)
@@ -1576,9 +1571,8 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
   const Bitboard dkAtt = attackSquares<KING  >(dk, 0);
   const Bitboard dnAtt = attackSquares<KNIGHT>(dn, 0);
 
-  // Squares the attacker covers, the bishop seeing through the defending king (a
-  // king cannot step back along the diagonal it is checked on).
-  const Bitboard atkCover = akAtt | anAtt | attackSquares<BISHOP>(ab, occ ^ dkB);
+  // Squares the attacker covers around the defending king.
+  const Bitboard atkCover = attackerCover<BISHOP, KNIGHT>(pos, atk);
 
   // The side to move is in check.
   const bool chk = defToMove ? ((abAtt | anAtt) & dkB) : (dnAtt & akB);
@@ -1595,11 +1589,7 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
 
   // Defending king's distance to the nearer corner of the bishop's colour (the
   // only corners KBN can mate in).
-  const Bitboard bishCorners =
-    CornerSquares & ((abB & WhiteSquares) ? WhiteSquares : BlackSquares);
-  int dkCorner = 8;
-  for (Bitboard c = bishCorners; c != 0; c &= c - 1)
-    dkCorner = std::min(dkCorner, chebyshevDistance(dk, squareNo(c & -c)));
+  const int dkCorner = bishopCornerDistance(dk, abB);
 
   const int dkKnD  = chebyshevDistance(dk, dn);
   const int akKnD  = chebyshevDistance(ak, dn);
@@ -1722,10 +1712,8 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   // The defending rook pins the bishop to its king.
   const bool bPin = xrays<ROOK>(dr, occ, abB, akB);
 
-  // Squares the attacker covers against the defending king. The sliders see
-  // through the king (it cannot step back along the line it is checked on).
-  const Bitboard abThruDk = attackSquares<BISHOP>(ab, occ ^ dkB);
-  const Bitboard atkCover = akAtt | attackSquares<ROOK>(ar, occ ^ dkB) | abThruDk;
+  // Squares the attacker covers around the defending king.
+  const Bitboard atkCover = attackerCover<ROOK, BISHOP>(pos, atk);
 
   // Lines traced with the defending rook lifted off its square: the attacking
   // sliders' lines through it, and the defending rook's own lines once it has
@@ -1735,11 +1723,8 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   const Bitboard arLift = attackSquares<ROOK  >(ar, drLift);
   const Bitboard drOnB  = (drAtt & abB) ? attackSquares<ROOK>(ab, drLift) : 0;
 
-  // Defending rook moves to squares where it is not lost: the bishop does not
-  // hit it, and the attacking king and rook either do not hit it or the
-  // defending king guards it (RxR KxR is KB vs K).
-  const Bitboard drSafeSq = ~abLift & (~(akAtt | arLift) | dkAtt);
-  const int drSafe = popCount(drAtt & ~dkB & drSafeSq);
+  // Defending rook moves to squares where it is not lost.
+  const int drSafe = rookSafeMoves<BISHOP>(pos, atk);
 
   // Squares of the bishop's colour. A king off them can never be checked by it.
   const Bitboard abColour = (abB & WhiteSquares) ? WhiteSquares : BlackSquares;
@@ -1769,7 +1754,7 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   // rook takes the checking rook, the rook blocks next to its king (RxR KxR is
   // KB vs K), the king takes a loose piece, or the king steps next to a rook
   // nothing guards once the bishop has taken (BxR KxR is KB vs K).
-  if (defToMove and chk and (abThruDk & drB))
+  if (defToMove and chk and (attackSquares<BISHOP>(ab, occ ^ dkB) & drB))
   {
     const bool rookChk = (arAtt & dkB) and not (abAtt & dkB);   // only then can a block answer it
     const Bitboard dkMoves = dkAtt & ~drB & ~atkCover;
@@ -2158,9 +2143,8 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   // The rooks hit each other. A rook trade leaves KN vs K.
   const bool rHit = drAtt & arB;
 
-  // Squares the attacker covers. The rook sees through the defending king (it
-  // cannot step back along the line it is checked on).
-  const Bitboard atkCover = akAtt | anAtt | attackSquares<ROOK>(ar, occ ^ dkB);
+  // Squares the attacker covers around the defending king.
+  const Bitboard atkCover = attackerCover<ROOK, KNIGHT>(pos, atk);
 
   // The attacking rook's lines with the defending rook lifted off its square.
   const Bitboard drLift = occ ^ drB;
@@ -2294,11 +2278,8 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   // Moves of the defending king to squares the attacker does not cover.
   const int dkSafe = popCount(dkAtt & ~drB & ~atkCover);
 
-  // Defending rook moves to squares where it is not lost: the knight does not
-  // hit it, and the attacking king and rook either do not hit it or the
-  // defending king guards it (RxR KxR is KN vs K).
-  const Bitboard drSafeSq = ~anAtt & (~(akAtt | arLift) | dkAtt);
-  const int drSafe = popCount(drAtt & ~dkB & drSafeSq);
+  // Defending rook moves to squares where it is not lost.
+  const int drSafe = rookSafeMoves<KNIGHT>(pos, atk);
 
   if (dSkew or dkSafe == 0 or discChk or drSafe < 3 or edgeTwo or rxnWins)
     return false;

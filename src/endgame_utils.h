@@ -67,6 +67,25 @@ namespace eg
   int
   getRuleOfSquareIndex(const EgBoard& pos, Color side, Square pawnSq);
 
+  // How many king steps k is from the nearer corner of the bishop's colour.
+  int
+  bishopCornerDistance(Square k, Bitboard bishop);
+
+  // Squares the attacking king and `Men` cover around the defending king. The
+  // sliders see through the king: it can't step back along the line it is
+  // checked on.
+  template <PieceType... Men>
+  Bitboard
+  attackerCover(const EgBoard& pos, Color atk);
+
+  // KRB vs KR and KRN vs KR, either side to move. Defending rook moves to
+  // squares where the rook is not lost: the minor doesn't hit it, and the
+  // attacking king and rook either don't hit it or the defending king guards it
+  // (RxR KxR leaves K and minor vs K).
+  template <PieceType Minor>
+  int
+  rookSafeMoves(const EgBoard& pos, Color atk);
+
   // KRB vs KR and KRN vs KR. The defender (the lone rook's side) is to move and
   // not in check; the attacker has a rook and a `Minor`.
 

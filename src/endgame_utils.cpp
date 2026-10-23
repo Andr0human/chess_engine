@@ -39,6 +39,52 @@ namespace eg
     return ruleOfSquareIndex;
   }
 
+  int
+  bishopCornerDistance(const Square k, const Bitboard bishop)
+  {
+    const Bitboard corners = CornerSquares & ((bishop & WhiteSquares) ? WhiteSquares : BlackSquares);
+
+    int d = 8;
+    for (Bitboard c = corners; c != 0; c &= c - 1)
+      d = std::min(d, plt::chebyshevDistance(k, squareNo(c & -c)));
+    return d;
+  }
+
+  template <PieceType... Men>
+  Bitboard
+  attackerCover(const EgBoard& pos, const Color atk)
+  {
+    const Bitboard thru = pos.all() ^ pos.getPiece(~atk, KING);
+    return (attackSquares<KING>(squareNo(pos.getPiece(atk, KING)), 0) | ... |
+            attackSquares<Men>(squareNo(pos.getPiece(atk, Men)), thru));
+  }
+
+  template Bitboard attackerCover<ROOK, BISHOP  >(const EgBoard& pos, Color atk);
+  template Bitboard attackerCover<ROOK, KNIGHT  >(const EgBoard& pos, Color atk);
+  template Bitboard attackerCover<BISHOP, KNIGHT>(const EgBoard& pos, Color atk);
+
+  template <PieceType Minor>
+  int
+  rookSafeMoves(const EgBoard& pos, const Color atk)
+  {
+    const Color def = ~atk;
+
+    const Bitboard dkB    = pos.getPiece(def, KING);
+    const Bitboard drB    = pos.getPiece(def, ROOK);
+    const Bitboard drLift = pos.all() ^ drB;
+
+    const Bitboard akAtt = attackSquares<KING >(squareNo(pos.getPiece(atk, KING )), 0);
+    const Bitboard arAtt = attackSquares<ROOK >(squareNo(pos.getPiece(atk, ROOK )), drLift);
+    const Bitboard amAtt = attackSquares<Minor>(squareNo(pos.getPiece(atk, Minor)), drLift);
+    const Bitboard dkAtt = attackSquares<KING >(squareNo(dkB), 0);
+    const Bitboard drAtt = attackSquares<ROOK >(squareNo(drB), pos.all());
+
+    return popCount(drAtt & ~dkB & ~amAtt & (~(akAtt | arAtt) | dkAtt));
+  }
+
+  template int rookSafeMoves<KNIGHT>(const EgBoard& pos, Color atk);
+  template int rookSafeMoves<BISHOP>(const EgBoard& pos, Color atk);
+
   bool
   backRankThreat(const EgBoard& pos)
   {
