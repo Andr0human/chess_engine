@@ -1671,11 +1671,11 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
 }
 
 // KRB vs KR. Checked against the 5-man oracle (`egvalidate pieces Rbr oracle`):
-// it claims 344,023,332 of the 473,847,914 draws (73%) with no false draw, in
+// it claims 280,258,372 of the 473,847,914 draws (59%) with no false draw, in
 // both colourings. The early blocks rule out tactics and mates that decide the
 // game; the claims after them are quiet regions, each with its own exceptions.
-// One-move lookaheads back some of them: the defender's moves, the attacker's
-// checks, and every reply when the attacker is in check.
+// One-move lookaheads back some of them: the attacker's checks, and every reply
+// when the attacker is in check.
 // KRRKB and KRRBK fall through to search.
 //
 // Notation: d = defender (the lone rook's side), a = attacker (rook + bishop);
@@ -1994,24 +1994,6 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
       quietHolds()
   ) return true;
 
-  // The defender holds when one capture or check reaches a known draw and none
-  // of its forcing moves can win (see forcingMoveDraws). This adds 58.41M
-  // draws: 52.19M from moves out of check, 6.21M from captures, none from
-  // checks. A reply that takes the rook proves a move can't win in 4.73M of
-  // them. Without the test that no forcing move wins, it claims 229,980 false
-  // draws: the defender takes a loose rook into a won KR vs KB, or checks
-  // first and then wins a piece.
-  //
-  // A quiet move into a known draw counts too, and adds 4.84M draws, when the
-  // attacking king stands where the defender has no quiet win the lookahead
-  // can't see: not on the edge two squares from the defending king (8/8/8/8/8/
-  // 1k3r2/8/RK2B3 b: Rf1 hits the bishop that blocks the back-rank mate), nor
-  // in the net above (5r2/8/8/8/8/3k4/5B2/K4R2 b: Kc2 boxes the king in its
-  // corner). Without them it claims 1.45M more draws and 96 false ones.
-  const bool quietDraws = not (kingsD == 2 and akEdge == 0) and not akNet;
-  if (defToMove and forcingMoveDraws<ROOK>(pos, true, quietDraws))
-    return true;
-
   // With the attacker to move and out of check, the defender holds when no
   // one-move tactic wins the rook (taking it outright was ruled out above) and
   // the kings stand where no mating net is near. The tests below rule out the
@@ -2141,12 +2123,11 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
 }
 
 // KRN vs KR. Checked against the 5-man oracle (`egvalidate pieces RNr oracle`):
-// it claims 264,245,510 of the 494,956,894 draws (53%) with no false draw, in
+// it claims 204,895,170 of the 494,956,894 draws (41%) with no false draw, in
 // both colourings. With the defender to move, the rook takes the rook or the
-// knight into a 4-man draw, the position is quiet, or one move reaches a known
-// draw and none of its forcing moves wins. With the attacker to move, it is in
-// check and the same lookahead holds, all five men stand on one line, or the
-// defending king is far from the knight and the attacking king.
+// knight into a 4-man draw, or the position is quiet. With the attacker to
+// move, all five men stand on one line, or the defending king is far from the
+// knight and the attacking king.
 // Exclusions before each claim rule out mates and tactics that decide the game.
 // KRRKN and KRRNK fall through to search.
 //
@@ -2219,12 +2200,6 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
       if (lost)
         return false;
     }
-
-    // The attacker is in check, so every move is forcing: the defender holds
-    // when one reply reaches a known draw and none of the others can win (see
-    // forcingMoveDraws).
-    if ((drAtt & akB) and forcingMoveDraws<ROOK>(pos, true))
-      return true;
 
     const auto mIndex = msbIndex(occ);
     const auto lIndex = lsbIndex(occ);
@@ -2444,27 +2419,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
     return true;
   };
 
-  if (quietHolds())
-    return true;
-
-  // The defender holds when one capture or check reaches a known draw and none
-  // of its forcing moves can win (see forcingMoveDraws). This adds 31.02M
-  // draws: 25.07M from moves out of check, 5.95M from captures, none from
-  // checks. A reply that takes the rook proves a move can't win in 2.86M of
-  // them. Without the test that no forcing move wins, it claims 1,251,012 false
-  // draws. Not when a king step threatens mate in one, a quiet win the
-  // lookahead can't see (r6N/8/8/8/2k5/8/8/3KR3 b: Kd3, then Ra1 mates). That
-  // costs 34k draws and removes 96 false ones. A quiet move into a known draw
-  // counts too, and adds 4.73M draws.
-  for (Bitboard t = dkAtt & ~occ & ~atkCover; t != 0; t &= t - 1)
-  {
-    EgBoard next = pos.play(dk, squareNo(t & -t));
-    next.color = def;
-    if (rookMatesInOne<KNIGHT>(next))
-      return false;
-  }
-
-  return forcingMoveDraws<ROOK>(pos, true, true);
+  return quietHolds();
 }
 
 bool

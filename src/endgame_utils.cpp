@@ -325,6 +325,9 @@ namespace eg
     }
   }
 
+  // KRB vs KR and KRN vs KR don't use this because of the slowdown: with
+  // `canWin` it made search in those endings two to three times slower, and
+  // up to 2.5 plies shallower. It needs optimising before it is used there again.
   template <PieceType Man>
   bool
   forcingMoveDraws(const EgBoard& pos, const bool canWin, const bool quiet)
