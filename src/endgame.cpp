@@ -13,89 +13,6 @@ using plt::manhattanDistance;
 // Helpers shared by the recognizers.
 using namespace eg;
 
-// The dispatcher, declared here so a recognizer can ask about the position after
-// a capture (`isTheoreticalDraw(pos.play(from, to))`).
-static bool
-isTheoreticalDraw(const EgBoard& pos);
-
-// How deep this thread is in forcingMoveDraws. A recognizer asked from inside
-// a lookahead answers from its other rules only, so lookaheads don't nest.
-static thread_local int lookaheadDepth = 0;
-
-// Calls f(from, to) for each move of side c (pawns left out, legal or not), and
-// returns true as soon as f does.
-template <typename F>
-static bool
-anyMove(const EgBoard& pos, const Color c, F&& f)
-{
-  const Bitboard occ = pos.all(), own = pos.getPiece(c, ALL);
-  for (Bitboard p = own; p != 0; p &= p - 1)
-  {
-    const Bitboard sB = p & -p;
-    const Square   s  = squareNo(sB);
-    Bitboard to = (sB & pos.getPiece(c, KING  )) ? attackSquares<KING  >(s, 0)
-                : (sB & pos.getPiece(c, KNIGHT)) ? attackSquares<KNIGHT>(s, 0)
-                : (sB & pos.getPiece(c, BISHOP)) ? attackSquares<BISHOP>(s, occ)
-                : (sB & pos.getPiece(c, ROOK  )) ? attackSquares<ROOK  >(s, occ)
-                : (sB & pos.getPiece(c, QUEEN )) ? attackSquares<QUEEN >(s, occ) : 0;
-    for (to &= ~own; to != 0; to &= to - 1)
-      if (f(s, squareNo(to & -to)))
-        return true;
-  }
-  return false;
-}
-
-// The side to move holds when one of its captures or checks (any move when it
-// is in check) reaches a position the recognizers call drawn. That is enough
-// when it can't win. When it can (`canWin`), none of the other forcing moves
-// may win either: each must reach a known draw, or the other side must have a
-// reply that does or that takes `Man`, the side to move's one man besides its
-// king. A mate has no reply, so it counts as a win. Wins by a quiet move are
-// the caller's to rule out. Pawnless material only.
-template <PieceType Man>
-static bool
-forcingMoveDraws(const EgBoard& pos, const bool canWin)
-{
-  if (lookaheadDepth > 0)
-    return false;
-  ++lookaheadDepth;
-  struct Leave { ~Leave() { --lookaheadDepth; } } leave;
-
-  const Color    us      = pos.color, them = ~us;
-  const Bitboard theirs  = pos.getPiece(them, ALL);
-  const auto     checked = [] (const EgBoard& b, const Color c) -> bool {
-    return attackers(b, squareNo(b.getPiece(c, KING)), ~c);
-  };
-  const bool chk = checked(pos, us);
-
-  // Calls f on the position after each legal capture or check (each legal
-  // move when in check), and returns true as soon as f does.
-  const auto anyForcing = [&] (auto&& f) {
-    return anyMove(pos, us, [&] (const Square from, const Square to) {
-      const EgBoard next = pos.play(from, to);
-      return not checked(next, us)
-         and (chk or (theirs & (1ULL << to)) or checked(next, them))
-         and f(next);
-    });
-  };
-
-  // The other side has a reply that reaches a known draw or takes the man.
-  const auto refuted = [&] (const EgBoard& next) {
-    const Bitboard man = next.getPiece(us, Man);
-    return anyMove(next, them, [&] (const Square from, const Square to) {
-      const EgBoard reply = next.play(from, to);
-      return not checked(reply, them) and ((man & (1ULL << to)) or isTheoreticalDraw(reply));
-    });
-  };
-
-  return anyForcing([] (const EgBoard& next) { return isTheoreticalDraw(next); })
-     and not (canWin and anyForcing([&] (const EgBoard& next) {
-       return not isTheoreticalDraw(next) and not refuted(next);
-     }));
-}
-
-// TODO: KRRK
-
 template <Endgames e>
 inline bool
 isEndgame(const EgBoard& pos) = delete;
@@ -1754,10 +1671,11 @@ Endgame<Endgames::KBNKN>(const EgBoard& pos)
 }
 
 // KRB vs KR. Checked against the 5-man oracle (`egvalidate pieces Rbr oracle`):
-// it claims 279,011,344 of the 473,847,914 draws (59%) with no false draw, in
+// it claims 331,676,324 of the 473,847,914 draws (70%) with no false draw, in
 // both colourings. The early blocks rule out tactics and mates that decide the
-// game; the claims after them are quiet regions, each with its own exceptions,
-// and last a one-move lookahead for the defender.
+// game; the claims after them are quiet regions, each with its own exceptions.
+// One-move lookaheads back some of them: the defender's forcing moves, the
+// attacker's checks, and every reply when the attacker is in check.
 // KRRKB and KRRBK fall through to search.
 //
 // Notation: d = defender (the lone rook's side), a = attacker (rook + bishop);
@@ -1823,6 +1741,29 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   const int kingsD = chebyshevDistance(ak, dk);
   const int dkEdge = edgeDistance(dk);
   const int akEdge = edgeDistance(ak);
+
+  // The defending king's lines. `edgeLine` is the edge line it stands on, if
+  // any. `flank` holds the lines next to the king's, parallel to the edge it
+  // stands on or one line from: the attacking rook there cuts the king off, or
+  // checks it from behind.
+  const int      dkR      = dk >> 3, dkF = dk & 7;
+  const int      dkRankD  = std::min(dkR, 7 - dkR), dkFileD = std::min(dkF, 7 - dkF);
+  const Bitboard dkRank   = Rank1 << (8 * dkR), dkFile = FileA << dkF;
+  const Bitboard edgeLine = ((dkRankD == 0) ? dkRank : NoSquares) | ((dkFileD == 0) ? dkFile : NoSquares);
+  const Bitboard flank    = ((dkRankD == dkEdge) ? (dkRank << 8) | (dkRank >> 8) : NoSquares)
+                          | ((dkFileD == dkEdge) ? ((dkFile << 1) & ~FileA) | ((dkFile >> 1) & ~FileH) : NoSquares);
+
+  // The defending king's safe squares, and those further from the edge than it
+  // stands (counted for a king on the two outer lines).
+  const Bitboard outer = (dkEdge == 0) ? EdgeSquares : (EdgeSquares | Rank2 | Rank7 | FileB | FileG);
+  const int      dkMob = popCount(dkAtt & ~drB & ~atkCover);
+  const int      dkIn  = popCount(dkAtt & ~drB & ~atkCover & ~outer);
+
+  // With the defending king on the edge: how many lines the attacking king
+  // stands out from that edge, and how many lines aside. A king in a corner
+  // counts from its rank's edge.
+  const int out   = (dkRankD == 0) ? std::abs((ak >> 3) - dkR) : std::abs((ak & 7) - dkF);
+  const int aside = (dkRankD == 0) ? std::abs((ak & 7) - dkF) : std::abs((ak >> 3) - dkR);
 
   // Attacker to move and able to take the defending rook: 104M attacker wins
   // against 7M draws, so leave it to search. The bishop can't take while the
@@ -2023,13 +1964,7 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
     // The defending king on the edge, close to the attacking king: mating nets.
     if (dkEdge == 0 and kingsD <= 4)
     {
-      // Safe squares off the edge, how many lines the attacking king stands out
-      // from the edge, and how many files aside.
-      const int  dkIn     = popCount(dkAtt & ~drB & ~atkCover & ~(Rank18 | FileAH));
-      const bool rankEdge = (dk >> 3) == 0 or (dk >> 3) == 7;
-      const int  out      = rankEdge ? std::abs((ak >> 3) - (dk >> 3)) : std::abs((ak & 7) - (dk & 7));
-      const int  aside    = rankEdge ? std::abs((ak & 7) - (dk & 7)) : std::abs((ak >> 3) - (dk >> 3));
-      const bool nextToC  = dkAtt & CornerSquares;
+      const bool nextToC = dkAtt & CornerSquares;
 
       // Three apart: the king is cut off, the attacking king stands in front of
       // it, or it is next to a corner with the attacking king two lines out.
@@ -2062,17 +1997,34 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
   if (defToMove and forcingMoveDraws<ROOK>(pos, true))
     return true;
 
-  // With the attacker to move, the defender holds when the attacker is out of
-  // check, the defending king is off the edge and more than two squares from the
-  // attacking king, and no one-move tactic wins the rook (taking it outright was
-  // ruled out above). The exceptions are those tactics and two mating nets.
-  if (not defToMove and not chk and dkEdge >= 1 and kingsD >= 3)
+  // With the attacker to move and out of check, the defender holds when no
+  // one-move tactic wins the rook (taking it outright was ruled out above) and
+  // the kings stand where no mating net is near. The tests below rule out the
+  // tactics and two mating nets, and the claims at the end say where the kings
+  // may stand.
+  if (not defToMove and not chk)
   {
     const Bitboard dMen = dkB | drB;
 
-    // Batteries: the bishop sees the defending king or rook through its own
-    // rook, or the rook through its own bishop.
-    if (xrays<BISHOP>(ab, occ, arB, dMen) or xrays<ROOK>(ar, occ, abB, dMen))
+    // Batteries. The rook stands between the bishop and the defending king:
+    // every rook move gives a discovered check.
+    if (xrays<BISHOP>(ab, occ, arB, dkB))
+      return false;
+
+    // The bishop stands between the rook and the defending king: a bishop move
+    // gives a discovered check. It wins the rook when the rook stands behind
+    // the king on the line, or when the bishop move hits it, directly or
+    // through the king. With the kings three apart, the defending king one line
+    // in from the edge and its rook next to it, the threat is a zugzwang.
+    if (xrays<ROOK>(ar, occ, abB, dkB)
+        and (xrays<ROOK>(ar, occ ^ abB, dkB, drB) or quietMoveHits<BISHOP>(ab, occ, drB, dkB)
+             or (kingsD == 3 and dkEdge == 1 and (dkAtt & drB))))
+      return false;
+
+    // One attacking piece stands between the other and the defending rook. A
+    // move of the front piece that gives check discovers the attack on the rook.
+    if ((xrays<ROOK  >(ar, occ, abB, drB) and quietMoveHits<BISHOP>(ab, occ, dkB))
+        or (xrays<BISHOP>(ab, occ, arB, drB) and quietMoveHits<ROOK>(ar, occ, dkB)))
       return false;
 
     // The attacking king blocks its bishop's or rook's line to the defending king
@@ -2127,8 +2079,48 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
         and ((akNextToR & attackSquares<KING>(ab, 0)) or (akNextToR and (attackSquares<ROOK>(dk, 0) & drB))))
       return false;
 
-    return true;
+    // The defending king off the edge, more than two squares from the attacking
+    // king.
+    if (dkEdge >= 1 and kingsD >= 3)
+      return true;
+
+    // Closer kings, or the defending king on the edge. The shapes below are
+    // where no quiet move wins, and no check may win either: each needs a reply
+    // that reaches a known draw (see checksRefuted).
+    const bool corner = dkB & CornerSquares;
+
+    // The kings two apart: the defending king off the two outer lines, or one
+    // line in with a safe square further in and no rook on its flank.
+    const bool twoApart = kingsD == 2
+      and (dkEdge >= 2 or (dkEdge == 1 and dkIn >= 1 and not (arB & flank)));
+
+    // The defending king on the edge, four squares away, with no rook on its
+    // flank. All three squares off the edge must be safe, or the king must be
+    // out of the corner with its rook off the edge line, the attacking king not
+    // in front of it (four lines out, within two lines aside), and the rook not
+    // attacking a bishop the attacking rook guards (the attacking king walks up
+    // and wins the rook).
+    const bool fourApart = dkEdge == 0 and kingsD == 4 and not (arB & flank)
+      and (dkIn == 3 or (not corner and not (drB & edgeLine) and not (out == 4 and aside <= 2)
+                         and not ((drAtt & abB) and (arAtt & abB))));
+
+    // The defending king on the edge, five or more squares away. Out of the
+    // corner its rook must not be trapped, and the king needs a safe square off
+    // the edge or its rook off the edge line. In the corner the king needs a
+    // corner off the bishop's colour and six or more squares, or two safe
+    // squares and its rook four or more squares from it.
+    const bool farApart = dkEdge == 0 and kingsD >= 5
+      and (corner ? (dkOffB and kingsD >= 6) or (dkMob >= 2 and chebyshevDistance(dr, dk) >= 4)
+                  : drSafe >= 2 and (dkIn >= 1 or not (drB & edgeLine)));
+
+    if ((twoApart or fourApart or farApart) and checksRefuted(pos))
+      return true;
   }
+
+  // The attacker is in check: the defender holds when every reply reaches a
+  // known draw (see everyMoveDraws).
+  if (not defToMove and chk and everyMoveDraws(pos))
+    return true;
 
   return false;
 }
@@ -2452,7 +2444,7 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
   return forcingMoveDraws<ROOK>(pos, true);
 }
 
-static bool
+bool
 isTheoreticalDraw(const EgBoard& pos)
 {
   int pieceCount = pos.count<ALL>();

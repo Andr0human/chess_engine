@@ -66,5 +66,10 @@ struct EgBoard
 bool
 isTheoreticalDraw(const ChessBoard& pos);
 
+// The dispatcher behind it. Recognizers and the lookaheads in endgame_utils ask
+// it about the position after a move (`isTheoreticalDraw(pos.play(from, to))`).
+bool
+isTheoreticalDraw(const EgBoard& pos);
+
 
 #endif

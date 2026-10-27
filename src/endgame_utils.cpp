@@ -63,6 +63,23 @@ namespace eg
   template Bitboard attackerCover<ROOK, KNIGHT  >(const EgBoard& pos, Color atk);
   template Bitboard attackerCover<BISHOP, KNIGHT>(const EgBoard& pos, Color atk);
 
+  template <PieceType Slider>
+  bool
+  quietMoveHits(const Square s, const Bitboard occ, const Bitboard target, const Bitboard through)
+  {
+    const Bitboard rest = occ ^ (1ULL << s);
+    for (Bitboard to = attackSquares<Slider>(s, occ) & ~occ; to != 0; to &= to - 1)
+    {
+      const Bitboard toB = to & -to;
+      if (attackSquares<Slider>(squareNo(toB), (rest | toB) ^ through) & target)
+        return true;
+    }
+    return false;
+  }
+
+  template bool quietMoveHits<BISHOP>(Square s, Bitboard occ, Bitboard target, Bitboard through);
+  template bool quietMoveHits<ROOK  >(Square s, Bitboard occ, Bitboard target, Bitboard through);
+
   template <PieceType Minor>
   int
   rookSafeMoves(const EgBoard& pos, const Color atk)
@@ -266,4 +283,123 @@ namespace eg
 
   template bool rookSkewers<KNIGHT>(const EgBoard& pos, Square r, Square k, Bitboard o);
   template bool rookSkewers<BISHOP>(const EgBoard& pos, Square r, Square k, Bitboard o);
+
+  namespace
+  {
+    // How deep this thread is in a lookahead.
+    thread_local int lookaheadDepth = 0;
+
+    // Marks this thread as inside a lookahead for as long as it lives.
+    struct Lookahead
+    {
+      Lookahead()  { ++lookaheadDepth; }
+      ~Lookahead() { --lookaheadDepth; }
+    };
+
+    // The king of side c is in check.
+    bool
+    inCheck(const EgBoard& pos, const Color c)
+    { return attackers(pos, squareNo(pos.getPiece(c, KING)), ~c); }
+
+    // Calls f(from, to) for each move of side c (pawns left out, legal or not),
+    // and returns true as soon as f does.
+    template <typename F>
+    bool
+    anyMove(const EgBoard& pos, const Color c, F&& f)
+    {
+      const Bitboard occ = pos.all(), own = pos.getPiece(c, ALL);
+      for (Bitboard p = own; p != 0; p &= p - 1)
+      {
+        const Bitboard sB = p & -p;
+        const Square   s  = squareNo(sB);
+        Bitboard to = (sB & pos.getPiece(c, KING  )) ? attackSquares<KING  >(s, 0)
+                    : (sB & pos.getPiece(c, KNIGHT)) ? attackSquares<KNIGHT>(s, 0)
+                    : (sB & pos.getPiece(c, BISHOP)) ? attackSquares<BISHOP>(s, occ)
+                    : (sB & pos.getPiece(c, ROOK  )) ? attackSquares<ROOK  >(s, occ)
+                    : (sB & pos.getPiece(c, QUEEN )) ? attackSquares<QUEEN >(s, occ) : 0;
+        for (to &= ~own; to != 0; to &= to - 1)
+          if (f(s, squareNo(to & -to)))
+            return true;
+      }
+      return false;
+    }
+  }
+
+  template <PieceType Man>
+  bool
+  forcingMoveDraws(const EgBoard& pos, const bool canWin)
+  {
+    if (lookaheadDepth > 0)
+      return false;
+    const Lookahead inside;
+
+    const Color    us     = pos.color, them = ~us;
+    const Bitboard theirs = pos.getPiece(them, ALL);
+    const bool     chk    = inCheck(pos, us);
+
+    // Calls f on the position after each legal capture or check (each legal
+    // move when in check), and returns true as soon as f does.
+    const auto anyForcing = [&] (auto&& f) {
+      return anyMove(pos, us, [&] (const Square from, const Square to) {
+        const EgBoard next = pos.play(from, to);
+        return not inCheck(next, us)
+           and (chk or (theirs & (1ULL << to)) or inCheck(next, them))
+           and f(next);
+      });
+    };
+
+    // The other side has a reply that reaches a known draw or takes the man.
+    const auto refuted = [&] (const EgBoard& next) {
+      const Bitboard man = next.getPiece(us, Man);
+      return anyMove(next, them, [&] (const Square from, const Square to) {
+        const EgBoard reply = next.play(from, to);
+        return not inCheck(reply, them) and ((man & (1ULL << to)) or isTheoreticalDraw(reply));
+      });
+    };
+
+    return anyForcing([] (const EgBoard& next) { return isTheoreticalDraw(next); })
+       and not (canWin and anyForcing([&] (const EgBoard& next) {
+         return not isTheoreticalDraw(next) and not refuted(next);
+       }));
+  }
+
+  template bool forcingMoveDraws<KNIGHT>(const EgBoard& pos, bool canWin);
+  template bool forcingMoveDraws<ROOK  >(const EgBoard& pos, bool canWin);
+
+  bool
+  checksRefuted(const EgBoard& pos)
+  {
+    if (lookaheadDepth > 0)
+      return false;
+    const Lookahead inside;
+
+    const Color us = pos.color, them = ~us;
+    return not anyMove(pos, us, [&] (const Square from, const Square to) {
+      const EgBoard next = pos.play(from, to);
+      return not inCheck(next, us) and inCheck(next, them)
+         and not anyMove(next, them, [&] (const Square f, const Square t) {
+           const EgBoard reply = next.play(f, t);
+           return not inCheck(reply, them) and isTheoreticalDraw(reply);
+         });
+    });
+  }
+
+  bool
+  everyMoveDraws(const EgBoard& pos)
+  {
+    if (lookaheadDepth > 0)
+      return false;
+    const Lookahead inside;
+
+    const Color us  = pos.color;
+    bool        any = false;
+    const bool  won = anyMove(pos, us, [&] (const Square from, const Square to) {
+      const EgBoard next = pos.play(from, to);
+      if (inCheck(next, us))
+        return false;
+      any = true;
+      return not isTheoreticalDraw(next);
+    });
+    return any and not won;
+  }
 }

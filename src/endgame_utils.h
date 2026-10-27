@@ -96,6 +96,13 @@ namespace eg
   Bitboard
   attackerCover(const EgBoard& pos, Color atk);
 
+  // A move of the slider on s to an empty square hits `target` from there, its
+  // new lines seen through `through`. With a slider of its side behind it, that
+  // is the second attack of a discovered check.
+  template <PieceType Slider>
+  bool
+  quietMoveHits(Square s, Bitboard occ, Bitboard target, Bitboard through = 0);
+
   // KRB vs KR and KRN vs KR, either side to move. Defending rook moves to
   // squares where the rook is not lost: the minor doesn't hit it, and the
   // attacking king and rook either don't hit it or the defending king guards it
@@ -148,6 +155,33 @@ namespace eg
   // attacker then hits, with the rook's lines seen through the king.
   bool
   loneKingLoses(Square k, Bitboard aAtt, Bitboard rookB);
+
+  // One-move lookaheads that ask isTheoreticalDraw about the positions after
+  // each move. A recognizer asked from inside one answers from its other rules
+  // only, so lookaheads don't nest: each answers false when asked from inside
+  // another. Pawnless material only.
+
+  // The side to move holds when one of its captures or checks (any move when it
+  // is in check) reaches a position the recognizers call drawn. That is enough
+  // when it can't win. When it can (`canWin`), none of the other forcing moves
+  // may win either: each must reach a known draw, or the other side must have a
+  // reply that does or that takes `Man`, the side to move's one man besides its
+  // king. A mate has no reply, so it counts as a win. Wins by a quiet move are
+  // the caller's to rule out.
+  template <PieceType Man>
+  bool
+  forcingMoveDraws(const EgBoard& pos, bool canWin);
+
+  // No check by the side to move wins: each has a reply that reaches a position
+  // the recognizers call drawn. A mate has no reply, so it counts as a win.
+  // Captures and quiet moves are the caller's to rule out.
+  bool
+  checksRefuted(const EgBoard& pos);
+
+  // Every legal move of the side to move reaches a position the recognizers call
+  // drawn. With no legal move (mate or stalemate) it answers false.
+  bool
+  everyMoveDraws(const EgBoard& pos);
 }
 
 #endif
