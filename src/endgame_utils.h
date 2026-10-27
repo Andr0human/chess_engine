@@ -162,15 +162,15 @@ namespace eg
   // another. Pawnless material only.
 
   // The side to move holds when one of its captures or checks (any move when it
-  // is in check) reaches a position the recognizers call drawn. That is enough
-  // when it can't win. When it can (`canWin`), none of the other forcing moves
-  // may win either: each must reach a known draw, or the other side must have a
-  // reply that does or that takes `Man`, the side to move's one man besides its
-  // king. A mate has no reply, so it counts as a win. Wins by a quiet move are
-  // the caller's to rule out.
+  // is in check, or with `quiet`) reaches a position the recognizers call
+  // drawn. That is enough when it can't win. When it can (`canWin`), none of
+  // its forcing moves may win either: each must reach a known draw, or the
+  // other side must have a reply that does or that takes `Man`, the side to
+  // move's one man besides its king. A mate has no reply, so it counts as a
+  // win. Wins by a quiet move are the caller's to rule out.
   template <PieceType Man>
   bool
-  forcingMoveDraws(const EgBoard& pos, bool canWin);
+  forcingMoveDraws(const EgBoard& pos, bool canWin, bool quiet = false);
 
   // No check by the side to move wins: each has a reply that reaches a position
   // the recognizers call drawn. A mate has no reply, so it counts as a win.

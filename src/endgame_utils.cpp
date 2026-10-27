@@ -327,7 +327,7 @@ namespace eg
 
   template <PieceType Man>
   bool
-  forcingMoveDraws(const EgBoard& pos, const bool canWin)
+  forcingMoveDraws(const EgBoard& pos, const bool canWin, const bool quiet)
   {
     if (lookaheadDepth > 0)
       return false;
@@ -338,12 +338,13 @@ namespace eg
     const bool     chk    = inCheck(pos, us);
 
     // Calls f on the position after each legal capture or check (each legal
-    // move when in check), and returns true as soon as f does.
-    const auto anyForcing = [&] (auto&& f) {
+    // move when in check, or when `all` is set), and returns true as soon as f
+    // does.
+    const auto anyForcing = [&] (auto&& f, const bool all = false) {
       return anyMove(pos, us, [&] (const Square from, const Square to) {
         const EgBoard next = pos.play(from, to);
         return not inCheck(next, us)
-           and (chk or (theirs & (1ULL << to)) or inCheck(next, them))
+           and (all or chk or (theirs & (1ULL << to)) or inCheck(next, them))
            and f(next);
       });
     };
@@ -357,14 +358,14 @@ namespace eg
       });
     };
 
-    return anyForcing([] (const EgBoard& next) { return isTheoreticalDraw(next); })
+    return anyForcing([] (const EgBoard& next) { return isTheoreticalDraw(next); }, quiet)
        and not (canWin and anyForcing([&] (const EgBoard& next) {
          return not isTheoreticalDraw(next) and not refuted(next);
        }));
   }
 
-  template bool forcingMoveDraws<KNIGHT>(const EgBoard& pos, bool canWin);
-  template bool forcingMoveDraws<ROOK  >(const EgBoard& pos, bool canWin);
+  template bool forcingMoveDraws<KNIGHT>(const EgBoard& pos, bool canWin, bool quiet);
+  template bool forcingMoveDraws<ROOK  >(const EgBoard& pos, bool canWin, bool quiet);
 
   bool
   checksRefuted(const EgBoard& pos)
