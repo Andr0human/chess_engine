@@ -2126,13 +2126,14 @@ Endgame<Endgames::KRBKR>(const EgBoard& pos)
 }
 
 // KRN vs KR. Checked against the 5-man oracle (`egvalidate pieces RNr oracle`):
-// it claims 235,912,270 of the 494,956,894 draws (48%) with no false draw, in
+// it claims 259,513,990 of the 494,956,894 draws (52%) with no false draw, in
 // both colourings. With the defender to move, the rook takes the rook or the
 // knight into a 4-man draw, the position is quiet, or one capture or check
 // reaches a known draw and none of its forcing moves wins. With the attacker to
-// move, all five men stand on one line, or the defending king is far from the
-// knight and the attacking king. Exclusions before each claim rule out mates
-// and tactics that decide the game. KRRKN and KRRNK fall through to search.
+// move, it is in check and the same lookahead holds, all five men stand on one
+// line, or the defending king is far from the knight and the attacking king.
+// Exclusions before each claim rule out mates and tactics that decide the game.
+// KRRKN and KRRNK fall through to search.
 //
 // Notation: d = defender (the lone rook's side), a = attacker (rook + knight);
 // k/r/n = king/rook/knight, so `dr` is the defending rook's square and `drB` its
@@ -2203,6 +2204,12 @@ Endgame<Endgames::KRNKR>(const EgBoard& pos)
       if (lost)
         return false;
     }
+
+    // The attacker is in check, so every move is forcing: the defender holds
+    // when one reply reaches a known draw and none of the others can win (see
+    // forcingMoveDraws).
+    if ((drAtt & akB) and forcingMoveDraws<ROOK>(pos, true))
+      return true;
 
     const auto mIndex = msbIndex(occ);
     const auto lIndex = lsbIndex(occ);
