@@ -166,6 +166,17 @@ struct Tally
   uint64_t agreeDraw = 0, agreeNondraw = 0, missedDraw = 0, falseDraw = 0;
   uint64_t oWin = 0, oDraw = 0, oLoss = 0, oBad = 0;
 
+  // `forcing`: claim a draw from the forcing moves alone: captures, checks and
+  // promotions, or every move when in check. fAll claims when every forcing
+  // move reaches a draw (or there is none), taking the quiet moves to change
+  // nothing. fSome claims when one forcing move reaches a draw, which is exact
+  // when the side to move can't win. Leaf 0 asks the oracle about each move's
+  // position, so it tests the idea itself. Leaf 1 asks isTheoreticalDraw (a
+  // stalemate counts as a draw), so it is what a recognizer could claim, and
+  // counts only positions isTheoreticalDraw doesn't already claim. Indexed
+  // [leaf][side to move][has a forcing move][truth win, draw, loss].
+  uint64_t fAll[2][COLOR_NB][2][3] = {}, fSome[2][COLOR_NB][3] = {};
+
   Tally&
   operator+=(const Tally& o)
   {
@@ -178,6 +189,14 @@ struct Tally
     agreeDraw += o.agreeDraw; agreeNondraw += o.agreeNondraw;
     missedDraw += o.missedDraw; falseDraw += o.falseDraw;
     oWin += o.oWin; oDraw += o.oDraw; oLoss += o.oLoss; oBad += o.oBad;
+    for (int l = 0; l < 2; ++l)
+      for (int c = 0; c < COLOR_NB; ++c)
+        for (int w = 0; w < 3; ++w)
+        {
+          fAll[l][c][0][w] += o.fAll[l][c][0][w];
+          fAll[l][c][1][w] += o.fAll[l][c][1][w];
+          fSome[l][c][w]   += o.fSome[l][c][w];
+        }
     return *this;
   }
 };
@@ -196,6 +215,7 @@ struct Walker
   bool                      wantDump = false;
   bool                      dumpFalseOnly = false;  // dump only the false draws
   bool                      wantSamples = false;   // keep example FENs per bucket
+  bool                      wantForcing = false;   // the `forcing` experiment
 
   Color stm = WHITE;
   std::array<int, 16> square{};   // current square per slot
@@ -208,6 +228,7 @@ struct Walker
 
   Tally               t;
   std::vector<string> falseFens;  // up to MAX_FALSE_FENS examples for this slice
+  std::vector<string> forcingFens;  // false fSome claims, recognizer leaf
   string              dump;       // dump lines for this slice (merged in task order)
 
   // Oracle results per feature bucket. Filled only when BucketProbe is on and
@@ -315,13 +336,17 @@ struct Walker
       }
 
       mismatch = (isDraw != oracleDraw);
+
+      if (wantForcing)
+        forcing(moves, truth, isDraw);
     }
 
     // The dump lists only positions where the recognizer and the oracle
     // disagree, as `FEN | <D or .> | <W, D or L>`: the recognizer's verdict, then
     // the oracle's. A missed draw is `| . | D`, and a false draw is `| D | W` or
-    // `| D | L`. `dump` needs `oracle` (checked at the start), so the oracle is
-    // always set here.
+    // `| D | L`. A `| D | W` line also lists the winning moves, which show how
+    // the side to move wins. `dump` needs `oracle` (checked at the start), so
+    // the oracle is always set here.
     if (wantDump && mismatch && (!dumpFalseOnly || isDraw))
     {
       dump += buildFen();
@@ -329,8 +354,68 @@ struct Walker
       dump += (isDraw ? 'D' : '.');
       dump += " | ";
       dump += oracleCh;
+      if (isDraw && oracleCh == 'W')
+      {
+        MoveArray arr;
+        moves.getMoves(pos, arr);
+        dump += " |";
+        for (const Move m : arr)
+        {
+          const string s = printMove(m, pos);
+          pos.makeMove(m);
+          const bool wins = oracle->probe(pos) == Wdl::LOSS;
+          pos.unmakeMove();
+          if (wins)
+            dump += " " + s;
+        }
+      }
       dump += '\n';
     }
+  }
+
+  // The `forcing` experiment for this position (see Tally::fAll). `isDraw` is
+  // isTheoreticalDraw's verdict on it.
+  void
+  forcing(const MoveList& moves, const Wdl truth, const bool isDraw)
+  {
+    MoveArray arr;
+    moves.getMoves(pos, arr);
+
+    bool any = false;
+    bool all[2] = { true, true }, some[2] = { false, false };
+    for (const Move m : arr)
+    {
+      pos.makeMove(m);
+      const bool check = (stm == WHITE) ? inCheck<BLACK>(pos) : inCheck<WHITE>(pos);
+      if (moves.checkers or ((m >> 20) & 3) or check)
+      {
+        any = true;
+        const bool oDraw = oracle->probe(pos) == Wdl::DRAW;
+        all[0] = all[0] and oDraw;
+        some[0] = some[0] or oDraw;
+        if (not isDraw and (all[1] or not some[1]))
+        {
+          const MoveList next = generateMoves(pos);
+          const bool rDraw = next.anyMove() ? isTheoreticalDraw(pos) : not check;
+          all[1] = all[1] and rDraw;
+          some[1] = some[1] or rDraw;
+        }
+      }
+      pos.unmakeMove();
+    }
+
+    const int w = (truth == Wdl::WIN) ? 0 : (truth == Wdl::DRAW) ? 1 : 2;
+    for (int l = 0; l < 2; ++l)
+    {
+      if (l == 1 and isDraw)
+        break;
+      if (all[l])
+        ++t.fAll[l][stm][any][w];
+      if (some[l])
+        ++t.fSome[l][stm][w];
+    }
+    if (not isDraw and some[1] and w != 1 and forcingFens.size() < MAX_FALSE_FENS)
+      forcingFens.push_back(buildFen());
   }
 
   // Place the man for `slot`, then the ones after it. Cheap tests (king file,
@@ -392,6 +477,7 @@ struct Generator
   bool wantDump = false;
   bool dumpFalseOnly = false;
   bool wantSamples = false;
+  bool wantForcing = false;
   const EgSolver* oracle = nullptr;
 
   std::array<int, 16> prevSame{}; // nearest earlier slot with same fenChar, or -1
@@ -399,6 +485,7 @@ struct Generator
   // Results from all workers, merged in task order.
   Tally               t;
   std::vector<string> falseFens;
+  std::vector<string> forcingFens;
   string              dump;
   BucketTally         buckets;
 
@@ -445,6 +532,7 @@ struct Generator
       w.wantDump  = wantDump;
       w.dumpFalseOnly = dumpFalseOnly;
       w.wantSamples = wantSamples;
+      w.wantForcing = wantForcing;
       w.stm       = tasks[static_cast<size_t>(i)].stm;
       w.square[WK] = tasks[static_cast<size_t>(i)].wkSq;
       w.pos.reset();
@@ -472,6 +560,9 @@ struct Generator
       for (const string& f : w.falseFens)
         if (falseFens.size() < MAX_FALSE_FENS)
           falseFens.push_back(f);
+      for (const string& f : w.forcingFens)
+        if (forcingFens.size() < MAX_FALSE_FENS)
+          forcingFens.push_back(f);
       if (wantDump)
         dump += w.dump;
       if (wantSamples)
@@ -553,6 +644,44 @@ reportScorecard(const Generator& g, const string& pieceStr)
   cout << '\n';
 }
 
+// Print the `forcing` experiment for one colouring (see Tally::fAll).
+void
+reportForcing(const Generator& g, const string& pieceStr)
+{
+  cout << "--- Forcing-move claim " << signatureOf(pieceStr)
+       << " (pieces " << pieceStr << ") ---\n"
+       << "Claim a draw when every capture, check and promotion (every move in\n"
+       << "check) reaches a draw (all), when there is none (no), or when one does\n"
+       << "(one). The recognizer rows count only positions it doesn't claim yet.\n"
+       << "Columns are the oracle's verdict on the claims.\n"
+       << "                                            draw         win        loss\n";
+
+  const auto row = [&] (const string& name, const uint64_t (&c)[3]) {
+    cout << "  " << std::left << std::setw(34) << name << std::right
+         << std::setw(12) << c[1] << std::setw(12) << c[0] << std::setw(12) << c[2] << '\n';
+  };
+  for (int l = 0; l < 2; ++l)
+  {
+    const string leaf = l ? "recognizer " : "oracle ";
+    for (Color c : { WHITE, BLACK })
+    {
+      const string side = (c == WHITE) ? "w " : "b ";
+      row(leaf + side + "all forcing", g.t.fAll[l][c][1]);
+      row(leaf + side + "no forcing",  g.t.fAll[l][c][0]);
+      row(leaf + side + "one forcing", g.t.fSome[l][c]);
+    }
+  }
+
+  if (!g.forcingFens.empty())
+  {
+    cout << "  recognizer leaf false \"one forcing\" claims (first "
+         << g.forcingFens.size() << "):\n";
+    for (const string& f : g.forcingFens)
+      cout << "    " << f << '\n';
+  }
+  cout << '\n';
+}
+
 // Set the OpenMP thread count for the solver and the position walk from
 // `threads <n>`, kept between 1 and the hardware maximum. Without it, use half
 // the hardware threads so the machine stays usable. Returns the count used.
@@ -598,7 +727,7 @@ void
 validateEndgame(const vector<string>& args)
 {
   // elsa egvalidate [pieces <set>] [oracle] [threads <n>] [mirror] [nocache] [allfiles]
-  //                 [dump <file>] [dumpfalse] [cube <file>]
+  //                 [dump <file>] [dumpfalse] [cube <file>] [forcing]
   //                 [combos] [sums] [frozen] [freeze <n>] [maxk <n>] [top <n>]
   //
   // Walk every legal position of one material: the two kings (always there,
@@ -619,6 +748,9 @@ validateEndgame(const vector<string>& args)
   // has only one colouring.
   //
   // `allfiles` turns off the white king fold (every count should then double).
+  //
+  // `forcing` (needs `oracle`) also scores claiming a draw from captures,
+  // checks and promotions alone. See Tally::fAll.
   //
   // The oracle's tables are cached in output/egcache/ by signature. The first
   // build solves them, and later runs on the same or overlapping material load
@@ -645,6 +777,7 @@ validateEndgame(const vector<string>& args)
   const bool noFold   = utils::hasArg(args, "allfiles");
   const bool wantMirror = utils::hasArg(args, "mirror");
   const bool wantOracle = utils::hasArg(args, "oracle");
+  const bool wantForcing = utils::hasArg(args, "forcing");
 
   // The dump lists only positions where the recognizer and the oracle disagree,
   // so it needs the oracle. Refuse `dump` without `oracle` instead of writing
@@ -784,6 +917,7 @@ validateEndgame(const vector<string>& args)
     g.maxKingFile = maxKingFile;
     g.wantDump = wantDump;
     g.dumpFalseOnly = dumpFalseOnly;
+    g.wantForcing = wantForcing and wantOracle;
 
     // Example FENs are only for the per-bucket table, which the searches and
     // `cube` don't print. The whole pool has so many buckets that keeping
@@ -887,6 +1021,8 @@ validateEndgame(const vector<string>& args)
       if (gens[i].oracle)
       {
         reportScorecard(gens[i], colourings[i]);
+        if (gens[i].wantForcing)
+          reportForcing(gens[i], colourings[i]);
 
         const string tag = signatureOf(colourings[i]) + " (pieces " + colourings[i] + ")";
 
