@@ -139,6 +139,15 @@ class ChessBoard
   markSearchRoot() noexcept
   { searchRootIndex = undoInfoStackCounter; }
 
+  // The move played `back` plies ago (1 = the move that reached this position),
+  // or NULL_MOVE if the undo stack doesn't go back that far.
+  Move
+  previousMove(int back) const noexcept
+  {
+    const int i = undoInfoStackCounter - back;
+    return i >= 0 ? undoInfo[i].move : Move(NULL_MOVE);
+  }
+
   bool
   fiftyMoveDraw() const noexcept;
 
