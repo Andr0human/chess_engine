@@ -109,7 +109,8 @@ searchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
   int numExtensions,
-  Depth depth
+  Depth depth,
+  bool pvNode
 );
 
 

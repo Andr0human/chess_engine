@@ -607,7 +607,7 @@ alphaBeta(ChessBoard& pos, SearchContext ctx)
   }
 
   if constexpr (USE_EXTENSIONS) {
-    int extensions = searchExtension(pos, myMoves, ns.numExtensions, ns.depth);
+    int extensions = searchExtension(pos, myMoves, ns.numExtensions, ns.depth, PvNode);
     ns.depth += extensions;
     ns.numExtensions += extensions;
   }

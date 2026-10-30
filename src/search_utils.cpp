@@ -126,7 +126,8 @@ searchExtension(
   const ChessBoard& pos,
   const MoveList& myMoves,
   int numExtensions,
-  Depth depth
+  Depth depth,
+  bool pvNode
 )
 {
   if (numExtensions >= EXTENSION_LIMIT)
@@ -141,7 +142,25 @@ searchExtension(
     (myMoves.checkers == 0) and
     pieceTrapped(pos, myMoves.myAttackedSquares, myMoves.enemyAttackedSquares)
   ) return 1;
-  
+
+  // Recapture at a PV node: the last move took back on the square the move
+  // before it captured on, and the two captured pieces are worth about the
+  // same. Extending it at every node cost more depth for no extra Elo.
+  if (!pvNode)
+    return 0;
+
+  const array<Score, ALL> pieceValues = { 0, 100, 320, 300, 530, 910, 3200 };
+
+  const Move last = pos.previousMove(1);
+  const Move prev = pos.previousMove(2);
+  const PieceType lastCap = PieceType((last >> 15) & 7);
+  const PieceType prevCap = PieceType((prev >> 15) & 7);
+
+  if (lastCap != NONE and prevCap != NONE
+      and to_sq(last) == to_sq(prev)
+      and std::abs(pieceValues[lastCap] - pieceValues[prevCap]) <= 50)
+    return 1;
+
   return 0;
 }
 
