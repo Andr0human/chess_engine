@@ -577,7 +577,8 @@ alphaBeta(ChessBoard& pos, SearchContext ctx)
   // Null-move pruning.
   if constexpr (USE_NMP)
   {
-    if (ns.doNull
+    if (!PvNode                                   // not at PV nodes
+        and ns.doNull
         and myMoves.checkers == 0                 // never null out of check
         and ns.depth >= NMP_MIN_DEPTH              // too shallow to be worth it
         and pos.hasNonPawnMaterial(pos.color)      // zugzwang guard
